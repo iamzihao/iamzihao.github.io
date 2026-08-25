@@ -7305,6 +7305,236 @@ FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
       </tags>
   </entry>
   <entry>
+    <title>KeyMapping：win上使用mac键位</title>
+    <url>/posts/a9a69d93/</url>
+    <content><![CDATA[<p>最近购入了台17年12寸的
+macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command
+键的位置和用法，但是切换回 Windows
+的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP
+win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。
+<span id="more"></span></p>
+<p>本文介绍如何使用 AutoHotkey (v2.0)
+编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
+体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
+<h3 id="核心痛点本地与远程的精神分裂">💡
+核心痛点：本地与远程的”精神分裂”</h3>
+<p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
+<code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
+键就在这个位置）。</p>
+<p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
+Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
+<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
+远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
+的 <code>Win</code> 键。此时，我们在 Mac 上按
+<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
+<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
+<h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
+<p>Windows 提供了 WTSAPI (Windows Terminal Services
+API)，允许我们查询当前会话的信息。通过
+<code>WTSQuerySessionInformation</code>
+函数，我们可以获取连接到当前会话的客户端名称（Client Name）。</p>
+<ul>
+<li><strong>本地登录</strong>：客户端名称通常为空。</li>
+<li><strong>远程登录</strong>：客户端名称会显示发起连接的设备名）。</li>
+</ul>
+<p>利用这一点，我们可以编写一个 <code>IsRemoteMac()</code>
+函数来动态判断当前的上下文。</p>
+<h3 id="脚本实现">🛠️ 脚本实现</h3>
+<p>以下是完整的 AutoHotkey v2 脚本。</p>
+<figure class="highlight ahk"><table><tr><td class="code"><pre><span class="line"><span class="meta">#Requires AutoHotkey v2.0</span></span><br><span class="line"><span class="meta">#SingleInstance Force</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; MacKeys.ahk - Windows 下模拟 Mac 键位布局</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 功能说明：</span></span><br><span class="line"><span class="comment">;   - 将 Alt 键模拟为 Mac 的 Cmd 键</span></span><br><span class="line"><span class="comment">;   - 支持远程 Mac 模式（通过 RDP 连接时）和本地 Windows 模式自动切换</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 使用方式：</span></span><br><span class="line"><span class="comment">;   - 双击运行此脚本，托盘区会出现 AHK 图标</span></span><br><span class="line"><span class="comment">;   - 右键图标可退出或重新加载脚本</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 函数定义</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line">IsRemoteMac() &#123;</span><br><span class="line">    clientName := Trim(GetRdpClientName())</span><br><span class="line">    if (clientName = <span class="string">&quot;&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line"></span><br><span class="line">    if InStr(clientName, <span class="string">&quot;zihao-macbook&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">GetRdpClientName() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">        pBuffer := <span class="number">0</span></span><br><span class="line">        bytes := <span class="number">0</span></span><br><span class="line">        if !DllCall(<span class="string">&quot;wtsapi32\WTSQuerySessionInformationW&quot;</span></span><br><span class="line">            , <span class="string">&quot;Ptr&quot;</span>, <span class="number">0</span>              <span class="comment">; WTS_CURRENT_SERVER_HANDLE</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, -<span class="number">1</span>             <span class="comment">; WTS_CURRENT_SESSION</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, <span class="number">10</span>             <span class="comment">; WTSClientName</span></span><br><span class="line">            , <span class="string">&quot;Ptr*&quot;</span>, &amp;pBuffer</span><br><span class="line">            , <span class="string">&quot;UInt*&quot;</span>, &amp;bytes)</span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">        name := StrGet(pBuffer, <span class="string">&quot;UTF-16&quot;</span>)</span><br><span class="line">        DllCall(<span class="string">&quot;wtsapi32\WTSFreeMemory&quot;</span>, <span class="string">&quot;Ptr&quot;</span>, pBuffer)</span><br><span class="line">        <span class="keyword">return</span> name</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 远程 Mac 模式 (通过 RDP 连接到 Mac 时)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; Alt + Tab -&gt; Win + Tab (任务切换)</span></span><br><span class="line"><span class="title">$!Tab::</span></span><br><span class="line">&#123;</span><br><span class="line">    SendInput <span class="string">&quot;&#123;LAlt up&#125;&quot;</span></span><br><span class="line">    Sleep <span class="number">10</span></span><br><span class="line">    SendEvent <span class="string">&quot;#&#123;Tab&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; Win 键映射</span></span><br><span class="line"><span class="title">$#/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 斜杠 (Win + / -&gt; Ctrl + /)</span></span><br><span class="line"><span class="title">$#b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Win + B -&gt; Ctrl + B)</span></span><br><span class="line"><span class="title">$#s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Win + S -&gt; Ctrl + S)</span></span><br><span class="line"><span class="title">$#-::</span>Send <span class="string">&quot;^-&quot;</span>          <span class="comment">; 缩小 (Win + - -&gt; Ctrl + -)</span></span><br><span class="line"><span class="title">$#=::</span>Send <span class="string">&quot;^=&quot;</span>          <span class="comment">; 放大 (Win + = -&gt; Ctrl + =)</span></span><br><span class="line"><span class="title">$#p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 打印 (Win + P -&gt; Ctrl + P)</span></span><br><span class="line"><span class="title">$#[::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Win + [ -&gt; Ctrl + [)</span></span><br><span class="line"><span class="title">$#t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Win + T -&gt; Ctrl + T)</span></span><br><span class="line"><span class="title">$#+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Win + Shift + K -&gt; Ctrl + Shift + K)</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 (将 Alt 模拟 Mac 的 Cmd 键)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 基础编辑操作 ----</span></span><br><span class="line"><span class="title">$!c::</span>Send <span class="string">&quot;^c&quot;</span>          <span class="comment">; 复制 (Alt + C -&gt; Ctrl + C) 实现 Cmd + C</span></span><br><span class="line"><span class="title">$!v::</span>Send <span class="string">&quot;^v&quot;</span>          <span class="comment">; 粘贴 (Alt + V -&gt; Ctrl + V) 实现 Cmd + V</span></span><br><span class="line"><span class="title">$!x::</span>Send <span class="string">&quot;^x&quot;</span>          <span class="comment">; 剪切 (Alt + X -&gt; Ctrl + X) 实现 Cmd + X</span></span><br><span class="line"><span class="title">$!z::</span>Send <span class="string">&quot;^z&quot;</span>          <span class="comment">; 撤销 (Alt + Z -&gt; Ctrl + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$!+z::</span>Send <span class="string">&quot;^y&quot;</span>         <span class="comment">; 重做 (Alt + Shift + Z -&gt; Ctrl + Y) 实现 Cmd + Shift + Z</span></span><br><span class="line"><span class="title">$!a::</span>Send <span class="string">&quot;^a&quot;</span>          <span class="comment">; 全选 (Alt + A -&gt; Ctrl + A) 实现 Cmd + A</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文件操作 ----</span></span><br><span class="line"><span class="title">$!s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Alt + S -&gt; Ctrl + S) 实现 Cmd + S</span></span><br><span class="line"><span class="title">$!n::</span>Send <span class="string">&quot;^n&quot;</span>          <span class="comment">; 新建 (Alt + N -&gt; Ctrl + N) 实现 Cmd + N</span></span><br><span class="line"><span class="title">$!w::</span>Send <span class="string">&quot;^w&quot;</span>          <span class="comment">; 关闭 (Alt + W -&gt; Ctrl + W) 实现 Cmd + W</span></span><br><span class="line"><span class="title">$!p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 搜索 (Alt + P -&gt; Ctrl + P) 实现 Cmd + P</span></span><br><span class="line"><span class="title">$!,::</span>Send <span class="string">&quot;^,&quot;</span>          <span class="comment">; 菜单 (Alt + , -&gt; Ctrl + ,) 实现 Cmd + ,</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本编辑 ----</span></span><br><span class="line"><span class="title">$!b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Alt + B -&gt; Ctrl + B) 实现 Cmd + B</span></span><br><span class="line"><span class="title">$!f::</span>Send <span class="string">&quot;^f&quot;</span>          <span class="comment">; 查找 (Alt + F -&gt; Ctrl + F) 实现 Cmd + F</span></span><br><span class="line"><span class="title">$!h::</span>Send <span class="string">&quot;^h&quot;</span>          <span class="comment">; 替换 (Alt + H -&gt; Ctrl + H) 实现 Cmd + H</span></span><br><span class="line"><span class="title">$!/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 注释 (Alt + / -&gt; Ctrl + /) 实现 Cmd + /</span></span><br><span class="line"><span class="title">$![::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Alt + [ -&gt; Ctrl + [) 实现 Cmd + [</span></span><br><span class="line"><span class="title">$!+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Alt + Shift + K -&gt; Ctrl + Shift + K) 实现 Cmd + Shift + K</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器/标签页 ----</span></span><br><span class="line"><span class="title">$!t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Alt + T -&gt; Ctrl + T) 实现 Cmd + T</span></span><br><span class="line"><span class="title">$!r::</span>Send <span class="string">&quot;^r&quot;</span>          <span class="comment">; 刷新 (Alt + R -&gt; Ctrl + R) 实现 Cmd + R</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 缩放控制 ----</span></span><br><span class="line"><span class="title">$!=::</span>Send <span class="string">&quot;^&#123;=&#125;&quot;</span>        <span class="comment">; 放大 (Alt + = -&gt; Ctrl + =) 实现 Cmd + =</span></span><br><span class="line"><span class="title">$!-::</span>Send <span class="string">&quot;^&#123;-&#125;&quot;</span>        <span class="comment">; 缩小 (Alt + - -&gt; Ctrl + -) 实现 Cmd + -</span></span><br><span class="line"><span class="title">$!0::</span>Send <span class="string">&quot;^0&quot;</span>          <span class="comment">; 恢复大小 (Alt + 0 -&gt; Ctrl + 0) 实现 Cmd + 0</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 应用专属快捷键</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Typora 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Typora.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!1::</span>Send <span class="string">&quot;^1&quot;</span>          <span class="comment">; 一级标题 (Alt + 1 -&gt; Ctrl + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">    $!2::</span>Send <span class="string">&quot;^2&quot;</span>          <span class="comment">; 二级标题 (Alt + 2 -&gt; Ctrl + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">    $!3::</span>Send <span class="string">&quot;^3&quot;</span>          <span class="comment">; 三级标题 (Alt + 3 -&gt; Ctrl + 3) 实现 Cmd + 3</span></span><br><span class="line"><span class="title">    $!4::</span>Send <span class="string">&quot;^4&quot;</span>          <span class="comment">; 四级标题 (Alt + 4 -&gt; Ctrl + 4) 实现 Cmd + 4</span></span><br><span class="line"><span class="title">    $!5::</span>Send <span class="string">&quot;^5&quot;</span>          <span class="comment">; 五级标题 (Alt + 5 -&gt; Ctrl + 5) 实现 Cmd + 5</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器专属 (Chrome, Edge, Firefox) ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; (WinActive(&quot;ahk_exe chrome.exe&quot;) || WinActive(&quot;ahk_exe msedge.exe&quot;) || WinActive(&quot;ahk_exe firefox.exe&quot;))</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!Left::</span>Send <span class="string">&quot;!&#123;Left&#125;&quot;</span>      <span class="comment">; 后退 (Alt + Left -&gt; Alt + Left) 实现 Cmd + [</span></span><br><span class="line"><span class="title">    $!Right::</span>Send <span class="string">&quot;!&#123;Right&#125;&quot;</span>    <span class="comment">; 前进 (Alt + Right -&gt; Alt + Right) 实现 Cmd + ]</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- VS Code 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Code.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!+p::</span>Send <span class="string">&quot;^+p&quot;</span>        <span class="comment">; 命令面板 (Alt + Shift + P -&gt; Ctrl + Shift + P) 实现 Cmd + Shift + P</span></span><br><span class="line"><span class="title">    $!g::</span>Send <span class="string">&quot;^g&quot;</span>          <span class="comment">; 跳转行号 (Alt + G -&gt; Ctrl + G) 实现 Cmd + G</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 - 通用快捷键 (在应用专属之后处理)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 光标移动 ----</span></span><br><span class="line"><span class="title">$!Left::</span>Send <span class="string">&quot;&#123;Home&#125;&quot;</span>   <span class="comment">; 光标移至行首 (Alt + Left -&gt; Home) 实现 Cmd + Left</span></span><br><span class="line"><span class="title">$!Right::</span>Send <span class="string">&quot;&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至行尾 (Alt + Right -&gt; End) 实现 Cmd + Right</span></span><br><span class="line"><span class="title">$!Up::</span>Send <span class="string">&quot;^&#123;Home&#125;&quot;</span>    <span class="comment">; 光标移至文档头 (Alt + Up -&gt; Ctrl + Home) 实现 Cmd + Up</span></span><br><span class="line"><span class="title">$!Down::</span>Send <span class="string">&quot;^&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至文档尾 (Alt + Down -&gt; Ctrl + End) 实现 Cmd + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本选择 ----</span></span><br><span class="line"><span class="title">$!+Left::</span>Send <span class="string">&quot;+&#123;Home&#125;&quot;</span>     <span class="comment">; 选中至行首 (Alt + Shift + Left -&gt; Shift + Home) 实现 Cmd + Shift + Left</span></span><br><span class="line"><span class="title">$!+Right::</span>Send <span class="string">&quot;+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至行尾 (Alt + Shift + Right -&gt; Shift + End) 实现 Cmd + Shift + Right</span></span><br><span class="line"><span class="title">$!+Up::</span>Send <span class="string">&quot;^+&#123;Home&#125;&quot;</span>      <span class="comment">; 选中至文档头 (Alt + Shift + Up -&gt; Ctrl + Shift + Home) 实现 Cmd + Shift + Up</span></span><br><span class="line"><span class="title">$!+Down::</span>Send <span class="string">&quot;^+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至文档尾 (Alt + Shift + Down -&gt; Ctrl + Shift + End) 实现 Cmd + Shift + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 系统快捷键 ----</span></span><br><span class="line"><span class="title">$!e::</span>Send <span class="string">&quot;#e&quot;</span>          <span class="comment">; 打开资源管理器 (Alt + E -&gt; Win + E) 实现 Cmd + E</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 聚焦搜索 (Alt + Space -&gt; Win + S) 实现 Cmd + Space ----</span></span><br><span class="line"><span class="comment">; 使用 ~ 前缀允许原生 Alt+Space 行为，延迟触发 Win+S</span></span><br><span class="line"><span class="title">~!Space::</span></span><br><span class="line">&#123;</span><br><span class="line">    KeyWait <span class="string">&quot;Alt&quot;</span></span><br><span class="line">    Sleep <span class="number">50</span></span><br><span class="line">    Send <span class="string">&quot;#s&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Win 键特殊映射 ----</span></span><br><span class="line"><span class="title">$#z::</span>Send <span class="string">&quot;!z&quot;</span>          <span class="comment">; 自动换行 (Win + Z -&gt; Alt + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$#1::</span>Send <span class="string">&quot;^!1&quot;</span>         <span class="comment">; 截图并复制 (Win + 1 -&gt; Ctrl + Alt + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">$#2::</span>Send <span class="string">&quot;^!2&quot;</span>         <span class="comment">; 贴图 (Win + 2 -&gt; Ctrl + Alt + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">$#3::</span>Send <span class="string">&quot;^!3&quot;</span>         <span class="comment">; 截图 (Win + 3 -&gt; Ctrl + Alt + 3) 实现 Cmd + 3</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 单击 LAlt 发送 Win 键 ----</span></span><br><span class="line"><span class="title">~LAlt::</span>Send <span class="string">&quot;&#123;Blind&#125;&#123;vkE8&#125;&quot;</span></span><br><span class="line"><span class="title">~LAlt Up::</span></span><br><span class="line">&#123;</span><br><span class="line">    if (<span class="built_in">A_PriorKey</span> = <span class="string">&quot;LAlt&quot;</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        Send <span class="string">&quot;&#123;LWin&#125;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br></pre></td></tr></table></figure>
+<h3 id="如何使用">🚀 如何使用</h3>
+<ol type="1">
+<li>安装 <a href="https://www.autohotkey.com/">AutoHotkey v2</a>。</li>
+<li>创建一个新文件 <code>MacKeys.ahk</code>，将上述代码粘贴进去。</li>
+<li>双击运行即可。</li>
+<li>（可选）将其放入 Windows 的启动文件夹，实现开机自启。</li>
+</ol>
+<p><a
+href="https://github.com/supermarkli/MacKeysMapping.git">仓库地址</a>放到这里，希望这对你有帮助！</p>
+]]></content>
+      <categories>
+        <category>技术工具</category>
+      </categories>
+      <tags>
+        <tag>Windows</tag>
+        <tag>MacOS</tag>
+        <tag>AutoHotkey</tag>
+        <tag>效率工具</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
+    <url>/posts/c3f2a1b9/</url>
+    <content><![CDATA[<p>面对五花八门的开源许可证，最常被问到的无非三件事：能不能商用？能不能改了闭源？要不要写专利和修改声明？这篇文章用一张速查表和几条决策准则，帮你在
+1 分钟内选对证。</p>
+<span id="more"></span>
+<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>MIT 许可证</th>
+<th>Apache 2.0 许可证</th>
+<th>GPL 许可证 (v3)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>宽松（Permissive）</td>
+<td>宽松（Permissive）</td>
+<td>传染共享（Copyleft）</td>
+</tr>
+<tr>
+<td>商业使用</td>
+<td>允许</td>
+<td>允许</td>
+<td>允许</td>
+</tr>
+<tr>
+<td>修改后闭源</td>
+<td>允许</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>需要包含原许可证</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>需要说明修改</td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>专利授权</td>
+<td>无明确说明</td>
+<td>明确授权</td>
+<td>明确授权</td>
+</tr>
+<tr>
+<td>“传染性”</td>
+<td>无</td>
+<td>无</td>
+<td>强</td>
+</tr>
+</tbody>
+</table>
+<p>图表要点：如果你希望”随便用、闭源也行”，首选 MIT 或 Apache
+2.0；如果你希望”别人用到你的代码时必须开源”，选择 GPL v3。</p>
+<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
+<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
+<ul>
+<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
+<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
+<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
+</ul>
+<h3 id="apache-2.0工程团队的默认首选">✅ Apache
+2.0：工程团队的默认首选</h3>
+<ul>
+<li>核心义务：保留 <code>LICENSE</code> 与
+<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
+<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
+<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
+</ul>
+<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
+Copyleft，确保改动也开源</h3>
+<ul>
+<li>核心义务：凡分发衍生作品，必须以 GPL
+兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
+<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
+<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
+</ul>
+<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
+<ol type="1">
+<li>你是否希望别人基于你的代码做出的产品可以闭源？
+<ul>
+<li>是 → 选 MIT 或 Apache 2.0</li>
+<li>否 → 选 GPL
+v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
+AGPL）</li>
+</ul></li>
+<li>你是否担心专利纠纷？
+<ul>
+<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
+<li>否 → MIT 也可</li>
+</ul></li>
+<li>你的目标用户是谁？
+<ul>
+<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
+<li>个人/教学/社区 Demo → MIT 简洁好用</li>
+</ul></li>
+<li>你是否需要与其他许可证兼容？
+<ul>
+<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
+<li>想”强制开源传递” → GPL 系列</li>
+</ul></li>
+</ol>
+<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
+<ul>
+<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
+<code>NOTICE</code>（列出版权与声明）。</li>
+<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
+对“修改过的文件”做适当标注。</li>
+<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
+<code>LICENSE/NOTICE</code> 汇总。</li>
+<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
+<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
+</ul>
+<h2 id="常见误区">❓ 常见误区</h2>
+<ul>
+<li>“用了 GPL 的库就必须把我的 SaaS
+也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
+明确将“网络提供服务”纳入义务，注意区分。</li>
+<li>“MIT
+就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
+<li>“Apache 2.0
+一定要每个文件头都加版权声明吗？”——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
+</ul>
+<h2 id="模板与参考">📎 模板与参考</h2>
+<ul>
+<li>官方文本：
+<ul>
+<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
+Initiative</a></li>
+<li>Apache 2.0：<a
+href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
+2.0</a></li>
+<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
+GPLv3</a></li>
+</ul></li>
+<li>模板生成：<code>choosealicense.com</code>
+提供多语言示例与合规提示。</li>
+</ul>
+<h2 id="小结">✨ 小结</h2>
+<ul>
+<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
+<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
+<li>想确保改动继续开源并回馈社区：选 <strong>GPL
+v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
+</ul>
+<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
+]]></content>
+      <categories>
+        <category>计算机基础</category>
+        <category>开源</category>
+      </categories>
+      <tags>
+        <tag>开源</tag>
+        <tag>License</tag>
+        <tag>许可证</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>GPU 工作原理：和 CPU 有何不同？</title>
     <url>/posts/d1a2c3b4/</url>
     <content><![CDATA[<p>如果把 CPU 比作“多才多艺的总管”，GPU 更像“高效的流水线工厂”：CPU
@@ -7732,236 +7962,6 @@ IB/RoCE；拓扑差异决定带宽与延迟</li>
         <tag>CPU</tag>
         <tag>并行计算</tag>
         <tag>计算机基础</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>KeyMapping：win上使用mac键位</title>
-    <url>/posts/a9a69d93/</url>
-    <content><![CDATA[<p>最近购入了台17年12寸的
-macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command
-键的位置和用法，但是切换回 Windows
-的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP
-win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。
-<span id="more"></span></p>
-<p>本文介绍如何使用 AutoHotkey (v2.0)
-编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
-体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
-<h3 id="核心痛点本地与远程的精神分裂">💡
-核心痛点：本地与远程的”精神分裂”</h3>
-<p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
-<code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
-键就在这个位置）。</p>
-<p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
-Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
-<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
-远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
-的 <code>Win</code> 键。此时，我们在 Mac 上按
-<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
-<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
-<h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
-<p>Windows 提供了 WTSAPI (Windows Terminal Services
-API)，允许我们查询当前会话的信息。通过
-<code>WTSQuerySessionInformation</code>
-函数，我们可以获取连接到当前会话的客户端名称（Client Name）。</p>
-<ul>
-<li><strong>本地登录</strong>：客户端名称通常为空。</li>
-<li><strong>远程登录</strong>：客户端名称会显示发起连接的设备名）。</li>
-</ul>
-<p>利用这一点，我们可以编写一个 <code>IsRemoteMac()</code>
-函数来动态判断当前的上下文。</p>
-<h3 id="脚本实现">🛠️ 脚本实现</h3>
-<p>以下是完整的 AutoHotkey v2 脚本。</p>
-<figure class="highlight ahk"><table><tr><td class="code"><pre><span class="line"><span class="meta">#Requires AutoHotkey v2.0</span></span><br><span class="line"><span class="meta">#SingleInstance Force</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; MacKeys.ahk - Windows 下模拟 Mac 键位布局</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 功能说明：</span></span><br><span class="line"><span class="comment">;   - 将 Alt 键模拟为 Mac 的 Cmd 键</span></span><br><span class="line"><span class="comment">;   - 支持远程 Mac 模式（通过 RDP 连接时）和本地 Windows 模式自动切换</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 使用方式：</span></span><br><span class="line"><span class="comment">;   - 双击运行此脚本，托盘区会出现 AHK 图标</span></span><br><span class="line"><span class="comment">;   - 右键图标可退出或重新加载脚本</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 函数定义</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line">IsRemoteMac() &#123;</span><br><span class="line">    clientName := Trim(GetRdpClientName())</span><br><span class="line">    if (clientName = <span class="string">&quot;&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line"></span><br><span class="line">    if InStr(clientName, <span class="string">&quot;zihao-macbook&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">GetRdpClientName() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">        pBuffer := <span class="number">0</span></span><br><span class="line">        bytes := <span class="number">0</span></span><br><span class="line">        if !DllCall(<span class="string">&quot;wtsapi32\WTSQuerySessionInformationW&quot;</span></span><br><span class="line">            , <span class="string">&quot;Ptr&quot;</span>, <span class="number">0</span>              <span class="comment">; WTS_CURRENT_SERVER_HANDLE</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, -<span class="number">1</span>             <span class="comment">; WTS_CURRENT_SESSION</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, <span class="number">10</span>             <span class="comment">; WTSClientName</span></span><br><span class="line">            , <span class="string">&quot;Ptr*&quot;</span>, &amp;pBuffer</span><br><span class="line">            , <span class="string">&quot;UInt*&quot;</span>, &amp;bytes)</span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">        name := StrGet(pBuffer, <span class="string">&quot;UTF-16&quot;</span>)</span><br><span class="line">        DllCall(<span class="string">&quot;wtsapi32\WTSFreeMemory&quot;</span>, <span class="string">&quot;Ptr&quot;</span>, pBuffer)</span><br><span class="line">        <span class="keyword">return</span> name</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 远程 Mac 模式 (通过 RDP 连接到 Mac 时)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; Alt + Tab -&gt; Win + Tab (任务切换)</span></span><br><span class="line"><span class="title">$!Tab::</span></span><br><span class="line">&#123;</span><br><span class="line">    SendInput <span class="string">&quot;&#123;LAlt up&#125;&quot;</span></span><br><span class="line">    Sleep <span class="number">10</span></span><br><span class="line">    SendEvent <span class="string">&quot;#&#123;Tab&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; Win 键映射</span></span><br><span class="line"><span class="title">$#/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 斜杠 (Win + / -&gt; Ctrl + /)</span></span><br><span class="line"><span class="title">$#b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Win + B -&gt; Ctrl + B)</span></span><br><span class="line"><span class="title">$#s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Win + S -&gt; Ctrl + S)</span></span><br><span class="line"><span class="title">$#-::</span>Send <span class="string">&quot;^-&quot;</span>          <span class="comment">; 缩小 (Win + - -&gt; Ctrl + -)</span></span><br><span class="line"><span class="title">$#=::</span>Send <span class="string">&quot;^=&quot;</span>          <span class="comment">; 放大 (Win + = -&gt; Ctrl + =)</span></span><br><span class="line"><span class="title">$#p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 打印 (Win + P -&gt; Ctrl + P)</span></span><br><span class="line"><span class="title">$#[::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Win + [ -&gt; Ctrl + [)</span></span><br><span class="line"><span class="title">$#t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Win + T -&gt; Ctrl + T)</span></span><br><span class="line"><span class="title">$#+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Win + Shift + K -&gt; Ctrl + Shift + K)</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 (将 Alt 模拟 Mac 的 Cmd 键)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 基础编辑操作 ----</span></span><br><span class="line"><span class="title">$!c::</span>Send <span class="string">&quot;^c&quot;</span>          <span class="comment">; 复制 (Alt + C -&gt; Ctrl + C) 实现 Cmd + C</span></span><br><span class="line"><span class="title">$!v::</span>Send <span class="string">&quot;^v&quot;</span>          <span class="comment">; 粘贴 (Alt + V -&gt; Ctrl + V) 实现 Cmd + V</span></span><br><span class="line"><span class="title">$!x::</span>Send <span class="string">&quot;^x&quot;</span>          <span class="comment">; 剪切 (Alt + X -&gt; Ctrl + X) 实现 Cmd + X</span></span><br><span class="line"><span class="title">$!z::</span>Send <span class="string">&quot;^z&quot;</span>          <span class="comment">; 撤销 (Alt + Z -&gt; Ctrl + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$!+z::</span>Send <span class="string">&quot;^y&quot;</span>         <span class="comment">; 重做 (Alt + Shift + Z -&gt; Ctrl + Y) 实现 Cmd + Shift + Z</span></span><br><span class="line"><span class="title">$!a::</span>Send <span class="string">&quot;^a&quot;</span>          <span class="comment">; 全选 (Alt + A -&gt; Ctrl + A) 实现 Cmd + A</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文件操作 ----</span></span><br><span class="line"><span class="title">$!s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Alt + S -&gt; Ctrl + S) 实现 Cmd + S</span></span><br><span class="line"><span class="title">$!n::</span>Send <span class="string">&quot;^n&quot;</span>          <span class="comment">; 新建 (Alt + N -&gt; Ctrl + N) 实现 Cmd + N</span></span><br><span class="line"><span class="title">$!w::</span>Send <span class="string">&quot;^w&quot;</span>          <span class="comment">; 关闭 (Alt + W -&gt; Ctrl + W) 实现 Cmd + W</span></span><br><span class="line"><span class="title">$!p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 搜索 (Alt + P -&gt; Ctrl + P) 实现 Cmd + P</span></span><br><span class="line"><span class="title">$!,::</span>Send <span class="string">&quot;^,&quot;</span>          <span class="comment">; 菜单 (Alt + , -&gt; Ctrl + ,) 实现 Cmd + ,</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本编辑 ----</span></span><br><span class="line"><span class="title">$!b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Alt + B -&gt; Ctrl + B) 实现 Cmd + B</span></span><br><span class="line"><span class="title">$!f::</span>Send <span class="string">&quot;^f&quot;</span>          <span class="comment">; 查找 (Alt + F -&gt; Ctrl + F) 实现 Cmd + F</span></span><br><span class="line"><span class="title">$!h::</span>Send <span class="string">&quot;^h&quot;</span>          <span class="comment">; 替换 (Alt + H -&gt; Ctrl + H) 实现 Cmd + H</span></span><br><span class="line"><span class="title">$!/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 注释 (Alt + / -&gt; Ctrl + /) 实现 Cmd + /</span></span><br><span class="line"><span class="title">$![::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Alt + [ -&gt; Ctrl + [) 实现 Cmd + [</span></span><br><span class="line"><span class="title">$!+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Alt + Shift + K -&gt; Ctrl + Shift + K) 实现 Cmd + Shift + K</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器/标签页 ----</span></span><br><span class="line"><span class="title">$!t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Alt + T -&gt; Ctrl + T) 实现 Cmd + T</span></span><br><span class="line"><span class="title">$!r::</span>Send <span class="string">&quot;^r&quot;</span>          <span class="comment">; 刷新 (Alt + R -&gt; Ctrl + R) 实现 Cmd + R</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 缩放控制 ----</span></span><br><span class="line"><span class="title">$!=::</span>Send <span class="string">&quot;^&#123;=&#125;&quot;</span>        <span class="comment">; 放大 (Alt + = -&gt; Ctrl + =) 实现 Cmd + =</span></span><br><span class="line"><span class="title">$!-::</span>Send <span class="string">&quot;^&#123;-&#125;&quot;</span>        <span class="comment">; 缩小 (Alt + - -&gt; Ctrl + -) 实现 Cmd + -</span></span><br><span class="line"><span class="title">$!0::</span>Send <span class="string">&quot;^0&quot;</span>          <span class="comment">; 恢复大小 (Alt + 0 -&gt; Ctrl + 0) 实现 Cmd + 0</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 应用专属快捷键</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Typora 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Typora.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!1::</span>Send <span class="string">&quot;^1&quot;</span>          <span class="comment">; 一级标题 (Alt + 1 -&gt; Ctrl + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">    $!2::</span>Send <span class="string">&quot;^2&quot;</span>          <span class="comment">; 二级标题 (Alt + 2 -&gt; Ctrl + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">    $!3::</span>Send <span class="string">&quot;^3&quot;</span>          <span class="comment">; 三级标题 (Alt + 3 -&gt; Ctrl + 3) 实现 Cmd + 3</span></span><br><span class="line"><span class="title">    $!4::</span>Send <span class="string">&quot;^4&quot;</span>          <span class="comment">; 四级标题 (Alt + 4 -&gt; Ctrl + 4) 实现 Cmd + 4</span></span><br><span class="line"><span class="title">    $!5::</span>Send <span class="string">&quot;^5&quot;</span>          <span class="comment">; 五级标题 (Alt + 5 -&gt; Ctrl + 5) 实现 Cmd + 5</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器专属 (Chrome, Edge, Firefox) ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; (WinActive(&quot;ahk_exe chrome.exe&quot;) || WinActive(&quot;ahk_exe msedge.exe&quot;) || WinActive(&quot;ahk_exe firefox.exe&quot;))</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!Left::</span>Send <span class="string">&quot;!&#123;Left&#125;&quot;</span>      <span class="comment">; 后退 (Alt + Left -&gt; Alt + Left) 实现 Cmd + [</span></span><br><span class="line"><span class="title">    $!Right::</span>Send <span class="string">&quot;!&#123;Right&#125;&quot;</span>    <span class="comment">; 前进 (Alt + Right -&gt; Alt + Right) 实现 Cmd + ]</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- VS Code 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Code.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!+p::</span>Send <span class="string">&quot;^+p&quot;</span>        <span class="comment">; 命令面板 (Alt + Shift + P -&gt; Ctrl + Shift + P) 实现 Cmd + Shift + P</span></span><br><span class="line"><span class="title">    $!g::</span>Send <span class="string">&quot;^g&quot;</span>          <span class="comment">; 跳转行号 (Alt + G -&gt; Ctrl + G) 实现 Cmd + G</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 - 通用快捷键 (在应用专属之后处理)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 光标移动 ----</span></span><br><span class="line"><span class="title">$!Left::</span>Send <span class="string">&quot;&#123;Home&#125;&quot;</span>   <span class="comment">; 光标移至行首 (Alt + Left -&gt; Home) 实现 Cmd + Left</span></span><br><span class="line"><span class="title">$!Right::</span>Send <span class="string">&quot;&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至行尾 (Alt + Right -&gt; End) 实现 Cmd + Right</span></span><br><span class="line"><span class="title">$!Up::</span>Send <span class="string">&quot;^&#123;Home&#125;&quot;</span>    <span class="comment">; 光标移至文档头 (Alt + Up -&gt; Ctrl + Home) 实现 Cmd + Up</span></span><br><span class="line"><span class="title">$!Down::</span>Send <span class="string">&quot;^&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至文档尾 (Alt + Down -&gt; Ctrl + End) 实现 Cmd + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本选择 ----</span></span><br><span class="line"><span class="title">$!+Left::</span>Send <span class="string">&quot;+&#123;Home&#125;&quot;</span>     <span class="comment">; 选中至行首 (Alt + Shift + Left -&gt; Shift + Home) 实现 Cmd + Shift + Left</span></span><br><span class="line"><span class="title">$!+Right::</span>Send <span class="string">&quot;+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至行尾 (Alt + Shift + Right -&gt; Shift + End) 实现 Cmd + Shift + Right</span></span><br><span class="line"><span class="title">$!+Up::</span>Send <span class="string">&quot;^+&#123;Home&#125;&quot;</span>      <span class="comment">; 选中至文档头 (Alt + Shift + Up -&gt; Ctrl + Shift + Home) 实现 Cmd + Shift + Up</span></span><br><span class="line"><span class="title">$!+Down::</span>Send <span class="string">&quot;^+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至文档尾 (Alt + Shift + Down -&gt; Ctrl + Shift + End) 实现 Cmd + Shift + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 系统快捷键 ----</span></span><br><span class="line"><span class="title">$!e::</span>Send <span class="string">&quot;#e&quot;</span>          <span class="comment">; 打开资源管理器 (Alt + E -&gt; Win + E) 实现 Cmd + E</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 聚焦搜索 (Alt + Space -&gt; Win + S) 实现 Cmd + Space ----</span></span><br><span class="line"><span class="comment">; 使用 ~ 前缀允许原生 Alt+Space 行为，延迟触发 Win+S</span></span><br><span class="line"><span class="title">~!Space::</span></span><br><span class="line">&#123;</span><br><span class="line">    KeyWait <span class="string">&quot;Alt&quot;</span></span><br><span class="line">    Sleep <span class="number">50</span></span><br><span class="line">    Send <span class="string">&quot;#s&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Win 键特殊映射 ----</span></span><br><span class="line"><span class="title">$#z::</span>Send <span class="string">&quot;!z&quot;</span>          <span class="comment">; 自动换行 (Win + Z -&gt; Alt + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$#1::</span>Send <span class="string">&quot;^!1&quot;</span>         <span class="comment">; 截图并复制 (Win + 1 -&gt; Ctrl + Alt + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">$#2::</span>Send <span class="string">&quot;^!2&quot;</span>         <span class="comment">; 贴图 (Win + 2 -&gt; Ctrl + Alt + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">$#3::</span>Send <span class="string">&quot;^!3&quot;</span>         <span class="comment">; 截图 (Win + 3 -&gt; Ctrl + Alt + 3) 实现 Cmd + 3</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 单击 LAlt 发送 Win 键 ----</span></span><br><span class="line"><span class="title">~LAlt::</span>Send <span class="string">&quot;&#123;Blind&#125;&#123;vkE8&#125;&quot;</span></span><br><span class="line"><span class="title">~LAlt Up::</span></span><br><span class="line">&#123;</span><br><span class="line">    if (<span class="built_in">A_PriorKey</span> = <span class="string">&quot;LAlt&quot;</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        Send <span class="string">&quot;&#123;LWin&#125;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br></pre></td></tr></table></figure>
-<h3 id="如何使用">🚀 如何使用</h3>
-<ol type="1">
-<li>安装 <a href="https://www.autohotkey.com/">AutoHotkey v2</a>。</li>
-<li>创建一个新文件 <code>MacKeys.ahk</code>，将上述代码粘贴进去。</li>
-<li>双击运行即可。</li>
-<li>（可选）将其放入 Windows 的启动文件夹，实现开机自启。</li>
-</ol>
-<p><a
-href="https://github.com/supermarkli/MacKeysMapping.git">仓库地址</a>放到这里，希望这对你有帮助！</p>
-]]></content>
-      <categories>
-        <category>技术工具</category>
-      </categories>
-      <tags>
-        <tag>Windows</tag>
-        <tag>MacOS</tag>
-        <tag>AutoHotkey</tag>
-        <tag>效率工具</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
-    <url>/posts/c3f2a1b9/</url>
-    <content><![CDATA[<p>面对五花八门的开源许可证，最常被问到的无非三件事：能不能商用？能不能改了闭源？要不要写专利和修改声明？这篇文章用一张速查表和几条决策准则，帮你在
-1 分钟内选对证。</p>
-<span id="more"></span>
-<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>MIT 许可证</th>
-<th>Apache 2.0 许可证</th>
-<th>GPL 许可证 (v3)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>类型</td>
-<td>宽松（Permissive）</td>
-<td>宽松（Permissive）</td>
-<td>传染共享（Copyleft）</td>
-</tr>
-<tr>
-<td>商业使用</td>
-<td>允许</td>
-<td>允许</td>
-<td>允许</td>
-</tr>
-<tr>
-<td>修改后闭源</td>
-<td>允许</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>需要包含原许可证</td>
-<td>是</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>需要说明修改</td>
-<td>否</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>专利授权</td>
-<td>无明确说明</td>
-<td>明确授权</td>
-<td>明确授权</td>
-</tr>
-<tr>
-<td>“传染性”</td>
-<td>无</td>
-<td>无</td>
-<td>强</td>
-</tr>
-</tbody>
-</table>
-<p>图表要点：如果你希望”随便用、闭源也行”，首选 MIT 或 Apache
-2.0；如果你希望”别人用到你的代码时必须开源”，选择 GPL v3。</p>
-<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
-<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
-<ul>
-<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
-<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
-<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
-</ul>
-<h3 id="apache-2.0工程团队的默认首选">✅ Apache
-2.0：工程团队的默认首选</h3>
-<ul>
-<li>核心义务：保留 <code>LICENSE</code> 与
-<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
-<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
-<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
-</ul>
-<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
-Copyleft，确保改动也开源</h3>
-<ul>
-<li>核心义务：凡分发衍生作品，必须以 GPL
-兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
-<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
-<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
-</ul>
-<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
-<ol type="1">
-<li>你是否希望别人基于你的代码做出的产品可以闭源？
-<ul>
-<li>是 → 选 MIT 或 Apache 2.0</li>
-<li>否 → 选 GPL
-v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
-AGPL）</li>
-</ul></li>
-<li>你是否担心专利纠纷？
-<ul>
-<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
-<li>否 → MIT 也可</li>
-</ul></li>
-<li>你的目标用户是谁？
-<ul>
-<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
-<li>个人/教学/社区 Demo → MIT 简洁好用</li>
-</ul></li>
-<li>你是否需要与其他许可证兼容？
-<ul>
-<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
-<li>想”强制开源传递” → GPL 系列</li>
-</ul></li>
-</ol>
-<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
-<ul>
-<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
-<code>NOTICE</code>（列出版权与声明）。</li>
-<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
-对“修改过的文件”做适当标注。</li>
-<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
-<code>LICENSE/NOTICE</code> 汇总。</li>
-<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
-<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
-</ul>
-<h2 id="常见误区">❓ 常见误区</h2>
-<ul>
-<li>“用了 GPL 的库就必须把我的 SaaS
-也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
-明确将“网络提供服务”纳入义务，注意区分。</li>
-<li>“MIT
-就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
-<li>“Apache 2.0
-一定要每个文件头都加版权声明吗？”——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
-</ul>
-<h2 id="模板与参考">📎 模板与参考</h2>
-<ul>
-<li>官方文本：
-<ul>
-<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
-Initiative</a></li>
-<li>Apache 2.0：<a
-href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
-2.0</a></li>
-<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
-GPLv3</a></li>
-</ul></li>
-<li>模板生成：<code>choosealicense.com</code>
-提供多语言示例与合规提示。</li>
-</ul>
-<h2 id="小结">✨ 小结</h2>
-<ul>
-<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
-<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
-<li>想确保改动继续开源并回馈社区：选 <strong>GPL
-v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
-</ul>
-<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
-]]></content>
-      <categories>
-        <category>计算机基础</category>
-        <category>开源</category>
-      </categories>
-      <tags>
-        <tag>开源</tag>
-        <tag>License</tag>
-        <tag>许可证</tag>
       </tags>
   </entry>
   <entry>
@@ -9474,6 +9474,295 @@ CI 早点发现错。</li>
       <tags>
         <tag>Python</tag>
         <tag>工程实践</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>SEV-SNP隔离原理：NPT、RMP与硬件强制</title>
+    <url>/posts/d2278960/</url>
+    <content><![CDATA[<p>hypervisor 负责翻译地址，可它自己又不可信——SEV-SNP
+是怎么让”不可信的管家”干活、又防住它偷东西的？</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor</td>
+<td>虚拟机监控器（VMM）</td>
+<td>云上管虚拟机的软件层</td>
+</tr>
+<tr>
+<td>嵌套分页</td>
+<td>Nested Paging，两层地址翻译</td>
+<td>虚拟机地址翻译机制</td>
+</tr>
+<tr>
+<td>NPT</td>
+<td>Nested Page Table，嵌套页表</td>
+<td>hypervisor 建的翻译规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>Reverse Map Table，反向映射表</td>
+<td>硬件记录的”物理页归谁”事实</td>
+</tr>
+<tr>
+<td>RMPE</td>
+<td>RMP Entry，RMP 条目</td>
+<td>每 4KB 物理页一条记录</td>
+</tr>
+<tr>
+<td>ASID</td>
+<td>Address Space Identifier，地址空间标识符</td>
+<td>每个 CVM 的唯一身份编号</td>
+</tr>
+<tr>
+<td>VMCB</td>
+<td>Virtual Machine Control Block，虚拟机控制块</td>
+<td>存 VM 状态和 ASID 的控制块</td>
+</tr>
+<tr>
+<td>VMRUN/VMEXIT</td>
+<td>进出虚拟机的特权指令</td>
+<td>硬件切换”当前身份”的开关</td>
+</tr>
+<tr>
+<td>VMPL</td>
+<td>Virtual Machine Privilege Level，虚拟机特权级</td>
+<td>VM 内部的 4 级权限</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全小电脑</td>
+</tr>
+<tr>
+<td>#PF</td>
+<td>Page Fault，缺页异常</td>
+<td>硬件拒绝访问时的信号</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要-snp第一代-sev-的漏洞">🧩 为什么需要 SNP：第一代 SEV
+的漏洞</h3>
+<p>先看虚拟机地址翻译。虚拟机里的地址要翻译两次才能到真实物理地址：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Guest 认为的地址(GVA) → Guest 页表 → Guest 物理地址(GPA)</span><br><span class="line">                                         │</span><br><span class="line">                                         ▼</span><br><span class="line">                          hypervisor 的嵌套页表(NPT) → 真实物理地址(SPA)</span><br></pre></td></tr></table></figure>
+<p>这里的 <strong>NPT 由 hypervisor
+管理</strong>。问题来了：<strong>hypervisor
+不可信</strong>，它可以：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>攻击</th>
+<th>做法</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>偷换内容</td>
+<td>把 VM 的某个 GPA 悄悄重映射到别的物理页</td>
+<td>VM 读到被替换的假数据</td>
+</tr>
+<tr>
+<td>数据串扰</td>
+<td>把 VM 的页映射给另一个 VM</td>
+<td>两个租户数据互相泄露</td>
+</tr>
+<tr>
+<td>直接偷读</td>
+<td>把自己映射到 VM 的页</td>
+<td>读取 VM 内存</td>
+</tr>
+</tbody>
+</table>
+<p>第一代 SEV
+只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证”别人读不懂”，但
+hypervisor 可以”把读的对象换掉”。这就是 SNP 要补的洞。</p>
+<h3 id="rmp反向映射表硬件管的所有权事实">🔍
+RMP：反向映射表，硬件管的”所有权事实”</h3>
+<p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
+的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP：每 4KB 物理页一行，硬件强制记录：</span><br><span class="line">┌──────────┬───────────┬──────────┐</span><br><span class="line">│ 物理页地址 │ 属于哪个VM │ 权限/状态  │</span><br><span class="line">│ (SPA)    │ (ASID)    │          │</span><br><span class="line">└──────────┴───────────┴──────────┘</span><br></pre></td></tr></table></figure>
+<p>“反向”的含义：NPT 是 hypervisor 往前翻译”地址去哪”，RMP
+是硬件反过来锁”这页是谁的、谁才能动”。</p>
+<p>一句话对比：</p>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>谁维护</th>
+<th>管什么</th>
+<th>本质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NPT</td>
+<td>hypervisor（软件）</td>
+<td>地址往哪翻</td>
+<td>路由规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>CPU 硬件</td>
+<td>翻过去之后你有没有资格碰</td>
+<td>所有权事实</td>
+</tr>
+</tbody>
+</table>
+<p>hypervisor 能改路由规则，但改不了所有权事实——<strong>事实由 PSP
+固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
+都是白费力气，最终判定权在硬件手里。</p>
+<h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
+<p>“硬件强制执行，谁也绕不过”靠<strong>两把锁</strong>：</p>
+<p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
+<p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
+<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定”开多快”（建
+NPT
+规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
+<h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
+<p><strong>ASID（Address Space
+Identifier，地址空间标识符）</strong>——每个 CVM
+一个唯一编号。身份从哪来？怎么保证伪造不了？</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 每个 CVM 启动时分配一个 ASID（如 VM-A=16, VM-B=17）</span><br><span class="line">② ASID 记录在 VMCB（虚拟机控制块）里</span><br><span class="line">③ CPU 执行 VMRUN 进入该 VM 时，硬件把 ASID 装载为&quot;当前身份&quot;</span><br><span class="line">④ 之后该 VM 的所有内存访问，都自动携带这个身份</span><br></pre></td></tr></table></figure>
+<p><strong>判定流程（硬件完成，一次访存）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
+<p><strong>为什么软件伪造不了身份？</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
+<p>类比：VMRUN 就是”刷门禁卡进房间”，CPU
+是门禁系统本身。门禁系统自己知道”现在里面是谁”——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
+<h3 id="关键澄清hypervisor-只是提供规则不是执行翻译">🧩
+关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</h3>
+<p>这是最容易混的点。<strong>页表是谁建的 ≠
+翻译是谁执行的</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
+<p>关键事实：<code>GPA→SPA</code>
+的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
+写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
+的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的”地图”，但走路的是
+CPU。</p>
+<p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
+<h3 id="典型场景对照">📋 典型场景对照</h3>
+<table>
+<thead>
+<tr>
+<th>访问者身份（当前 ASID）</th>
+<th>目标页归属（RMPE.ASID）</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VM-A (16)</td>
+<td>16（自己）</td>
+<td>✅ 允许</td>
+</tr>
+<tr>
+<td>VM-A (16)</td>
+<td>17（VM-B 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>16（CVM 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>未分配页</td>
+<td>✅ 允许（host 自己的内存）</td>
+</tr>
+</tbody>
+</table>
+<p>补充两个细节：</p>
+<ul>
+<li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
+还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
+里分别记录各级的读/写/执行权限。ASID 管”是不是这家的”，VMPL
+管”这家里面谁有权碰”。</li>
+<li><strong>设备 DMA 同样受限</strong>：设备要通过
+IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
+DMA 指向 CVM 的私有页。</li>
+</ul>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor 查 RMP</td>
+<td>查 RMP 的是 CPU 硬件，不是 hypervisor——它是裁判，不能当运动员</td>
+</tr>
+<tr>
+<td>hypervisor 执行地址翻译</td>
+<td>翻译由 CPU 的 MMU 硬件执行，hypervisor 只提供 NPT 规则表</td>
+</tr>
+<tr>
+<td>hypervisor 改 NPT 就能访问 CVM 内存</td>
+<td>NPT 是路由规则，RMP 是所有权事实，路由改了也过不了所有权检查</td>
+</tr>
+<tr>
+<td>内存加密就够防篡改</td>
+<td>加密只防”读不懂”，SNP/RMP 才是防”偷换、重映射”的关键</td>
+</tr>
+<tr>
+<td>ASID 是软件声明的身份</td>
+<td>ASID 是硬件通过 VMRUN/VMEXIT 自动维护的内部状态，软件伪造不了</td>
+</tr>
+<tr>
+<td>RMP 表软件可以随便改</td>
+<td>RMP 区域对软件保留，唯一入口 RMPUPDATE 由 PSP 固件把关</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>SEV-SNP 用 RMP
+把”物理页归谁”这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
+CPU 硬件执行，hypervisor 只提供页表规则；“当前访问者”是硬件通过
+VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管”地址往哪翻”，RMP
+管”翻过去之后你有没有资格碰”。</p>
+</blockquote>
+<p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>安全</category>
+        <category>机密计算</category>
+      </categories>
+      <tags>
+        <tag>机密计算</tag>
+        <tag>SEV-SNP</tag>
+        <tag>虚拟化</tag>
+        <tag>安全</tag>
       </tags>
   </entry>
   <entry>
@@ -11104,6 +11393,424 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
         <tag>网络安全</tag>
         <tag>加密</tag>
         <tag>HTTPS</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>TPM从零理解：保险箱里的密码世界</title>
+    <url>/posts/fd7258a1/</url>
+    <content><![CDATA[<p>你的电脑里其实一直藏着一台”只进不出的保险箱电脑”——Windows 的
+BitLocker、指纹登录全靠它，但你可能从没见过它干活。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TPM</td>
+<td>Trusted Platform Module，可信平台模块</td>
+<td>密钥永不出芯片的保险箱</td>
+</tr>
+<tr>
+<td>TCG</td>
+<td>Trusted Computing Group，可信计算组织</td>
+<td>制定 TPM 规范的标准组织</td>
+</tr>
+<tr>
+<td>PCR</td>
+<td>Platform Configuration Register，平台配置寄存器</td>
+<td>只能追加不能写的系统指纹</td>
+</tr>
+<tr>
+<td>EK</td>
+<td>Endorsement Key，背书密钥</td>
+<td>TPM 出厂身份证明</td>
+</tr>
+<tr>
+<td>AIK</td>
+<td>Attestation Identity Key，认证身份密钥</td>
+<td>给系统状态签名用的匿名密钥</td>
+</tr>
+<tr>
+<td>SRK</td>
+<td>Storage Root Key，存储根密钥</td>
+<td>密钥树的根，锁在芯片里</td>
+</tr>
+<tr>
+<td>blob</td>
+<td>Binary Large Object，二进制大对象</td>
+<td>被父密钥加密的密钥文件</td>
+</tr>
+<tr>
+<td>sealing</td>
+<td>密封</td>
+<td>密钥和系统状态绑定</td>
+</tr>
+<tr>
+<td>NVRAM</td>
+<td>Non-Volatile RAM，非易失存储器</td>
+<td>掉电不丢的芯片内存储</td>
+</tr>
+<tr>
+<td>dTPM/fTPM/vTPM</td>
+<td>独立芯片/固件/虚拟机实现的 TPM</td>
+<td>三种 TPM 实现形态</td>
+</tr>
+<tr>
+<td>TSS</td>
+<td>TCG Software Stack，TCG 软件栈</td>
+<td>应用程序访问 TPM 的接口库</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tpm-是什么一台只进不出的保险箱电脑">🏦 TPM
+是什么：一台”只进不出”的保险箱电脑</h3>
+<p><strong>TPM（Trusted Platform Module，可信平台模块）</strong>
+是一颗独立的<strong>密码协处理器芯片</strong>，焊在主板上（PCIe/SPI
+总线连接）。它干的事：给你提供<strong>基于硬件的密钥存储和加密运算</strong>，密钥永远锁在芯片里，谁也拷不走。</p>
+<p>把 TPM 想象成一台<strong>迷你专用电脑</strong>，它有两个门：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────┐</span><br><span class="line">│  TPM（迷你电脑）              │</span><br><span class="line">│                             │</span><br><span class="line">│  ① 输入口（命令接口）          │</span><br><span class="line">│     · 给它数据算哈希           │</span><br><span class="line">│     · 让它签名/加密/解密        │</span><br><span class="line">│     · 让它生成密钥             │</span><br><span class="line">│     · 让它扩展 PCR            │</span><br><span class="line">│                             │</span><br><span class="line">│  ② 保险柜（内部存储）          │</span><br><span class="line">│     · PCR 值（系统指纹）       │</span><br><span class="line">│     · 密钥（永远不出来）        │</span><br><span class="line">│     · NVRAM 数据             │</span><br><span class="line">│                             │</span><br><span class="line">│  它没有显示器、没有键盘        │</span><br><span class="line">│  你不能&quot;登录进去看&quot;，只能       │</span><br><span class="line">│  通过命令指挥它干活            │</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p><strong>最重要的一条规矩：密钥一旦生成就锁在保险柜里，任何软件都拿不到密钥本身</strong>。你只能让它”用这把钥匙帮我签名”——它签完把结果给你，钥匙还在柜子里。</p>
+<p>TPM 是<strong>行业标准</strong>（TCG 定义，ISO/IEC 11889），Windows
+11 强制要求，几乎所有新主板都带。</p>
+<h3 id="tpm-的三大核心能力">🧬 TPM 的三大核心能力</h3>
+<h4 id="度量measurementpcr-与只进不出">① 度量（Measurement）：PCR
+与”只进不出”</h4>
+<p>平台启动时，逐级”测量并记录”：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">平台启动时逐级测量：</span><br><span class="line">  固件 → 引导程序 → 内核 → ...</span><br><span class="line">  每级算出哈希，PCR_Extend 进 PCR</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">PCR 新值 = SHA256( PCR旧值 || 新测量值 )   ← || 是拼接，不是按位或</span><br></pre></td></tr></table></figure>
+<p><strong>PCR（Platform Configuration
+Register，平台配置寄存器）</strong> 只有两个特性：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>只能 Extend（追加）</td>
+<td>没有”直接写”这个命令，固件层就不存在该接口</td>
+</tr>
+<tr>
+<td>开机清零</td>
+<td>每次启动重新累计，从零开始</td>
+</tr>
+</tbody>
+</table>
+<p>所以 PCR 里的值 =
+这台机器”从开机到现在装了什么”的<strong>不可篡改指纹</strong>。想伪装成”没装过恶意软件”？改不了——你加载过的任何恶意代码必然出现在
+Extend 链里。</p>
+<blockquote>
+<p>为什么只能 Extend？因为 PCR
+的意义是”不可抵赖的系统指纹”。如果能直接写，恶意软件就能把 PCR
+直接写成”干净的值”。Extend
+用哈希链保证历史不可抹除：账本只能往后加页，不能撕掉前面的页。</p>
+</blockquote>
+<h4 id="存储sealing密封钥匙和状态绑定">②
+存储（Sealing，密封）：钥匙和状态绑定</h4>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">seal(key, PCR值集合)  →  这把钥匙只在一个特定状态下才能 unseal</span><br><span class="line"></span><br><span class="line">TPM 内部有密钥层级：</span><br><span class="line">  SRK（存储根密钥）→ 保护下面的所有子密钥</span><br><span class="line">  子密钥 → 保护应用的密钥</span><br><span class="line">像一棵树，根在芯片里，枝叶在外面（磁盘上）</span><br></pre></td></tr></table></figure>
+<p>这就是”<strong>钥匙锁进保险箱，保险箱的门锁绑定系统状态</strong>”——系统被篡改（PCR
+不对），unseal 直接失败。</p>
+<p><strong>sealing
+的本质价值</strong>：密钥和”系统状态（PCR）“绑定。<strong>就算攻击者偷走了整个硬盘/内存里的密文，只要这台机器的状态不是当初密封时的状态（或他把东西搬去别的机器），密钥就永远解不开。</strong>
+把”密码保护”升级成”状态保护”。</p>
+<h4 id="认证attestationaik-与-quote">③ 认证（Attestation）：AIK 与
+Quote</h4>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>密钥</th>
+<th>全称</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EK</td>
+<td>Endorsement Key，背书密钥</td>
+<td>出厂烧进芯片的身份密钥，证明”我是真 TPM”</td>
+</tr>
+<tr>
+<td>AIK</td>
+<td>Attestation Identity Key，认证身份密钥</td>
+<td>由 EK 背书派生，专用于给”系统状态”签名（匿名）</td>
+</tr>
+<tr>
+<td>SRK</td>
+<td>Storage Root Key，存储根密钥</td>
+<td>密钥树根节点，保护所有子密钥</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Quote 操作</strong>：<code>TPM_Quote(AIK, PCR选择)</code> →
+返回”当前 PCR 值 + AIK 签名”。</p>
+<p>远程认证的经典玩法：验证方给个随机数 nonce → 被验证方 TPM 对”PCR +
+nonce”签名 → 验证方核对签名和 PCR 是否符合预期。nonce
+防重放，签名保证真实。</p>
+<h3 id="tpm-是硬件还是软件">💻 TPM 是硬件还是软件？</h3>
+<p><strong>TPM 是一个”逻辑规范”，实现方式有多种。</strong> TPM 2.0
+规范（TCG
+定的）定义”这台设备应该提供什么命令、什么语义”，实现形态看厂商：</p>
+<table>
+<thead>
+<tr>
+<th>实现</th>
+<th>形态</th>
+<th>安全强度</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>dTPM</td>
+<td>独立芯片焊主板</td>
+<td>⭐⭐⭐ 最高</td>
+<td>多数台式机/服务器主板</td>
+</tr>
+<tr>
+<td>fTPM</td>
+<td>CPU 固件里跑的软件实现</td>
+<td>⭐⭐</td>
+<td>AMD 的 fTPM 在 PSP 里执行</td>
+</tr>
+<tr>
+<td>vTPM</td>
+<td>虚拟机里的软件模拟</td>
+<td>⭐</td>
+<td>云上每个 VM 一个 vTPM</td>
+</tr>
+<tr>
+<td>模拟器</td>
+<td>纯软件测试用</td>
+<td>⭐</td>
+<td>Microsoft ms-tpm-20-ref</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>fTPM
+的坑：论文引用的研究（faultPM）用<strong>电压故障注入</strong>物理攻击，成功干扰
+fTPM 计算并提取了保护密钥（论文 §2.2）。这也是机密计算里做
+<strong>CTPM（机密 TPM）</strong> 的动机之一。</p>
+</blockquote>
+<h3 id="tcg-是啥">🏛 TCG 是啥？</h3>
+<p><strong>TCG（Trusted Computing Group，可信计算组织）</strong>
+是一个国际标准组织（成员包括 AMD、Intel、Microsoft、IBM
+等），<strong>负责制定 TPM 的规范</strong>。类比：TCG 是”国标委”，TPM
+2.0
+规范是它发布的标准，各家芯片厂（英飞凌、国民技术等）按标准造芯片。TCG
+还定义了 <strong>TSS（TCG Software Stack）</strong>——应用程序访问 TPM
+的统一接口库。</p>
+<h3 id="用户怎么访问-tpm">🛠 用户怎么访问 TPM</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户 → TSS 软件栈（tpm2-tools 等）→ TPM 芯片</span><br><span class="line">       ↑</span><br><span class="line">    tpm2_pcrread      读 PCR</span><br><span class="line">    tpm2_createkey    生成密钥</span><br><span class="line">    tpm2_sign         用密钥签名</span><br><span class="line">    tpm2_quote        做远程认证</span><br><span class="line">    tpm2_nvwrite      写 NVRAM（需要授权）</span><br></pre></td></tr></table></figure>
+<p>命令行示例（Linux 上可跑）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">tpm2_pcrread sha256:0          <span class="comment"># 读 PCR 0 的值</span></span><br><span class="line">tpm2_createprimary -c owner.ctx <span class="comment"># 在 Owner 层级下创建主密钥</span></span><br><span class="line">tpm2_quote -c aik.ctx -l sha256:0,1 -m quote.bin -s sig.bin  <span class="comment"># 做认证</span></span><br></pre></td></tr></table></figure>
+<h3 id="你其实已经在用-tpm三个日常场景">🖥 你其实已经在用
+TPM：三个日常场景</h3>
+<p><strong>场景 A：BitLocker（磁盘加密）——用 TPM
+保管磁盘密钥</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 启用 BitLocker，系统让 TPM 生成/存入&quot;磁盘加密密钥&quot;</span><br><span class="line">② 开机时：</span><br><span class="line">   系统问 TPM：&quot;当前 PCR 值是多少？符合预期吗？&quot;</span><br><span class="line">   TPM 比对 → 符合 → 释放密钥 → 系统解密磁盘</span><br><span class="line">            → 不符合（换了引导程序、有人改启动项）</span><br><span class="line">              → 拒绝释放 → 屏幕让你插恢复 U 盘</span><br></pre></td></tr></table></figure>
+<p>防的是”有人拆走你的硬盘去别的机器上读”——硬盘到哪都解不开。</p>
+<p><strong>场景 B：Windows Hello / 指纹登录</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 注册时，系统让 TPM 生成一对密钥，私钥锁进 TPM</span><br><span class="line">② 登录时，指纹匹配成功后系统让 TPM 用私钥签名</span><br><span class="line">   验证通过 → 放你进系统</span><br></pre></td></tr></table></figure>
+<p>私钥永远不会出现在内存/磁盘里，偷走 Windows 文件也偷不走密钥。</p>
+<p><strong>场景 C：远程认证</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 别人（验证方）发来一个随机数 nonce</span><br><span class="line">② 你的 TPM 用 AIK 签名 (当前PCR值, nonce)</span><br><span class="line">③ 对方验证签名 → 确认&quot;这台机器的 PCR 确实是这个值&quot;</span><br><span class="line">④ 对方对照&quot;干净机器的预期 PCR 表&quot; → 通过则可信</span><br></pre></td></tr></table></figure>
+<p>注意 PCR 值来自 TPM
+自己的保险柜，<strong>不是软件报告的</strong>——软件想谎报
+PCR？它没有权限写 PCR。</p>
+<h3 id="blob-与两层加密">🔑 blob 与两层加密</h3>
+<p><strong>blob = Binary Large Object（二进制大对象）</strong>，在 TPM
+语境里特指”被父密钥加密后的密钥对象文件”：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">磁盘上的一个密钥文件（比如 keyA.bin）：</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ 头部（元数据：密钥类型、属性）   │</span><br><span class="line">│ 密钥材料（用父密钥加密后的密文） │</span><br><span class="line">│ 认证信息、策略等               │</span><br><span class="line">└──────────────────────────────┘</span><br><span class="line">        ↑</span><br><span class="line">    这整个文件就叫&quot;密钥 blob&quot;</span><br></pre></td></tr></table></figure>
+<p><strong>blob 是密文</strong>，没有芯片里父密钥的参与，磁盘上的 blob
+什么都干不了。blob
+可以放任何地方：磁盘、NVRAM、网络传输——都安全。使用时：<code>加载 blob → TPM 内部用父密钥解开 → 密钥在芯片内就位 → 干活</code>。</p>
+<p>TPM 体系里加密分<strong>两层</strong>，别混：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">第 1 层（密钥层）：父密钥加密 → 子密钥材料   → 产物 = 密钥 blob（密钥本身）</span><br><span class="line">第 2 层（数据层）：子密钥加密 → 数据          → 产物 = 数据密文（你的文件）</span><br><span class="line"></span><br><span class="line">磁盘上最终看到两个文件：</span><br><span class="line">  key.bin    ← 密钥 blob（里面是&quot;被 SRK 加密过的 AES 密钥材料&quot;）</span><br><span class="line">  data.enc   ← 数据密文（里面是&quot;被 AES 密钥加密过的文件内容&quot;）</span><br></pre></td></tr></table></figure>
+<p>类比三层套娃：保险箱（SRK，永远在芯片内）→ 钥匙盒（blob，里面是加密的
+AES 密钥材料）→ 信（数据，用这把钥匙加密）。blob
+保护”钥匙不泄露”，数据密文保护”内容不泄露”，各管一层。</p>
+<h3 id="密钥树与-nvram容器和结构的关系">🧅 密钥树与
+NVRAM：容器和结构的关系</h3>
+<p><strong>TPM 密钥体系是”洋葱式”的，绝大多数密钥根本不在 TPM
+芯片里</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">芯片内（NVRAM/内部）：SRK、EK、种子（根节点）</span><br><span class="line">芯片外（磁盘/文件）：  所有子密钥 = &quot;用父密钥加密的 blob&quot;</span><br><span class="line">                          ↓ 要用时，blob 装进 TPM，父密钥在芯片内解开</span><br></pre></td></tr></table></figure>
+<p>存外面也不怕：<strong>没有芯片里的父密钥，磁盘上的 blob
+就是一堆密文</strong>。</p>
+<p><strong>NVRAM 里有什么？不都是密钥：</strong></p>
+<table>
+<thead>
+<tr>
+<th>内容</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EK 证书</td>
+<td>出厂身份证明</td>
+</tr>
+<tr>
+<td>平台种子（如 EPSeed）</td>
+<td>所有密钥的”源头”</td>
+</tr>
+<tr>
+<td>部分 PCR 备份</td>
+<td>视实现而定</td>
+</tr>
+<tr>
+<td>计数器</td>
+<td>防回滚的单调计数器</td>
+</tr>
+<tr>
+<td>平台策略/授权数据</td>
+<td>使用策略</td>
+</tr>
+<tr>
+<td>少量核心密钥</td>
+<td>SRK、AIK 等（不是全部！）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>NVRAM
+和密钥树的关系</strong>——一个是”存储空间”，一个是”逻辑层级”：</p>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>本质</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>密钥树</td>
+<td>父密钥加密子密钥的逻辑结构</td>
+<td>家谱</td>
+</tr>
+<tr>
+<td>NVRAM</td>
+<td>芯片内掉电不丢的存储区</td>
+<td>保险柜里的抽屉</td>
+</tr>
+</tbody>
+</table>
+<p>密钥树的<strong>根</strong>（SRK/种子）必须呆在芯片内；<strong>枝叶</strong>（blob）可以放
+NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树是”家谱”，NVRAM
+是”保险柜里的抽屉”；重要的东西锁在抽屉里，其余的放在外面的保险箱（加密磁盘）里也一样安全。</strong></p>
+<h3 id="完整例子用-tpm-加密一个文件6-步">🎬 完整例子：用 TPM
+加密一个文件（6 步）</h3>
+<p><strong>场景</strong>：把 <code>存折密码.txt</code>
+加密，要求”只有这台机器、且系统没被动过手脚时才能解开”。</p>
+<p><strong>Step 1：芯片初始化</strong>（出厂时发生，不是你做的）</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">TPM 芯片出厂：内部生成 EK + 平台种子</span><br><span class="line">  → 这些是&quot;根&quot;，永远锁在芯片里</span><br></pre></td></tr></table></figure>
+<p><strong>Step 2：启动度量</strong>（每次开机自动发生）</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">开机 → UEFI 固件 → 引导程序 → 内核</span><br><span class="line">每一级启动时被&quot;度量&quot;：算出哈希 → Extend 进 PCR</span><br><span class="line">开机完成后：PCR = [0x3A2F..., 0x8C11..., ...]（不可篡改的系统指纹）</span><br></pre></td></tr></table></figure>
+<p><strong>Step 3：创建你的加密密钥</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你执行：tpm2_create ...（系统帮你调用 TPM）</span><br><span class="line"></span><br><span class="line">TPM 芯片内部：</span><br><span class="line">  · 用根密钥 SRK 派生/保护一个新密钥（AES 密钥）</span><br><span class="line">  · 把新密钥的&quot;材料&quot;用 SRK 加密</span><br><span class="line">  · 把加密结果吐出来给你</span><br><span class="line">          │</span><br><span class="line">          ▼</span><br><span class="line">磁盘上多了一个文件：mykey.bin   ← 这就是 blob</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>⚠️ AES 密钥本身从未离开过芯片。你拿到的是”被 SRK
+锁住的密钥”（blob），不是密钥。</p>
+</blockquote>
+<p><strong>Step 4：加密文件</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 让 TPM 加载 mykey.bin → 芯片内部用 SRK 解开 → AES 密钥就位（在芯片内）</span><br><span class="line">② 把文件内容喂给 TPM，TPM 在内部用 AES 密钥加密</span><br><span class="line">③ 吐出密文 → 写入 存折密码.txt.enc</span><br><span class="line"></span><br><span class="line">磁盘上现在有：</span><br><span class="line">  mykey.bin          （加密的密钥材料）</span><br><span class="line">  存折密码.txt.enc   （加密的数据）</span><br></pre></td></tr></table></figure>
+<p><strong>Step 5：解密</strong>（下次要用时）</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 加载 mykey.bin → TPM 解开 → AES 密钥就位</span><br><span class="line">② TPM 用 AES 密钥解密密文 → 吐出明文</span><br></pre></td></tr></table></figure>
+<p><strong>Step 6：加一道 sealing</strong>（TPM 的灵魂功能）</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">创建密钥时指定：只有 PCR 值 == [0x3A2F..., ...] 时才能解开</span><br><span class="line">  → 密钥和&quot;这台机器此刻的状态&quot;绑死</span><br><span class="line"></span><br><span class="line">攻击场景演示：</span><br><span class="line">  ① 小偷把磁盘拆走，装到自己机器上</span><br><span class="line">     → 他那台机器的 PCR ≠ 你的 PCR → TPM 拒绝解开 ✅</span><br><span class="line">  ② 有人改了你的开机项/内核（植入恶意软件）</span><br><span class="line">     → PCR 变了 → TPM 拒绝解开 → 敏感文件宁可打不开也不泄露 ✅</span><br></pre></td></tr></table></figure>
+<p><strong>TPM
+的工作模式一句话</strong>：秘密（密钥）永远在芯片里；你永远只能”命令它”（加载
+blob、让它解密、让它签名）；它永远只把”结果”给你，不给”秘密”。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TPM 是纯软件</td>
+<td>TPM
+是规范，独立芯片（dTPM）、固件（fTPM）、虚拟机（vTPM）都能实现</td>
+</tr>
+<tr>
+<td>NVRAM 里全是密钥</td>
+<td>NVRAM 装种子/证书/计数器/策略/少量核心密钥，大部分密钥是外部的
+blob</td>
+</tr>
+<tr>
+<td><code>\|\|</code> 是按位或</td>
+<td>PCR 更新公式里的 <code>\|\|</code>
+是拼接（concatenation），不是或运算</td>
+</tr>
+<tr>
+<td>密钥文件加密的是数据</td>
+<td>密钥 blob
+加密的是<strong>密钥材料本身</strong>，数据另有单独一层加密</td>
+</tr>
+<tr>
+<td>blob 放外面不安全</td>
+<td>blob 是密文，没有芯片内父密钥就是一堆废数据</td>
+</tr>
+<tr>
+<td>TPM 只是一个密钥管理器</td>
+<td>它同时是密钥管理器 + 度量器（PCR）+ 签名器（AIK）+ 随机数发生器 +
+加密引擎</td>
+</tr>
+<tr>
+<td>PCR 可以被软件直接改写</td>
+<td>固件层面只有 Extend 命令，没有”写 PCR”接口，历史不可抹除</td>
+</tr>
+<tr>
+<td>所有 TPM 实现一样安全</td>
+<td>dTPM &gt; fTPM &gt; vTPM，fTPM 曾被电压故障注入攻击提取密钥</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>TPM
+是一台只能通过命令指挥、密钥永不出柜的保险箱电脑：根密钥锁芯片内，子密钥以
+blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sealing
+把密钥和系统状态绑死，AIK Quote 支撑远程认证；BitLocker 和 Windows Hello
+就是它最日常的应用。三个”永不”：根密钥永不离开芯片、任何密钥的工作形式永不出现明文、PCR
+永不接受直接写入。</p>
+</blockquote>
+<p>下一站：把 TPM 和 TEE 放到一起——信任根三件套与协作信任。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>安全</category>
+        <category>机密计算</category>
+      </categories>
+      <tags>
+        <tag>安全</tag>
+        <tag>TPM</tag>
+        <tag>可信计算</tag>
+        <tag>密钥管理</tag>
       </tags>
   </entry>
   <entry>
@@ -16668,6 +17375,356 @@ Adam、SGD）外面，通过”向前看”的策略来稳定训练过程。</p>
       </tags>
   </entry>
   <entry>
+    <title>信任根三件套：RTM、RTR、RTS与TEE+TPM协作</title>
+    <url>/posts/2affc801/</url>
+    <content><![CDATA[<p>TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了论文
+CCxTrust 的核心：协作信任。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM</td>
+<td>Root of Trust for Measurement，度量信任根</td>
+<td>记账员：负责测量</td>
+</tr>
+<tr>
+<td>RTR</td>
+<td>Root of Trust for Report，报告信任根</td>
+<td>公证员：负责汇报</td>
+</tr>
+<tr>
+<td>RTS</td>
+<td>Root of Trust for Storage，存储信任根</td>
+<td>保险库：负责藏钥匙</td>
+</tr>
+<tr>
+<td>黑盒信任根</td>
+<td>black-box RoT</td>
+<td>TEE 的信任根，用户够不着</td>
+</tr>
+<tr>
+<td>白盒信任根</td>
+<td>white-box RoT</td>
+<td>TPM 的信任根，用户可访问可配置</td>
+</tr>
+<tr>
+<td>TCB</td>
+<td>Trusted Computing Base，受信计算基</td>
+<td>安全所依赖的最小可信组件集合</td>
+</tr>
+<tr>
+<td>信任链</td>
+<td>chain of trust</td>
+<td>从物理锚点逐级验证的链条</td>
+</tr>
+<tr>
+<td>信任锚</td>
+<td>trust anchor</td>
+<td>信任链的起点，物理上不可篡改</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全协处理器</td>
+</tr>
+<tr>
+<td>复合认证</td>
+<td>composite attestation</td>
+<td>TEE 和 TPM 合并出认证报告</td>
+</tr>
+</tbody>
+</table>
+<h3 id="信任根三件套rtm-rtr-rts">🧩 信任根三件套：RTM / RTR / RTS</h3>
+<p>TCG 把”可信平台”拆成三个信任根。<strong>整个 CCxTrust
+架构就是围绕这三个根怎么分配展开的</strong>：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 18%" />
+<col style="width: 25%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>信任根</th>
+<th>全称</th>
+<th>干什么</th>
+<th>通俗类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>RTM</strong></td>
+<td>Root of Trust for <strong>Measurement</strong>，度量信任根</td>
+<td>负责测量系统状态，保证”测了、记了、改不了”</td>
+<td>记账员</td>
+</tr>
+<tr>
+<td><strong>RTR</strong></td>
+<td>Root of Trust for <strong>Report</strong>，报告信任根</td>
+<td>负责把测量结果<strong>可信地报出去</strong>（签名）</td>
+<td>公证员</td>
+</tr>
+<tr>
+<td><strong>RTS</strong></td>
+<td>Root of Trust for <strong>Storage</strong>，存储信任根</td>
+<td>负责保护密钥等秘密</td>
+<td>保险库</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>一句话：<strong>RTM 管”测量”，RTR 管”汇报”，RTS
+管”存储”</strong>。一台机器可不可信，就是”测得好、报得真、藏得牢”三件事。</p>
+</blockquote>
+<h3 id="黑盒-tee-白盒-tpm各有所长">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</h3>
+<p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>（论文
+§5.1.1）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          TEE（SEV-SNP）                 TPM</span><br><span class="line">       ┌──────────────────┐        ┌──────────────────┐</span><br><span class="line">信任模式│  black-box        │        │  white-box        │</span><br><span class="line">       │  信任根归厂商       │        │  用户可直接访问     │</span><br><span class="line">可访问性│  用户够不着（API 受限）│        │  用户可配置可验证     │</span><br><span class="line">强项   │  强隔离的执行环境    │        │  用户侧密钥/存储/认证 │</span><br><span class="line">短板   │  信任是黑箱         │        │  没有执行环境       │</span><br><span class="line">       └──────────────────┘        └──────────────────┘</span><br></pre></td></tr></table></figure>
+<p>关键差异：<strong>CPU-TEE
+信任根是黑盒的</strong>，只能给系统底层（固件、hypervisor、内核）用，用户够不着、验不了；<strong>TPM
+是白盒的</strong>，用户可以直接访问、配置、验证，能补上 TEE
+没有的用户侧能力。</p>
+<p>论文的三个核心挑战与对应方案（§3.2、§4）：</p>
+<table>
+<thead>
+<tr>
+<th>挑战</th>
+<th>问题</th>
+<th>方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1</td>
+<td>怎么建立用户可控的信任体系？</td>
+<td>S1：协作信任根（TEE+TPM）</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>怎么弥合 TEE 和 TPM 的技术鸿沟？</td>
+<td>S2：机密 TPM（CTPM）</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>怎么保证 CVM 敏感数据安全？</td>
+<td>S3：复合认证</td>
+</tr>
+</tbody>
+</table>
+<h3 id="论文的核心分配三件套怎么分工">📐
+论文的核心分配：三件套怎么分工</h3>
+<p>论文的原创设计（§5.1）——<strong>不搞一家独大，让 TEE 和 TPM
+分工协作</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RTM（度量）  → TEE 与 TPM 并行独立，各测各的域</span><br><span class="line">              TEE 测：硬件/固件/启动环境（TEE 的 TCB）</span><br><span class="line">              TPM 测：hypervisor、guest OS、工作负载</span><br><span class="line">              → 两块&quot;账本&quot;互不依赖，一份被攻破，另一份还在</span><br><span class="line"></span><br><span class="line">RTR（报告）  → TEE 与 TPM 协作，生成&quot;复合认证报告&quot;</span><br><span class="line">              → 单一报告根容易被伪造/拼接攻击（见下）</span><br><span class="line"></span><br><span class="line">RTS（存储）  → 完全交给 TPM</span><br><span class="line">              → 用户密钥由 TPM 密封存储，TEE 也把密钥托管给 TPM</span><br></pre></td></tr></table></figure>
+<p><strong>为什么这样分？</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>分配</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM 并行独立</td>
+<td>两者测的域不同、互不依赖，形成”双保险”（论文原话 dual
+insurance）</td>
+</tr>
+<tr>
+<td>RTR 协作</td>
+<td>单一报告根容易被伪造/拼接攻击，合并成一份报告才能防拼接</td>
+</tr>
+<tr>
+<td>RTS 归 TPM</td>
+<td>TEE 没有持久存储能力（内存加密但掉电即失），TPM 有 NVRAM +
+密钥树，天生是保险库</td>
+</tr>
+</tbody>
+</table>
+<h3 id="三阶段测量rtm-的具体落地">📏 三阶段测量：RTM 的具体落地</h3>
+<p>论文把 CVM 的信任链从启动到运行分成三个阶段（§5.1.2）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────────────────┐</span><br><span class="line">│ Stage 1：Host 静态测量（CVM 启动前）                          │</span><br><span class="line">│   测 hypervisor、host 内核、虚拟化服务                        │</span><br><span class="line">│   → 保证&quot;我住的房子是干净的&quot;                                 │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 2：CVM 启动测量                                        │</span><br><span class="line">│   测 guest 固件、内核、initrd、根文件系统、镜像签名            │</span><br><span class="line">│   → 保证&quot;住进来的这个租客是预期的&quot;                            │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 3：运行时测量（动态）                                   │</span><br><span class="line">│   TEE 对 CVM 内工作负载做完整性校验                           │</span><br><span class="line">│   → 保证&quot;运行过程中没被篡改&quot;                                 │</span><br><span class="line">└─────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。论文说”静态
++ 动态信任链结合”，指的就是这个。</p>
+<blockquote>
+<p>顺带澄清一个容易混的概念：<strong>hypervisor
+不是固件</strong>。层次是：应用 → Guest OS → hypervisor（软件）→ 固件
+Firmware（UEFI/BIOS、PSP 等，烧在只读存储里）→ CPU 硬件。固件启动
+hypervisor，hypervisor 启动 guest。</p>
+</blockquote>
+<h3 id="度量分工重合吗这是双保险不是-bug">🔗
+度量分工重合吗？——这是”双保险”不是 bug</h3>
+<p>论文说”TEE 测固件、TPM 测 hypervisor”，但现实中 TPM
+的启动链本来也测固件（UEFI 启动时自己 Extend
+PCR）。<strong>实践中有重叠，但这是刻意为之</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">论文的真实意图 = 双保险（redundancy）：</span><br><span class="line">· 两个独立的测量源（TEE 的 PSP 侧 vs TPM 芯片侧），互不信任、互不依赖</span><br><span class="line">· TEE 的测量域 = &quot;TEE 自己的启动信任链&quot;（PSP→SEV 固件→OVMF 等）</span><br><span class="line">· TPM 的测量域 = &quot;平台全局启动链&quot;（UEFI→hypervisor→guest）</span><br><span class="line">· 哪怕一条链被攻破/伪造，另一条链的账本仍然可信</span><br></pre></td></tr></table></figure>
+<p><strong>概念上分工（各测各的域），实践上有重叠（都碰固件），重叠是刻意的冗余设计。</strong></p>
+<h3 id="信任链与信任锚固件为什么改不了">🔑
+信任链与信任锚：固件为什么改不了</h3>
+<p>PCR
+的”固件逻辑强制”依赖一个前提：<strong>固件本身不能被恶意修改</strong>。这靠两道防线，不是靠”加载时度量”一次解决：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 物理防护（第一道，硬件级）：</span><br><span class="line">   · dTPM 是独立芯片，固件写在一次性熔丝/受保护闪存里，</span><br><span class="line">     常规软件攻击根本写不进去</span><br><span class="line">   · fTPM 在 CPU 的 PSP 里，PSP 固件有签名校验 + 只读存储</span><br><span class="line">   → &quot;改 TPM 固件&quot;不是软件层能做到的事，物理防护兜底</span><br><span class="line"></span><br><span class="line">② 信任链（第二道，启动级）：</span><br><span class="line">   从&quot;绝对可信的起点&quot;逐级验证：</span><br><span class="line">   硬件（RoT 芯片）→ 验证固件 → 固件验证 bootloader → bootloader 验证内核 → ...</span><br><span class="line">   每一步都由前一步验证</span><br></pre></td></tr></table></figure>
+<p>所以准确表述是：</p>
+<table>
+<thead>
+<tr>
+<th>防护对象</th>
+<th>防护手段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TPM 固件本身不可改</td>
+<td>物理防护（熔丝、受保护存储、签名校验）</td>
+</tr>
+<tr>
+<td>系统软件（内核等）不被篡改</td>
+<td>信任链（启动时逐级度量 + 签名校验）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>信任链的起点（信任锚）是谁？</strong> 是硬件本身（RoT，Root
+of Trust，信任根）——它是物理上无法篡改的，比如 TPM 芯片内部逻辑、CPU
+内部的 PSP
+ROM。<strong>信任链不是无限的，它终止于一个”物理可信”的锚点</strong>，这就是”根（Root）“的含义。</p>
+<blockquote>
+<p>修正一个常见说法：不是”加载时度量保证固件不可改”——UEFI
+是第一级软件，加载时已经没人能度量它了，它靠的是硬件锚点 +
+物理防护。</p>
+</blockquote>
+<h3 id="pspamd-芯片里的先于一切的安全小电脑">🔩 PSP：AMD
+芯片里的”先于一切”的安全小电脑</h3>
+<p><strong>PSP（Platform Security Processor，平台安全处理器）</strong>
+是 AMD CPU 里的<strong>独立 ARM 安全协处理器</strong>，相当于”CPU
+里的一个小电脑”：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────┐</span><br><span class="line">│ AMD CPU 芯片                 │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ x86 主核（跑你的系统）     │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ PSP（独立 ARM 核）        │ │</span><br><span class="line">│  │ · 芯片上电先于 x86 主核   │ │</span><br><span class="line">│  │ · 跑在隔离的安全环境里    │ │</span><br><span class="line">│  │ · 管理：SEV 内存加密密钥、 │ │</span><br><span class="line">│  │   RMP 表、固件签名校验、  │ │</span><br><span class="line">│  │   fTPM、DMA 保护          │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>PSP 在论文里的角色：</p>
+<table>
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>论文提到的地方</th>
+<th>PSP 干什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>§5.1.1 “TEE 通过 PSP 进行信任初始化”</td>
+<td>PSP 是 TEE 信任链的起点（锚点）</td>
+</tr>
+<tr>
+<td>内存加密</td>
+<td>PSP 生成和管理内存加密密钥</td>
+</tr>
+<tr>
+<td>RMP 归属分配</td>
+<td>PSP 固件执行 RMPUPDATE，锁定页归属</td>
+</tr>
+<tr>
+<td>fTPM</td>
+<td>AMD 的 fTPM 就跑在 PSP 里</td>
+</tr>
+</tbody>
+</table>
+<p>一句话：<strong>PSP 是 AMD
+芯片里”先于一切、独立于一切”的安全小电脑，TEE 的信任锚就是它。</strong>
+类似地，Intel 有 Intel ME/CSE，ARM 有 TrustZone 的 secure world。</p>
+<h3 id="展望rtr-协作-复合认证">🔭 展望：RTR 协作 = 复合认证</h3>
+<p>本篇已建立完整骨架，最后预告论文最核心的一环——<strong>RTR
+协作</strong>。</p>
+<p><strong>为什么独立认证不够</strong>（论文 §5.3）：TEE 和 TPM
+各自单独出认证报告时：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· 攻击者可能伪造 CVM 的 ID 发起攻击</span><br><span class="line">· 攻击者可能做&quot;报告拼接攻击&quot;（report concatenation）：</span><br><span class="line">  把 A 机器的 TPM 报告 + B 机器的 TEE 报告拼成&quot;完整报告&quot;</span><br><span class="line">  → 验证方以为是一台可信机器的完整状态，实际是两台机器拼的</span><br><span class="line">· 独立认证需要两次交互（两个数据拷贝、两次签名、两次报告返回），效率低</span><br></pre></td></tr></table></figure>
+<p><strong>论文的解法</strong>：复合认证协议——把 TEE 报告嵌进 TPM
+Quote（或反过来），生成<strong>一份不可拆分的复合报告</strong>，一次交互完成认证。拼接攻击的根基（两份独立报告）被直接消灭，认证效率还提升了
+24%（论文 §7）。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM/RTR/RTS 是论文发明的</td>
+<td>是 TCG 标准术语，论文的创新在于”怎么分配”</td>
+</tr>
+<tr>
+<td>TEE 比 TPM 强，全都用 TEE</td>
+<td>TEE 是黑盒、无持久存储、用户够不着；TPM
+是白盒、有存储，两者互补</td>
+</tr>
+<tr>
+<td>度量分工必须严格不重合</td>
+<td>实践中有重叠，这是刻意的双保险冗余设计</td>
+</tr>
+<tr>
+<td>固件不可篡改靠启动时度量</td>
+<td>固件本身靠物理防护（熔丝/受保护存储），度量管的是系统软件</td>
+</tr>
+<tr>
+<td>信任链可以无限延伸</td>
+<td>信任链终止于物理锚点（TPM 芯片、PSP），根不需要被验证</td>
+</tr>
+<tr>
+<td>hypervisor 是底层固件</td>
+<td>hypervisor 是软件层，固件在它下面一层</td>
+</tr>
+<tr>
+<td>TEE 和 TPM 各自出报告就行</td>
+<td>独立报告可被拼接攻击利用，复合认证才能防拼接</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>信任根三件套中，RTM 管测量、RTR 管报告、RTS 管存储；CCxTrust 让 TEE
+和 TPM 分工协作——RTM 并行独立（双保险）、RTR 复合认证（防拼接）、RTS 归
+TPM（用白盒补黑盒），通过三阶段测量覆盖从启动到运行的完整信任链，信任锚则落在
+PSP 等物理硬件上。这就是论文”TEE + TPM 协作信任”的全貌。</p>
+</blockquote>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>安全</category>
+        <category>机密计算</category>
+      </categories>
+      <tags>
+        <tag>机密计算</tag>
+        <tag>TEE</tag>
+        <tag>TPM</tag>
+        <tag>信任根</tag>
+        <tag>远程认证</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>内网穿透与远程桌面：用 Tailscale 随时随地访问你的 Windows</title>
     <url>/posts/8a7b3c2d/</url>
     <content><![CDATA[<p>是否曾想在咖啡馆、酒店或任何有网络的地方，像坐在自己书房一样操作家里的电脑？无论是访问重要文件、运行特定软件，还是进行远程维护，直接访问一台不在身边的计算机都是一个常见的需求。</p>
@@ -17723,6 +18780,311 @@ graph LR
       </tags>
   </entry>
   <entry>
+    <title>机密计算入门：数据使用中的安全与TEE</title>
+    <url>/posts/84b980d1/</url>
+    <content><![CDATA[<p>硬盘加密了、网络加密了，可数据一进内存就是明文——谁来保护”正在被计算的数据”？</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据三态</td>
+<td>静态、传输中、使用中三种数据状态</td>
+<td>内存里的数据最危险</td>
+</tr>
+<tr>
+<td>TEE</td>
+<td>Trusted Execution Environment，可信执行环境</td>
+<td>CPU 里的硬件保险箱</td>
+</tr>
+<tr>
+<td>CVM</td>
+<td>Confidential Virtual Machine，机密虚拟机</td>
+<td>内存被硬件加密的虚拟机</td>
+</tr>
+<tr>
+<td>SEV-SNP</td>
+<td>AMD 的 CVM 技术（安全加密虚拟化-安全嵌套分页）</td>
+<td>AMD 系机密虚拟机</td>
+</tr>
+<tr>
+<td>TDX</td>
+<td>Intel 的 CVM 技术（信任域扩展）</td>
+<td>Intel 系机密虚拟机</td>
+</tr>
+<tr>
+<td>CCA</td>
+<td>ARM 的 CVM 技术（机密计算架构）</td>
+<td>ARM 系机密虚拟机</td>
+</tr>
+<tr>
+<td>内存加密</td>
+<td>数据在内存里以密文形式存储</td>
+<td>明文只在 CPU 芯片内出现</td>
+</tr>
+<tr>
+<td>信任根（RoT）</td>
+<td>Root of Trust，信任链的起点</td>
+<td>安全体系的”根”</td>
+</tr>
+<tr>
+<td>黑盒信任根</td>
+<td>用户无法直接验证的信任根</td>
+<td>信任全押在厂商身上</td>
+</tr>
+<tr>
+<td>信任缺口</td>
+<td>trust gap，用户与云平台间的信任落差</td>
+<td>数据你说了不算</td>
+</tr>
+<tr>
+<td>TLS</td>
+<td>Transport Layer Security，传输层安全协议</td>
+<td>加密管道本身</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>HTTP over TLS</td>
+<td>加密管道送 HTTP</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数据三态为什么内存里的数据最难保护">🧩
+数据三态：为什么内存里的数据最难保护</h3>
+<p>任何数据在生命周期里都有三种状态：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────┐</span><br><span class="line">│  ① 静态数据 (Data at Rest)   → 存在硬盘/磁盘里     │</span><br><span class="line">│  ② 传输中数据 (Data in Transit) → 网络上传输       │</span><br><span class="line">│  ③ 使用中数据 (Data in Use)  → 在内存里被 CPU 计算  │</span><br><span class="line">└─────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>传统加密方案只保护前两种：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>保护手段</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>静态</td>
+<td>磁盘加密</td>
+<td>BitLocker、LUKS</td>
+</tr>
+<tr>
+<td>传输中</td>
+<td>网络加密</td>
+<td>HTTPS/TLS</td>
+</tr>
+<tr>
+<td>使用中</td>
+<td>❌ 传统方案管不了</td>
+<td>内存里的明文</td>
+</tr>
+</tbody>
+</table>
+<p>第 ③ 种状态是真正的盲区：<strong>数据在内存里被 CPU
+处理时是明文</strong>。在传统云环境里，云服务商的运维人员、管理员、甚至被攻破的虚拟机监控器（hypervisor）都能看到内存里的明文数据。</p>
+<blockquote>
+<p>典型场景：云端跑 AI
+推理，模型权重和用户数据在内存里参与计算。磁盘加密管静态、HTTPS
+管传输，唯独”正在计算”这一头是裸奔的。</p>
+</blockquote>
+<h3 id="tee给-cpu-装一个保险箱">🏦 TEE：给 CPU 装一个保险箱</h3>
+<p><strong>TEE（Trusted Execution Environment，可信执行环境）</strong>
+的思路：在 CPU
+硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">普通虚拟机 vs 机密虚拟机（CVM）</span><br><span class="line">┌─────────────────────┐   ┌─────────────────────┐</span><br><span class="line">│   普通 VM            │   │  CVM（机密虚拟机）    │</span><br><span class="line">│  内存 = 明文         │   │  内存 = 硬件加密      │</span><br><span class="line">│  hypervisor 能读     │   │  hypervisor 读不了    │</span><br><span class="line">│  管理员能读          │   │  物理攻击也读不了     │</span><br><span class="line">└─────────────────────┘   └─────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>主流的 CVM 技术（论文 §2.1）：</p>
+<table>
+<thead>
+<tr>
+<th>技术</th>
+<th>厂商</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AMD SEV-SNP</td>
+<td>AMD</td>
+<td>内存加密 + SNP（安全嵌套分页）防篡改，生态最成熟</td>
+</tr>
+<tr>
+<td>Intel TDX</td>
+<td>Intel</td>
+<td>类似思路，生态还在早期</td>
+</tr>
+<tr>
+<td>ARM CCA</td>
+<td>ARM</td>
+<td>面向 ARM 芯片，适合移动/嵌入式</td>
+</tr>
+</tbody>
+</table>
+<p>一句话：<strong>TEE =
+硬件帮你把”正在计算的数据”锁进保险箱</strong>。</p>
+<h3 id="内存加密计算时不还是要解密吗">🔐
+内存加密：计算时不还是要解密吗？</h3>
+<p>这是最常问的问题。答案：<strong>要解密，但解密发生在 CPU
+芯片”内部”，明文永远不出芯片</strong>。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统（无内存加密）：</span><br><span class="line">  DRAM(明文) ──内存总线──&gt; CPU 计算 ──&gt; DRAM(明文)</span><br><span class="line">  ▲                                ▲</span><br><span class="line">  └─ 总线嗅探、插内存条、冷启动都能读到明文 ─┘</span><br><span class="line"></span><br><span class="line">内存加密后（SEV）：</span><br><span class="line">  DRAM(密文) ──内存总线──&gt; CPU 内部解密 → 明文只存在于芯片内 ──&gt; 重新加密写回 DRAM</span><br><span class="line">                    │        （缓存/寄存器/执行单元）</span><br><span class="line">                    │</span><br><span class="line">                    └─ 总线上的、DRAM 里的，全是密文 AES(key)</span><br></pre></td></tr></table></figure>
+<p>四个关键点：</p>
+<ol type="1">
+<li><strong>密钥永远在 CPU 内部</strong>，由 CPU 的专用安全处理器（AMD
+是 PSP，Platform Security Processor）生成和管理，外界拿不到。</li>
+<li><strong>解密点 = 内存控制器</strong>，它就在 CPU 芯片上。数据从 DRAM
+进入芯片后才被解密；离开芯片写回内存前被加密。</li>
+<li>攻击者能接触到的所有地方——内存条、总线、DMA
+设备——看到的都是密文。<strong>“计算”这个动作发生在芯片内部，外人看不到明文</strong>。</li>
+<li>类比：CPU
+是个保密工厂。仓库（DRAM）里堆的全是加密原料，原料进车间（芯片内部）才解锁加工，成品出车间前重新上锁。你能抢仓库、能蹲在传送带（总线）旁边，但看到的永远是锁着的东西。</li>
+</ol>
+<blockquote>
+<p>边界提醒：这个模型防的是”外部窃读”。如果攻击者攻破了 CVM
+<strong>内部</strong>的软件（guest kernel
+漏洞），明文当然还是会被读到——这要靠后面讲的远程认证来保证 CVM
+内部没被装后门。</p>
+</blockquote>
+<h3 id="https-和-tls-的区别">🧷 HTTPS 和 TLS 的区别</h3>
+<p><strong>TLS 是”加密管道”协议本身，HTTPS 是”HTTP 跑在 TLS
+管道里”这个组合。</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">HTTP ──┐</span><br><span class="line">TLS  ──┼──&gt; HTTPS = HTTP over TLS（https:// 前缀）</span><br><span class="line">TCP/IP─┘</span><br></pre></td></tr></table></figure>
+<table>
+<colgroup>
+<col style="width: 42%" />
+<col style="width: 57%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TLS</td>
+<td>独立的加密协议：握手、证书验证、密钥协商、加密传输。不关心上面跑的是什么</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>“HTTP + TLS”的固定组合，是 TLS 最常见的应用场景</td>
+</tr>
+<tr>
+<td>SSL</td>
+<td>TLS 的前身（SSL 3.0 → TLS 1.0），现在说”SSL 证书”其实都是 TLS
+证书</td>
+</tr>
+</tbody>
+</table>
+<p>TLS 不只服务 HTTP：比如内核里可以直接跑 TLS（kernel
+TLS），给特定通道做端到端加密，这是机密计算里的常见性能优化点。</p>
+<h3 id="黑盒信任根tee-的信任缺口">🔮 黑盒信任根：TEE 的信任缺口</h3>
+<p>TEE 的保险箱钥匙（信任根）捏在<strong>芯片厂商</strong>手里：</p>
+<ul>
+<li>你要相信 AMD/Intel 的密钥管理、固件、证书链全都没问题</li>
+<li>用户<strong>无法直接验证</strong>，只能”信任厂商”，这叫
+<strong>black-box trust root（黑盒信任根）</strong></li>
+<li>用户和云平台之间存在 <strong>trust
+gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统 TEE 信任模型：</span><br><span class="line">  用户 → 信任 → 云平台 → 信任 → 芯片厂商</span><br><span class="line">        └──────────────────────────┘</span><br><span class="line">        信任链全部建立在&quot;厂商没毛病&quot;上，</span><br><span class="line">        用户没有独立验证的入口，这叫黑盒</span><br></pre></td></tr></table></figure>
+<p>三个具体痛点（论文 §1、§5.1）：</p>
+<table>
+<thead>
+<tr>
+<th>痛点</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>厂商依赖</td>
+<td>用户必须信任制造商，制造商出问题或作恶，安全就崩</td>
+</tr>
+<tr>
+<td>无法独立验证</td>
+<td>验证服务本身也是厂商/平台提供的，用户只能被动接受结论</td>
+</tr>
+<tr>
+<td>多租户复杂</td>
+<td>多租户云环境虚拟化栈复杂，漏洞不可避免，风险放大</td>
+</tr>
+</tbody>
+</table>
+<p>这正是论文 CCxTrust 的切入点：<strong>TPM
+是用户能直接访问、能自己配置的”白盒”信任根，用它来制衡 TEE
+的黑盒信任根</strong>。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>磁盘加密 + HTTPS 就能保护云端数据</td>
+<td>只保护静态和传输两种状态，内存里的使用中数据仍是明文</td>
+</tr>
+<tr>
+<td>内存加密后 CPU 计算会暴露明文</td>
+<td>解密只在 CPU 芯片内部，外部看到的永远是密文</td>
+</tr>
+<tr>
+<td>TEE 是纯软件方案</td>
+<td>TEE 依赖 CPU 硬件隔离和内存加密，密钥由芯片内安全处理器管理</td>
+</tr>
+<tr>
+<td>信任厂商 = 安全</td>
+<td>黑盒信任根意味着用户无法独立验证，存在信任缺口</td>
+</tr>
+<tr>
+<td>HTTPS 和 TLS 是两种加密技术</td>
+<td>HTTPS = HTTP over TLS，TLS 才是底层协议</td>
+</tr>
+<tr>
+<td>SSL 和 TLS 没关系</td>
+<td>TLS 是 SSL 的继任者，本质同一套体系</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数据在使用中（内存里）是明文，传统加密管不了，需要 TEE
+这类硬件级隔离；TEE 靠”内存加密 +
+解密只在芯片内”保护使用中数据，但它的信任根归厂商、用户无法验证，形成了黑盒信任缺口——这正是
+TEE + TPM 协作信任要解决的问题。</p>
+</blockquote>
+<p>下一站：SEV-SNP 的隔离到底怎么做到的（NPT、RMP、ASID）。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>安全</category>
+        <category>机密计算</category>
+      </categories>
+      <tags>
+        <tag>机密计算</tag>
+        <tag>安全</tag>
+        <tag>TEE</tag>
+        <tag>内存加密</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>混合加密入门：集安全与效率于一身的艺术</title>
     <url>/posts/8c9a7e4f/</url>
     <content><![CDATA[<p>在数字世界中，我们渴望两全其美：既想要信息传输绝对安全，又追求其过程畅快高效。若把数据加密比作锁门，我们面临一个两难选择：</p>
@@ -17835,9 +19197,9 @@ Telegram)</strong>：这些端到端加密的聊天工具，同样采用类似�
         <category>安全</category>
       </categories>
       <tags>
+        <tag>安全</tag>
         <tag>加密</tag>
         <tag>密码学</tag>
-        <tag>安全</tag>
       </tags>
   </entry>
   <entry>

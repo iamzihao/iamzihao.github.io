@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"supermarkli.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="hypervisor 负责翻译地址，可它自己又不可信——SEV-SNP 是怎么让”不可信的管家”干活、又防住它偷东西的？">
+<meta property="og:type" content="article">
+<meta property="og:title" content="SEV-SNP隔离原理：NPT、RMP与硬件强制">
+<meta property="og:url" content="https://supermarkli.github.io/posts/d2278960/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="hypervisor 负责翻译地址，可它自己又不可信——SEV-SNP 是怎么让”不可信的管家”干活、又防住它偷东西的？">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-08-25T05:03:27.000Z">
+<meta property="article:modified_time" content="2026-08-25T04:04:04.891Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="机密计算">
+<meta property="article:tag" content="SEV-SNP">
+<meta property="article:tag" content="虚拟化">
+<meta property="article:tag" content="安全">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://supermarkli.github.io/posts/d2278960/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://supermarkli.github.io/posts/d2278960/","path":"posts/d2278960/","title":"SEV-SNP隔离原理：NPT、RMP与硬件强制"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>SEV-SNP隔离原理：NPT、RMP与硬件强制 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81-snp%E7%AC%AC%E4%B8%80%E4%BB%A3-sev-%E7%9A%84%E6%BC%8F%E6%B4%9E"><span class="nav-number">2.</span> <span class="nav-text">🧩 为什么需要 SNP：第一代 SEV
+的漏洞</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#rmp%E5%8F%8D%E5%90%91%E6%98%A0%E5%B0%84%E8%A1%A8%E7%A1%AC%E4%BB%B6%E7%AE%A1%E7%9A%84%E6%89%80%E6%9C%89%E6%9D%83%E4%BA%8B%E5%AE%9E"><span class="nav-number">3.</span> <span class="nav-text">🔍
+RMP：反向映射表，硬件管的”所有权事实”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E5%BC%BA%E5%88%B6%E6%89%A7%E8%A1%8C%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84"><span class="nav-number">4.</span> <span class="nav-text">🔒 硬件强制执行是怎么实现的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BF%E9%97%AE%E8%80%85%E8%BA%AB%E4%BB%BD%E6%80%8E%E4%B9%88%E5%88%A4%E5%AE%9Aasid"><span class="nav-number">5.</span> <span class="nav-text">🪪 访问者身份怎么判定：ASID</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E6%BE%84%E6%B8%85hypervisor-%E5%8F%AA%E6%98%AF%E6%8F%90%E4%BE%9B%E8%A7%84%E5%88%99%E4%B8%8D%E6%98%AF%E6%89%A7%E8%A1%8C%E7%BF%BB%E8%AF%91"><span class="nav-number">6.</span> <span class="nav-text">🧩
+关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B8%E5%9E%8B%E5%9C%BA%E6%99%AF%E5%AF%B9%E7%85%A7"><span class="nav-number">7.</span> <span class="nav-text">📋 典型场景对照</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/tkd.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">63</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">43</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">151</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/supermarkli" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;supermarkli" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:12110504@mail.sustech.edu.cn" title="E-Mail → mailto:12110504@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://supermarkli.github.io/posts/d2278960/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/tkd.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="SEV-SNP隔离原理：NPT、RMP与硬件强制 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          SEV-SNP隔离原理：NPT、RMP与硬件强制
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-08-25 13:03:27 / Modified: 12:04:04" itemprop="dateCreated datePublished" datetime="2026-08-25T13:03:27+08:00">2026-08-25</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E5%AE%89%E5%85%A8/" itemprop="url" rel="index"><span itemprop="name">安全</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E5%AE%89%E5%85%A8/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" itemprop="url" rel="index"><span itemprop="name">机密计算</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>3.8k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>7 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>hypervisor 负责翻译地址，可它自己又不可信——SEV-SNP
+是怎么让”不可信的管家”干活、又防住它偷东西的？</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor</td>
+<td>虚拟机监控器（VMM）</td>
+<td>云上管虚拟机的软件层</td>
+</tr>
+<tr>
+<td>嵌套分页</td>
+<td>Nested Paging，两层地址翻译</td>
+<td>虚拟机地址翻译机制</td>
+</tr>
+<tr>
+<td>NPT</td>
+<td>Nested Page Table，嵌套页表</td>
+<td>hypervisor 建的翻译规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>Reverse Map Table，反向映射表</td>
+<td>硬件记录的”物理页归谁”事实</td>
+</tr>
+<tr>
+<td>RMPE</td>
+<td>RMP Entry，RMP 条目</td>
+<td>每 4KB 物理页一条记录</td>
+</tr>
+<tr>
+<td>ASID</td>
+<td>Address Space Identifier，地址空间标识符</td>
+<td>每个 CVM 的唯一身份编号</td>
+</tr>
+<tr>
+<td>VMCB</td>
+<td>Virtual Machine Control Block，虚拟机控制块</td>
+<td>存 VM 状态和 ASID 的控制块</td>
+</tr>
+<tr>
+<td>VMRUN/VMEXIT</td>
+<td>进出虚拟机的特权指令</td>
+<td>硬件切换”当前身份”的开关</td>
+</tr>
+<tr>
+<td>VMPL</td>
+<td>Virtual Machine Privilege Level，虚拟机特权级</td>
+<td>VM 内部的 4 级权限</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全小电脑</td>
+</tr>
+<tr>
+<td>#PF</td>
+<td>Page Fault，缺页异常</td>
+<td>硬件拒绝访问时的信号</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要-snp第一代-sev-的漏洞">🧩 为什么需要 SNP：第一代 SEV
+的漏洞</h3>
+<p>先看虚拟机地址翻译。虚拟机里的地址要翻译两次才能到真实物理地址：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Guest 认为的地址(GVA) → Guest 页表 → Guest 物理地址(GPA)</span><br><span class="line">                                         │</span><br><span class="line">                                         ▼</span><br><span class="line">                          hypervisor 的嵌套页表(NPT) → 真实物理地址(SPA)</span><br></pre></td></tr></table></figure>
+<p>这里的 <strong>NPT 由 hypervisor
+管理</strong>。问题来了：<strong>hypervisor
+不可信</strong>，它可以：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>攻击</th>
+<th>做法</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>偷换内容</td>
+<td>把 VM 的某个 GPA 悄悄重映射到别的物理页</td>
+<td>VM 读到被替换的假数据</td>
+</tr>
+<tr>
+<td>数据串扰</td>
+<td>把 VM 的页映射给另一个 VM</td>
+<td>两个租户数据互相泄露</td>
+</tr>
+<tr>
+<td>直接偷读</td>
+<td>把自己映射到 VM 的页</td>
+<td>读取 VM 内存</td>
+</tr>
+</tbody>
+</table>
+<p>第一代 SEV
+只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证”别人读不懂”，但
+hypervisor 可以”把读的对象换掉”。这就是 SNP 要补的洞。</p>
+<h3 id="rmp反向映射表硬件管的所有权事实">🔍
+RMP：反向映射表，硬件管的”所有权事实”</h3>
+<p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
+的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RMP：每 4KB 物理页一行，硬件强制记录：</span><br><span class="line">┌──────────┬───────────┬──────────┐</span><br><span class="line">│ 物理页地址 │ 属于哪个VM │ 权限/状态  │</span><br><span class="line">│ (SPA)    │ (ASID)    │          │</span><br><span class="line">└──────────┴───────────┴──────────┘</span><br></pre></td></tr></table></figure>
+<p>“反向”的含义：NPT 是 hypervisor 往前翻译”地址去哪”，RMP
+是硬件反过来锁”这页是谁的、谁才能动”。</p>
+<p>一句话对比：</p>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>谁维护</th>
+<th>管什么</th>
+<th>本质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NPT</td>
+<td>hypervisor（软件）</td>
+<td>地址往哪翻</td>
+<td>路由规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>CPU 硬件</td>
+<td>翻过去之后你有没有资格碰</td>
+<td>所有权事实</td>
+</tr>
+</tbody>
+</table>
+<p>hypervisor 能改路由规则，但改不了所有权事实——<strong>事实由 PSP
+固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
+都是白费力气，最终判定权在硬件手里。</p>
+<h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
+<p>“硬件强制执行，谁也绕不过”靠<strong>两把锁</strong>：</p>
+<p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
+<p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
+<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定”开多快”（建
+NPT
+规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
+<h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
+<p><strong>ASID（Address Space
+Identifier，地址空间标识符）</strong>——每个 CVM
+一个唯一编号。身份从哪来？怎么保证伪造不了？</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">① 每个 CVM 启动时分配一个 ASID（如 VM-A=16, VM-B=17）</span><br><span class="line">② ASID 记录在 VMCB（虚拟机控制块）里</span><br><span class="line">③ CPU 执行 VMRUN 进入该 VM 时，硬件把 ASID 装载为&quot;当前身份&quot;</span><br><span class="line">④ 之后该 VM 的所有内存访问，都自动携带这个身份</span><br></pre></td></tr></table></figure>
+<p><strong>判定流程（硬件完成，一次访存）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
+<p><strong>为什么软件伪造不了身份？</strong></p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
+<p>类比：VMRUN 就是”刷门禁卡进房间”，CPU
+是门禁系统本身。门禁系统自己知道”现在里面是谁”——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
+<h3 id="关键澄清hypervisor-只是提供规则不是执行翻译">🧩
+关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</h3>
+<p>这是最容易混的点。<strong>页表是谁建的 ≠
+翻译是谁执行的</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
+<p>关键事实：<code>GPA→SPA</code>
+的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
+写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
+的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的”地图”，但走路的是
+CPU。</p>
+<p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
+<h3 id="典型场景对照">📋 典型场景对照</h3>
+<table>
+<thead>
+<tr>
+<th>访问者身份（当前 ASID）</th>
+<th>目标页归属（RMPE.ASID）</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VM-A (16)</td>
+<td>16（自己）</td>
+<td>✅ 允许</td>
+</tr>
+<tr>
+<td>VM-A (16)</td>
+<td>17（VM-B 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>16（CVM 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>未分配页</td>
+<td>✅ 允许（host 自己的内存）</td>
+</tr>
+</tbody>
+</table>
+<p>补充两个细节：</p>
+<ul>
+<li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
+还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
+里分别记录各级的读/写/执行权限。ASID 管”是不是这家的”，VMPL
+管”这家里面谁有权碰”。</li>
+<li><strong>设备 DMA 同样受限</strong>：设备要通过
+IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
+DMA 指向 CVM 的私有页。</li>
+</ul>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor 查 RMP</td>
+<td>查 RMP 的是 CPU 硬件，不是 hypervisor——它是裁判，不能当运动员</td>
+</tr>
+<tr>
+<td>hypervisor 执行地址翻译</td>
+<td>翻译由 CPU 的 MMU 硬件执行，hypervisor 只提供 NPT 规则表</td>
+</tr>
+<tr>
+<td>hypervisor 改 NPT 就能访问 CVM 内存</td>
+<td>NPT 是路由规则，RMP 是所有权事实，路由改了也过不了所有权检查</td>
+</tr>
+<tr>
+<td>内存加密就够防篡改</td>
+<td>加密只防”读不懂”，SNP/RMP 才是防”偷换、重映射”的关键</td>
+</tr>
+<tr>
+<td>ASID 是软件声明的身份</td>
+<td>ASID 是硬件通过 VMRUN/VMEXIT 自动维护的内部状态，软件伪造不了</td>
+</tr>
+<tr>
+<td>RMP 表软件可以随便改</td>
+<td>RMP 区域对软件保留，唯一入口 RMPUPDATE 由 PSP 固件把关</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>SEV-SNP 用 RMP
+把”物理页归谁”这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
+CPU 硬件执行，hypervisor 只提供页表规则；“当前访问者”是硬件通过
+VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管”地址往哪翻”，RMP
+管”翻过去之后你有没有资格碰”。</p>
+</blockquote>
+<p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" rel="tag"># 机密计算</a>
+              <a href="/tags/SEV-SNP/" rel="tag"># SEV-SNP</a>
+              <a href="/tags/%E8%99%9A%E6%8B%9F%E5%8C%96/" rel="tag"># 虚拟化</a>
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/84b980d1/" rel="prev" title="机密计算入门：数据使用中的安全与TEE">
+                  <i class="fa fa-angle-left"></i> 机密计算入门：数据使用中的安全与TEE
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/fd7258a1/" rel="next" title="TPM从零理解：保险箱里的密码世界">
+                  TPM从零理解：保险箱里的密码世界 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">320k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">9:41</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

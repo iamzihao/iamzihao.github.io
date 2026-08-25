@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"supermarkli.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了论文 CCxTrust 的核心：协作信任。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="信任根三件套：RTM、RTR、RTS与TEE+TPM协作">
+<meta property="og:url" content="https://supermarkli.github.io/posts/2affc801/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了论文 CCxTrust 的核心：协作信任。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-08-25T07:03:27.000Z">
+<meta property="article:modified_time" content="2026-08-25T04:04:57.684Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="机密计算">
+<meta property="article:tag" content="TEE">
+<meta property="article:tag" content="TPM">
+<meta property="article:tag" content="信任根">
+<meta property="article:tag" content="远程认证">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://supermarkli.github.io/posts/2affc801/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://supermarkli.github.io/posts/2affc801/","path":"posts/2affc801/","title":"信任根三件套：RTM、RTR、RTS与TEE+TPM协作"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>信任根三件套：RTM、RTR、RTS与TEE+TPM协作 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BF%A1%E4%BB%BB%E6%A0%B9%E4%B8%89%E4%BB%B6%E5%A5%97rtm-rtr-rts"><span class="nav-number">2.</span> <span class="nav-text">🧩 信任根三件套：RTM &#x2F; RTR &#x2F; RTS</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%BB%91%E7%9B%92-tee-%E7%99%BD%E7%9B%92-tpm%E5%90%84%E6%9C%89%E6%89%80%E9%95%BF"><span class="nav-number">3.</span> <span class="nav-text">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E7%9A%84%E6%A0%B8%E5%BF%83%E5%88%86%E9%85%8D%E4%B8%89%E4%BB%B6%E5%A5%97%E6%80%8E%E4%B9%88%E5%88%86%E5%B7%A5"><span class="nav-number">4.</span> <span class="nav-text">📐
+论文的核心分配：三件套怎么分工</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E9%98%B6%E6%AE%B5%E6%B5%8B%E9%87%8Frtm-%E7%9A%84%E5%85%B7%E4%BD%93%E8%90%BD%E5%9C%B0"><span class="nav-number">5.</span> <span class="nav-text">📏 三阶段测量：RTM 的具体落地</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BA%A6%E9%87%8F%E5%88%86%E5%B7%A5%E9%87%8D%E5%90%88%E5%90%97%E8%BF%99%E6%98%AF%E5%8F%8C%E4%BF%9D%E9%99%A9%E4%B8%8D%E6%98%AF-bug"><span class="nav-number">6.</span> <span class="nav-text">🔗
+度量分工重合吗？——这是”双保险”不是 bug</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BF%A1%E4%BB%BB%E9%93%BE%E4%B8%8E%E4%BF%A1%E4%BB%BB%E9%94%9A%E5%9B%BA%E4%BB%B6%E4%B8%BA%E4%BB%80%E4%B9%88%E6%94%B9%E4%B8%8D%E4%BA%86"><span class="nav-number">7.</span> <span class="nav-text">🔑
+信任链与信任锚：固件为什么改不了</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#pspamd-%E8%8A%AF%E7%89%87%E9%87%8C%E7%9A%84%E5%85%88%E4%BA%8E%E4%B8%80%E5%88%87%E7%9A%84%E5%AE%89%E5%85%A8%E5%B0%8F%E7%94%B5%E8%84%91"><span class="nav-number">8.</span> <span class="nav-text">🔩 PSP：AMD
+芯片里的”先于一切”的安全小电脑</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B1%95%E6%9C%9Brtr-%E5%8D%8F%E4%BD%9C-%E5%A4%8D%E5%90%88%E8%AE%A4%E8%AF%81"><span class="nav-number">9.</span> <span class="nav-text">🔭 展望：RTR 协作 &#x3D; 复合认证</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">10.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">11.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/tkd.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">63</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">43</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">151</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/supermarkli" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;supermarkli" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:12110504@mail.sustech.edu.cn" title="E-Mail → mailto:12110504@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://supermarkli.github.io/posts/2affc801/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/tkd.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="信任根三件套：RTM、RTR、RTS与TEE+TPM协作 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          信任根三件套：RTM、RTR、RTS与TEE+TPM协作
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-08-25 15:03:27 / Modified: 12:04:57" itemprop="dateCreated datePublished" datetime="2026-08-25T15:03:27+08:00">2026-08-25</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E5%AE%89%E5%85%A8/" itemprop="url" rel="index"><span itemprop="name">安全</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E5%AE%89%E5%85%A8/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" itemprop="url" rel="index"><span itemprop="name">机密计算</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>4.7k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>8 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了论文
+CCxTrust 的核心：协作信任。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM</td>
+<td>Root of Trust for Measurement，度量信任根</td>
+<td>记账员：负责测量</td>
+</tr>
+<tr>
+<td>RTR</td>
+<td>Root of Trust for Report，报告信任根</td>
+<td>公证员：负责汇报</td>
+</tr>
+<tr>
+<td>RTS</td>
+<td>Root of Trust for Storage，存储信任根</td>
+<td>保险库：负责藏钥匙</td>
+</tr>
+<tr>
+<td>黑盒信任根</td>
+<td>black-box RoT</td>
+<td>TEE 的信任根，用户够不着</td>
+</tr>
+<tr>
+<td>白盒信任根</td>
+<td>white-box RoT</td>
+<td>TPM 的信任根，用户可访问可配置</td>
+</tr>
+<tr>
+<td>TCB</td>
+<td>Trusted Computing Base，受信计算基</td>
+<td>安全所依赖的最小可信组件集合</td>
+</tr>
+<tr>
+<td>信任链</td>
+<td>chain of trust</td>
+<td>从物理锚点逐级验证的链条</td>
+</tr>
+<tr>
+<td>信任锚</td>
+<td>trust anchor</td>
+<td>信任链的起点，物理上不可篡改</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全协处理器</td>
+</tr>
+<tr>
+<td>复合认证</td>
+<td>composite attestation</td>
+<td>TEE 和 TPM 合并出认证报告</td>
+</tr>
+</tbody>
+</table>
+<h3 id="信任根三件套rtm-rtr-rts">🧩 信任根三件套：RTM / RTR / RTS</h3>
+<p>TCG 把”可信平台”拆成三个信任根。<strong>整个 CCxTrust
+架构就是围绕这三个根怎么分配展开的</strong>：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 18%" />
+<col style="width: 25%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>信任根</th>
+<th>全称</th>
+<th>干什么</th>
+<th>通俗类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>RTM</strong></td>
+<td>Root of Trust for <strong>Measurement</strong>，度量信任根</td>
+<td>负责测量系统状态，保证”测了、记了、改不了”</td>
+<td>记账员</td>
+</tr>
+<tr>
+<td><strong>RTR</strong></td>
+<td>Root of Trust for <strong>Report</strong>，报告信任根</td>
+<td>负责把测量结果<strong>可信地报出去</strong>（签名）</td>
+<td>公证员</td>
+</tr>
+<tr>
+<td><strong>RTS</strong></td>
+<td>Root of Trust for <strong>Storage</strong>，存储信任根</td>
+<td>负责保护密钥等秘密</td>
+<td>保险库</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>一句话：<strong>RTM 管”测量”，RTR 管”汇报”，RTS
+管”存储”</strong>。一台机器可不可信，就是”测得好、报得真、藏得牢”三件事。</p>
+</blockquote>
+<h3 id="黑盒-tee-白盒-tpm各有所长">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</h3>
+<p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>（论文
+§5.1.1）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">          TEE（SEV-SNP）                 TPM</span><br><span class="line">       ┌──────────────────┐        ┌──────────────────┐</span><br><span class="line">信任模式│  black-box        │        │  white-box        │</span><br><span class="line">       │  信任根归厂商       │        │  用户可直接访问     │</span><br><span class="line">可访问性│  用户够不着（API 受限）│        │  用户可配置可验证     │</span><br><span class="line">强项   │  强隔离的执行环境    │        │  用户侧密钥/存储/认证 │</span><br><span class="line">短板   │  信任是黑箱         │        │  没有执行环境       │</span><br><span class="line">       └──────────────────┘        └──────────────────┘</span><br></pre></td></tr></table></figure>
+<p>关键差异：<strong>CPU-TEE
+信任根是黑盒的</strong>，只能给系统底层（固件、hypervisor、内核）用，用户够不着、验不了；<strong>TPM
+是白盒的</strong>，用户可以直接访问、配置、验证，能补上 TEE
+没有的用户侧能力。</p>
+<p>论文的三个核心挑战与对应方案（§3.2、§4）：</p>
+<table>
+<thead>
+<tr>
+<th>挑战</th>
+<th>问题</th>
+<th>方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1</td>
+<td>怎么建立用户可控的信任体系？</td>
+<td>S1：协作信任根（TEE+TPM）</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>怎么弥合 TEE 和 TPM 的技术鸿沟？</td>
+<td>S2：机密 TPM（CTPM）</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>怎么保证 CVM 敏感数据安全？</td>
+<td>S3：复合认证</td>
+</tr>
+</tbody>
+</table>
+<h3 id="论文的核心分配三件套怎么分工">📐
+论文的核心分配：三件套怎么分工</h3>
+<p>论文的原创设计（§5.1）——<strong>不搞一家独大，让 TEE 和 TPM
+分工协作</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">RTM（度量）  → TEE 与 TPM 并行独立，各测各的域</span><br><span class="line">              TEE 测：硬件/固件/启动环境（TEE 的 TCB）</span><br><span class="line">              TPM 测：hypervisor、guest OS、工作负载</span><br><span class="line">              → 两块&quot;账本&quot;互不依赖，一份被攻破，另一份还在</span><br><span class="line"></span><br><span class="line">RTR（报告）  → TEE 与 TPM 协作，生成&quot;复合认证报告&quot;</span><br><span class="line">              → 单一报告根容易被伪造/拼接攻击（见下）</span><br><span class="line"></span><br><span class="line">RTS（存储）  → 完全交给 TPM</span><br><span class="line">              → 用户密钥由 TPM 密封存储，TEE 也把密钥托管给 TPM</span><br></pre></td></tr></table></figure>
+<p><strong>为什么这样分？</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>分配</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM 并行独立</td>
+<td>两者测的域不同、互不依赖，形成”双保险”（论文原话 dual
+insurance）</td>
+</tr>
+<tr>
+<td>RTR 协作</td>
+<td>单一报告根容易被伪造/拼接攻击，合并成一份报告才能防拼接</td>
+</tr>
+<tr>
+<td>RTS 归 TPM</td>
+<td>TEE 没有持久存储能力（内存加密但掉电即失），TPM 有 NVRAM +
+密钥树，天生是保险库</td>
+</tr>
+</tbody>
+</table>
+<h3 id="三阶段测量rtm-的具体落地">📏 三阶段测量：RTM 的具体落地</h3>
+<p>论文把 CVM 的信任链从启动到运行分成三个阶段（§5.1.2）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────────────────┐</span><br><span class="line">│ Stage 1：Host 静态测量（CVM 启动前）                          │</span><br><span class="line">│   测 hypervisor、host 内核、虚拟化服务                        │</span><br><span class="line">│   → 保证&quot;我住的房子是干净的&quot;                                 │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 2：CVM 启动测量                                        │</span><br><span class="line">│   测 guest 固件、内核、initrd、根文件系统、镜像签名            │</span><br><span class="line">│   → 保证&quot;住进来的这个租客是预期的&quot;                            │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 3：运行时测量（动态）                                   │</span><br><span class="line">│   TEE 对 CVM 内工作负载做完整性校验                           │</span><br><span class="line">│   → 保证&quot;运行过程中没被篡改&quot;                                 │</span><br><span class="line">└─────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。论文说”静态
++ 动态信任链结合”，指的就是这个。</p>
+<blockquote>
+<p>顺带澄清一个容易混的概念：<strong>hypervisor
+不是固件</strong>。层次是：应用 → Guest OS → hypervisor（软件）→ 固件
+Firmware（UEFI/BIOS、PSP 等，烧在只读存储里）→ CPU 硬件。固件启动
+hypervisor，hypervisor 启动 guest。</p>
+</blockquote>
+<h3 id="度量分工重合吗这是双保险不是-bug">🔗
+度量分工重合吗？——这是”双保险”不是 bug</h3>
+<p>论文说”TEE 测固件、TPM 测 hypervisor”，但现实中 TPM
+的启动链本来也测固件（UEFI 启动时自己 Extend
+PCR）。<strong>实践中有重叠，但这是刻意为之</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">论文的真实意图 = 双保险（redundancy）：</span><br><span class="line">· 两个独立的测量源（TEE 的 PSP 侧 vs TPM 芯片侧），互不信任、互不依赖</span><br><span class="line">· TEE 的测量域 = &quot;TEE 自己的启动信任链&quot;（PSP→SEV 固件→OVMF 等）</span><br><span class="line">· TPM 的测量域 = &quot;平台全局启动链&quot;（UEFI→hypervisor→guest）</span><br><span class="line">· 哪怕一条链被攻破/伪造，另一条链的账本仍然可信</span><br></pre></td></tr></table></figure>
+<p><strong>概念上分工（各测各的域），实践上有重叠（都碰固件），重叠是刻意的冗余设计。</strong></p>
+<h3 id="信任链与信任锚固件为什么改不了">🔑
+信任链与信任锚：固件为什么改不了</h3>
+<p>PCR
+的”固件逻辑强制”依赖一个前提：<strong>固件本身不能被恶意修改</strong>。这靠两道防线，不是靠”加载时度量”一次解决：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">① 物理防护（第一道，硬件级）：</span><br><span class="line">   · dTPM 是独立芯片，固件写在一次性熔丝/受保护闪存里，</span><br><span class="line">     常规软件攻击根本写不进去</span><br><span class="line">   · fTPM 在 CPU 的 PSP 里，PSP 固件有签名校验 + 只读存储</span><br><span class="line">   → &quot;改 TPM 固件&quot;不是软件层能做到的事，物理防护兜底</span><br><span class="line"></span><br><span class="line">② 信任链（第二道，启动级）：</span><br><span class="line">   从&quot;绝对可信的起点&quot;逐级验证：</span><br><span class="line">   硬件（RoT 芯片）→ 验证固件 → 固件验证 bootloader → bootloader 验证内核 → ...</span><br><span class="line">   每一步都由前一步验证</span><br></pre></td></tr></table></figure>
+<p>所以准确表述是：</p>
+<table>
+<thead>
+<tr>
+<th>防护对象</th>
+<th>防护手段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TPM 固件本身不可改</td>
+<td>物理防护（熔丝、受保护存储、签名校验）</td>
+</tr>
+<tr>
+<td>系统软件（内核等）不被篡改</td>
+<td>信任链（启动时逐级度量 + 签名校验）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>信任链的起点（信任锚）是谁？</strong> 是硬件本身（RoT，Root
+of Trust，信任根）——它是物理上无法篡改的，比如 TPM 芯片内部逻辑、CPU
+内部的 PSP
+ROM。<strong>信任链不是无限的，它终止于一个”物理可信”的锚点</strong>，这就是”根（Root）“的含义。</p>
+<blockquote>
+<p>修正一个常见说法：不是”加载时度量保证固件不可改”——UEFI
+是第一级软件，加载时已经没人能度量它了，它靠的是硬件锚点 +
+物理防护。</p>
+</blockquote>
+<h3 id="pspamd-芯片里的先于一切的安全小电脑">🔩 PSP：AMD
+芯片里的”先于一切”的安全小电脑</h3>
+<p><strong>PSP（Platform Security Processor，平台安全处理器）</strong>
+是 AMD CPU 里的<strong>独立 ARM 安全协处理器</strong>，相当于”CPU
+里的一个小电脑”：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">┌─────────────────────────────┐</span><br><span class="line">│ AMD CPU 芯片                 │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ x86 主核（跑你的系统）     │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ PSP（独立 ARM 核）        │ │</span><br><span class="line">│  │ · 芯片上电先于 x86 主核   │ │</span><br><span class="line">│  │ · 跑在隔离的安全环境里    │ │</span><br><span class="line">│  │ · 管理：SEV 内存加密密钥、 │ │</span><br><span class="line">│  │   RMP 表、固件签名校验、  │ │</span><br><span class="line">│  │   fTPM、DMA 保护          │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>PSP 在论文里的角色：</p>
+<table>
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>论文提到的地方</th>
+<th>PSP 干什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>§5.1.1 “TEE 通过 PSP 进行信任初始化”</td>
+<td>PSP 是 TEE 信任链的起点（锚点）</td>
+</tr>
+<tr>
+<td>内存加密</td>
+<td>PSP 生成和管理内存加密密钥</td>
+</tr>
+<tr>
+<td>RMP 归属分配</td>
+<td>PSP 固件执行 RMPUPDATE，锁定页归属</td>
+</tr>
+<tr>
+<td>fTPM</td>
+<td>AMD 的 fTPM 就跑在 PSP 里</td>
+</tr>
+</tbody>
+</table>
+<p>一句话：<strong>PSP 是 AMD
+芯片里”先于一切、独立于一切”的安全小电脑，TEE 的信任锚就是它。</strong>
+类似地，Intel 有 Intel ME/CSE，ARM 有 TrustZone 的 secure world。</p>
+<h3 id="展望rtr-协作-复合认证">🔭 展望：RTR 协作 = 复合认证</h3>
+<p>本篇已建立完整骨架，最后预告论文最核心的一环——<strong>RTR
+协作</strong>。</p>
+<p><strong>为什么独立认证不够</strong>（论文 §5.3）：TEE 和 TPM
+各自单独出认证报告时：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">· 攻击者可能伪造 CVM 的 ID 发起攻击</span><br><span class="line">· 攻击者可能做&quot;报告拼接攻击&quot;（report concatenation）：</span><br><span class="line">  把 A 机器的 TPM 报告 + B 机器的 TEE 报告拼成&quot;完整报告&quot;</span><br><span class="line">  → 验证方以为是一台可信机器的完整状态，实际是两台机器拼的</span><br><span class="line">· 独立认证需要两次交互（两个数据拷贝、两次签名、两次报告返回），效率低</span><br></pre></td></tr></table></figure>
+<p><strong>论文的解法</strong>：复合认证协议——把 TEE 报告嵌进 TPM
+Quote（或反过来），生成<strong>一份不可拆分的复合报告</strong>，一次交互完成认证。拼接攻击的根基（两份独立报告）被直接消灭，认证效率还提升了
+24%（论文 §7）。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM/RTR/RTS 是论文发明的</td>
+<td>是 TCG 标准术语，论文的创新在于”怎么分配”</td>
+</tr>
+<tr>
+<td>TEE 比 TPM 强，全都用 TEE</td>
+<td>TEE 是黑盒、无持久存储、用户够不着；TPM
+是白盒、有存储，两者互补</td>
+</tr>
+<tr>
+<td>度量分工必须严格不重合</td>
+<td>实践中有重叠，这是刻意的双保险冗余设计</td>
+</tr>
+<tr>
+<td>固件不可篡改靠启动时度量</td>
+<td>固件本身靠物理防护（熔丝/受保护存储），度量管的是系统软件</td>
+</tr>
+<tr>
+<td>信任链可以无限延伸</td>
+<td>信任链终止于物理锚点（TPM 芯片、PSP），根不需要被验证</td>
+</tr>
+<tr>
+<td>hypervisor 是底层固件</td>
+<td>hypervisor 是软件层，固件在它下面一层</td>
+</tr>
+<tr>
+<td>TEE 和 TPM 各自出报告就行</td>
+<td>独立报告可被拼接攻击利用，复合认证才能防拼接</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>信任根三件套中，RTM 管测量、RTR 管报告、RTS 管存储；CCxTrust 让 TEE
+和 TPM 分工协作——RTM 并行独立（双保险）、RTR 复合认证（防拼接）、RTS 归
+TPM（用白盒补黑盒），通过三阶段测量覆盖从启动到运行的完整信任链，信任锚则落在
+PSP 等物理硬件上。这就是论文”TEE + TPM 协作信任”的全貌。</p>
+</blockquote>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" rel="tag"># 机密计算</a>
+              <a href="/tags/TEE/" rel="tag"># TEE</a>
+              <a href="/tags/TPM/" rel="tag"># TPM</a>
+              <a href="/tags/%E4%BF%A1%E4%BB%BB%E6%A0%B9/" rel="tag"># 信任根</a>
+              <a href="/tags/%E8%BF%9C%E7%A8%8B%E8%AE%A4%E8%AF%81/" rel="tag"># 远程认证</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/fd7258a1/" rel="prev" title="TPM从零理解：保险箱里的密码世界">
+                  <i class="fa fa-angle-left"></i> TPM从零理解：保险箱里的密码世界
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">320k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">9:41</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
