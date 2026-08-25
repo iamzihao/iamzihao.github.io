@@ -7305,236 +7305,6 @@ FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
       </tags>
   </entry>
   <entry>
-    <title>KeyMapping：win上使用mac键位</title>
-    <url>/posts/a9a69d93/</url>
-    <content><![CDATA[<p>最近购入了台17年12寸的
-macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command
-键的位置和用法，但是切换回 Windows
-的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP
-win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。
-<span id="more"></span></p>
-<p>本文介绍如何使用 AutoHotkey (v2.0)
-编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
-体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
-<h3 id="核心痛点本地与远程的精神分裂">💡
-核心痛点：本地与远程的”精神分裂”</h3>
-<p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
-<code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
-键就在这个位置）。</p>
-<p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
-Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
-<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
-远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
-的 <code>Win</code> 键。此时，我们在 Mac 上按
-<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
-<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
-<h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
-<p>Windows 提供了 WTSAPI (Windows Terminal Services
-API)，允许我们查询当前会话的信息。通过
-<code>WTSQuerySessionInformation</code>
-函数，我们可以获取连接到当前会话的客户端名称（Client Name）。</p>
-<ul>
-<li><strong>本地登录</strong>：客户端名称通常为空。</li>
-<li><strong>远程登录</strong>：客户端名称会显示发起连接的设备名）。</li>
-</ul>
-<p>利用这一点，我们可以编写一个 <code>IsRemoteMac()</code>
-函数来动态判断当前的上下文。</p>
-<h3 id="脚本实现">🛠️ 脚本实现</h3>
-<p>以下是完整的 AutoHotkey v2 脚本。</p>
-<figure class="highlight ahk"><table><tr><td class="code"><pre><span class="line"><span class="meta">#Requires AutoHotkey v2.0</span></span><br><span class="line"><span class="meta">#SingleInstance Force</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; MacKeys.ahk - Windows 下模拟 Mac 键位布局</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 功能说明：</span></span><br><span class="line"><span class="comment">;   - 将 Alt 键模拟为 Mac 的 Cmd 键</span></span><br><span class="line"><span class="comment">;   - 支持远程 Mac 模式（通过 RDP 连接时）和本地 Windows 模式自动切换</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 使用方式：</span></span><br><span class="line"><span class="comment">;   - 双击运行此脚本，托盘区会出现 AHK 图标</span></span><br><span class="line"><span class="comment">;   - 右键图标可退出或重新加载脚本</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 函数定义</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line">IsRemoteMac() &#123;</span><br><span class="line">    clientName := Trim(GetRdpClientName())</span><br><span class="line">    if (clientName = <span class="string">&quot;&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line"></span><br><span class="line">    if InStr(clientName, <span class="string">&quot;zihao-macbook&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">GetRdpClientName() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">        pBuffer := <span class="number">0</span></span><br><span class="line">        bytes := <span class="number">0</span></span><br><span class="line">        if !DllCall(<span class="string">&quot;wtsapi32\WTSQuerySessionInformationW&quot;</span></span><br><span class="line">            , <span class="string">&quot;Ptr&quot;</span>, <span class="number">0</span>              <span class="comment">; WTS_CURRENT_SERVER_HANDLE</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, -<span class="number">1</span>             <span class="comment">; WTS_CURRENT_SESSION</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, <span class="number">10</span>             <span class="comment">; WTSClientName</span></span><br><span class="line">            , <span class="string">&quot;Ptr*&quot;</span>, &amp;pBuffer</span><br><span class="line">            , <span class="string">&quot;UInt*&quot;</span>, &amp;bytes)</span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">        name := StrGet(pBuffer, <span class="string">&quot;UTF-16&quot;</span>)</span><br><span class="line">        DllCall(<span class="string">&quot;wtsapi32\WTSFreeMemory&quot;</span>, <span class="string">&quot;Ptr&quot;</span>, pBuffer)</span><br><span class="line">        <span class="keyword">return</span> name</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 远程 Mac 模式 (通过 RDP 连接到 Mac 时)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; Alt + Tab -&gt; Win + Tab (任务切换)</span></span><br><span class="line"><span class="title">$!Tab::</span></span><br><span class="line">&#123;</span><br><span class="line">    SendInput <span class="string">&quot;&#123;LAlt up&#125;&quot;</span></span><br><span class="line">    Sleep <span class="number">10</span></span><br><span class="line">    SendEvent <span class="string">&quot;#&#123;Tab&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; Win 键映射</span></span><br><span class="line"><span class="title">$#/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 斜杠 (Win + / -&gt; Ctrl + /)</span></span><br><span class="line"><span class="title">$#b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Win + B -&gt; Ctrl + B)</span></span><br><span class="line"><span class="title">$#s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Win + S -&gt; Ctrl + S)</span></span><br><span class="line"><span class="title">$#-::</span>Send <span class="string">&quot;^-&quot;</span>          <span class="comment">; 缩小 (Win + - -&gt; Ctrl + -)</span></span><br><span class="line"><span class="title">$#=::</span>Send <span class="string">&quot;^=&quot;</span>          <span class="comment">; 放大 (Win + = -&gt; Ctrl + =)</span></span><br><span class="line"><span class="title">$#p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 打印 (Win + P -&gt; Ctrl + P)</span></span><br><span class="line"><span class="title">$#[::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Win + [ -&gt; Ctrl + [)</span></span><br><span class="line"><span class="title">$#t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Win + T -&gt; Ctrl + T)</span></span><br><span class="line"><span class="title">$#+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Win + Shift + K -&gt; Ctrl + Shift + K)</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 (将 Alt 模拟 Mac 的 Cmd 键)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 基础编辑操作 ----</span></span><br><span class="line"><span class="title">$!c::</span>Send <span class="string">&quot;^c&quot;</span>          <span class="comment">; 复制 (Alt + C -&gt; Ctrl + C) 实现 Cmd + C</span></span><br><span class="line"><span class="title">$!v::</span>Send <span class="string">&quot;^v&quot;</span>          <span class="comment">; 粘贴 (Alt + V -&gt; Ctrl + V) 实现 Cmd + V</span></span><br><span class="line"><span class="title">$!x::</span>Send <span class="string">&quot;^x&quot;</span>          <span class="comment">; 剪切 (Alt + X -&gt; Ctrl + X) 实现 Cmd + X</span></span><br><span class="line"><span class="title">$!z::</span>Send <span class="string">&quot;^z&quot;</span>          <span class="comment">; 撤销 (Alt + Z -&gt; Ctrl + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$!+z::</span>Send <span class="string">&quot;^y&quot;</span>         <span class="comment">; 重做 (Alt + Shift + Z -&gt; Ctrl + Y) 实现 Cmd + Shift + Z</span></span><br><span class="line"><span class="title">$!a::</span>Send <span class="string">&quot;^a&quot;</span>          <span class="comment">; 全选 (Alt + A -&gt; Ctrl + A) 实现 Cmd + A</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文件操作 ----</span></span><br><span class="line"><span class="title">$!s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Alt + S -&gt; Ctrl + S) 实现 Cmd + S</span></span><br><span class="line"><span class="title">$!n::</span>Send <span class="string">&quot;^n&quot;</span>          <span class="comment">; 新建 (Alt + N -&gt; Ctrl + N) 实现 Cmd + N</span></span><br><span class="line"><span class="title">$!w::</span>Send <span class="string">&quot;^w&quot;</span>          <span class="comment">; 关闭 (Alt + W -&gt; Ctrl + W) 实现 Cmd + W</span></span><br><span class="line"><span class="title">$!p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 搜索 (Alt + P -&gt; Ctrl + P) 实现 Cmd + P</span></span><br><span class="line"><span class="title">$!,::</span>Send <span class="string">&quot;^,&quot;</span>          <span class="comment">; 菜单 (Alt + , -&gt; Ctrl + ,) 实现 Cmd + ,</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本编辑 ----</span></span><br><span class="line"><span class="title">$!b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Alt + B -&gt; Ctrl + B) 实现 Cmd + B</span></span><br><span class="line"><span class="title">$!f::</span>Send <span class="string">&quot;^f&quot;</span>          <span class="comment">; 查找 (Alt + F -&gt; Ctrl + F) 实现 Cmd + F</span></span><br><span class="line"><span class="title">$!h::</span>Send <span class="string">&quot;^h&quot;</span>          <span class="comment">; 替换 (Alt + H -&gt; Ctrl + H) 实现 Cmd + H</span></span><br><span class="line"><span class="title">$!/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 注释 (Alt + / -&gt; Ctrl + /) 实现 Cmd + /</span></span><br><span class="line"><span class="title">$![::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Alt + [ -&gt; Ctrl + [) 实现 Cmd + [</span></span><br><span class="line"><span class="title">$!+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Alt + Shift + K -&gt; Ctrl + Shift + K) 实现 Cmd + Shift + K</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器/标签页 ----</span></span><br><span class="line"><span class="title">$!t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Alt + T -&gt; Ctrl + T) 实现 Cmd + T</span></span><br><span class="line"><span class="title">$!r::</span>Send <span class="string">&quot;^r&quot;</span>          <span class="comment">; 刷新 (Alt + R -&gt; Ctrl + R) 实现 Cmd + R</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 缩放控制 ----</span></span><br><span class="line"><span class="title">$!=::</span>Send <span class="string">&quot;^&#123;=&#125;&quot;</span>        <span class="comment">; 放大 (Alt + = -&gt; Ctrl + =) 实现 Cmd + =</span></span><br><span class="line"><span class="title">$!-::</span>Send <span class="string">&quot;^&#123;-&#125;&quot;</span>        <span class="comment">; 缩小 (Alt + - -&gt; Ctrl + -) 实现 Cmd + -</span></span><br><span class="line"><span class="title">$!0::</span>Send <span class="string">&quot;^0&quot;</span>          <span class="comment">; 恢复大小 (Alt + 0 -&gt; Ctrl + 0) 实现 Cmd + 0</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 应用专属快捷键</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Typora 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Typora.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!1::</span>Send <span class="string">&quot;^1&quot;</span>          <span class="comment">; 一级标题 (Alt + 1 -&gt; Ctrl + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">    $!2::</span>Send <span class="string">&quot;^2&quot;</span>          <span class="comment">; 二级标题 (Alt + 2 -&gt; Ctrl + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">    $!3::</span>Send <span class="string">&quot;^3&quot;</span>          <span class="comment">; 三级标题 (Alt + 3 -&gt; Ctrl + 3) 实现 Cmd + 3</span></span><br><span class="line"><span class="title">    $!4::</span>Send <span class="string">&quot;^4&quot;</span>          <span class="comment">; 四级标题 (Alt + 4 -&gt; Ctrl + 4) 实现 Cmd + 4</span></span><br><span class="line"><span class="title">    $!5::</span>Send <span class="string">&quot;^5&quot;</span>          <span class="comment">; 五级标题 (Alt + 5 -&gt; Ctrl + 5) 实现 Cmd + 5</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器专属 (Chrome, Edge, Firefox) ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; (WinActive(&quot;ahk_exe chrome.exe&quot;) || WinActive(&quot;ahk_exe msedge.exe&quot;) || WinActive(&quot;ahk_exe firefox.exe&quot;))</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!Left::</span>Send <span class="string">&quot;!&#123;Left&#125;&quot;</span>      <span class="comment">; 后退 (Alt + Left -&gt; Alt + Left) 实现 Cmd + [</span></span><br><span class="line"><span class="title">    $!Right::</span>Send <span class="string">&quot;!&#123;Right&#125;&quot;</span>    <span class="comment">; 前进 (Alt + Right -&gt; Alt + Right) 实现 Cmd + ]</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- VS Code 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Code.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!+p::</span>Send <span class="string">&quot;^+p&quot;</span>        <span class="comment">; 命令面板 (Alt + Shift + P -&gt; Ctrl + Shift + P) 实现 Cmd + Shift + P</span></span><br><span class="line"><span class="title">    $!g::</span>Send <span class="string">&quot;^g&quot;</span>          <span class="comment">; 跳转行号 (Alt + G -&gt; Ctrl + G) 实现 Cmd + G</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 - 通用快捷键 (在应用专属之后处理)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 光标移动 ----</span></span><br><span class="line"><span class="title">$!Left::</span>Send <span class="string">&quot;&#123;Home&#125;&quot;</span>   <span class="comment">; 光标移至行首 (Alt + Left -&gt; Home) 实现 Cmd + Left</span></span><br><span class="line"><span class="title">$!Right::</span>Send <span class="string">&quot;&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至行尾 (Alt + Right -&gt; End) 实现 Cmd + Right</span></span><br><span class="line"><span class="title">$!Up::</span>Send <span class="string">&quot;^&#123;Home&#125;&quot;</span>    <span class="comment">; 光标移至文档头 (Alt + Up -&gt; Ctrl + Home) 实现 Cmd + Up</span></span><br><span class="line"><span class="title">$!Down::</span>Send <span class="string">&quot;^&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至文档尾 (Alt + Down -&gt; Ctrl + End) 实现 Cmd + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本选择 ----</span></span><br><span class="line"><span class="title">$!+Left::</span>Send <span class="string">&quot;+&#123;Home&#125;&quot;</span>     <span class="comment">; 选中至行首 (Alt + Shift + Left -&gt; Shift + Home) 实现 Cmd + Shift + Left</span></span><br><span class="line"><span class="title">$!+Right::</span>Send <span class="string">&quot;+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至行尾 (Alt + Shift + Right -&gt; Shift + End) 实现 Cmd + Shift + Right</span></span><br><span class="line"><span class="title">$!+Up::</span>Send <span class="string">&quot;^+&#123;Home&#125;&quot;</span>      <span class="comment">; 选中至文档头 (Alt + Shift + Up -&gt; Ctrl + Shift + Home) 实现 Cmd + Shift + Up</span></span><br><span class="line"><span class="title">$!+Down::</span>Send <span class="string">&quot;^+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至文档尾 (Alt + Shift + Down -&gt; Ctrl + Shift + End) 实现 Cmd + Shift + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 系统快捷键 ----</span></span><br><span class="line"><span class="title">$!e::</span>Send <span class="string">&quot;#e&quot;</span>          <span class="comment">; 打开资源管理器 (Alt + E -&gt; Win + E) 实现 Cmd + E</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 聚焦搜索 (Alt + Space -&gt; Win + S) 实现 Cmd + Space ----</span></span><br><span class="line"><span class="comment">; 使用 ~ 前缀允许原生 Alt+Space 行为，延迟触发 Win+S</span></span><br><span class="line"><span class="title">~!Space::</span></span><br><span class="line">&#123;</span><br><span class="line">    KeyWait <span class="string">&quot;Alt&quot;</span></span><br><span class="line">    Sleep <span class="number">50</span></span><br><span class="line">    Send <span class="string">&quot;#s&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Win 键特殊映射 ----</span></span><br><span class="line"><span class="title">$#z::</span>Send <span class="string">&quot;!z&quot;</span>          <span class="comment">; 自动换行 (Win + Z -&gt; Alt + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$#1::</span>Send <span class="string">&quot;^!1&quot;</span>         <span class="comment">; 截图并复制 (Win + 1 -&gt; Ctrl + Alt + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">$#2::</span>Send <span class="string">&quot;^!2&quot;</span>         <span class="comment">; 贴图 (Win + 2 -&gt; Ctrl + Alt + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">$#3::</span>Send <span class="string">&quot;^!3&quot;</span>         <span class="comment">; 截图 (Win + 3 -&gt; Ctrl + Alt + 3) 实现 Cmd + 3</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 单击 LAlt 发送 Win 键 ----</span></span><br><span class="line"><span class="title">~LAlt::</span>Send <span class="string">&quot;&#123;Blind&#125;&#123;vkE8&#125;&quot;</span></span><br><span class="line"><span class="title">~LAlt Up::</span></span><br><span class="line">&#123;</span><br><span class="line">    if (<span class="built_in">A_PriorKey</span> = <span class="string">&quot;LAlt&quot;</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        Send <span class="string">&quot;&#123;LWin&#125;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br></pre></td></tr></table></figure>
-<h3 id="如何使用">🚀 如何使用</h3>
-<ol type="1">
-<li>安装 <a href="https://www.autohotkey.com/">AutoHotkey v2</a>。</li>
-<li>创建一个新文件 <code>MacKeys.ahk</code>，将上述代码粘贴进去。</li>
-<li>双击运行即可。</li>
-<li>（可选）将其放入 Windows 的启动文件夹，实现开机自启。</li>
-</ol>
-<p><a
-href="https://github.com/supermarkli/MacKeysMapping.git">仓库地址</a>放到这里，希望这对你有帮助！</p>
-]]></content>
-      <categories>
-        <category>技术工具</category>
-      </categories>
-      <tags>
-        <tag>Windows</tag>
-        <tag>MacOS</tag>
-        <tag>AutoHotkey</tag>
-        <tag>效率工具</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
-    <url>/posts/c3f2a1b9/</url>
-    <content><![CDATA[<p>面对五花八门的开源许可证，最常被问到的无非三件事：能不能商用？能不能改了闭源？要不要写专利和修改声明？这篇文章用一张速查表和几条决策准则，帮你在
-1 分钟内选对证。</p>
-<span id="more"></span>
-<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>MIT 许可证</th>
-<th>Apache 2.0 许可证</th>
-<th>GPL 许可证 (v3)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>类型</td>
-<td>宽松（Permissive）</td>
-<td>宽松（Permissive）</td>
-<td>传染共享（Copyleft）</td>
-</tr>
-<tr>
-<td>商业使用</td>
-<td>允许</td>
-<td>允许</td>
-<td>允许</td>
-</tr>
-<tr>
-<td>修改后闭源</td>
-<td>允许</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>需要包含原许可证</td>
-<td>是</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>需要说明修改</td>
-<td>否</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>专利授权</td>
-<td>无明确说明</td>
-<td>明确授权</td>
-<td>明确授权</td>
-</tr>
-<tr>
-<td>“传染性”</td>
-<td>无</td>
-<td>无</td>
-<td>强</td>
-</tr>
-</tbody>
-</table>
-<p>图表要点：如果你希望”随便用、闭源也行”，首选 MIT 或 Apache
-2.0；如果你希望”别人用到你的代码时必须开源”，选择 GPL v3。</p>
-<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
-<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
-<ul>
-<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
-<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
-<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
-</ul>
-<h3 id="apache-2.0工程团队的默认首选">✅ Apache
-2.0：工程团队的默认首选</h3>
-<ul>
-<li>核心义务：保留 <code>LICENSE</code> 与
-<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
-<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
-<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
-</ul>
-<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
-Copyleft，确保改动也开源</h3>
-<ul>
-<li>核心义务：凡分发衍生作品，必须以 GPL
-兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
-<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
-<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
-</ul>
-<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
-<ol type="1">
-<li>你是否希望别人基于你的代码做出的产品可以闭源？
-<ul>
-<li>是 → 选 MIT 或 Apache 2.0</li>
-<li>否 → 选 GPL
-v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
-AGPL）</li>
-</ul></li>
-<li>你是否担心专利纠纷？
-<ul>
-<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
-<li>否 → MIT 也可</li>
-</ul></li>
-<li>你的目标用户是谁？
-<ul>
-<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
-<li>个人/教学/社区 Demo → MIT 简洁好用</li>
-</ul></li>
-<li>你是否需要与其他许可证兼容？
-<ul>
-<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
-<li>想”强制开源传递” → GPL 系列</li>
-</ul></li>
-</ol>
-<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
-<ul>
-<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
-<code>NOTICE</code>（列出版权与声明）。</li>
-<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
-对“修改过的文件”做适当标注。</li>
-<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
-<code>LICENSE/NOTICE</code> 汇总。</li>
-<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
-<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
-</ul>
-<h2 id="常见误区">❓ 常见误区</h2>
-<ul>
-<li>“用了 GPL 的库就必须把我的 SaaS
-也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
-明确将“网络提供服务”纳入义务，注意区分。</li>
-<li>“MIT
-就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
-<li>“Apache 2.0
-一定要每个文件头都加版权声明吗？”——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
-</ul>
-<h2 id="模板与参考">📎 模板与参考</h2>
-<ul>
-<li>官方文本：
-<ul>
-<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
-Initiative</a></li>
-<li>Apache 2.0：<a
-href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
-2.0</a></li>
-<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
-GPLv3</a></li>
-</ul></li>
-<li>模板生成：<code>choosealicense.com</code>
-提供多语言示例与合规提示。</li>
-</ul>
-<h2 id="小结">✨ 小结</h2>
-<ul>
-<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
-<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
-<li>想确保改动继续开源并回馈社区：选 <strong>GPL
-v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
-</ul>
-<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
-]]></content>
-      <categories>
-        <category>计算机基础</category>
-        <category>开源</category>
-      </categories>
-      <tags>
-        <tag>开源</tag>
-        <tag>License</tag>
-        <tag>许可证</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>GPU 工作原理：和 CPU 有何不同？</title>
     <url>/posts/d1a2c3b4/</url>
     <content><![CDATA[<p>如果把 CPU 比作“多才多艺的总管”，GPU 更像“高效的流水线工厂”：CPU
@@ -7962,6 +7732,236 @@ IB/RoCE；拓扑差异决定带宽与延迟</li>
         <tag>CPU</tag>
         <tag>并行计算</tag>
         <tag>计算机基础</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>KeyMapping：win上使用mac键位</title>
+    <url>/posts/a9a69d93/</url>
+    <content><![CDATA[<p>最近购入了台17年12寸的
+macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command
+键的位置和用法，但是切换回 Windows
+的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP
+win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。
+<span id="more"></span></p>
+<p>本文介绍如何使用 AutoHotkey (v2.0)
+编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
+体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
+<h3 id="核心痛点本地与远程的精神分裂">💡
+核心痛点：本地与远程的”精神分裂”</h3>
+<p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
+<code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
+键就在这个位置）。</p>
+<p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
+Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
+<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
+远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
+的 <code>Win</code> 键。此时，我们在 Mac 上按
+<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
+<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
+<h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
+<p>Windows 提供了 WTSAPI (Windows Terminal Services
+API)，允许我们查询当前会话的信息。通过
+<code>WTSQuerySessionInformation</code>
+函数，我们可以获取连接到当前会话的客户端名称（Client Name）。</p>
+<ul>
+<li><strong>本地登录</strong>：客户端名称通常为空。</li>
+<li><strong>远程登录</strong>：客户端名称会显示发起连接的设备名）。</li>
+</ul>
+<p>利用这一点，我们可以编写一个 <code>IsRemoteMac()</code>
+函数来动态判断当前的上下文。</p>
+<h3 id="脚本实现">🛠️ 脚本实现</h3>
+<p>以下是完整的 AutoHotkey v2 脚本。</p>
+<figure class="highlight ahk"><table><tr><td class="code"><pre><span class="line"><span class="meta">#Requires AutoHotkey v2.0</span></span><br><span class="line"><span class="meta">#SingleInstance Force</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; MacKeys.ahk - Windows 下模拟 Mac 键位布局</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 功能说明：</span></span><br><span class="line"><span class="comment">;   - 将 Alt 键模拟为 Mac 的 Cmd 键</span></span><br><span class="line"><span class="comment">;   - 支持远程 Mac 模式（通过 RDP 连接时）和本地 Windows 模式自动切换</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 使用方式：</span></span><br><span class="line"><span class="comment">;   - 双击运行此脚本，托盘区会出现 AHK 图标</span></span><br><span class="line"><span class="comment">;   - 右键图标可退出或重新加载脚本</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 函数定义</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line">IsRemoteMac() &#123;</span><br><span class="line">    clientName := Trim(GetRdpClientName())</span><br><span class="line">    if (clientName = <span class="string">&quot;&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line"></span><br><span class="line">    if InStr(clientName, <span class="string">&quot;zihao-macbook&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">GetRdpClientName() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">        pBuffer := <span class="number">0</span></span><br><span class="line">        bytes := <span class="number">0</span></span><br><span class="line">        if !DllCall(<span class="string">&quot;wtsapi32\WTSQuerySessionInformationW&quot;</span></span><br><span class="line">            , <span class="string">&quot;Ptr&quot;</span>, <span class="number">0</span>              <span class="comment">; WTS_CURRENT_SERVER_HANDLE</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, -<span class="number">1</span>             <span class="comment">; WTS_CURRENT_SESSION</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, <span class="number">10</span>             <span class="comment">; WTSClientName</span></span><br><span class="line">            , <span class="string">&quot;Ptr*&quot;</span>, &amp;pBuffer</span><br><span class="line">            , <span class="string">&quot;UInt*&quot;</span>, &amp;bytes)</span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">        name := StrGet(pBuffer, <span class="string">&quot;UTF-16&quot;</span>)</span><br><span class="line">        DllCall(<span class="string">&quot;wtsapi32\WTSFreeMemory&quot;</span>, <span class="string">&quot;Ptr&quot;</span>, pBuffer)</span><br><span class="line">        <span class="keyword">return</span> name</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 远程 Mac 模式 (通过 RDP 连接到 Mac 时)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; Alt + Tab -&gt; Win + Tab (任务切换)</span></span><br><span class="line"><span class="title">$!Tab::</span></span><br><span class="line">&#123;</span><br><span class="line">    SendInput <span class="string">&quot;&#123;LAlt up&#125;&quot;</span></span><br><span class="line">    Sleep <span class="number">10</span></span><br><span class="line">    SendEvent <span class="string">&quot;#&#123;Tab&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; Win 键映射</span></span><br><span class="line"><span class="title">$#/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 斜杠 (Win + / -&gt; Ctrl + /)</span></span><br><span class="line"><span class="title">$#b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Win + B -&gt; Ctrl + B)</span></span><br><span class="line"><span class="title">$#s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Win + S -&gt; Ctrl + S)</span></span><br><span class="line"><span class="title">$#-::</span>Send <span class="string">&quot;^-&quot;</span>          <span class="comment">; 缩小 (Win + - -&gt; Ctrl + -)</span></span><br><span class="line"><span class="title">$#=::</span>Send <span class="string">&quot;^=&quot;</span>          <span class="comment">; 放大 (Win + = -&gt; Ctrl + =)</span></span><br><span class="line"><span class="title">$#p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 打印 (Win + P -&gt; Ctrl + P)</span></span><br><span class="line"><span class="title">$#[::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Win + [ -&gt; Ctrl + [)</span></span><br><span class="line"><span class="title">$#t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Win + T -&gt; Ctrl + T)</span></span><br><span class="line"><span class="title">$#+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Win + Shift + K -&gt; Ctrl + Shift + K)</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 (将 Alt 模拟 Mac 的 Cmd 键)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 基础编辑操作 ----</span></span><br><span class="line"><span class="title">$!c::</span>Send <span class="string">&quot;^c&quot;</span>          <span class="comment">; 复制 (Alt + C -&gt; Ctrl + C) 实现 Cmd + C</span></span><br><span class="line"><span class="title">$!v::</span>Send <span class="string">&quot;^v&quot;</span>          <span class="comment">; 粘贴 (Alt + V -&gt; Ctrl + V) 实现 Cmd + V</span></span><br><span class="line"><span class="title">$!x::</span>Send <span class="string">&quot;^x&quot;</span>          <span class="comment">; 剪切 (Alt + X -&gt; Ctrl + X) 实现 Cmd + X</span></span><br><span class="line"><span class="title">$!z::</span>Send <span class="string">&quot;^z&quot;</span>          <span class="comment">; 撤销 (Alt + Z -&gt; Ctrl + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$!+z::</span>Send <span class="string">&quot;^y&quot;</span>         <span class="comment">; 重做 (Alt + Shift + Z -&gt; Ctrl + Y) 实现 Cmd + Shift + Z</span></span><br><span class="line"><span class="title">$!a::</span>Send <span class="string">&quot;^a&quot;</span>          <span class="comment">; 全选 (Alt + A -&gt; Ctrl + A) 实现 Cmd + A</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文件操作 ----</span></span><br><span class="line"><span class="title">$!s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Alt + S -&gt; Ctrl + S) 实现 Cmd + S</span></span><br><span class="line"><span class="title">$!n::</span>Send <span class="string">&quot;^n&quot;</span>          <span class="comment">; 新建 (Alt + N -&gt; Ctrl + N) 实现 Cmd + N</span></span><br><span class="line"><span class="title">$!w::</span>Send <span class="string">&quot;^w&quot;</span>          <span class="comment">; 关闭 (Alt + W -&gt; Ctrl + W) 实现 Cmd + W</span></span><br><span class="line"><span class="title">$!p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 搜索 (Alt + P -&gt; Ctrl + P) 实现 Cmd + P</span></span><br><span class="line"><span class="title">$!,::</span>Send <span class="string">&quot;^,&quot;</span>          <span class="comment">; 菜单 (Alt + , -&gt; Ctrl + ,) 实现 Cmd + ,</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本编辑 ----</span></span><br><span class="line"><span class="title">$!b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Alt + B -&gt; Ctrl + B) 实现 Cmd + B</span></span><br><span class="line"><span class="title">$!f::</span>Send <span class="string">&quot;^f&quot;</span>          <span class="comment">; 查找 (Alt + F -&gt; Ctrl + F) 实现 Cmd + F</span></span><br><span class="line"><span class="title">$!h::</span>Send <span class="string">&quot;^h&quot;</span>          <span class="comment">; 替换 (Alt + H -&gt; Ctrl + H) 实现 Cmd + H</span></span><br><span class="line"><span class="title">$!/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 注释 (Alt + / -&gt; Ctrl + /) 实现 Cmd + /</span></span><br><span class="line"><span class="title">$![::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Alt + [ -&gt; Ctrl + [) 实现 Cmd + [</span></span><br><span class="line"><span class="title">$!+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Alt + Shift + K -&gt; Ctrl + Shift + K) 实现 Cmd + Shift + K</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器/标签页 ----</span></span><br><span class="line"><span class="title">$!t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Alt + T -&gt; Ctrl + T) 实现 Cmd + T</span></span><br><span class="line"><span class="title">$!r::</span>Send <span class="string">&quot;^r&quot;</span>          <span class="comment">; 刷新 (Alt + R -&gt; Ctrl + R) 实现 Cmd + R</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 缩放控制 ----</span></span><br><span class="line"><span class="title">$!=::</span>Send <span class="string">&quot;^&#123;=&#125;&quot;</span>        <span class="comment">; 放大 (Alt + = -&gt; Ctrl + =) 实现 Cmd + =</span></span><br><span class="line"><span class="title">$!-::</span>Send <span class="string">&quot;^&#123;-&#125;&quot;</span>        <span class="comment">; 缩小 (Alt + - -&gt; Ctrl + -) 实现 Cmd + -</span></span><br><span class="line"><span class="title">$!0::</span>Send <span class="string">&quot;^0&quot;</span>          <span class="comment">; 恢复大小 (Alt + 0 -&gt; Ctrl + 0) 实现 Cmd + 0</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 应用专属快捷键</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Typora 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Typora.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!1::</span>Send <span class="string">&quot;^1&quot;</span>          <span class="comment">; 一级标题 (Alt + 1 -&gt; Ctrl + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">    $!2::</span>Send <span class="string">&quot;^2&quot;</span>          <span class="comment">; 二级标题 (Alt + 2 -&gt; Ctrl + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">    $!3::</span>Send <span class="string">&quot;^3&quot;</span>          <span class="comment">; 三级标题 (Alt + 3 -&gt; Ctrl + 3) 实现 Cmd + 3</span></span><br><span class="line"><span class="title">    $!4::</span>Send <span class="string">&quot;^4&quot;</span>          <span class="comment">; 四级标题 (Alt + 4 -&gt; Ctrl + 4) 实现 Cmd + 4</span></span><br><span class="line"><span class="title">    $!5::</span>Send <span class="string">&quot;^5&quot;</span>          <span class="comment">; 五级标题 (Alt + 5 -&gt; Ctrl + 5) 实现 Cmd + 5</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器专属 (Chrome, Edge, Firefox) ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; (WinActive(&quot;ahk_exe chrome.exe&quot;) || WinActive(&quot;ahk_exe msedge.exe&quot;) || WinActive(&quot;ahk_exe firefox.exe&quot;))</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!Left::</span>Send <span class="string">&quot;!&#123;Left&#125;&quot;</span>      <span class="comment">; 后退 (Alt + Left -&gt; Alt + Left) 实现 Cmd + [</span></span><br><span class="line"><span class="title">    $!Right::</span>Send <span class="string">&quot;!&#123;Right&#125;&quot;</span>    <span class="comment">; 前进 (Alt + Right -&gt; Alt + Right) 实现 Cmd + ]</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- VS Code 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Code.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!+p::</span>Send <span class="string">&quot;^+p&quot;</span>        <span class="comment">; 命令面板 (Alt + Shift + P -&gt; Ctrl + Shift + P) 实现 Cmd + Shift + P</span></span><br><span class="line"><span class="title">    $!g::</span>Send <span class="string">&quot;^g&quot;</span>          <span class="comment">; 跳转行号 (Alt + G -&gt; Ctrl + G) 实现 Cmd + G</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 - 通用快捷键 (在应用专属之后处理)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 光标移动 ----</span></span><br><span class="line"><span class="title">$!Left::</span>Send <span class="string">&quot;&#123;Home&#125;&quot;</span>   <span class="comment">; 光标移至行首 (Alt + Left -&gt; Home) 实现 Cmd + Left</span></span><br><span class="line"><span class="title">$!Right::</span>Send <span class="string">&quot;&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至行尾 (Alt + Right -&gt; End) 实现 Cmd + Right</span></span><br><span class="line"><span class="title">$!Up::</span>Send <span class="string">&quot;^&#123;Home&#125;&quot;</span>    <span class="comment">; 光标移至文档头 (Alt + Up -&gt; Ctrl + Home) 实现 Cmd + Up</span></span><br><span class="line"><span class="title">$!Down::</span>Send <span class="string">&quot;^&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至文档尾 (Alt + Down -&gt; Ctrl + End) 实现 Cmd + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本选择 ----</span></span><br><span class="line"><span class="title">$!+Left::</span>Send <span class="string">&quot;+&#123;Home&#125;&quot;</span>     <span class="comment">; 选中至行首 (Alt + Shift + Left -&gt; Shift + Home) 实现 Cmd + Shift + Left</span></span><br><span class="line"><span class="title">$!+Right::</span>Send <span class="string">&quot;+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至行尾 (Alt + Shift + Right -&gt; Shift + End) 实现 Cmd + Shift + Right</span></span><br><span class="line"><span class="title">$!+Up::</span>Send <span class="string">&quot;^+&#123;Home&#125;&quot;</span>      <span class="comment">; 选中至文档头 (Alt + Shift + Up -&gt; Ctrl + Shift + Home) 实现 Cmd + Shift + Up</span></span><br><span class="line"><span class="title">$!+Down::</span>Send <span class="string">&quot;^+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至文档尾 (Alt + Shift + Down -&gt; Ctrl + Shift + End) 实现 Cmd + Shift + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 系统快捷键 ----</span></span><br><span class="line"><span class="title">$!e::</span>Send <span class="string">&quot;#e&quot;</span>          <span class="comment">; 打开资源管理器 (Alt + E -&gt; Win + E) 实现 Cmd + E</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 聚焦搜索 (Alt + Space -&gt; Win + S) 实现 Cmd + Space ----</span></span><br><span class="line"><span class="comment">; 使用 ~ 前缀允许原生 Alt+Space 行为，延迟触发 Win+S</span></span><br><span class="line"><span class="title">~!Space::</span></span><br><span class="line">&#123;</span><br><span class="line">    KeyWait <span class="string">&quot;Alt&quot;</span></span><br><span class="line">    Sleep <span class="number">50</span></span><br><span class="line">    Send <span class="string">&quot;#s&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Win 键特殊映射 ----</span></span><br><span class="line"><span class="title">$#z::</span>Send <span class="string">&quot;!z&quot;</span>          <span class="comment">; 自动换行 (Win + Z -&gt; Alt + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$#1::</span>Send <span class="string">&quot;^!1&quot;</span>         <span class="comment">; 截图并复制 (Win + 1 -&gt; Ctrl + Alt + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">$#2::</span>Send <span class="string">&quot;^!2&quot;</span>         <span class="comment">; 贴图 (Win + 2 -&gt; Ctrl + Alt + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">$#3::</span>Send <span class="string">&quot;^!3&quot;</span>         <span class="comment">; 截图 (Win + 3 -&gt; Ctrl + Alt + 3) 实现 Cmd + 3</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 单击 LAlt 发送 Win 键 ----</span></span><br><span class="line"><span class="title">~LAlt::</span>Send <span class="string">&quot;&#123;Blind&#125;&#123;vkE8&#125;&quot;</span></span><br><span class="line"><span class="title">~LAlt Up::</span></span><br><span class="line">&#123;</span><br><span class="line">    if (<span class="built_in">A_PriorKey</span> = <span class="string">&quot;LAlt&quot;</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        Send <span class="string">&quot;&#123;LWin&#125;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br></pre></td></tr></table></figure>
+<h3 id="如何使用">🚀 如何使用</h3>
+<ol type="1">
+<li>安装 <a href="https://www.autohotkey.com/">AutoHotkey v2</a>。</li>
+<li>创建一个新文件 <code>MacKeys.ahk</code>，将上述代码粘贴进去。</li>
+<li>双击运行即可。</li>
+<li>（可选）将其放入 Windows 的启动文件夹，实现开机自启。</li>
+</ol>
+<p><a
+href="https://github.com/supermarkli/MacKeysMapping.git">仓库地址</a>放到这里，希望这对你有帮助！</p>
+]]></content>
+      <categories>
+        <category>技术工具</category>
+      </categories>
+      <tags>
+        <tag>Windows</tag>
+        <tag>MacOS</tag>
+        <tag>AutoHotkey</tag>
+        <tag>效率工具</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
+    <url>/posts/c3f2a1b9/</url>
+    <content><![CDATA[<p>面对五花八门的开源许可证，最常被问到的无非三件事：能不能商用？能不能改了闭源？要不要写专利和修改声明？这篇文章用一张速查表和几条决策准则，帮你在
+1 分钟内选对证。</p>
+<span id="more"></span>
+<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>MIT 许可证</th>
+<th>Apache 2.0 许可证</th>
+<th>GPL 许可证 (v3)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>宽松（Permissive）</td>
+<td>宽松（Permissive）</td>
+<td>传染共享（Copyleft）</td>
+</tr>
+<tr>
+<td>商业使用</td>
+<td>允许</td>
+<td>允许</td>
+<td>允许</td>
+</tr>
+<tr>
+<td>修改后闭源</td>
+<td>允许</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>需要包含原许可证</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>需要说明修改</td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>专利授权</td>
+<td>无明确说明</td>
+<td>明确授权</td>
+<td>明确授权</td>
+</tr>
+<tr>
+<td>“传染性”</td>
+<td>无</td>
+<td>无</td>
+<td>强</td>
+</tr>
+</tbody>
+</table>
+<p>图表要点：如果你希望”随便用、闭源也行”，首选 MIT 或 Apache
+2.0；如果你希望”别人用到你的代码时必须开源”，选择 GPL v3。</p>
+<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
+<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
+<ul>
+<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
+<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
+<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
+</ul>
+<h3 id="apache-2.0工程团队的默认首选">✅ Apache
+2.0：工程团队的默认首选</h3>
+<ul>
+<li>核心义务：保留 <code>LICENSE</code> 与
+<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
+<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
+<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
+</ul>
+<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
+Copyleft，确保改动也开源</h3>
+<ul>
+<li>核心义务：凡分发衍生作品，必须以 GPL
+兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
+<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
+<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
+</ul>
+<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
+<ol type="1">
+<li>你是否希望别人基于你的代码做出的产品可以闭源？
+<ul>
+<li>是 → 选 MIT 或 Apache 2.0</li>
+<li>否 → 选 GPL
+v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
+AGPL）</li>
+</ul></li>
+<li>你是否担心专利纠纷？
+<ul>
+<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
+<li>否 → MIT 也可</li>
+</ul></li>
+<li>你的目标用户是谁？
+<ul>
+<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
+<li>个人/教学/社区 Demo → MIT 简洁好用</li>
+</ul></li>
+<li>你是否需要与其他许可证兼容？
+<ul>
+<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
+<li>想”强制开源传递” → GPL 系列</li>
+</ul></li>
+</ol>
+<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
+<ul>
+<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
+<code>NOTICE</code>（列出版权与声明）。</li>
+<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
+对“修改过的文件”做适当标注。</li>
+<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
+<code>LICENSE/NOTICE</code> 汇总。</li>
+<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
+<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
+</ul>
+<h2 id="常见误区">❓ 常见误区</h2>
+<ul>
+<li>“用了 GPL 的库就必须把我的 SaaS
+也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
+明确将“网络提供服务”纳入义务，注意区分。</li>
+<li>“MIT
+就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
+<li>“Apache 2.0
+一定要每个文件头都加版权声明吗？”——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
+</ul>
+<h2 id="模板与参考">📎 模板与参考</h2>
+<ul>
+<li>官方文本：
+<ul>
+<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
+Initiative</a></li>
+<li>Apache 2.0：<a
+href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
+2.0</a></li>
+<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
+GPLv3</a></li>
+</ul></li>
+<li>模板生成：<code>choosealicense.com</code>
+提供多语言示例与合规提示。</li>
+</ul>
+<h2 id="小结">✨ 小结</h2>
+<ul>
+<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
+<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
+<li>想确保改动继续开源并回馈社区：选 <strong>GPL
+v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
+</ul>
+<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
+]]></content>
+      <categories>
+        <category>计算机基础</category>
+        <category>开源</category>
+      </categories>
+      <tags>
+        <tag>开源</tag>
+        <tag>License</tag>
+        <tag>许可证</tag>
       </tags>
   </entry>
   <entry>
@@ -11604,10 +11604,10 @@ nonce”签名 → 验证方核对签名和 PCR 是否符合预期。nonce
 </tbody>
 </table>
 <blockquote>
-<p>fTPM
-的坑：论文引用的研究（faultPM）用<strong>电压故障注入</strong>物理攻击，成功干扰
-fTPM 计算并提取了保护密钥（论文 §2.2）。这也是机密计算里做
-<strong>CTPM（机密 TPM）</strong> 的动机之一。</p>
+<p>fTPM 的坑：faultPM
+研究用<strong>电压故障注入</strong>物理攻击，成功干扰 fTPM
+计算并提取了保护密钥。这也是机密计算里做 <strong>CTPM（机密
+TPM）</strong> 的动机之一。</p>
 </blockquote>
 <h3 id="tcg-是啥">🏛 TCG 是啥？</h3>
 <p><strong>TCG（Trusted Computing Group，可信计算组织）</strong>
@@ -17377,8 +17377,8 @@ Adam、SGD）外面，通过”向前看”的策略来稳定训练过程。</p>
   <entry>
     <title>信任根三件套：RTM、RTR、RTS与TEE+TPM协作</title>
     <url>/posts/2affc801/</url>
-    <content><![CDATA[<p>TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了论文
-CCxTrust 的核心：协作信任。</p>
+    <content><![CDATA[<p>TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了 CCxTrust
+协作信任的核心。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
@@ -17491,14 +17491,13 @@ CCxTrust 的核心：协作信任。</p>
 管”存储”</strong>。一台机器可不可信，就是”测得好、报得真、藏得牢”三件事。</p>
 </blockquote>
 <h3 id="黑盒-tee-白盒-tpm各有所长">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</h3>
-<p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>（论文
-§5.1.1）：</p>
+<p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          TEE（SEV-SNP）                 TPM</span><br><span class="line">       ┌──────────────────┐        ┌──────────────────┐</span><br><span class="line">信任模式│  black-box        │        │  white-box        │</span><br><span class="line">       │  信任根归厂商       │        │  用户可直接访问     │</span><br><span class="line">可访问性│  用户够不着（API 受限）│        │  用户可配置可验证     │</span><br><span class="line">强项   │  强隔离的执行环境    │        │  用户侧密钥/存储/认证 │</span><br><span class="line">短板   │  信任是黑箱         │        │  没有执行环境       │</span><br><span class="line">       └──────────────────┘        └──────────────────┘</span><br></pre></td></tr></table></figure>
 <p>关键差异：<strong>CPU-TEE
 信任根是黑盒的</strong>，只能给系统底层（固件、hypervisor、内核）用，用户够不着、验不了；<strong>TPM
 是白盒的</strong>，用户可以直接访问、配置、验证，能补上 TEE
 没有的用户侧能力。</p>
-<p>论文的三个核心挑战与对应方案（§3.2、§4）：</p>
+<p>三个核心挑战与对应方案：</p>
 <table>
 <thead>
 <tr>
@@ -17525,9 +17524,8 @@ CCxTrust 的核心：协作信任。</p>
 </tr>
 </tbody>
 </table>
-<h3 id="论文的核心分配三件套怎么分工">📐
-论文的核心分配：三件套怎么分工</h3>
-<p>论文的原创设计（§5.1）——<strong>不搞一家独大，让 TEE 和 TPM
+<h3 id="核心分配三件套怎么分工">📐 核心分配：三件套怎么分工</h3>
+<p>CCxTrust 的原创设计——<strong>不搞一家独大，让 TEE 和 TPM
 分工协作</strong>：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RTM（度量）  → TEE 与 TPM 并行独立，各测各的域</span><br><span class="line">              TEE 测：硬件/固件/启动环境（TEE 的 TCB）</span><br><span class="line">              TPM 测：hypervisor、guest OS、工作负载</span><br><span class="line">              → 两块&quot;账本&quot;互不依赖，一份被攻破，另一份还在</span><br><span class="line"></span><br><span class="line">RTR（报告）  → TEE 与 TPM 协作，生成&quot;复合认证报告&quot;</span><br><span class="line">              → 单一报告根容易被伪造/拼接攻击（见下）</span><br><span class="line"></span><br><span class="line">RTS（存储）  → 完全交给 TPM</span><br><span class="line">              → 用户密钥由 TPM 密封存储，TEE 也把密钥托管给 TPM</span><br></pre></td></tr></table></figure>
 <p><strong>为什么这样分？</strong></p>
@@ -17545,8 +17543,7 @@ CCxTrust 的核心：协作信任。</p>
 <tbody>
 <tr>
 <td>RTM 并行独立</td>
-<td>两者测的域不同、互不依赖，形成”双保险”（论文原话 dual
-insurance）</td>
+<td>两者测的域不同、互不依赖，形成”双保险”（dual insurance）</td>
 </tr>
 <tr>
 <td>RTR 协作</td>
@@ -17560,10 +17557,10 @@ insurance）</td>
 </tbody>
 </table>
 <h3 id="三阶段测量rtm-的具体落地">📏 三阶段测量：RTM 的具体落地</h3>
-<p>论文把 CVM 的信任链从启动到运行分成三个阶段（§5.1.2）：</p>
+<p>CVM 的信任链从启动到运行分成三个阶段：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────────────────┐</span><br><span class="line">│ Stage 1：Host 静态测量（CVM 启动前）                          │</span><br><span class="line">│   测 hypervisor、host 内核、虚拟化服务                        │</span><br><span class="line">│   → 保证&quot;我住的房子是干净的&quot;                                 │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 2：CVM 启动测量                                        │</span><br><span class="line">│   测 guest 固件、内核、initrd、根文件系统、镜像签名            │</span><br><span class="line">│   → 保证&quot;住进来的这个租客是预期的&quot;                            │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 3：运行时测量（动态）                                   │</span><br><span class="line">│   TEE 对 CVM 内工作负载做完整性校验                           │</span><br><span class="line">│   → 保证&quot;运行过程中没被篡改&quot;                                 │</span><br><span class="line">└─────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。论文说”静态
-+ 动态信任链结合”，指的就是这个。</p>
+<p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。也就是”静态
++ 动态信任链结合”。</p>
 <blockquote>
 <p>顺带澄清一个容易混的概念：<strong>hypervisor
 不是固件</strong>。层次是：应用 → Guest OS → hypervisor（软件）→ 固件
@@ -17572,10 +17569,10 @@ hypervisor，hypervisor 启动 guest。</p>
 </blockquote>
 <h3 id="度量分工重合吗这是双保险不是-bug">🔗
 度量分工重合吗？——这是”双保险”不是 bug</h3>
-<p>论文说”TEE 测固件、TPM 测 hypervisor”，但现实中 TPM
+<p>设计上”TEE 测固件、TPM 测 hypervisor”，但现实中 TPM
 的启动链本来也测固件（UEFI 启动时自己 Extend
 PCR）。<strong>实践中有重叠，但这是刻意为之</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">论文的真实意图 = 双保险（redundancy）：</span><br><span class="line">· 两个独立的测量源（TEE 的 PSP 侧 vs TPM 芯片侧），互不信任、互不依赖</span><br><span class="line">· TEE 的测量域 = &quot;TEE 自己的启动信任链&quot;（PSP→SEV 固件→OVMF 等）</span><br><span class="line">· TPM 的测量域 = &quot;平台全局启动链&quot;（UEFI→hypervisor→guest）</span><br><span class="line">· 哪怕一条链被攻破/伪造，另一条链的账本仍然可信</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">设计意图 = 双保险（redundancy）：</span><br><span class="line">· 两个独立的测量源（TEE 的 PSP 侧 vs TPM 芯片侧），互不信任、互不依赖</span><br><span class="line">· TEE 的测量域 = &quot;TEE 自己的启动信任链&quot;（PSP→SEV 固件→OVMF 等）</span><br><span class="line">· TPM 的测量域 = &quot;平台全局启动链&quot;（UEFI→hypervisor→guest）</span><br><span class="line">· 哪怕一条链被攻破/伪造，另一条链的账本仍然可信</span><br></pre></td></tr></table></figure>
 <p><strong>概念上分工（各测各的域），实践上有重叠（都碰固件），重叠是刻意的冗余设计。</strong></p>
 <h3 id="信任链与信任锚固件为什么改不了">🔑
 信任链与信任锚：固件为什么改不了</h3>
@@ -17616,21 +17613,17 @@ ROM。<strong>信任链不是无限的，它终止于一个”物理可信”的
 是 AMD CPU 里的<strong>独立 ARM 安全协处理器</strong>，相当于”CPU
 里的一个小电脑”：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────┐</span><br><span class="line">│ AMD CPU 芯片                 │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ x86 主核（跑你的系统）     │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ PSP（独立 ARM 核）        │ │</span><br><span class="line">│  │ · 芯片上电先于 x86 主核   │ │</span><br><span class="line">│  │ · 跑在隔离的安全环境里    │ │</span><br><span class="line">│  │ · 管理：SEV 内存加密密钥、 │ │</span><br><span class="line">│  │   RMP 表、固件签名校验、  │ │</span><br><span class="line">│  │   fTPM、DMA 保护          │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>PSP 在论文里的角色：</p>
+<p>PSP 的核心角色：</p>
 <table>
-<colgroup>
-<col style="width: 57%" />
-<col style="width: 42%" />
-</colgroup>
 <thead>
 <tr>
-<th>论文提到的地方</th>
+<th>场景</th>
 <th>PSP 干什么</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>§5.1.1 “TEE 通过 PSP 进行信任初始化”</td>
+<td>“TEE 通过 PSP 进行信任初始化”</td>
 <td>PSP 是 TEE 信任链的起点（锚点）</td>
 </tr>
 <tr>
@@ -17651,14 +17644,14 @@ ROM。<strong>信任链不是无限的，它终止于一个”物理可信”的
 芯片里”先于一切、独立于一切”的安全小电脑，TEE 的信任锚就是它。</strong>
 类似地，Intel 有 Intel ME/CSE，ARM 有 TrustZone 的 secure world。</p>
 <h3 id="展望rtr-协作-复合认证">🔭 展望：RTR 协作 = 复合认证</h3>
-<p>本篇已建立完整骨架，最后预告论文最核心的一环——<strong>RTR
+<p>本篇已建立完整骨架，最后预告 CCxTrust 最核心的一环——<strong>RTR
 协作</strong>。</p>
-<p><strong>为什么独立认证不够</strong>（论文 §5.3）：TEE 和 TPM
+<p><strong>为什么独立认证不够</strong>：TEE 和 TPM
 各自单独出认证报告时：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· 攻击者可能伪造 CVM 的 ID 发起攻击</span><br><span class="line">· 攻击者可能做&quot;报告拼接攻击&quot;（report concatenation）：</span><br><span class="line">  把 A 机器的 TPM 报告 + B 机器的 TEE 报告拼成&quot;完整报告&quot;</span><br><span class="line">  → 验证方以为是一台可信机器的完整状态，实际是两台机器拼的</span><br><span class="line">· 独立认证需要两次交互（两个数据拷贝、两次签名、两次报告返回），效率低</span><br></pre></td></tr></table></figure>
-<p><strong>论文的解法</strong>：复合认证协议——把 TEE 报告嵌进 TPM
+<p><strong>CCxTrust 的解法</strong>：复合认证协议——把 TEE 报告嵌进 TPM
 Quote（或反过来），生成<strong>一份不可拆分的复合报告</strong>，一次交互完成认证。拼接攻击的根基（两份独立报告）被直接消灭，认证效率还提升了
-24%（论文 §7）。</p>
+24%。</p>
 <h3 id="常见误区">⚠️ 常见误区</h3>
 <table>
 <colgroup>
@@ -17673,8 +17666,8 @@ Quote（或反过来），生成<strong>一份不可拆分的复合报告</stron
 </thead>
 <tbody>
 <tr>
-<td>RTM/RTR/RTS 是论文发明的</td>
-<td>是 TCG 标准术语，论文的创新在于”怎么分配”</td>
+<td>RTM/RTR/RTS 是 CCxTrust 发明的</td>
+<td>是 TCG 标准术语，CCxTrust 的创新在于”怎么分配”</td>
 </tr>
 <tr>
 <td>TEE 比 TPM 强，全都用 TEE</td>
@@ -17708,7 +17701,7 @@ Quote（或反过来），生成<strong>一份不可拆分的复合报告</stron
 <p>信任根三件套中，RTM 管测量、RTR 管报告、RTS 管存储；CCxTrust 让 TEE
 和 TPM 分工协作——RTM 并行独立（双保险）、RTR 复合认证（防拼接）、RTS 归
 TPM（用白盒补黑盒），通过三阶段测量覆盖从启动到运行的完整信任链，信任锚则落在
-PSP 等物理硬件上。这就是论文”TEE + TPM 协作信任”的全貌。</p>
+PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
 </blockquote>
 <p>Happy Hacking! 🎉</p>
 ]]></content>
@@ -18904,7 +18897,7 @@ graph LR
 的思路：在 CPU
 硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">普通虚拟机 vs 机密虚拟机（CVM）</span><br><span class="line">┌─────────────────────┐   ┌─────────────────────┐</span><br><span class="line">│   普通 VM            │   │  CVM（机密虚拟机）    │</span><br><span class="line">│  内存 = 明文         │   │  内存 = 硬件加密      │</span><br><span class="line">│  hypervisor 能读     │   │  hypervisor 读不了    │</span><br><span class="line">│  管理员能读          │   │  物理攻击也读不了     │</span><br><span class="line">└─────────────────────┘   └─────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>主流的 CVM 技术（论文 §2.1）：</p>
+<p>主流的 CVM 技术：</p>
 <table>
 <thead>
 <tr>
@@ -18998,7 +18991,7 @@ TLS），给特定通道做端到端加密，这是机密计算里的常见性�
 gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
 </ul>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统 TEE 信任模型：</span><br><span class="line">  用户 → 信任 → 云平台 → 信任 → 芯片厂商</span><br><span class="line">        └──────────────────────────┘</span><br><span class="line">        信任链全部建立在&quot;厂商没毛病&quot;上，</span><br><span class="line">        用户没有独立验证的入口，这叫黑盒</span><br></pre></td></tr></table></figure>
-<p>三个具体痛点（论文 §1、§5.1）：</p>
+<p>三个具体痛点：</p>
 <table>
 <thead>
 <tr>
@@ -19021,7 +19014,7 @@ gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
 </tr>
 </tbody>
 </table>
-<p>这正是论文 CCxTrust 的切入点：<strong>TPM
+<p>这正是 TEE 与 TPM 协作信任的切入点：<strong>TPM
 是用户能直接访问、能自己配置的”白盒”信任根，用它来制衡 TEE
 的黑盒信任根</strong>。</p>
 <h3 id="常见误区">⚠️ 常见误区</h3>
