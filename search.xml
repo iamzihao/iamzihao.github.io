@@ -1233,6 +1233,57 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <categories>
+        <category>软件开发</category>
+        <category>数据库</category>
+      </categories>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>前端浏览器缓存机制</title>
     <url>/posts/50ac740b/</url>
     <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
@@ -1544,57 +1595,6 @@ JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件�
       <tags>
         <tag>编码</tag>
         <tag>计算机基础</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <categories>
-        <category>软件开发</category>
-        <category>数据库</category>
-      </categories>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -10966,326 +10966,6 @@ VPN 几乎一致（接管全系统流量）。</li>
       </tags>
   </entry>
   <entry>
-    <title>优化器详解：从SGD到Adam的原理与参数调优</title>
-    <url>/posts/104dbac2/</url>
-    <content><![CDATA[<p>选择合适的优化器以及理解其背后的参数，往往决定了模型是能够快速收敛到最佳状态，还是在训练过程中产生“梯度爆炸”甚至完全无法收敛。本文将通俗地解释这些概念，并深入剖析
-PyTorch 中常用优化器的关键参数。</p>
-<span id="more"></span>
-<h2 id="通俗理解蒙眼下山">通俗理解：蒙眼下山</h2>
-<p>想象你被蒙住双眼，放置在一座高山上。你的目标是下到山谷的最低点——在深度学习中，这代表着让模型的<strong>损失函数
-(Loss)</strong> 最小化。</p>
-<p>优化器，就是你的<strong>下山策略</strong>。</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    Start(&quot;山顶 (高 Loss)&quot;) --&gt; Strategy{选择优化器}
-    Strategy -- &quot;SGD&quot; --&gt; Path1(&quot;固定步长，稳步试探&quot;)
-    Strategy -- &quot;Adam&quot; --&gt; Path2(&quot;自适应速度，智能调整&quot;)
-    Path1 --&gt; Goal(&quot;山谷 (低 Loss)&quot;)
-    Path2 --&gt; Goal
-</code>
-</pre>
-<h3 id="基础选手sgd-随机梯度下降">🚶 基础选手：SGD (随机梯度下降)</h3>
-<p><strong>策略</strong>：用脚探一下当前的地面，感觉哪个方向是向下的，就往那个方向迈出固定的一步。</p>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>老实</strong>：它完全依赖当前的梯度方向。你设定多大的步长（学习率），它就走多远。</li>
-<li><strong>稳健但缓慢</strong>：如果步长太小，下山速度极慢；如果步长太大，可能会在山谷震荡甚至跑偏。</li>
-<li><strong>优势</strong>：在计算机视觉（CV）任务中（如 ResNet
-训练），SGD 往往能找到更平坦、泛化能力更强的极小值点。</li>
-</ul>
-<h3 id="进阶选手adam-自适应矩估计">🏎️ 进阶选手：Adam (自适应矩估计)</h3>
-<p><strong>策略</strong>：它不仅看当前的坡度，还”记得”之前的速度（动量），并且会根据地形的复杂程度自动调整步子大小。</p>
-<ul>
-<li><strong>平坦路段</strong>：自动加速。</li>
-<li><strong>陡峭悬崖</strong>：自动减速，防止冲过头。</li>
-</ul>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>智能</strong>：结合了动量（Momentum）和自适应学习率（RMSprop
-的思想）。</li>
-<li><strong>快速</strong>：收敛速度通常远快于 SGD。</li>
-<li><strong>劣势</strong>：对”初始推力”（学习率）非常敏感，且在某些 CV
-任务上，最终的泛化性能可能不如精心调教的 SGD。</li>
-</ul>
-<h2 id="深入剖析关键参数与含义">深入剖析：关键参数与含义</h2>
-<p>在 PyTorch 中，我们通常通过 <code>torch.optim</code>
-来调用这些优化器。理解每个参数的物理含义，是避免“炼丹”失败的关键。</p>
-<h3 id="sgd-的关键参数">SGD 的关键参数</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.SGD(model.parameters(), lr=<span class="number">0.1</span>, momentum=<span class="number">0.9</span>, weight_decay=<span class="number">1e-4</span>)</span><br></pre></td></tr></table></figure>
-<ol type="1">
-<li><strong><code>lr</code> (Learning Rate, 学习率)</strong>
-<ul>
-<li><strong>含义</strong>：下山的“步长”。</li>
-<li><strong>通俗解释</strong>：决定了你每一次更新参数时变化有多大。</li>
-<li><strong>典型值</strong>：<code>0.1</code>, <code>0.01</code>。SGD
-需要较大的 <code>lr</code> 才能推动模型前进。</li>
-</ul></li>
-<li><strong><code>momentum</code> (动量)</strong>
-<ul>
-<li><strong>含义</strong>：模拟物理中的“惯性”。</li>
-<li><strong>通俗解释</strong>：如果之前一直是下坡，那么这次不仅要看当前的坡度，还要加上之前的速度冲下去。这有助于冲过局部的平坦区域（鞍点）或小坑。</li>
-<li><strong>典型值</strong>：<code>0.9</code>。这意味着当前的更新方向有
-90% 来自之前的积累，10% 来自当前的梯度。</li>
-</ul></li>
-<li><strong><code>weight_decay</code> (权重衰减)</strong>
-<ul>
-<li><strong>含义</strong>：L2 正则化。</li>
-<li><strong>通俗解释</strong>：一种“惩罚机制”。为了防止模型为了拟合数据而变得过于复杂（参数值过大），我们在损失函数里加了一项惩罚。它就像给模型加了“刹车”，防止过拟合。</li>
-<li><strong>典型值</strong>：<code>1e-4</code> (0.0001) 或
-<code>5e-4</code>。</li>
-</ul></li>
-</ol>
-<h3 id="adam-的关键参数">Adam 的关键参数</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adam(model.parameters(), lr=<span class="number">0.001</span>, betas=(<span class="number">0.9</span>, <span class="number">0.999</span>), eps=<span class="number">1e-8</span>)</span><br></pre></td></tr></table></figure>
-<ol type="1">
-<li><strong><code>lr</code> (Learning Rate)</strong>
-<ul>
-<li><strong>注意</strong>：Adam 的学习率通常比 SGD 小得多。</li>
-<li><strong>典型值</strong>：<code>0.001</code> (1e-3) 或
-<code>3e-4</code>。这是因为 Adam
-内部会自动根据梯度的一阶矩和二阶矩放大更新幅度。</li>
-</ul></li>
-<li><strong><code>betas</code> (Beta1, Beta2)</strong>
-<ul>
-<li><strong>含义</strong>：控制两个“记忆”的衰减率。</li>
-<li><strong><code>beta1</code> (默认 0.9)</strong>：对应
-<strong>一阶矩估计</strong>（即动量
-Momentum）。控制“惯性”保持多久。</li>
-<li><strong><code>beta2</code> (默认 0.999)</strong>：对应
-<strong>二阶矩估计</strong>（即梯度的平方）。用来衡量“路况”的平稳程度，从而实现自适应步长。</li>
-<li><strong>调参建议</strong>：通常保持默认即可。</li>
-</ul></li>
-<li><strong><code>eps</code> (Epsilon)</strong>
-<ul>
-<li><strong>含义</strong>：数值稳定性项。</li>
-<li><strong>作用</strong>：防止分母为零。在计算自适应步长时，分母是梯度的平方根，加一个极小数
-<code>eps</code> 避免除零错误。</li>
-</ul></li>
-</ol>
-<h2 id="实战避坑为什么会梯度爆炸">实战避坑：为什么会”梯度爆炸”？</h2>
-<p>在实际开发中，一个最常见的错误就是<strong>将 SGD 的经验直接套用到
-Adam 上</strong>。</p>
-<h3 id="典型事故现场">典型事故现场</h3>
-<p>假设你习惯了训练 ResNet，配置了 <code>lr=0.1</code>。然后你想尝试一下
-Transformer，于是把优化器改成了
-Adam，但<strong>忘记了修改学习率</strong>。</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    Config[&quot;配置: Adam 优化器&quot;] --&gt; Input[&quot;输入: SGD 级别的学习率 (0.1)&quot;]
-    Input -- &quot;对于 Adam 来说&quot; --&gt; Mechanism[&quot;Adam 内部的自适应放大机制&quot;]
-    Mechanism --&gt; Result[&quot;实际更新步长过大 (相当于 SGD 的 100 倍)&quot;]
-    Result --&gt; Boom[&quot;参数变为 NaN &#x2F; Infinity&quot;]
-    Boom --&gt; Loss[&quot;Loss 震荡或不收敛&quot;]
-</code>
-</pre>
-<p><strong>原因分析</strong>： Adam 自带“助推器”（自适应调整）。对于
-Adam 来说，<code>0.001</code> 已经是很快的速度了。如果你给它
-<code>0.1</code>
-的初始推力，相当于给一辆法拉利加了火箭燃料，瞬间就会因为步长过大冲出赛道，导致参数变成
-<code>NaN</code> (Not a Number) 或无穷大。</p>
-<p><strong>修正方案</strong>： 一旦切换到 Adam，务必将学习率降低 1-2
-个数量级（从 <code>0.1</code> 降到 <code>0.001</code>）。</p>
-<h2 id="选型指南我该用哪个">选型指南：我该用哪个？</h2>
-<p>没有绝对的“最好”，只有“最适合”。</p>
-<h3 id="选择-sgd-的场景">✅ 选择 SGD 的场景</h3>
-<ul>
-<li><strong>任务</strong>：计算机视觉标准任务（图像分类、物体检测、分割）。</li>
-<li><strong>代表模型</strong>：ResNet, VGG, YOLO。</li>
-<li><strong>理由</strong>：虽然收敛慢，需要配合学习率衰减策略（Learning
-Rate Scheduler），但往往能收敛到更优的解，测试集准确率更高。</li>
-<li><strong>推荐配置</strong>：<code>SGD(lr=0.1, momentum=0.9, weight_decay=5e-4)</code></li>
-</ul>
-<h3 id="选择-adam-的场景">✅ 选择 Adam 的场景</h3>
-<ul>
-<li><strong>任务</strong>：自然语言处理（NLP）、强化学习、生成对抗网络（GAN）、或快速原型开发。</li>
-<li><strong>代表模型</strong>：Transformer, BERT, GPT, ViT。</li>
-<li><strong>理由</strong>：收敛速度极快，对超参数（Hyper-parameters）不那么敏感，开箱即用。</li>
-<li><strong>推荐配置</strong>：<code>Adam(lr=1e-3)</code> 或
-<code>AdamW(lr=3e-4)</code></li>
-</ul>
-<h3 id="小贴士adamw-是什么">💡 小贴士：AdamW 是什么？</h3>
-<p>你可能会在现在的代码中经常看到 <code>AdamW</code>。它是 Adam
-的修正版。简单来说，Adam 在处理
-<code>weight_decay</code>（权重衰减）时存在一个理论上的
-Bug，<code>AdamW</code> 修复了这个问题，使得它在训练 Transformer
-等大模型时效果更好、更稳定。</p>
-<h2 id="总结">总结</h2>
-<ul>
-<li><strong>SGD</strong>
-像手动挡赛车，上限高，但需要精细的油门控制（调参）。</li>
-<li><strong>Adam</strong>
-像自动挡跑车，起步快，省心，但在某些赛道上可能不如手动挡精准。</li>
-<li><strong>切记</strong>：换车（优化器）的时候，千万别忘了换挡（调整学习率）！</li>
-</ul>
-<h2 id="拓展其他常见优化器一览">拓展：其他常见优化器一览</h2>
-<p>除了 SGD 和
-Adam，深度学习工具箱中还有许多其他优化器。了解它们有助于在特定场景下做出更合适的选择。</p>
-<h3 id="rmsprop-root-mean-square-propagation">📊 RMSprop (Root Mean
-Square Propagation)</h3>
-<p><strong>诞生背景</strong>：为了解决 AdaGrad
-学习率过早衰减的问题。</p>
-<p><strong>核心思想</strong>：使用梯度的<strong>移动平均平方</strong>（而非累积平方）来调整学习率，这样可以让学习率在训练后期仍然保持活力。</p>
-<p><strong>下山比喻</strong>：就像一个经验丰富的登山者，会根据最近一段路的情况（而不是整段路程）来判断下一步的步长。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.RMSprop(model.parameters(), lr=<span class="number">0.01</span>, alpha=<span class="number">0.99</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>关键参数</strong>：</p>
-<ul>
-<li><strong><code>lr</code></strong>：学习率，典型值
-<code>0.01</code></li>
-<li><strong><code>alpha</code></strong>：平滑常数，控制历史梯度的衰减速度，默认
-<code>0.99</code></li>
-</ul>
-<p><strong>适用场景</strong>：RNN（循环神经网络）训练，是 Adam
-出现之前的主流选择。</p>
-<h3 id="adagrad-adaptive-gradient">📈 AdaGrad (Adaptive Gradient)</h3>
-<p><strong>核心思想</strong>：为每个参数维护一个<strong>累积的梯度平方和</strong>，频繁更新的参数会获得更小的学习率，稀疏参数会获得更大的学习率。</p>
-<p><strong>下山比喻</strong>：如果某个方向你经常走（梯度大），说明这个方向可能已经接近目标了，就放慢脚步；如果某个方向很少走（梯度小），就加快探索。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adagrad(model.parameters(), lr=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>优点</strong>：对稀疏梯度友好，适合处理稀疏数据。</li>
-<li><strong>缺点</strong>：学习率会单调递减，训练后期可能过小导致无法继续学习。</li>
-</ul>
-<p><strong>适用场景</strong>：自然语言处理中的稀疏特征学习，但现在已较少使用。</p>
-<h3 id="adadelta">🔄 AdaDelta</h3>
-<p><strong>诞生背景</strong>：AdaGrad
-的改进版，解决了学习率过早衰减的问题。</p>
-<p><strong>核心创新</strong>：不需要手动设置学习率！它会根据参数更新的历史信息自动调整。</p>
-<p><strong>下山比喻</strong>：完全自动驾驶，不仅会根据路况调整速度，还会根据之前走过的路来预测下一步该走多远。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adadelta(model.parameters(), rho=<span class="number">0.9</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>关键参数</strong>：</p>
-<ul>
-<li><strong><code>rho</code></strong>：衰减率，控制历史信息的权重，默认
-<code>0.9</code></li>
-</ul>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>优点</strong>：无需设置学习率，对超参数不敏感。</li>
-<li><strong>缺点</strong>：收敛速度可能较慢，实际使用中不如 Adam
-受欢迎。</li>
-</ul>
-<h3 id="adamw-adam-with-weight-decay-fix">⚡ AdamW (Adam with Weight
-Decay Fix)</h3>
-<p><strong>核心改进</strong>：修复了 Adam 在处理权重衰减（Weight
-Decay）时的理论缺陷。</p>
-<p><strong>技术细节</strong>：在原始 Adam 中，<code>weight_decay</code>
-被错误地应用到了梯度上，而不是直接应用到参数上。AdamW
-将权重衰减与梯度更新<strong>解耦</strong>，使得正则化效果更符合 L2
-正则化的原始意图。</p>
-<p><strong>下山比喻</strong>：Adam
-在刹车（权重衰减）时，刹车片和油门混在一起了；AdamW
-把刹车系统独立出来，刹车更精准。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.AdamW(model.parameters(), lr=<span class="number">3e-4</span>, weight_decay=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>关键参数</strong>：</p>
-<ul>
-<li><strong><code>lr</code></strong>：学习率，典型值
-<code>3e-4</code>（比 Adam 稍小）</li>
-<li><strong><code>weight_decay</code></strong>：权重衰减，典型值
-<code>0.01</code>（可以比 Adam 中设置得更大）</li>
-</ul>
-<p><strong>适用场景</strong>：</p>
-<ul>
-<li><strong>Transformer 模型</strong>：BERT、GPT 等大模型的标准选择</li>
-<li><strong>计算机视觉</strong>：ViT（Vision Transformer）等</li>
-<li><strong>现代深度学习</strong>：几乎成为新项目的默认选择</li>
-</ul>
-<p><strong>为什么现在更推荐 AdamW？</strong> 1.
-理论更严谨：权重衰减的实现方式更符合数学原理 2.
-泛化性能更好：在大多数任务上测试集表现更优 3. 超参数更稳定:对
-<code>weight_decay</code> 的敏感性更低</p>
-<h3 id="其他新兴优化器">🎯 其他新兴优化器</h3>
-<h4 id="nadam-nesterov-accelerated-adam">NAdam (Nesterov-accelerated
-Adam)</h4>
-<p>结合了 Nesterov 动量和 Adam
-的优点，在收敛速度和稳定性之间取得更好的平衡。</p>
-<h4 id="radam-rectified-adam">RAdam (Rectified Adam)</h4>
-<p>解决了 Adam
-在训练初期可能不稳定的问题，通过动态调整学习率来保证训练的稳定性。</p>
-<h4 id="lookahead">Lookahead</h4>
-<p>一种<strong>元优化器</strong>，可以包装在任何优化器（如
-Adam、SGD）外面，通过”向前看”的策略来稳定训练过程。</p>
-<h3 id="快速对比表">📋 快速对比表</h3>
-<table>
-<thead>
-<tr>
-<th>优化器</th>
-<th>学习率需求</th>
-<th>收敛速度</th>
-<th>超参数敏感性</th>
-<th>主要应用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>SGD</strong></td>
-<td>较大 (0.1)</td>
-<td>慢</td>
-<td>高</td>
-<td>CV 任务 (ResNet)</td>
-</tr>
-<tr>
-<td><strong>Adam</strong></td>
-<td>较小 (0.001)</td>
-<td>快</td>
-<td>中</td>
-<td>NLP、GAN、快速原型</td>
-</tr>
-<tr>
-<td><strong>AdamW</strong></td>
-<td>较小 (3e-4)</td>
-<td>快</td>
-<td>低</td>
-<td>Transformer、现代大模型</td>
-</tr>
-<tr>
-<td><strong>RMSprop</strong></td>
-<td>中等 (0.01)</td>
-<td>中</td>
-<td>中</td>
-<td>RNN（历史选择）</td>
-</tr>
-<tr>
-<td><strong>AdaGrad</strong></td>
-<td>中等 (0.01)</td>
-<td>慢（后期）</td>
-<td>低</td>
-<td>稀疏数据（较少使用）</td>
-</tr>
-<tr>
-<td><strong>AdaDelta</strong></td>
-<td>无需设置</td>
-<td>中</td>
-<td>低</td>
-<td>理论研究（较少使用）</td>
-</tr>
-</tbody>
-</table>
-<h3 id="实用建议">💡 实用建议</h3>
-<ol type="1">
-<li><strong>新手入门</strong>：直接使用
-<code>AdamW(lr=3e-4)</code>，这是 2024 年最稳妥的选择。</li>
-<li><strong>CV 任务追求极致</strong>：尝试
-<code>SGD(lr=0.1, momentum=0.9)</code> 配合学习率调度器。</li>
-<li><strong>大模型训练</strong>：优先考虑 <code>AdamW</code>，配合
-<code>weight_decay=0.1</code>。</li>
-<li><strong>实验阶段</strong>：先用 AdamW
-快速验证想法，再根据任务特点微调。记住：<strong>没有万能的优化器，只有最适合你任务的优化器</strong>。理解原理比盲目选择更重要！</li>
-</ol>
-]]></content>
-      <categories>
-        <category>AI</category>
-        <category>深度学习基础</category>
-      </categories>
-      <tags>
-        <tag>PyTorch</tag>
-        <tag>深度学习</tag>
-        <tag>优化器</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>实模式（Real Mode）</title>
     <url>/posts/b08764f6/</url>
     <content><![CDATA[<p>本文主要介绍实模式（Real
@@ -11769,6 +11449,326 @@ graph LR
         <tag>x86</tag>
         <tag>启动</tag>
         <tag>实模式</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>优化器详解：从SGD到Adam的原理与参数调优</title>
+    <url>/posts/104dbac2/</url>
+    <content><![CDATA[<p>选择合适的优化器以及理解其背后的参数，往往决定了模型是能够快速收敛到最佳状态，还是在训练过程中产生“梯度爆炸”甚至完全无法收敛。本文将通俗地解释这些概念，并深入剖析
+PyTorch 中常用优化器的关键参数。</p>
+<span id="more"></span>
+<h2 id="通俗理解蒙眼下山">通俗理解：蒙眼下山</h2>
+<p>想象你被蒙住双眼，放置在一座高山上。你的目标是下到山谷的最低点——在深度学习中，这代表着让模型的<strong>损失函数
+(Loss)</strong> 最小化。</p>
+<p>优化器，就是你的<strong>下山策略</strong>。</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    Start(&quot;山顶 (高 Loss)&quot;) --&gt; Strategy{选择优化器}
+    Strategy -- &quot;SGD&quot; --&gt; Path1(&quot;固定步长，稳步试探&quot;)
+    Strategy -- &quot;Adam&quot; --&gt; Path2(&quot;自适应速度，智能调整&quot;)
+    Path1 --&gt; Goal(&quot;山谷 (低 Loss)&quot;)
+    Path2 --&gt; Goal
+</code>
+</pre>
+<h3 id="基础选手sgd-随机梯度下降">🚶 基础选手：SGD (随机梯度下降)</h3>
+<p><strong>策略</strong>：用脚探一下当前的地面，感觉哪个方向是向下的，就往那个方向迈出固定的一步。</p>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>老实</strong>：它完全依赖当前的梯度方向。你设定多大的步长（学习率），它就走多远。</li>
+<li><strong>稳健但缓慢</strong>：如果步长太小，下山速度极慢；如果步长太大，可能会在山谷震荡甚至跑偏。</li>
+<li><strong>优势</strong>：在计算机视觉（CV）任务中（如 ResNet
+训练），SGD 往往能找到更平坦、泛化能力更强的极小值点。</li>
+</ul>
+<h3 id="进阶选手adam-自适应矩估计">🏎️ 进阶选手：Adam (自适应矩估计)</h3>
+<p><strong>策略</strong>：它不仅看当前的坡度，还”记得”之前的速度（动量），并且会根据地形的复杂程度自动调整步子大小。</p>
+<ul>
+<li><strong>平坦路段</strong>：自动加速。</li>
+<li><strong>陡峭悬崖</strong>：自动减速，防止冲过头。</li>
+</ul>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>智能</strong>：结合了动量（Momentum）和自适应学习率（RMSprop
+的思想）。</li>
+<li><strong>快速</strong>：收敛速度通常远快于 SGD。</li>
+<li><strong>劣势</strong>：对”初始推力”（学习率）非常敏感，且在某些 CV
+任务上，最终的泛化性能可能不如精心调教的 SGD。</li>
+</ul>
+<h2 id="深入剖析关键参数与含义">深入剖析：关键参数与含义</h2>
+<p>在 PyTorch 中，我们通常通过 <code>torch.optim</code>
+来调用这些优化器。理解每个参数的物理含义，是避免“炼丹”失败的关键。</p>
+<h3 id="sgd-的关键参数">SGD 的关键参数</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.SGD(model.parameters(), lr=<span class="number">0.1</span>, momentum=<span class="number">0.9</span>, weight_decay=<span class="number">1e-4</span>)</span><br></pre></td></tr></table></figure>
+<ol type="1">
+<li><strong><code>lr</code> (Learning Rate, 学习率)</strong>
+<ul>
+<li><strong>含义</strong>：下山的“步长”。</li>
+<li><strong>通俗解释</strong>：决定了你每一次更新参数时变化有多大。</li>
+<li><strong>典型值</strong>：<code>0.1</code>, <code>0.01</code>。SGD
+需要较大的 <code>lr</code> 才能推动模型前进。</li>
+</ul></li>
+<li><strong><code>momentum</code> (动量)</strong>
+<ul>
+<li><strong>含义</strong>：模拟物理中的“惯性”。</li>
+<li><strong>通俗解释</strong>：如果之前一直是下坡，那么这次不仅要看当前的坡度，还要加上之前的速度冲下去。这有助于冲过局部的平坦区域（鞍点）或小坑。</li>
+<li><strong>典型值</strong>：<code>0.9</code>。这意味着当前的更新方向有
+90% 来自之前的积累，10% 来自当前的梯度。</li>
+</ul></li>
+<li><strong><code>weight_decay</code> (权重衰减)</strong>
+<ul>
+<li><strong>含义</strong>：L2 正则化。</li>
+<li><strong>通俗解释</strong>：一种“惩罚机制”。为了防止模型为了拟合数据而变得过于复杂（参数值过大），我们在损失函数里加了一项惩罚。它就像给模型加了“刹车”，防止过拟合。</li>
+<li><strong>典型值</strong>：<code>1e-4</code> (0.0001) 或
+<code>5e-4</code>。</li>
+</ul></li>
+</ol>
+<h3 id="adam-的关键参数">Adam 的关键参数</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adam(model.parameters(), lr=<span class="number">0.001</span>, betas=(<span class="number">0.9</span>, <span class="number">0.999</span>), eps=<span class="number">1e-8</span>)</span><br></pre></td></tr></table></figure>
+<ol type="1">
+<li><strong><code>lr</code> (Learning Rate)</strong>
+<ul>
+<li><strong>注意</strong>：Adam 的学习率通常比 SGD 小得多。</li>
+<li><strong>典型值</strong>：<code>0.001</code> (1e-3) 或
+<code>3e-4</code>。这是因为 Adam
+内部会自动根据梯度的一阶矩和二阶矩放大更新幅度。</li>
+</ul></li>
+<li><strong><code>betas</code> (Beta1, Beta2)</strong>
+<ul>
+<li><strong>含义</strong>：控制两个“记忆”的衰减率。</li>
+<li><strong><code>beta1</code> (默认 0.9)</strong>：对应
+<strong>一阶矩估计</strong>（即动量
+Momentum）。控制“惯性”保持多久。</li>
+<li><strong><code>beta2</code> (默认 0.999)</strong>：对应
+<strong>二阶矩估计</strong>（即梯度的平方）。用来衡量“路况”的平稳程度，从而实现自适应步长。</li>
+<li><strong>调参建议</strong>：通常保持默认即可。</li>
+</ul></li>
+<li><strong><code>eps</code> (Epsilon)</strong>
+<ul>
+<li><strong>含义</strong>：数值稳定性项。</li>
+<li><strong>作用</strong>：防止分母为零。在计算自适应步长时，分母是梯度的平方根，加一个极小数
+<code>eps</code> 避免除零错误。</li>
+</ul></li>
+</ol>
+<h2 id="实战避坑为什么会梯度爆炸">实战避坑：为什么会”梯度爆炸”？</h2>
+<p>在实际开发中，一个最常见的错误就是<strong>将 SGD 的经验直接套用到
+Adam 上</strong>。</p>
+<h3 id="典型事故现场">典型事故现场</h3>
+<p>假设你习惯了训练 ResNet，配置了 <code>lr=0.1</code>。然后你想尝试一下
+Transformer，于是把优化器改成了
+Adam，但<strong>忘记了修改学习率</strong>。</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    Config[&quot;配置: Adam 优化器&quot;] --&gt; Input[&quot;输入: SGD 级别的学习率 (0.1)&quot;]
+    Input -- &quot;对于 Adam 来说&quot; --&gt; Mechanism[&quot;Adam 内部的自适应放大机制&quot;]
+    Mechanism --&gt; Result[&quot;实际更新步长过大 (相当于 SGD 的 100 倍)&quot;]
+    Result --&gt; Boom[&quot;参数变为 NaN &#x2F; Infinity&quot;]
+    Boom --&gt; Loss[&quot;Loss 震荡或不收敛&quot;]
+</code>
+</pre>
+<p><strong>原因分析</strong>： Adam 自带“助推器”（自适应调整）。对于
+Adam 来说，<code>0.001</code> 已经是很快的速度了。如果你给它
+<code>0.1</code>
+的初始推力，相当于给一辆法拉利加了火箭燃料，瞬间就会因为步长过大冲出赛道，导致参数变成
+<code>NaN</code> (Not a Number) 或无穷大。</p>
+<p><strong>修正方案</strong>： 一旦切换到 Adam，务必将学习率降低 1-2
+个数量级（从 <code>0.1</code> 降到 <code>0.001</code>）。</p>
+<h2 id="选型指南我该用哪个">选型指南：我该用哪个？</h2>
+<p>没有绝对的“最好”，只有“最适合”。</p>
+<h3 id="选择-sgd-的场景">✅ 选择 SGD 的场景</h3>
+<ul>
+<li><strong>任务</strong>：计算机视觉标准任务（图像分类、物体检测、分割）。</li>
+<li><strong>代表模型</strong>：ResNet, VGG, YOLO。</li>
+<li><strong>理由</strong>：虽然收敛慢，需要配合学习率衰减策略（Learning
+Rate Scheduler），但往往能收敛到更优的解，测试集准确率更高。</li>
+<li><strong>推荐配置</strong>：<code>SGD(lr=0.1, momentum=0.9, weight_decay=5e-4)</code></li>
+</ul>
+<h3 id="选择-adam-的场景">✅ 选择 Adam 的场景</h3>
+<ul>
+<li><strong>任务</strong>：自然语言处理（NLP）、强化学习、生成对抗网络（GAN）、或快速原型开发。</li>
+<li><strong>代表模型</strong>：Transformer, BERT, GPT, ViT。</li>
+<li><strong>理由</strong>：收敛速度极快，对超参数（Hyper-parameters）不那么敏感，开箱即用。</li>
+<li><strong>推荐配置</strong>：<code>Adam(lr=1e-3)</code> 或
+<code>AdamW(lr=3e-4)</code></li>
+</ul>
+<h3 id="小贴士adamw-是什么">💡 小贴士：AdamW 是什么？</h3>
+<p>你可能会在现在的代码中经常看到 <code>AdamW</code>。它是 Adam
+的修正版。简单来说，Adam 在处理
+<code>weight_decay</code>（权重衰减）时存在一个理论上的
+Bug，<code>AdamW</code> 修复了这个问题，使得它在训练 Transformer
+等大模型时效果更好、更稳定。</p>
+<h2 id="总结">总结</h2>
+<ul>
+<li><strong>SGD</strong>
+像手动挡赛车，上限高，但需要精细的油门控制（调参）。</li>
+<li><strong>Adam</strong>
+像自动挡跑车，起步快，省心，但在某些赛道上可能不如手动挡精准。</li>
+<li><strong>切记</strong>：换车（优化器）的时候，千万别忘了换挡（调整学习率）！</li>
+</ul>
+<h2 id="拓展其他常见优化器一览">拓展：其他常见优化器一览</h2>
+<p>除了 SGD 和
+Adam，深度学习工具箱中还有许多其他优化器。了解它们有助于在特定场景下做出更合适的选择。</p>
+<h3 id="rmsprop-root-mean-square-propagation">📊 RMSprop (Root Mean
+Square Propagation)</h3>
+<p><strong>诞生背景</strong>：为了解决 AdaGrad
+学习率过早衰减的问题。</p>
+<p><strong>核心思想</strong>：使用梯度的<strong>移动平均平方</strong>（而非累积平方）来调整学习率，这样可以让学习率在训练后期仍然保持活力。</p>
+<p><strong>下山比喻</strong>：就像一个经验丰富的登山者，会根据最近一段路的情况（而不是整段路程）来判断下一步的步长。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.RMSprop(model.parameters(), lr=<span class="number">0.01</span>, alpha=<span class="number">0.99</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong><code>lr</code></strong>：学习率，典型值
+<code>0.01</code></li>
+<li><strong><code>alpha</code></strong>：平滑常数，控制历史梯度的衰减速度，默认
+<code>0.99</code></li>
+</ul>
+<p><strong>适用场景</strong>：RNN（循环神经网络）训练，是 Adam
+出现之前的主流选择。</p>
+<h3 id="adagrad-adaptive-gradient">📈 AdaGrad (Adaptive Gradient)</h3>
+<p><strong>核心思想</strong>：为每个参数维护一个<strong>累积的梯度平方和</strong>，频繁更新的参数会获得更小的学习率，稀疏参数会获得更大的学习率。</p>
+<p><strong>下山比喻</strong>：如果某个方向你经常走（梯度大），说明这个方向可能已经接近目标了，就放慢脚步；如果某个方向很少走（梯度小），就加快探索。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adagrad(model.parameters(), lr=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>优点</strong>：对稀疏梯度友好，适合处理稀疏数据。</li>
+<li><strong>缺点</strong>：学习率会单调递减，训练后期可能过小导致无法继续学习。</li>
+</ul>
+<p><strong>适用场景</strong>：自然语言处理中的稀疏特征学习，但现在已较少使用。</p>
+<h3 id="adadelta">🔄 AdaDelta</h3>
+<p><strong>诞生背景</strong>：AdaGrad
+的改进版，解决了学习率过早衰减的问题。</p>
+<p><strong>核心创新</strong>：不需要手动设置学习率！它会根据参数更新的历史信息自动调整。</p>
+<p><strong>下山比喻</strong>：完全自动驾驶，不仅会根据路况调整速度，还会根据之前走过的路来预测下一步该走多远。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adadelta(model.parameters(), rho=<span class="number">0.9</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong><code>rho</code></strong>：衰减率，控制历史信息的权重，默认
+<code>0.9</code></li>
+</ul>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>优点</strong>：无需设置学习率，对超参数不敏感。</li>
+<li><strong>缺点</strong>：收敛速度可能较慢，实际使用中不如 Adam
+受欢迎。</li>
+</ul>
+<h3 id="adamw-adam-with-weight-decay-fix">⚡ AdamW (Adam with Weight
+Decay Fix)</h3>
+<p><strong>核心改进</strong>：修复了 Adam 在处理权重衰减（Weight
+Decay）时的理论缺陷。</p>
+<p><strong>技术细节</strong>：在原始 Adam 中，<code>weight_decay</code>
+被错误地应用到了梯度上，而不是直接应用到参数上。AdamW
+将权重衰减与梯度更新<strong>解耦</strong>，使得正则化效果更符合 L2
+正则化的原始意图。</p>
+<p><strong>下山比喻</strong>：Adam
+在刹车（权重衰减）时，刹车片和油门混在一起了；AdamW
+把刹车系统独立出来，刹车更精准。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.AdamW(model.parameters(), lr=<span class="number">3e-4</span>, weight_decay=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong><code>lr</code></strong>：学习率，典型值
+<code>3e-4</code>（比 Adam 稍小）</li>
+<li><strong><code>weight_decay</code></strong>：权重衰减，典型值
+<code>0.01</code>（可以比 Adam 中设置得更大）</li>
+</ul>
+<p><strong>适用场景</strong>：</p>
+<ul>
+<li><strong>Transformer 模型</strong>：BERT、GPT 等大模型的标准选择</li>
+<li><strong>计算机视觉</strong>：ViT（Vision Transformer）等</li>
+<li><strong>现代深度学习</strong>：几乎成为新项目的默认选择</li>
+</ul>
+<p><strong>为什么现在更推荐 AdamW？</strong> 1.
+理论更严谨：权重衰减的实现方式更符合数学原理 2.
+泛化性能更好：在大多数任务上测试集表现更优 3. 超参数更稳定:对
+<code>weight_decay</code> 的敏感性更低</p>
+<h3 id="其他新兴优化器">🎯 其他新兴优化器</h3>
+<h4 id="nadam-nesterov-accelerated-adam">NAdam (Nesterov-accelerated
+Adam)</h4>
+<p>结合了 Nesterov 动量和 Adam
+的优点，在收敛速度和稳定性之间取得更好的平衡。</p>
+<h4 id="radam-rectified-adam">RAdam (Rectified Adam)</h4>
+<p>解决了 Adam
+在训练初期可能不稳定的问题，通过动态调整学习率来保证训练的稳定性。</p>
+<h4 id="lookahead">Lookahead</h4>
+<p>一种<strong>元优化器</strong>，可以包装在任何优化器（如
+Adam、SGD）外面，通过”向前看”的策略来稳定训练过程。</p>
+<h3 id="快速对比表">📋 快速对比表</h3>
+<table>
+<thead>
+<tr>
+<th>优化器</th>
+<th>学习率需求</th>
+<th>收敛速度</th>
+<th>超参数敏感性</th>
+<th>主要应用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SGD</strong></td>
+<td>较大 (0.1)</td>
+<td>慢</td>
+<td>高</td>
+<td>CV 任务 (ResNet)</td>
+</tr>
+<tr>
+<td><strong>Adam</strong></td>
+<td>较小 (0.001)</td>
+<td>快</td>
+<td>中</td>
+<td>NLP、GAN、快速原型</td>
+</tr>
+<tr>
+<td><strong>AdamW</strong></td>
+<td>较小 (3e-4)</td>
+<td>快</td>
+<td>低</td>
+<td>Transformer、现代大模型</td>
+</tr>
+<tr>
+<td><strong>RMSprop</strong></td>
+<td>中等 (0.01)</td>
+<td>中</td>
+<td>中</td>
+<td>RNN（历史选择）</td>
+</tr>
+<tr>
+<td><strong>AdaGrad</strong></td>
+<td>中等 (0.01)</td>
+<td>慢（后期）</td>
+<td>低</td>
+<td>稀疏数据（较少使用）</td>
+</tr>
+<tr>
+<td><strong>AdaDelta</strong></td>
+<td>无需设置</td>
+<td>中</td>
+<td>低</td>
+<td>理论研究（较少使用）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实用建议">💡 实用建议</h3>
+<ol type="1">
+<li><strong>新手入门</strong>：直接使用
+<code>AdamW(lr=3e-4)</code>，这是 2024 年最稳妥的选择。</li>
+<li><strong>CV 任务追求极致</strong>：尝试
+<code>SGD(lr=0.1, momentum=0.9)</code> 配合学习率调度器。</li>
+<li><strong>大模型训练</strong>：优先考虑 <code>AdamW</code>，配合
+<code>weight_decay=0.1</code>。</li>
+<li><strong>实验阶段</strong>：先用 AdamW
+快速验证想法，再根据任务特点微调。记住：<strong>没有万能的优化器，只有最适合你任务的优化器</strong>。理解原理比盲目选择更重要！</li>
+</ol>
+]]></content>
+      <categories>
+        <category>AI</category>
+        <category>深度学习基础</category>
+      </categories>
+      <tags>
+        <tag>PyTorch</tag>
+        <tag>深度学习</tag>
+        <tag>优化器</tag>
       </tags>
   </entry>
   <entry>
