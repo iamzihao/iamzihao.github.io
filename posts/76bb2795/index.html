@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。">
+    <meta name="description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Rust OS 入门：从 main 到 _start">
 <meta property="og:url" content="https://iamzihao.github.io/posts/76bb2795/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。">
+<meta property="og:description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T02:26:48.000Z">
-<meta property="article:modified_time" content="2026-09-01T02:44:07.049Z">
+<meta property="article:modified_time" content="2026-09-01T03:06:27.245Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -181,14 +181,11 @@
 no_std</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#no_std-%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.1.</span> <span class="nav-text">#![no_std] 做了什么</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#panicpanic_handler-%E4%B8%8E-panic-%E7%AD%96%E7%95%A5"><span class="nav-number">4.</span> <span class="nav-text">🧩
 Panic：panic_handler 与 panic 策略</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#panic_handlerno_std-binary-%E5%BF%85%E9%A1%BB%E6%8F%90%E4%BE%9B%E7%9A%84%E5%A4%84%E7%90%86%E5%85%A5%E5%8F%A3"><span class="nav-number">4.1.</span> <span class="nav-text">panic_handler：no_std
 binary 必须提供的处理入口</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#panic-%E7%AD%96%E7%95%A5unwind-%E8%BF%98%E6%98%AF-abort"><span class="nav-number">4.2.</span> <span class="nav-text">panic 策略：unwind
-还是 abort</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-os-kernel-%E9%80%9A%E5%B8%B8%E9%80%89-abort"><span class="nav-number">4.3.</span> <span class="nav-text">为什么 OS kernel 通常选
-abort</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#no_main-%E4%B8%8E%E8%87%AA%E5%AE%9A%E4%B9%89%E5%85%A5%E5%8F%A3-_start"><span class="nav-number">5.</span> <span class="nav-text">🧩 #![no_main]
+还是 abort</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%80%89-abort"><span class="nav-number">4.3.</span> <span class="nav-text">为什么选 abort</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#no_main-%E4%B8%8E%E8%87%AA%E5%AE%9A%E4%B9%89%E5%85%A5%E5%8F%A3-_start"><span class="nav-number">5.</span> <span class="nav-text">🧩 #![no_main]
 与自定义入口 _start</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#start-%E7%9A%84%E5%87%A0%E4%B8%AA%E5%85%B3%E9%94%AE%E4%BF%AE%E9%A5%B0%E7%AC%A6"><span class="nav-number">5.1.</span> <span class="nav-text">_start
 的几个关键修饰符</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#crt0-%E4%B8%8E-_start-%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">6.</span> <span class="nav-text">🧩 crt0 与
 _start 的区别</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-rust-os-%E4%B8%8D%E4%BD%BF%E7%94%A8%E9%BB%98%E8%AE%A4%E7%9A%84-crt0"><span class="nav-number">6.1.</span> <span class="nav-text">为什么 Rust OS 不使用默认的
-crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%88%E4%BB%8E%E5%93%AA%E9%87%8C%E6%9D%A5"><span class="nav-number">7.</span> <span class="nav-text">🧩 栈从哪里来？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E4%B8%8E%E9%93%BE%E6%8E%A5%E9%94%99%E8%AF%AF"><span class="nav-number">8.</span> <span class="nav-text">🧩 链接器与链接错误</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%8E%E9%93%BE%E6%8E%A5%E5%99%A8%E7%9A%84%E5%88%86%E5%B7%A5"><span class="nav-number">8.1.</span> <span class="nav-text">编译器与链接器的分工</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E5%87%BA%E7%8E%B0%E9%93%BE%E6%8E%A5%E5%99%A8%E9%94%99%E8%AF%AF"><span class="nav-number">8.2.</span> <span class="nav-text">为什么会出现链接器错误</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%80%E7%A7%8D%E4%B8%B4%E6%97%B6%E6%96%B9%E6%A1%88%E6%89%8B%E5%8A%A8%E4%BC%A0%E9%93%BE%E6%8E%A5%E5%99%A8%E5%8F%82%E6%95%B0"><span class="nav-number">8.3.</span> <span class="nav-text">一种临时方案：手动传链接器参数</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%90%84%E5%B9%B3%E5%8F%B0%E5%8F%82%E6%95%B0%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E5%90%8C"><span class="nav-number">8.4.</span> <span class="nav-text">各平台参数为什么不同</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%8E%A8%E8%8D%90%E8%BF%99%E4%B8%AA%E6%96%B9%E6%B3%95"><span class="nav-number">8.5.</span> <span class="nav-text">为什么不推荐这个方法</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%AD%A3%E8%A7%A3bare-metal-target"><span class="nav-number">9.</span> <span class="nav-text">🧩 正解：Bare Metal Target</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#target-triple-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">9.1.</span> <span class="nav-text">Target Triple 是什么</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#host-%E4%B8%8E-target"><span class="nav-number">9.2.</span> <span class="nav-text">Host 与 Target</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E7%A7%8D%E5%90%AF%E5%8A%A8%E9%93%BE%E7%9A%84%E6%9C%80%E7%BB%88%E5%AF%B9%E6%AF%94"><span class="nav-number">10.</span> <span class="nav-text">🧩 两种启动链的最终对比</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%99%84--target-%E4%B8%8E---all-targets-%E4%B8%8D%E8%A6%81%E6%B7%B7"><span class="nav-number">10.1.</span> <span class="nav-text">⚠️ 附：--target
-与 --all-targets 不要混</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E5%9D%91rust-analyzer-%E6%8A%A5-panic_impl-%E9%87%8D%E5%A4%8D"><span class="nav-number">11.</span> <span class="nav-text">⚠️ 常见坑：rust-analyzer
-报 panic_impl 重复</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%88%E4%BB%8E%E5%93%AA%E9%87%8C%E6%9D%A5"><span class="nav-number">7.</span> <span class="nav-text">🧩 栈从哪里来？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E4%B8%8E%E9%93%BE%E6%8E%A5%E9%94%99%E8%AF%AF"><span class="nav-number">8.</span> <span class="nav-text">🧩 链接器与链接错误</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%8E%E9%93%BE%E6%8E%A5%E5%99%A8%E7%9A%84%E5%88%86%E5%B7%A5"><span class="nav-number">8.1.</span> <span class="nav-text">编译器与链接器的分工</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E5%87%BA%E7%8E%B0%E9%93%BE%E6%8E%A5%E5%99%A8%E9%94%99%E8%AF%AF"><span class="nav-number">8.2.</span> <span class="nav-text">为什么会出现链接器错误</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%80%E7%A7%8D%E4%B8%B4%E6%97%B6%E6%96%B9%E6%A1%88%E6%89%8B%E5%8A%A8%E4%BC%A0%E9%93%BE%E6%8E%A5%E5%99%A8%E5%8F%82%E6%95%B0"><span class="nav-number">8.3.</span> <span class="nav-text">一种临时方案：手动传链接器参数</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%90%84%E5%B9%B3%E5%8F%B0%E5%8F%82%E6%95%B0%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E5%90%8C"><span class="nav-number">8.4.</span> <span class="nav-text">各平台参数为什么不同</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%8E%A8%E8%8D%90%E8%BF%99%E4%B8%AA%E6%96%B9%E6%B3%95"><span class="nav-number">8.5.</span> <span class="nav-text">为什么不推荐这个方法</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%AD%A3%E8%A7%A3bare-metal-target"><span class="nav-number">9.</span> <span class="nav-text">🧩 正解：Bare Metal Target</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#target-triple-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">9.1.</span> <span class="nav-text">Target Triple 是什么</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#host-%E4%B8%8E-target"><span class="nav-number">9.2.</span> <span class="nav-text">Host 与 Target</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E7%A7%8D%E5%90%AF%E5%8A%A8%E9%93%BE%E7%9A%84%E6%9C%80%E7%BB%88%E5%AF%B9%E6%AF%94"><span class="nav-number">10.</span> <span class="nav-text">🧩 两种启动链的最终对比</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">11.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -279,7 +276,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-01 10:26:48 / Modified: 10:44:07" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
+      <time title="Created: 2026-09-01 10:26:48 / Modified: 11:06:27" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
     </span>
     <span class="post-meta-item">
       <span class="post-meta-item-icon">
@@ -309,14 +306,14 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>9.6k</span>
+      <span>8.7k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>17 mins.</span>
+      <span>16 mins.</span>
     </span>
 </div>
 
@@ -326,7 +323,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。</p>
+    <div class="post-body" itemprop="articleBody"><p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
 <span id="more"></span>
 <blockquote>
 <p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
@@ -416,19 +413,18 @@ graph TD
     D --&gt; E[&quot;main()&quot;]
 </code>
 </pre>
-<p>补充一个概念：这里的 “libc / Rust startup glue” 指的是从
-<code>_start</code> 到 <code>main()</code>
-之间的启动与运行时衔接代码。它<strong>并不是一个类似 JVM/.NET
-那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup code
-等组件共同完成相关工作。</p>
+<p>这里的 “libc / Rust startup glue” 指的是从 <code>_start</code> 到
+<code>main()</code> 之间的启动与运行时衔接代码。它<strong>并不是一个类似
+JVM/.NET 那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup
+code 等组件共同完成相关工作。</p>
 <p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
 <code>e_entry</code>
 字段指定的入口地址</strong>开始执行，而不是直接”找到”某个叫
 <code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
 crt0 中的 <code>_start</code>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
-<p>所以更准确的说法是：<strong>链接器确定程序入口地址，通常将其设置为
-<code>_start</code> 的地址</strong>。<code>main()</code>
+<p><strong>链接器确定程序入口地址，通常将其设置为 <code>_start</code>
+的地址</strong>。<code>main()</code>
 只是这条链上”最后被调用”的那个普通函数。</p>
 <h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
 <code>no_std</code></h3>
@@ -444,7 +440,7 @@ graph TD
     C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
 </code>
 </pre>
-<p>关键理解：<strong><code>core</code>
+<p><strong><code>core</code>
 不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
 基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
 中。<code>std</code> 则建立在 <code>core</code>
@@ -465,15 +461,13 @@ framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp
 VGA 文本模式章节要做的事）。</p>
 <p>另外，<code>no_std</code> 也不等于”只能用 <code>core</code>“：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
-<p>官方文档的描述是：<code>no_std</code> 会阻止自动链接
-<code>std</code>，而 <code>alloc</code> 可以显式引入（前提是你提供了一个
-allocator）。</p>
+<p><code>no_std</code> 会阻止自动链接 <code>std</code>，而
+<code>alloc</code> 可以显式引入（前提是你提供了一个 allocator）。</p>
 <h3 id="panicpanic_handler-与-panic-策略">🧩
 Panic：<code>panic_handler</code> 与 panic 策略</h3>
 <p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
 binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
-<code>abort</code>（panic
-的实现方式）。它们经常被混为一谈，但其实是两回事。</p>
+<code>abort</code>（panic 的实现方式）。</p>
 <h4
 id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
 binary 必须提供的处理入口</h4>
@@ -495,17 +489,14 @@ binary 必须提供的处理入口</h4>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
 <p><code>abort</code>（直接终止）：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
-<h4 id="为什么-os-kernel-通常选-abort">为什么 OS kernel 通常选
-<code>abort</code></h4>
-<p>栈展开需要额外的展开信息和运行时支持，例如 Linux 环境常见的
-<code>libunwind</code>、Windows 的 SEH 等。这些机制在 OS kernel
-中通常过于复杂且没有必要，因此通常选择 abort：</p>
+<h4 id="为什么选-abort">为什么选 <code>abort</code></h4>
+<p>栈展开需要<strong>额外的展开信息和运行时支持</strong>，例如 Linux
+环境常见的 <code>libunwind</code>、Windows 的 SEH 等。</p>
 <figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
 <blockquote>
 <p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
 <strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
-是<strong>选择 panic 的实现策略</strong>。两者是不同的概念，不存在”因为
-abort 所以必须 panic_handler”的因果关系。</p>
+是<strong>选择 panic 的实现策略</strong>。</p>
 </blockquote>
 <h3 id="no_main-与自定义入口-_start">🧩 <code>#![no_main]</code>
 与自定义入口 <code>_start</code></h3>
@@ -569,14 +560,13 @@ Linux 用户程序中由 C runtime startup code 提供，“从哪里开始”�
 code）的统称，“开始之后帮你做什么”。注意它不是一个固定文件——现代
 Linux/glibc 中启动代码实际由
 <code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
-等多个启动对象组成（正文前面出现过的 <code>crt1 / _start</code>
-就是其中之一）。</li>
+等多个启动对象组成。</li>
 </ul>
 <p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
 由这套启动代码提供</strong>——<code>_start</code>
 不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p>一句话记忆：<code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
+<p><code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
 <p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
 并不负责”准备栈”</strong>。在 Linux
 用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
@@ -602,14 +592,14 @@ crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
 <p><strong>Rust OS</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
-<p>也就是说：在 Linux
+<p>在 Linux
 用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
 拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
 bootloader / kernel 早期启动代码自己的职责。</p>
 <p>更准确地说，栈是：</p>
 <blockquote>
 <p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
-CPU 并不存在一个叫”栈对象”的东西。</p>
+CPU 并不存在一个叫”栈”的东西。</p>
 </blockquote>
 <p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
 <code>pop</code> / <code>call</code> / <code>ret</code> /
@@ -744,32 +734,7 @@ graph TD
 <code>std</code>、默认 <code>main</code>
 入口机制以及相应的用户态启动代码和运行时支持；Rust OS
 不使用这一套，相应职责由 <strong>bootloader + kernel
-自己承担</strong>。另外注意：在 phil-opp 的 <code>blog_os</code>
-现代版本中，bootloader 本身承担了不少启动工作，所以你的
-<code>_start</code> 并不一定是从 BIOS/UEFI 后直接接管的第一个函数。</p>
-<h4 id="附--target-与---all-targets-不要混">⚠️ 附：<code>--target</code>
-与 <code>--all-targets</code> 不要混</h4>
-<p>Cargo 中：</p>
-<ul>
-<li><code>--target</code>：<strong>编译目标平台</strong>，例如
-<code>x86_64-unknown-linux-gnu</code>。</li>
-<li><code>--all-targets</code>：Cargo package
-中要构建哪些类型的目标（library、binary、test、bench、example）。</li>
-</ul>
-<p>两者完全不是一个概念。</p>
-<h3 id="常见坑rust-analyzer-报-panic_impl-重复">⚠️ 常见坑：rust-analyzer
-报 <code>panic_impl</code> 重复</h3>
-<p>Cargo 的普通测试构建会以 test harness 的方式编译，而 Rust 的 test
-harness 需要 <code>std</code>。所以 <code>no_std</code> kernel binary
-如果被 Cargo 当成普通 test target 构建，就可能和 kernel 自己定义的
-<code>#[panic_handler]</code> 冲突：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">std（test harness） → panic_impl</span><br><span class="line">你的 kernel         → panic_impl</span><br></pre></td></tr></table></figure>
-<p>报错：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">duplicate lang item `panic_impl`</span><br></pre></td></tr></table></figure>
-<p>解决：告诉 Cargo 这个 binary 不是普通测试程序：</p>
-<figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[[bin]]</span></span><br><span class="line"><span class="attr">name</span> = <span class="string">&quot;blog_os&quot;</span></span><br><span class="line"><span class="attr">test</span> = <span class="literal">false</span></span><br><span class="line"><span class="attr">bench</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
-<p>（phil-opp 后面的 integration-test 章节也是通过 <code>cfg_attr</code>
-等方式区分测试环境和 kernel 环境。）</p>
+自己承担</strong>。</p>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
 <p><code>no_std</code> 是”不使用 Rust 标准库”；<code>no_main</code>
@@ -846,8 +811,8 @@ class="uri">https://os.phil-opp.com/</a></li>
 
           <div class="post-nav">
             <div class="post-nav-item">
-                <a href="/posts/e2c8a5f6/" rel="prev" title="C&#x2F;C++ 入门：运算符重载与静态成员">
-                  <i class="fa fa-angle-left"></i> C/C++ 入门：运算符重载与静态成员
+                <a href="/posts/2affc801/" rel="prev" title="信任根三件套：RTM、RTR、RTS与TEE+TPM协作">
+                  <i class="fa fa-angle-left"></i> 信任根三件套：RTM、RTR、RTS与TEE+TPM协作
                 </a>
             </div>
             <div class="post-nav-item">
@@ -887,7 +852,7 @@ class="uri">https://os.phil-opp.com/</a></li>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:15</span>
+    <span title="Reading time total">11:14</span>
   </span>
 </div>
 <div class="busuanzi-count">

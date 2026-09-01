@@ -19504,6 +19504,692 @@ TEE + TPM 协作信任要解决的问题。</p>
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 入门：从 main 到 _start</title>
+    <url>/posts/76bb2795/</url>
+    <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
+Rust》系列教程（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>Rust 标准库，提供依赖 OS 的高级能力</td>
+<td>站在 OS 肩膀上</td>
+</tr>
+<tr>
+<td><code>core</code></td>
+<td>不依赖 OS 的 Rust 核心库</td>
+<td>裸机也能用</td>
+</tr>
+<tr>
+<td><code>alloc</code></td>
+<td>提供 <code>Vec</code>、<code>Box</code> 等动态分配抽象，需要自己提供
+allocator</td>
+<td>有堆才能用</td>
+</tr>
+<tr>
+<td><code>no_std</code></td>
+<td>不自动链接 <code>std</code>，改用 <code>core</code>
+作为基础环境</td>
+<td>不依赖 std</td>
+</tr>
+<tr>
+<td><code>panic_handler</code></td>
+<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
+<td>崩溃了怎么办</td>
+</tr>
+<tr>
+<td><code>crt0</code></td>
+<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
+用户程序中，启动代码会提供 <code>_start</code>
+等入口相关代码，并负责进入 libc/运行时初始化流程</td>
+<td>启动的”保洁员”</td>
+</tr>
+<tr>
+<td><code>_start</code></td>
+<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
+code 提供</td>
+<td>一切从这开始</td>
+</tr>
+<tr>
+<td><code>no_main</code></td>
+<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
+<td>入口我自己定</td>
+</tr>
+<tr>
+<td>Target Triple</td>
+<td>描述目标平台的字符串，通常包含架构、厂商、操作系统和 ABI 等信息</td>
+<td>给谁编译</td>
+</tr>
+</tbody>
+</table>
+<h3 id="main-不是程序真正的入口">🧩 <code>main()</code>
+不是程序真正的入口</h3>
+<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
+是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
+<p>普通程序的实际调用链是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间、建立初始用户栈、设置 RSP</span><br><span class="line">ELF loader 跳转到 e_entry</span><br><span class="line">   ↓</span><br><span class="line">crt0 中的 _start（解析 argc / argv / envp）</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[&quot;Linux kernel&quot;] --&gt;|&quot;创建进程地址空间 &#x2F; 建立初始用户栈 &#x2F; 设置 RSP&quot;| B[&quot;ELF loader 跳转到 e_entry&quot;]
+    B --&gt;|&quot;入口地址通常对应 crt0 中的 _start&quot;| C[&quot;crt0 中的 _start&quot;]
+    C --&gt;|&quot;解析 argc &#x2F; argv &#x2F; envp&quot;| D[&quot;libc &#x2F; Rust startup glue&quot;]
+    D --&gt; E[&quot;main()&quot;]
+</code>
+</pre>
+<p>这里的 “libc / Rust startup glue” 指的是从 <code>_start</code> 到
+<code>main()</code> 之间的启动与运行时衔接代码。它<strong>并不是一个类似
+JVM/.NET 那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup
+code 等组件共同完成相关工作。</p>
+<p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
+<code>e_entry</code>
+字段指定的入口地址</strong>开始执行，而不是直接”找到”某个叫
+<code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
+crt0 中的 <code>_start</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
+<p><strong>链接器确定程序入口地址，通常将其设置为 <code>_start</code>
+的地址</strong>。<code>main()</code>
+只是这条链上”最后被调用”的那个普通函数。</p>
+<h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
+<code>no_std</code></h3>
+<p>Rust 标准库可以理解成两层：</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
+    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
+    S --&gt; C[&quot;core 核心库&quot;]
+    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
+    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
+</code>
+</pre>
+<p><strong><code>core</code>
+不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
+基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
+中。<code>std</code> 则建立在 <code>core</code>
+等基础设施之上，大量依赖操作系统提供的能力。</p>
+<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
+是宏，最终通过 <code>std::io</code> 使用 stdout
+对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
+<p>而裸机环境下只有：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
+<p>标准库不再替你提供 stdout。所以：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不自动链接 std，默认以 core 为基础</span><br></pre></td></tr></table></figure>
+<p>注意：<code>no_std</code> <strong>不是”不能输出”</strong>。OS kernel
+完全可以自己实现 <code>print!</code>——例如直接写 VGA
+framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp 教程后面
+VGA 文本模式章节要做的事）。</p>
+<p>另外，<code>no_std</code> 也不等于”只能用 <code>core</code>“：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
+<p><code>no_std</code> 会阻止自动链接 <code>std</code>，而
+<code>alloc</code> 可以显式引入（前提是你提供了一个 allocator）。</p>
+<h3 id="panicpanic_handler-与-panic-策略">🧩
+Panic：<code>panic_handler</code> 与 panic 策略</h3>
+<p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
+binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
+<code>abort</code>（panic 的实现方式）。</p>
+<h4
+id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
+binary 必须提供的处理入口</h4>
+<p>最小程序：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
+<p>会报错：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
+<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
+时应该怎么办？</strong> 这个处理机制原本由 <code>std</code>
+提供，<code>no_std</code> 环境下就要自己定义：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
+<code>-&gt; !</code>
+表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
+<h4 id="panic-策略unwind-还是-abort">panic 策略：<code>unwind</code>
+还是 <code>abort</code></h4>
+<p>这是另一个独立的概念：Rust 可以选择 panic 的实现策略。</p>
+<p><code>unwind</code>（栈展开）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
+<p><code>abort</code>（直接终止）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
+<h4 id="为什么选-abort">为什么选 <code>abort</code></h4>
+<p>栈展开需要<strong>额外的展开信息和运行时支持</strong>，例如 Linux
+环境常见的 <code>libunwind</code>、Windows 的 SEH 等。</p>
+<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
+<strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
+是<strong>选择 panic 的实现策略</strong>。</p>
+</blockquote>
+<h3 id="no_main-与自定义入口-_start">🧩 <code>#![no_main]</code>
+与自定义入口 <code>_start</code></h3>
+<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
+之后，又会出现：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
+<p>原因前面已经说过：对于这种 freestanding <code>no_std</code>
+binary，不再使用 Rust
+默认的程序启动入口机制，因此不能依赖默认启动代码去调用
+<code>main()</code>。这与 phil-opp 教程的表述一致：freestanding
+executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
+<code>main</code>。所以：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
+<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
+<code>main()</code>。然后自己定义入口：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="start-的几个关键修饰符"><code>_start</code>
+的几个关键修饰符</h4>
+<table>
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>修饰符</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#[unsafe(no_mangle)]</code></td>
+<td>禁止 Rust name mangling，使最终符号名保持为 <code>_start</code></td>
+</tr>
+<tr>
+<td><code>pub</code></td>
+<td>使该 Rust item 对 crate 外可见；在这种入口函数中通常这样声明</td>
+</tr>
+<tr>
+<td><code>extern "C"</code></td>
+<td>使用稳定的 C ABI，而不是 Rust ABI</td>
+</tr>
+<tr>
+<td><code>-&gt; !</code></td>
+<td>表示入口函数不应该返回</td>
+</tr>
+</tbody>
+</table>
+<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
+名和类型信息的符号，例如 <code>fn start()</code> 可能变成
+<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
+<code>_start</code>，所以 <code>no_mangle</code>
+才是保证符号名正确的关键。</p>
+<h3 id="crt0-与-_start-的区别">🧩 <code>crt0</code> 与
+<code>_start</code> 的区别</h3>
+<p>这是最容易混淆的一对概念：</p>
+<ul>
+<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
+Linux 用户程序中由 C runtime startup code 提供，“从哪里开始”。</li>
+<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
+code）的统称，“开始之后帮你做什么”。注意它不是一个固定文件——现代
+Linux/glibc 中启动代码实际由
+<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
+等多个启动对象组成。</li>
+</ul>
+<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
+由这套启动代码提供</strong>——<code>_start</code>
+不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p><code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
+<p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
+并不负责”准备栈”</strong>。在 Linux
+用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间</span><br><span class="line">   ↓ 建立初始用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳转到 _start</span><br><span class="line">crt1 / _start</span><br><span class="line">   ↓ 解析 argc / argv / envp</span><br><span class="line">   ↓ 初始化 libc / runtime</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<p>所以 crt0
+做的事是”在已有栈上解析参数、初始化运行环境”，而不是”申请一块内存并设置
+RSP”。</p>
+<h4 id="为什么-rust-os-不使用默认的-crt0">为什么 Rust OS 不使用默认的
+<code>crt0</code>？</h4>
+<p>因为面向 Linux 用户态程序的 crt0 假设下面有操作系统：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">ELF loader</span><br><span class="line">   ↓</span><br><span class="line">crt0 / _start</span><br><span class="line">   ↓</span><br><span class="line">libc startup</span><br><span class="line">   ↓</span><br><span class="line">Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<p>而 Rust OS 的启动链是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Firmware / boot environment（传统 PC 上通常是 BIOS 或 UEFI）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓</span><br><span class="line">kernel entry</span><br><span class="line">   ↓</span><br><span class="line">kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
+<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
+crt0</strong>。但要注意：Rust OS 并不是完全没有”启动代码”——bootloader 和
+kernel 自己承担了建立执行环境、设置栈以及进入 kernel
+主逻辑等职责，它们本身就是一种 startup
+code。更准确的表述是：<strong>不使用面向 Linux 用户态程序的默认
+crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
+<h3 id="栈从哪里来">🧩 栈从哪里来？</h3>
+<p>栈并不是”单纯申请一块内存，然后保存一个地址”，要分情况：</p>
+<p><strong>普通 Linux 用户程序</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
+<p><strong>Rust OS</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
+<p>在 Linux
+用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
+拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
+bootloader / kernel 早期启动代码自己的职责。</p>
+<p>更准确地说，栈是：</p>
+<blockquote>
+<p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
+CPU 并不存在一个叫”栈”的东西。</p>
+</blockquote>
+<p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
+<code>pop</code> / <code>call</code> / <code>ret</code> /
+<code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
+<p>那么 <code>_start</code> 为什么写 <code>loop &#123;&#125;</code> 而不是
+<code>return</code>？因为 <code>_start</code> 是 ELF
+的程序入口，<strong>不是通过普通 <code>call</code>
+指令调用的函数</strong>，因此没有一个正常的调用者向它提供返回地址。若
+<code>_start</code> 返回，CPU
+会尝试按照函数返回约定取出返回地址继续执行，而入口环境并不保证存在这样的返回地址。因此这种程序入口通常定义为
+<code>-&gt; !</code>，并在结束后进入死循环、关机或其他不会返回的路径。</p>
+<h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
+<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
+</blockquote>
+<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
+<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
+之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
+target。它意味着”我要生成一个 Linux 用户程序”，于是链接器默认认为需要
+crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
+main，于是报：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
+<h4
+id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
+<p>含义：cargo → rustc → linker →
+<code>-nostartfiles</code>，告诉链接器<strong>不要自动链接标准的 C
+startup object files</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
+<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
+<table>
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 26%" />
+<col style="width: 21%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>平台</th>
+<th>可执行格式</th>
+<th>默认入口</th>
+<th>禁用 C startup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>ELF</td>
+<td><code>_start</code></td>
+<td><code>-nostartfiles</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>PE</td>
+<td><code>mainCRTStartup</code></td>
+<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>Mach-O</td>
+<td>自定义</td>
+<td><code>-e __start</code>（配合
+<code>-static</code>、<code>-nostartfiles</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
+<h4 id="为什么不推荐这个方法">为什么不推荐这个方法</h4>
+<p><code>-nostartfiles</code> 去掉的是默认的 C startup object
+files，<strong>并不会让 Linux loader 不再提供初始用户栈</strong>——你的
+<code>_start</code> 仍然会从 Linux
+建立好的初始栈开始执行，只是不会经过默认的 libc/Rust 启动流程。</p>
+<p>真正缺少的是 crt0 / libc startup 做的事：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 / libc startup</span><br><span class="line">   ├── 解析 argc / argv / envp</span><br><span class="line">   ├── libc 初始化</span><br><span class="line">   ├── TLS / runtime 等相关初始化</span><br><span class="line">   └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p>所以”编译成功、运行崩溃”不能一概而论：一个非常简单的 Linux
+<code>no_std</code> + <code>no_main</code>
+程序，只要入口、ABI、链接等处理正确，完全可以运行——例如上面那个空
+<code>loop &#123;&#125;</code> 的 <code>_start</code>
+甚至可以一直运行。是否崩溃，取决于你的 <code>_start</code>
+是否依赖了上面这些缺失的初始化。这个方法之所以”不推荐”，是因为它在”假装自己是
+Linux 程序”，却没有承担 Linux
+程序应有的完整启动环境，越复杂的程序越容易踩坑。</p>
+<h3 id="正解bare-metal-target">🧩 正解：Bare Metal Target</h3>
+<p>真正的方向是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
+<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">thumbv7em   → ARM Cortex-M 等 Thumb-2 / ARMv7E-M 子架构</span><br><span class="line">none        → 没有操作系统</span><br><span class="line">eabihf      → Embedded ABI + hard-float</span><br></pre></td></tr></table></figure>
+<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
+<h4 id="target-triple-是什么">Target Triple 是什么</h4>
+<p>Rust 用 Target Triple 描述目标环境。其一般格式为
+<code>&lt;arch&gt;&lt;sub&gt;-&lt;vendor&gt;-&lt;sys&gt;-&lt;abi&gt;</code>，但有些
+target 会省略某些部分，严格说不一定是”四元组”。例如
+<code>x86_64-unknown-linux-gnu</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
+<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
+就表示没有 OS。</p>
+<h4 id="host-与-target">Host 与 Target</h4>
+<ul>
+<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
+<li><strong>Target</strong>：你希望程序运行的机器，例如
+<code>x86_64-blog_os</code> 裸机 kernel。</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
+<p>这种”在一种平台上编译出另一种平台程序”的做法叫<strong>交叉编译（cross
+compilation）</strong>。</p>
+<h3 id="两种启动链的最终对比">🧩 两种启动链的最终对比</h3>
+<pre>
+<code class="mermaid">
+
+graph TD
+    subgraph &quot;普通 Linux 用户程序&quot;
+        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
+        B1 --&gt; C1[&quot;ELF loader&quot;]
+        C1 --&gt; D1[&quot;crt0 &#x2F; _start&quot;]
+        D1 --&gt; E1[&quot;libc &#x2F; Rust startup&quot;]
+        E1 --&gt; F1[&quot;main()&quot;]
+    end
+    subgraph &quot;Rust OS&quot;
+        A2[&quot;硬件&quot;] --&gt; B2[&quot;固件 &#x2F; boot environment（传统 PC 上为 BIOS &#x2F; UEFI）&quot;]
+        B2 --&gt; C2[&quot;Bootloader&quot;]
+        C2 --&gt; D2[&quot;Kernel entry&quot;]
+        D2 --&gt; E2[&quot;Kernel initialization（含设置栈等）&quot;]
+        E2 --&gt; F2[&quot;kernel_main()&quot;]
+    end
+</code>
+</pre>
+<p>典型的 Rust Linux
+用户程序依赖的是操作系统提供的用户态执行环境，并使用
+<code>std</code>、默认 <code>main</code>
+入口机制以及相应的用户态启动代码和运行时支持；Rust OS
+不使用这一套，相应职责由 <strong>bootloader + kernel
+自己承担</strong>。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><code>no_std</code> 是”不使用 Rust 标准库”；<code>no_main</code>
+是”不让 Rust 按普通程序方式处理 <code>main</code>“；<code>_start</code>
+是你自己定义的底层入口；真正写 OS 时，我们不使用面向 Linux
+用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
+自己承担。</p>
+</blockquote>
+<p>两条启动链的完整模型：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">普通 Linux 用户程序</span><br><span class="line">OS loader</span><br><span class="line">   ↓</span><br><span class="line">_start</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br><span class="line"></span><br><span class="line">Rust OS</span><br><span class="line">Firmware / boot environment</span><br><span class="line">   ↓</span><br><span class="line">Bootloader</span><br><span class="line">   ↓</span><br><span class="line">Kernel entry</span><br><span class="line">   ↓</span><br><span class="line">Kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
+<p>关键变化：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>普通程序</th>
+<th>Rust OS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>默认 <code>main</code> 入口机制</td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>用户态 crt0</td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>Linux 用户态 runtime</td>
+<td>依赖</td>
+<td>不依赖</td>
+</tr>
+</tbody>
+</table>
+<p>但注意：<strong>启动代码 ≠ 消失</strong>。只是从”操作系统提供的
+crt0/libc 启动流程”，换成了”由 bootloader + kernel
+自己承担”的启动流程——这才是这篇文章最值得强调的核心思想。</p>
+<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
+文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
+<ul>
+<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
+href="https://os.phil-opp.com/freestanding-rust-binary/"
+class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
+<li>《Writing an OS in Rust》系列主页：<a
+href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a></li>
+</ul>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>计算机基础</category>
+        <category>Rust</category>
+      </categories>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>no_std</tag>
+        <tag>裸机</tag>
+        <tag>链接器</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：数组</title>
+    <url>/posts/d9e4b7a3/</url>
+    <content><![CDATA[<p>变量一次只能保存一个值，要存”一组同类型的数据”，最简单的办法就是数组（array）。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数组</td>
+<td>一段连续内存里存放的多个同类型元素</td>
+<td>同类型数据排队</td>
+</tr>
+<tr>
+<td>元素（element）</td>
+<td>数组里的每一个数据</td>
+<td>队伍中的一员</td>
+</tr>
+<tr>
+<td>下标（index）</td>
+<td>元素在数组里的位置编号，从 0 开始</td>
+<td>第几个</td>
+</tr>
+<tr>
+<td>数组长度</td>
+<td>数组能容纳的元素个数</td>
+<td>队伍长度</td>
+</tr>
+<tr>
+<td>多维数组</td>
+<td>数组的元素还是数组，比如二维数组</td>
+<td>表格</td>
+</tr>
+<tr>
+<td>数组名</td>
+<td>数组的名字，使用时通常退化为首元素地址</td>
+<td>队伍的队首</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
+<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[数组 scores] --&gt; B[下标 0]
+    A --&gt; C[下标 1]
+    A --&gt; D[下标 2]
+    A --&gt; E[...]
+    A --&gt; F[下标 n-1]
+</code>
+</pre>
+<p>数组的两个基本事实：</p>
+<ol type="1">
+<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
+<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
+的，非常快。</li>
+</ol>
+<h3 id="一维数组">🧮 一维数组</h3>
+<h4 id="定义与初始化">定义与初始化</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>需要”运行时才知道大小”的数组，用第 9 章的 <code>new[]</code> 或
+<code>vector</code>，不要用变长数组写法。</p>
+</blockquote>
+<h4 id="下标访问">下标访问</h4>
+<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以结合数组长度求法：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
+<h3 id="数组与函数">📦 数组与函数</h3>
+<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="多维数组">🗺️ 多维数组</h3>
+<p>二维数组可以理解成”数组的数组”，适合表示表格、矩阵：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
+<p>双重循环遍历：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
+    A --&gt; C[第 2 行: 5 6 7 8]
+    A --&gt; D[第 3 行: 9 10 11 12]
+</code>
+</pre>
+<p>三维及以上同理，只是现实中用得较少。</p>
+<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>错误</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arr[5]</code>（长度 5 的数组）</td>
+<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
+</tr>
+<tr>
+<td>忘记初始化就用</td>
+<td>读到不确定的值</td>
+</tr>
+<tr>
+<td>数组长度用运行时变量</td>
+<td>变长数组写法不可移植</td>
+</tr>
+<tr>
+<td>函数里只传数组名不传长度</td>
+<td>函数不知道数组多大，容易越界</td>
+</tr>
+</tbody>
+</table>
+<p>C/C++
+<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
+<code>vector</code> 最大的差别之一——<code>vector</code> 有
+<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
+<blockquote>
+<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
+章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
+代码打交道时。</p>
+</blockquote>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>下标从 1 开始</td>
+<td>C/C++ 下标从 0 开始</td>
+</tr>
+<tr>
+<td>数组越界会报错</td>
+<td>不检查越界，是未定义行为</td>
+</tr>
+<tr>
+<td>传数组给函数是拷贝</td>
+<td>传的是首元素地址，函数内修改影响原数组</td>
+</tr>
+<tr>
+<td>数组名可以随便赋值</td>
+<td>数组名是常量地址，不能整体赋值</td>
+</tr>
+<tr>
+<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
+<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
+得到的是指针大小</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
+开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
+</blockquote>
+<p>学完数组，下一步的指针、字符串会大量建立在”数组名是首元素地址”这个事实上；而需要动态大小、自动管理内存时，记得有
+<code>vector</code> 这个更省心的选择。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>编程基础</category>
+        <category>C/C++</category>
+      </categories>
+      <tags>
+        <tag>C</tag>
+        <tag>C++</tag>
+        <tag>编程入门</tag>
+        <tag>数组</tag>
+        <tag>多维数组</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：STL 容器</title>
     <url>/posts/e9f3b7c2/</url>
     <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
@@ -20382,6 +21068,377 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：面向对象进阶</title>
+    <url>/posts/f5a1c8d3/</url>
+    <content><![CDATA[<p>类解决了”数据和操作放一起”，但真实世界里的对象常常有”共同点 +
+各自特点”，继承和多态就是为这种关系设计的。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>继承（inheritance）</td>
+<td>派生类复用基类的成员</td>
+<td>代码复用</td>
+</tr>
+<tr>
+<td>基类（base class）</td>
+<td>被继承的类</td>
+<td>父类</td>
+</tr>
+<tr>
+<td>派生类（derived class）</td>
+<td>继承基类的类</td>
+<td>子类</td>
+</tr>
+<tr>
+<td>继承访问权限</td>
+<td><code>public</code>/<code>protected</code>/<code>private</code>
+三种继承方式</td>
+<td>继承时成员怎么放行</td>
+</tr>
+<tr>
+<td>函数重写（override）</td>
+<td>派生类重新实现基类虚函数</td>
+<td>覆盖行为</td>
+</tr>
+<tr>
+<td>虚函数（virtual function）</td>
+<td>用 <code>virtual</code> 声明的成员函数</td>
+<td>支持动态绑定</td>
+</tr>
+<tr>
+<td>多态（polymorphism）</td>
+<td>基类指针/引用调用到派生类实现</td>
+<td>一个接口多种行为</td>
+</tr>
+<tr>
+<td>虚析构函数</td>
+<td>基类析构函数加 <code>virtual</code></td>
+<td>安全删除派生类对象</td>
+</tr>
+</tbody>
+</table>
+<h3 id="继承基类派生类代码复用">🧩 继承：基类、派生类、代码复用</h3>
+<h4 id="基本用法">基本用法</h4>
+<p>如果多个类有共同的数据和行为，可以把共同部分抽到基类，派生类”继承”它们，再补充自己的部分。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 基类：共同部分</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    string name;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">eat</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; name &lt;&lt; <span class="string">&quot; is eating&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 派生类：继承 Animal，再添加自己的部分</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">bark</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; name &lt;&lt; <span class="string">&quot; says woof!&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Dog d;</span><br><span class="line">    d.name = <span class="string">&quot;Rex&quot;</span>;   <span class="comment">// 基类的成员</span></span><br><span class="line">    d.<span class="built_in">eat</span>();          <span class="comment">// 基类的方法</span></span><br><span class="line">    d.<span class="built_in">bark</span>();         <span class="comment">// 自己的方法</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rex is eating</span><br><span class="line">Rex says woof!</span><br></pre></td></tr></table></figure>
+<p><code>class Dog : public Animal</code> 的含义是：<code>Dog</code>
+继承 <code>Animal</code>，<code>public</code> 表示继承方式。</p>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[基类 Animal&lt;br&#x2F;&gt;name, eat] --&gt; B[派生类 Dog&lt;br&#x2F;&gt;+ bark]
+    A --&gt; C[派生类 Cat&lt;br&#x2F;&gt;+ meow]
+</code>
+</pre>
+<h4 id="构造与析构顺序">构造与析构顺序</h4>
+<p>派生类对象创建时，先构造基类部分，再构造派生类部分；销毁时顺序相反，先析构派生类，再析构基类。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Base</span>()  &#123; cout &lt;&lt; <span class="string">&quot;Base 构造&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">    ~<span class="built_in">Base</span>() &#123; cout &lt;&lt; <span class="string">&quot;Base 析构&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Derived</span> : <span class="keyword">public</span> Base &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Derived</span>()  &#123; cout &lt;&lt; <span class="string">&quot;Derived 构造&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">    ~<span class="built_in">Derived</span>() &#123; cout &lt;&lt; <span class="string">&quot;Derived 析构&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 创建 Derived 对象时的输出：</span></span><br><span class="line"><span class="comment">// Base 构造</span></span><br><span class="line"><span class="comment">// Derived 构造</span></span><br><span class="line"><span class="comment">// Derived 析构</span></span><br><span class="line"><span class="comment">// Base 析构</span></span><br></pre></td></tr></table></figure>
+<p>继承带来的最直接好处是代码复用：<code>Dog</code> 和 <code>Cat</code>
+不用各自重复写 <code>name</code> 和 <code>eat()</code>。</p>
+<h3 id="继承访问权限">🔐 继承访问权限</h3>
+<p>继承时也可以指定访问权限，它决定基类成员在派生类中”降级”到什么可见性。</p>
+<table>
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 26%" />
+<col style="width: 30%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>基类成员</th>
+<th><code>public</code> 继承后</th>
+<th><code>protected</code> 继承后</th>
+<th><code>private</code> 继承后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>public</code></td>
+<td><code>public</code></td>
+<td><code>protected</code></td>
+<td><code>private</code></td>
+</tr>
+<tr>
+<td><code>protected</code></td>
+<td><code>protected</code></td>
+<td><code>protected</code></td>
+<td><code>private</code></td>
+</tr>
+<tr>
+<td><code>private</code></td>
+<td>不可访问</td>
+<td>不可访问</td>
+<td>不可访问</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>基类的 <code>private</code>
+成员无论哪种继承方式，派生类都<strong>不能直接访问</strong>（只能通过基类的
+<code>public</code>/<code>protected</code> 接口间接访问）。</p>
+</blockquote>
+<p>实际使用中，<code>public</code>
+继承占绝大多数，它表达”派生类是一种基类”（is-a）关系：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123; ... &#125;;   <span class="comment">// Dog 是一种 Animal</span></span><br></pre></td></tr></table></figure>
+<p><code>protected</code> 继承和 <code>private</code>
+继承主要用于特殊的设计场景，比如”实现复用但不暴露继承关系”。入门阶段记住三者的区别表，优先使用
+<code>public</code> 继承即可。</p>
+<h3 id="函数重写">🔁 函数重写</h3>
+<p>派生类可以重新实现基类里的函数，让同一个函数名在派生类里有不同的行为。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">void</span> <span class="title">speak</span><span class="params">()</span>   <span class="comment">// virtual：允许被重写</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span>  <span class="comment">// 重写基类的 speak</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;woof!&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>这里有两个关键点：</p>
+<ol type="1">
+<li><strong>基类函数要加
+<code>virtual</code></strong>：否则派生类的同名函数只是”隐藏”基类版本，不会参与多态；</li>
+<li><strong>派生类用 <code>override</code> 标记</strong>：C++11
+起可写，让编译器检查”基类里确实有这样一个虚函数”，防止拼错签名。</li>
+</ol>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span> </span>&#123; ... &#125;   <span class="comment">// 正确</span></span><br><span class="line">    <span class="comment">// void speak(int x) override;  // 错误：基类没有这个签名，编译器报错</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<h3 id="虚函数virtual-与动态绑定">🌀 虚函数：virtual 与动态绑定</h3>
+<h4 id="静态绑定-vs-动态绑定">静态绑定 vs 动态绑定</h4>
+<p>不加 <code>virtual</code>
+时，调用哪个函数在<strong>编译期</strong>就确定了，这叫静态绑定；加
+<code>virtual</code>
+后，调用哪个函数在<strong>运行期</strong>根据对象的实际类型决定，这叫动态绑定。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span>              <span class="comment">// 非虚函数：静态绑定</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span>              <span class="comment">// 隐藏基类版本，不参与多态</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;woof!&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Animal* p = <span class="keyword">new</span> <span class="built_in">Dog</span>();</span><br><span class="line">    p-&gt;<span class="built_in">speak</span>();               <span class="comment">// 静态绑定：调用 Animal::speak()</span></span><br><span class="line">    <span class="keyword">delete</span> p;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出是 <code>some sound</code>，因为编译期只看到指针类型是
+<code>Animal*</code>。</p>
+<p>把基类函数加上 <code>virtual</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">void</span> <span class="title">speak</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>同样的调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Animal* p = <span class="keyword">new</span> <span class="built_in">Dog</span>();</span><br><span class="line">p-&gt;<span class="built_in">speak</span>();   <span class="comment">// 动态绑定：运行期发现实际是 Dog，调用 Dog::speak()</span></span><br></pre></td></tr></table></figure>
+<p>输出变成 <code>woof!</code>。</p>
+<table>
+<thead>
+<tr>
+<th>绑定方式</th>
+<th>决定时机</th>
+<th>依赖 <code>virtual</code></th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>静态绑定</td>
+<td>编译期，看指针/引用类型</td>
+<td>否</td>
+<td>普通成员函数</td>
+</tr>
+<tr>
+<td>动态绑定</td>
+<td>运行期，看对象实际类型</td>
+<td>是</td>
+<td>虚函数</td>
+</tr>
+</tbody>
+</table>
+<h3 id="多态基类指针引用调用派生类行为">🎭
+多态：基类指针/引用调用派生类行为</h3>
+<p>多态就是”用基类的指针或引用，调用到派生类的实现”。把各种派生类对象当成基类来统一处理，运行时各自表现自己的行为。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">void</span> <span class="title">speak</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;woof!&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Cat</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;meow!&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 基类指针指向不同派生类对象</span></span><br><span class="line">    Animal* a = <span class="keyword">new</span> <span class="built_in">Dog</span>();</span><br><span class="line">    Animal* b = <span class="keyword">new</span> <span class="built_in">Cat</span>();</span><br><span class="line"></span><br><span class="line">    a-&gt;<span class="built_in">speak</span>();   <span class="comment">// woof!</span></span><br><span class="line">    b-&gt;<span class="built_in">speak</span>();   <span class="comment">// meow!</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 统一放进基类指针容器，逐个调用各自行为</span></span><br><span class="line">    vector&lt;Animal*&gt; zoo = &#123;a, b&#125;;</span><br><span class="line">    <span class="keyword">for</span> (Animal* p : zoo) &#123;</span><br><span class="line">        p-&gt;<span class="built_in">speak</span>();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">delete</span> a;</span><br><span class="line">    <span class="keyword">delete</span> b;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[Animal* 基类指针] --&gt; B[Dog 对象]
+    A --&gt; C[Cat 对象]
+    B --&gt;|p-&gt;speak 动态绑定| D[woof!]
+    C --&gt;|p-&gt;speak 动态绑定| E[meow!]
+</code>
+</pre>
+<p>多态的价值在于：代码只需要面向基类写一遍，新增一个派生类时不用改调用方。</p>
+<blockquote>
+<p>引用也能触发多态：<code>Animal&amp; ref = dog; ref.speak();</code>
+效果相同。只有通过基类指针或引用调用<strong>虚函数</strong>才会动态绑定；通过对象直接调用永远是静态绑定。</p>
+</blockquote>
+<h3 id="虚析构函数">🧹 虚析构函数</h3>
+<h4 id="风险场景">风险场景</h4>
+<p>如果基类析构函数不是
+<code>virtual</code>，通过基类指针删除派生类对象时，只会调用基类的析构函数，派生类部分的资源可能泄漏。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    ~<span class="built_in">Base</span>()   <span class="comment">// 非虚析构</span></span><br><span class="line">    &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Base 析构&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Derived</span> : <span class="keyword">public</span> Base &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    ~<span class="built_in">Derived</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Derived 析构&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Base* p = <span class="keyword">new</span> <span class="built_in">Derived</span>();</span><br><span class="line">    <span class="keyword">delete</span> p;   <span class="comment">// 危险：只调用 Base::~Base()</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出只有：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Base 析构</span><br></pre></td></tr></table></figure>
+<p><code>Derived</code> 的析构函数没被调用。如果 <code>Derived</code>
+在析构函数里释放资源，资源就泄漏了。</p>
+<h4 id="正确写法">正确写法</h4>
+<p>把基类析构函数声明为 <code>virtual</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="keyword">virtual</span> ~<span class="built_in">Base</span>()   <span class="comment">// 虚析构</span></span><br><span class="line">    &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Base 析构&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>这样 <code>delete p</code> 会先调用 <code>Derived</code> 析构，再调用
+<code>Base</code> 析构：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Derived 析构</span><br><span class="line">Base 析构</span><br></pre></td></tr></table></figure>
+<h4 id="经验规则">经验规则</h4>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类里有虚函数（会被继承和多态使用）</td>
+<td>析构函数也声明为 <code>virtual</code></td>
+</tr>
+<tr>
+<td>类不会被继承</td>
+<td>不必加 <code>virtual</code></td>
+</tr>
+<tr>
+<td>通过基类指针 <code>delete</code> 派生类对象</td>
+<td>基类析构必须是 <code>virtual</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>一个类只要设计了虚函数、打算被多态使用，就把析构函数也加上
+<code>virtual</code>。这是 C++
+里的经典规则：<strong>有虚函数，析构函数通常也要虚</strong>。</p>
+</blockquote>
+<h3 id="抽象类与纯虚函数">🏛️ 抽象类与纯虚函数</h3>
+<h4 id="纯虚函数">纯虚函数</h4>
+<p>在虚函数声明后面加 <code>= 0</code>，就成了纯虚函数（pure virtual
+function）：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Shape</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">double</span> <span class="title">area</span><span class="params">()</span> <span class="type">const</span> </span>= <span class="number">0</span>;   <span class="comment">// 纯虚函数：不提供实现</span></span><br><span class="line">    <span class="keyword">virtual</span> ~<span class="built_in">Shape</span>() &#123;&#125;                <span class="comment">// 虚析构，配合多态</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>含纯虚函数的类叫<strong>抽象类（abstract
+class）</strong>，它有两个特点：</p>
+<ol type="1">
+<li><strong>不能实例化</strong>：<code>Shape s;</code> 会编译报错，因为
+<code>area()</code> 没有实现；</li>
+<li><strong>作为接口</strong>：派生类必须实现所有纯虚函数，才能创建对象。</li>
+</ol>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Circle</span> : <span class="keyword">public</span> Shape &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">double</span> r;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Circle</span>(<span class="type">double</span> radius) : <span class="built_in">r</span>(radius) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">double</span> <span class="title">area</span><span class="params">()</span> <span class="type">const</span> <span class="keyword">override</span>   <span class="comment">// 必须实现纯虚函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">3.14159</span> * r * r;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// Shape s;                  // 错误：抽象类不能实例化</span></span><br><span class="line">    <span class="function">Circle <span class="title">c</span><span class="params">(<span class="number">2.0</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">area</span>() &lt;&lt; endl;     <span class="comment">// 12.5664</span></span><br><span class="line"></span><br><span class="line">    Shape* p = &amp;c;                <span class="comment">// 可以：用基类指针指向派生类</span></span><br><span class="line">    cout &lt;&lt; p-&gt;<span class="built_in">area</span>() &lt;&lt; endl;    <span class="comment">// 12.5664，多态调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="抽象类的意义">抽象类的意义</h4>
+<p>抽象类定义的是一份”契约”：它规定”所有形状都能算面积”，但不规定怎么算。具体算法由每个派生类自己实现。这正好和第
+8 章”对象职责”的思想衔接——基类只负责定义职责，实现下放给派生类。</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通虚函数</th>
+<th>纯虚函数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基类提供实现</td>
+<td>提供</td>
+<td>不提供（<code>= 0</code>）</td>
+</tr>
+<tr>
+<td>基类能否实例化</td>
+<td>能</td>
+<td>不能（抽象类）</td>
+</tr>
+<tr>
+<td>派生类是否必须实现</td>
+<td>可选</td>
+<td>必须实现</td>
+</tr>
+<tr>
+<td>典型用途</td>
+<td>默认行为 + 可覆盖</td>
+<td>定义接口契约</td>
+</tr>
+</tbody>
+</table>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[抽象类 Shape&lt;br&#x2F;&gt;area() &#x3D; 0] --&gt; B[Circle&lt;br&#x2F;&gt;实现 area]
+    A --&gt; C[Rectangle&lt;br&#x2F;&gt;实现 area]
+    B --&gt; D[基类指针调用各自实现]
+    C --&gt; D
+</code>
+</pre>
+<blockquote>
+<p>一个类里只要有一个纯虚函数，整个类就是抽象类。抽象类通常作为设计层级的”顶层接口”存在。</p>
+</blockquote>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>继承只是为了代码复用</td>
+<td>继承还表达 is-a 关系，与多态配合使用</td>
+</tr>
+<tr>
+<td>派生类写同名函数就是重写</td>
+<td>基类函数不加 <code>virtual</code> 时只是隐藏，不是重写</td>
+</tr>
+<tr>
+<td><code>override</code> 必须写</td>
+<td>不写也能编译，但写上能让编译器帮你检查签名</td>
+</tr>
+<tr>
+<td>基类析构函数加不加 <code>virtual</code> 无所谓</td>
+<td>通过基类指针删除派生类对象时，非虚析构会漏掉派生类析构</td>
+</tr>
+<tr>
+<td>多态就是函数重载</td>
+<td>重载是编译期同名不同参；多态是运行期动态绑定</td>
+</tr>
+<tr>
+<td>通过对象直接调用虚函数也是多态</td>
+<td>直接通过对象调用是静态绑定，只有基类指针/引用才触发动态绑定</td>
+</tr>
+<tr>
+<td>抽象类可以直接创建对象</td>
+<td>抽象类含纯虚函数，不能实例化，只能作为接口被继承</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>继承复用代码，虚函数开启动态绑定，两者结合就是多态；纯虚函数把基类变成抽象类，定义接口契约；设计基类时记住”有虚函数，析构函数也要虚”。</p>
+</blockquote>
+<p>学到这里，C++
+面向对象的四大特性——封装、继承、多态、抽象——已经集齐。第 7
+章的类与对象打底，这一章的继承、多态和抽象类让类与类之间有了层级和契约。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>编程基础</category>
+        <category>C/C++</category>
+      </categories>
+      <tags>
+        <tag>C</tag>
+        <tag>C++</tag>
+        <tag>编程入门</tag>
+        <tag>面向对象</tag>
+        <tag>继承</tag>
+        <tag>虚函数</tag>
+        <tag>多态</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：多文件工程</title>
     <url>/posts/b8d3f6a1/</url>
     <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
@@ -21227,208 +22284,6 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：数组</title>
-    <url>/posts/d9e4b7a3/</url>
-    <content><![CDATA[<p>变量一次只能保存一个值，要存”一组同类型的数据”，最简单的办法就是数组（array）。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>数组</td>
-<td>一段连续内存里存放的多个同类型元素</td>
-<td>同类型数据排队</td>
-</tr>
-<tr>
-<td>元素（element）</td>
-<td>数组里的每一个数据</td>
-<td>队伍中的一员</td>
-</tr>
-<tr>
-<td>下标（index）</td>
-<td>元素在数组里的位置编号，从 0 开始</td>
-<td>第几个</td>
-</tr>
-<tr>
-<td>数组长度</td>
-<td>数组能容纳的元素个数</td>
-<td>队伍长度</td>
-</tr>
-<tr>
-<td>多维数组</td>
-<td>数组的元素还是数组，比如二维数组</td>
-<td>表格</td>
-</tr>
-<tr>
-<td>数组名</td>
-<td>数组的名字，使用时通常退化为首元素地址</td>
-<td>队伍的队首</td>
-</tr>
-</tbody>
-</table>
-<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
-<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[数组 scores] --&gt; B[下标 0]
-    A --&gt; C[下标 1]
-    A --&gt; D[下标 2]
-    A --&gt; E[...]
-    A --&gt; F[下标 n-1]
-</code>
-</pre>
-<p>数组的两个基本事实：</p>
-<ol type="1">
-<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
-<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
-的，非常快。</li>
-</ol>
-<h3 id="一维数组">🧮 一维数组</h3>
-<h4 id="定义与初始化">定义与初始化</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>需要”运行时才知道大小”的数组，用第 9 章的 <code>new[]</code> 或
-<code>vector</code>，不要用变长数组写法。</p>
-</blockquote>
-<h4 id="下标访问">下标访问</h4>
-<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以结合数组长度求法：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
-<h3 id="数组与函数">📦 数组与函数</h3>
-<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="多维数组">🗺️ 多维数组</h3>
-<p>二维数组可以理解成”数组的数组”，适合表示表格、矩阵：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
-<p>双重循环遍历：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
-    A --&gt; C[第 2 行: 5 6 7 8]
-    A --&gt; D[第 3 行: 9 10 11 12]
-</code>
-</pre>
-<p>三维及以上同理，只是现实中用得较少。</p>
-<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>错误</th>
-<th>后果</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>arr[5]</code>（长度 5 的数组）</td>
-<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
-</tr>
-<tr>
-<td>忘记初始化就用</td>
-<td>读到不确定的值</td>
-</tr>
-<tr>
-<td>数组长度用运行时变量</td>
-<td>变长数组写法不可移植</td>
-</tr>
-<tr>
-<td>函数里只传数组名不传长度</td>
-<td>函数不知道数组多大，容易越界</td>
-</tr>
-</tbody>
-</table>
-<p>C/C++
-<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
-<code>vector</code> 最大的差别之一——<code>vector</code> 有
-<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
-<blockquote>
-<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
-章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
-代码打交道时。</p>
-</blockquote>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>下标从 1 开始</td>
-<td>C/C++ 下标从 0 开始</td>
-</tr>
-<tr>
-<td>数组越界会报错</td>
-<td>不检查越界，是未定义行为</td>
-</tr>
-<tr>
-<td>传数组给函数是拷贝</td>
-<td>传的是首元素地址，函数内修改影响原数组</td>
-</tr>
-<tr>
-<td>数组名可以随便赋值</td>
-<td>数组名是常量地址，不能整体赋值</td>
-</tr>
-<tr>
-<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
-<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
-得到的是指针大小</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
-开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
-</blockquote>
-<p>学完数组，下一步的指针、字符串会大量建立在”数组名是首元素地址”这个事实上；而需要动态大小、自动管理内存时，记得有
-<code>vector</code> 这个更省心的选择。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <categories>
-        <category>编程基础</category>
-        <category>C/C++</category>
-      </categories>
-      <tags>
-        <tag>C</tag>
-        <tag>C++</tag>
-        <tag>编程入门</tag>
-        <tag>数组</tag>
-        <tag>多维数组</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：文件 IO 流</title>
     <url>/posts/a7c2e9d4/</url>
     <content><![CDATA[<p>程序跑完数据就没了，想”留到下次”就得把数据写进文件；文件 IO 流（file
@@ -21965,893 +22820,6 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
         <tag>运算符重载</tag>
         <tag>静态成员</tag>
         <tag>面向对象</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：面向对象进阶</title>
-    <url>/posts/f5a1c8d3/</url>
-    <content><![CDATA[<p>类解决了”数据和操作放一起”，但真实世界里的对象常常有”共同点 +
-各自特点”，继承和多态就是为这种关系设计的。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>继承（inheritance）</td>
-<td>派生类复用基类的成员</td>
-<td>代码复用</td>
-</tr>
-<tr>
-<td>基类（base class）</td>
-<td>被继承的类</td>
-<td>父类</td>
-</tr>
-<tr>
-<td>派生类（derived class）</td>
-<td>继承基类的类</td>
-<td>子类</td>
-</tr>
-<tr>
-<td>继承访问权限</td>
-<td><code>public</code>/<code>protected</code>/<code>private</code>
-三种继承方式</td>
-<td>继承时成员怎么放行</td>
-</tr>
-<tr>
-<td>函数重写（override）</td>
-<td>派生类重新实现基类虚函数</td>
-<td>覆盖行为</td>
-</tr>
-<tr>
-<td>虚函数（virtual function）</td>
-<td>用 <code>virtual</code> 声明的成员函数</td>
-<td>支持动态绑定</td>
-</tr>
-<tr>
-<td>多态（polymorphism）</td>
-<td>基类指针/引用调用到派生类实现</td>
-<td>一个接口多种行为</td>
-</tr>
-<tr>
-<td>虚析构函数</td>
-<td>基类析构函数加 <code>virtual</code></td>
-<td>安全删除派生类对象</td>
-</tr>
-</tbody>
-</table>
-<h3 id="继承基类派生类代码复用">🧩 继承：基类、派生类、代码复用</h3>
-<h4 id="基本用法">基本用法</h4>
-<p>如果多个类有共同的数据和行为，可以把共同部分抽到基类，派生类”继承”它们，再补充自己的部分。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 基类：共同部分</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    string name;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">eat</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; name &lt;&lt; <span class="string">&quot; is eating&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 派生类：继承 Animal，再添加自己的部分</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">bark</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; name &lt;&lt; <span class="string">&quot; says woof!&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Dog d;</span><br><span class="line">    d.name = <span class="string">&quot;Rex&quot;</span>;   <span class="comment">// 基类的成员</span></span><br><span class="line">    d.<span class="built_in">eat</span>();          <span class="comment">// 基类的方法</span></span><br><span class="line">    d.<span class="built_in">bark</span>();         <span class="comment">// 自己的方法</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rex is eating</span><br><span class="line">Rex says woof!</span><br></pre></td></tr></table></figure>
-<p><code>class Dog : public Animal</code> 的含义是：<code>Dog</code>
-继承 <code>Animal</code>，<code>public</code> 表示继承方式。</p>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[基类 Animal&lt;br&#x2F;&gt;name, eat] --&gt; B[派生类 Dog&lt;br&#x2F;&gt;+ bark]
-    A --&gt; C[派生类 Cat&lt;br&#x2F;&gt;+ meow]
-</code>
-</pre>
-<h4 id="构造与析构顺序">构造与析构顺序</h4>
-<p>派生类对象创建时，先构造基类部分，再构造派生类部分；销毁时顺序相反，先析构派生类，再析构基类。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Base</span>()  &#123; cout &lt;&lt; <span class="string">&quot;Base 构造&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">    ~<span class="built_in">Base</span>() &#123; cout &lt;&lt; <span class="string">&quot;Base 析构&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Derived</span> : <span class="keyword">public</span> Base &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Derived</span>()  &#123; cout &lt;&lt; <span class="string">&quot;Derived 构造&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">    ~<span class="built_in">Derived</span>() &#123; cout &lt;&lt; <span class="string">&quot;Derived 析构&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 创建 Derived 对象时的输出：</span></span><br><span class="line"><span class="comment">// Base 构造</span></span><br><span class="line"><span class="comment">// Derived 构造</span></span><br><span class="line"><span class="comment">// Derived 析构</span></span><br><span class="line"><span class="comment">// Base 析构</span></span><br></pre></td></tr></table></figure>
-<p>继承带来的最直接好处是代码复用：<code>Dog</code> 和 <code>Cat</code>
-不用各自重复写 <code>name</code> 和 <code>eat()</code>。</p>
-<h3 id="继承访问权限">🔐 继承访问权限</h3>
-<p>继承时也可以指定访问权限，它决定基类成员在派生类中”降级”到什么可见性。</p>
-<table>
-<colgroup>
-<col style="width: 14%" />
-<col style="width: 26%" />
-<col style="width: 30%" />
-<col style="width: 27%" />
-</colgroup>
-<thead>
-<tr>
-<th>基类成员</th>
-<th><code>public</code> 继承后</th>
-<th><code>protected</code> 继承后</th>
-<th><code>private</code> 继承后</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>public</code></td>
-<td><code>public</code></td>
-<td><code>protected</code></td>
-<td><code>private</code></td>
-</tr>
-<tr>
-<td><code>protected</code></td>
-<td><code>protected</code></td>
-<td><code>protected</code></td>
-<td><code>private</code></td>
-</tr>
-<tr>
-<td><code>private</code></td>
-<td>不可访问</td>
-<td>不可访问</td>
-<td>不可访问</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>基类的 <code>private</code>
-成员无论哪种继承方式，派生类都<strong>不能直接访问</strong>（只能通过基类的
-<code>public</code>/<code>protected</code> 接口间接访问）。</p>
-</blockquote>
-<p>实际使用中，<code>public</code>
-继承占绝大多数，它表达”派生类是一种基类”（is-a）关系：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123; ... &#125;;   <span class="comment">// Dog 是一种 Animal</span></span><br></pre></td></tr></table></figure>
-<p><code>protected</code> 继承和 <code>private</code>
-继承主要用于特殊的设计场景，比如”实现复用但不暴露继承关系”。入门阶段记住三者的区别表，优先使用
-<code>public</code> 继承即可。</p>
-<h3 id="函数重写">🔁 函数重写</h3>
-<p>派生类可以重新实现基类里的函数，让同一个函数名在派生类里有不同的行为。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">void</span> <span class="title">speak</span><span class="params">()</span>   <span class="comment">// virtual：允许被重写</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span>  <span class="comment">// 重写基类的 speak</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;woof!&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>这里有两个关键点：</p>
-<ol type="1">
-<li><strong>基类函数要加
-<code>virtual</code></strong>：否则派生类的同名函数只是”隐藏”基类版本，不会参与多态；</li>
-<li><strong>派生类用 <code>override</code> 标记</strong>：C++11
-起可写，让编译器检查”基类里确实有这样一个虚函数”，防止拼错签名。</li>
-</ol>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span> </span>&#123; ... &#125;   <span class="comment">// 正确</span></span><br><span class="line">    <span class="comment">// void speak(int x) override;  // 错误：基类没有这个签名，编译器报错</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<h3 id="虚函数virtual-与动态绑定">🌀 虚函数：virtual 与动态绑定</h3>
-<h4 id="静态绑定-vs-动态绑定">静态绑定 vs 动态绑定</h4>
-<p>不加 <code>virtual</code>
-时，调用哪个函数在<strong>编译期</strong>就确定了，这叫静态绑定；加
-<code>virtual</code>
-后，调用哪个函数在<strong>运行期</strong>根据对象的实际类型决定，这叫动态绑定。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span>              <span class="comment">// 非虚函数：静态绑定</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span>              <span class="comment">// 隐藏基类版本，不参与多态</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;woof!&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Animal* p = <span class="keyword">new</span> <span class="built_in">Dog</span>();</span><br><span class="line">    p-&gt;<span class="built_in">speak</span>();               <span class="comment">// 静态绑定：调用 Animal::speak()</span></span><br><span class="line">    <span class="keyword">delete</span> p;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出是 <code>some sound</code>，因为编译期只看到指针类型是
-<code>Animal*</code>。</p>
-<p>把基类函数加上 <code>virtual</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">void</span> <span class="title">speak</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>同样的调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Animal* p = <span class="keyword">new</span> <span class="built_in">Dog</span>();</span><br><span class="line">p-&gt;<span class="built_in">speak</span>();   <span class="comment">// 动态绑定：运行期发现实际是 Dog，调用 Dog::speak()</span></span><br></pre></td></tr></table></figure>
-<p>输出变成 <code>woof!</code>。</p>
-<table>
-<thead>
-<tr>
-<th>绑定方式</th>
-<th>决定时机</th>
-<th>依赖 <code>virtual</code></th>
-<th>典型场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>静态绑定</td>
-<td>编译期，看指针/引用类型</td>
-<td>否</td>
-<td>普通成员函数</td>
-</tr>
-<tr>
-<td>动态绑定</td>
-<td>运行期，看对象实际类型</td>
-<td>是</td>
-<td>虚函数</td>
-</tr>
-</tbody>
-</table>
-<h3 id="多态基类指针引用调用派生类行为">🎭
-多态：基类指针/引用调用派生类行为</h3>
-<p>多态就是”用基类的指针或引用，调用到派生类的实现”。把各种派生类对象当成基类来统一处理，运行时各自表现自己的行为。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Animal</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">void</span> <span class="title">speak</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;some sound&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Dog</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;woof!&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Cat</span> : <span class="keyword">public</span> Animal &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">speak</span><span class="params">()</span> <span class="keyword">override</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;meow!&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 基类指针指向不同派生类对象</span></span><br><span class="line">    Animal* a = <span class="keyword">new</span> <span class="built_in">Dog</span>();</span><br><span class="line">    Animal* b = <span class="keyword">new</span> <span class="built_in">Cat</span>();</span><br><span class="line"></span><br><span class="line">    a-&gt;<span class="built_in">speak</span>();   <span class="comment">// woof!</span></span><br><span class="line">    b-&gt;<span class="built_in">speak</span>();   <span class="comment">// meow!</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 统一放进基类指针容器，逐个调用各自行为</span></span><br><span class="line">    vector&lt;Animal*&gt; zoo = &#123;a, b&#125;;</span><br><span class="line">    <span class="keyword">for</span> (Animal* p : zoo) &#123;</span><br><span class="line">        p-&gt;<span class="built_in">speak</span>();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">delete</span> a;</span><br><span class="line">    <span class="keyword">delete</span> b;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[Animal* 基类指针] --&gt; B[Dog 对象]
-    A --&gt; C[Cat 对象]
-    B --&gt;|p-&gt;speak 动态绑定| D[woof!]
-    C --&gt;|p-&gt;speak 动态绑定| E[meow!]
-</code>
-</pre>
-<p>多态的价值在于：代码只需要面向基类写一遍，新增一个派生类时不用改调用方。</p>
-<blockquote>
-<p>引用也能触发多态：<code>Animal&amp; ref = dog; ref.speak();</code>
-效果相同。只有通过基类指针或引用调用<strong>虚函数</strong>才会动态绑定；通过对象直接调用永远是静态绑定。</p>
-</blockquote>
-<h3 id="虚析构函数">🧹 虚析构函数</h3>
-<h4 id="风险场景">风险场景</h4>
-<p>如果基类析构函数不是
-<code>virtual</code>，通过基类指针删除派生类对象时，只会调用基类的析构函数，派生类部分的资源可能泄漏。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    ~<span class="built_in">Base</span>()   <span class="comment">// 非虚析构</span></span><br><span class="line">    &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Base 析构&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Derived</span> : <span class="keyword">public</span> Base &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    ~<span class="built_in">Derived</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Derived 析构&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Base* p = <span class="keyword">new</span> <span class="built_in">Derived</span>();</span><br><span class="line">    <span class="keyword">delete</span> p;   <span class="comment">// 危险：只调用 Base::~Base()</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出只有：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Base 析构</span><br></pre></td></tr></table></figure>
-<p><code>Derived</code> 的析构函数没被调用。如果 <code>Derived</code>
-在析构函数里释放资源，资源就泄漏了。</p>
-<h4 id="正确写法">正确写法</h4>
-<p>把基类析构函数声明为 <code>virtual</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="keyword">virtual</span> ~<span class="built_in">Base</span>()   <span class="comment">// 虚析构</span></span><br><span class="line">    &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Base 析构&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>这样 <code>delete p</code> 会先调用 <code>Derived</code> 析构，再调用
-<code>Base</code> 析构：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Derived 析构</span><br><span class="line">Base 析构</span><br></pre></td></tr></table></figure>
-<h4 id="经验规则">经验规则</h4>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>建议</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>类里有虚函数（会被继承和多态使用）</td>
-<td>析构函数也声明为 <code>virtual</code></td>
-</tr>
-<tr>
-<td>类不会被继承</td>
-<td>不必加 <code>virtual</code></td>
-</tr>
-<tr>
-<td>通过基类指针 <code>delete</code> 派生类对象</td>
-<td>基类析构必须是 <code>virtual</code></td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>一个类只要设计了虚函数、打算被多态使用，就把析构函数也加上
-<code>virtual</code>。这是 C++
-里的经典规则：<strong>有虚函数，析构函数通常也要虚</strong>。</p>
-</blockquote>
-<h3 id="抽象类与纯虚函数">🏛️ 抽象类与纯虚函数</h3>
-<h4 id="纯虚函数">纯虚函数</h4>
-<p>在虚函数声明后面加 <code>= 0</code>，就成了纯虚函数（pure virtual
-function）：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Shape</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="type">double</span> <span class="title">area</span><span class="params">()</span> <span class="type">const</span> </span>= <span class="number">0</span>;   <span class="comment">// 纯虚函数：不提供实现</span></span><br><span class="line">    <span class="keyword">virtual</span> ~<span class="built_in">Shape</span>() &#123;&#125;                <span class="comment">// 虚析构，配合多态</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>含纯虚函数的类叫<strong>抽象类（abstract
-class）</strong>，它有两个特点：</p>
-<ol type="1">
-<li><strong>不能实例化</strong>：<code>Shape s;</code> 会编译报错，因为
-<code>area()</code> 没有实现；</li>
-<li><strong>作为接口</strong>：派生类必须实现所有纯虚函数，才能创建对象。</li>
-</ol>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Circle</span> : <span class="keyword">public</span> Shape &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">double</span> r;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Circle</span>(<span class="type">double</span> radius) : <span class="built_in">r</span>(radius) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">double</span> <span class="title">area</span><span class="params">()</span> <span class="type">const</span> <span class="keyword">override</span>   <span class="comment">// 必须实现纯虚函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">3.14159</span> * r * r;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// Shape s;                  // 错误：抽象类不能实例化</span></span><br><span class="line">    <span class="function">Circle <span class="title">c</span><span class="params">(<span class="number">2.0</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">area</span>() &lt;&lt; endl;     <span class="comment">// 12.5664</span></span><br><span class="line"></span><br><span class="line">    Shape* p = &amp;c;                <span class="comment">// 可以：用基类指针指向派生类</span></span><br><span class="line">    cout &lt;&lt; p-&gt;<span class="built_in">area</span>() &lt;&lt; endl;    <span class="comment">// 12.5664，多态调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="抽象类的意义">抽象类的意义</h4>
-<p>抽象类定义的是一份”契约”：它规定”所有形状都能算面积”，但不规定怎么算。具体算法由每个派生类自己实现。这正好和第
-8 章”对象职责”的思想衔接——基类只负责定义职责，实现下放给派生类。</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通虚函数</th>
-<th>纯虚函数</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>基类提供实现</td>
-<td>提供</td>
-<td>不提供（<code>= 0</code>）</td>
-</tr>
-<tr>
-<td>基类能否实例化</td>
-<td>能</td>
-<td>不能（抽象类）</td>
-</tr>
-<tr>
-<td>派生类是否必须实现</td>
-<td>可选</td>
-<td>必须实现</td>
-</tr>
-<tr>
-<td>典型用途</td>
-<td>默认行为 + 可覆盖</td>
-<td>定义接口契约</td>
-</tr>
-</tbody>
-</table>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[抽象类 Shape&lt;br&#x2F;&gt;area() &#x3D; 0] --&gt; B[Circle&lt;br&#x2F;&gt;实现 area]
-    A --&gt; C[Rectangle&lt;br&#x2F;&gt;实现 area]
-    B --&gt; D[基类指针调用各自实现]
-    C --&gt; D
-</code>
-</pre>
-<blockquote>
-<p>一个类里只要有一个纯虚函数，整个类就是抽象类。抽象类通常作为设计层级的”顶层接口”存在。</p>
-</blockquote>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>继承只是为了代码复用</td>
-<td>继承还表达 is-a 关系，与多态配合使用</td>
-</tr>
-<tr>
-<td>派生类写同名函数就是重写</td>
-<td>基类函数不加 <code>virtual</code> 时只是隐藏，不是重写</td>
-</tr>
-<tr>
-<td><code>override</code> 必须写</td>
-<td>不写也能编译，但写上能让编译器帮你检查签名</td>
-</tr>
-<tr>
-<td>基类析构函数加不加 <code>virtual</code> 无所谓</td>
-<td>通过基类指针删除派生类对象时，非虚析构会漏掉派生类析构</td>
-</tr>
-<tr>
-<td>多态就是函数重载</td>
-<td>重载是编译期同名不同参；多态是运行期动态绑定</td>
-</tr>
-<tr>
-<td>通过对象直接调用虚函数也是多态</td>
-<td>直接通过对象调用是静态绑定，只有基类指针/引用才触发动态绑定</td>
-</tr>
-<tr>
-<td>抽象类可以直接创建对象</td>
-<td>抽象类含纯虚函数，不能实例化，只能作为接口被继承</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>继承复用代码，虚函数开启动态绑定，两者结合就是多态；纯虚函数把基类变成抽象类，定义接口契约；设计基类时记住”有虚函数，析构函数也要虚”。</p>
-</blockquote>
-<p>学到这里，C++
-面向对象的四大特性——封装、继承、多态、抽象——已经集齐。第 7
-章的类与对象打底，这一章的继承、多态和抽象类让类与类之间有了层级和契约。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <categories>
-        <category>编程基础</category>
-        <category>C/C++</category>
-      </categories>
-      <tags>
-        <tag>C</tag>
-        <tag>C++</tag>
-        <tag>编程入门</tag>
-        <tag>面向对象</tag>
-        <tag>继承</tag>
-        <tag>虚函数</tag>
-        <tag>多态</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 入门：从 main 到 _start</title>
-    <url>/posts/76bb2795/</url>
-    <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
-Rust》系列教程（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>std</code></td>
-<td>Rust 标准库，提供依赖 OS 的高级能力</td>
-<td>站在 OS 肩膀上</td>
-</tr>
-<tr>
-<td><code>core</code></td>
-<td>不依赖 OS 的 Rust 核心库</td>
-<td>裸机也能用</td>
-</tr>
-<tr>
-<td><code>alloc</code></td>
-<td>提供 <code>Vec</code>、<code>Box</code> 等动态分配抽象，需要自己提供
-allocator</td>
-<td>有堆才能用</td>
-</tr>
-<tr>
-<td><code>no_std</code></td>
-<td>不自动链接 <code>std</code>，改用 <code>core</code>
-作为基础环境</td>
-<td>不依赖 std</td>
-</tr>
-<tr>
-<td><code>panic_handler</code></td>
-<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
-<td>崩溃了怎么办</td>
-</tr>
-<tr>
-<td><code>crt0</code></td>
-<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
-用户程序中，启动代码会提供 <code>_start</code>
-等入口相关代码，并负责进入 libc/运行时初始化流程</td>
-<td>启动的”保洁员”</td>
-</tr>
-<tr>
-<td><code>_start</code></td>
-<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
-code 提供</td>
-<td>一切从这开始</td>
-</tr>
-<tr>
-<td><code>no_main</code></td>
-<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
-<td>入口我自己定</td>
-</tr>
-<tr>
-<td>Target Triple</td>
-<td>描述目标平台的字符串，通常包含架构、厂商、操作系统和 ABI 等信息</td>
-<td>给谁编译</td>
-</tr>
-</tbody>
-</table>
-<h3 id="main-不是程序真正的入口">🧩 <code>main()</code>
-不是程序真正的入口</h3>
-<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
-是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
-<p>普通程序的实际调用链是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间、建立初始用户栈、设置 RSP</span><br><span class="line">ELF loader 跳转到 e_entry</span><br><span class="line">   ↓</span><br><span class="line">crt0 中的 _start（解析 argc / argv / envp）</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-graph TD
-    A[&quot;Linux kernel&quot;] --&gt;|&quot;创建进程地址空间 &#x2F; 建立初始用户栈 &#x2F; 设置 RSP&quot;| B[&quot;ELF loader 跳转到 e_entry&quot;]
-    B --&gt;|&quot;入口地址通常对应 crt0 中的 _start&quot;| C[&quot;crt0 中的 _start&quot;]
-    C --&gt;|&quot;解析 argc &#x2F; argv &#x2F; envp&quot;| D[&quot;libc &#x2F; Rust startup glue&quot;]
-    D --&gt; E[&quot;main()&quot;]
-</code>
-</pre>
-<p>补充一个概念：这里的 “libc / Rust startup glue” 指的是从
-<code>_start</code> 到 <code>main()</code>
-之间的启动与运行时衔接代码。它<strong>并不是一个类似 JVM/.NET
-那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup code
-等组件共同完成相关工作。</p>
-<p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
-<code>e_entry</code>
-字段指定的入口地址</strong>开始执行，而不是直接”找到”某个叫
-<code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
-crt0 中的 <code>_start</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
-<p>所以更准确的说法是：<strong>链接器确定程序入口地址，通常将其设置为
-<code>_start</code> 的地址</strong>。<code>main()</code>
-只是这条链上”最后被调用”的那个普通函数。</p>
-<h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
-<code>no_std</code></h3>
-<p>Rust 标准库可以理解成两层：</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
-    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
-    S --&gt; C[&quot;core 核心库&quot;]
-    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
-    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
-</code>
-</pre>
-<p>关键理解：<strong><code>core</code>
-不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
-基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
-中。<code>std</code> 则建立在 <code>core</code>
-等基础设施之上，大量依赖操作系统提供的能力。</p>
-<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
-是宏，最终通过 <code>std::io</code> 使用 stdout
-对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
-<p>而裸机环境下只有：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
-<p>标准库不再替你提供 stdout。所以：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不自动链接 std，默认以 core 为基础</span><br></pre></td></tr></table></figure>
-<p>注意：<code>no_std</code> <strong>不是”不能输出”</strong>。OS kernel
-完全可以自己实现 <code>print!</code>——例如直接写 VGA
-framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp 教程后面
-VGA 文本模式章节要做的事）。</p>
-<p>另外，<code>no_std</code> 也不等于”只能用 <code>core</code>“：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
-<p>官方文档的描述是：<code>no_std</code> 会阻止自动链接
-<code>std</code>，而 <code>alloc</code> 可以显式引入（前提是你提供了一个
-allocator）。</p>
-<h3 id="panicpanic_handler-与-panic-策略">🧩
-Panic：<code>panic_handler</code> 与 panic 策略</h3>
-<p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
-binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
-<code>abort</code>（panic
-的实现方式）。它们经常被混为一谈，但其实是两回事。</p>
-<h4
-id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
-binary 必须提供的处理入口</h4>
-<p>最小程序：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
-<p>会报错：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
-<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
-时应该怎么办？</strong> 这个处理机制原本由 <code>std</code>
-提供，<code>no_std</code> 环境下就要自己定义：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
-<code>-&gt; !</code>
-表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
-<h4 id="panic-策略unwind-还是-abort">panic 策略：<code>unwind</code>
-还是 <code>abort</code></h4>
-<p>这是另一个独立的概念：Rust 可以选择 panic 的实现策略。</p>
-<p><code>unwind</code>（栈展开）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
-<p><code>abort</code>（直接终止）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
-<h4 id="为什么-os-kernel-通常选-abort">为什么 OS kernel 通常选
-<code>abort</code></h4>
-<p>栈展开需要额外的展开信息和运行时支持，例如 Linux 环境常见的
-<code>libunwind</code>、Windows 的 SEH 等。这些机制在 OS kernel
-中通常过于复杂且没有必要，因此通常选择 abort：</p>
-<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
-<strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
-是<strong>选择 panic 的实现策略</strong>。两者是不同的概念，不存在”因为
-abort 所以必须 panic_handler”的因果关系。</p>
-</blockquote>
-<h3 id="no_main-与自定义入口-_start">🧩 <code>#![no_main]</code>
-与自定义入口 <code>_start</code></h3>
-<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
-之后，又会出现：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
-<p>原因前面已经说过：对于这种 freestanding <code>no_std</code>
-binary，不再使用 Rust
-默认的程序启动入口机制，因此不能依赖默认启动代码去调用
-<code>main()</code>。这与 phil-opp 教程的表述一致：freestanding
-executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
-<code>main</code>。所以：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
-<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
-<code>main()</code>。然后自己定义入口：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="start-的几个关键修饰符"><code>_start</code>
-的几个关键修饰符</h4>
-<table>
-<colgroup>
-<col style="width: 57%" />
-<col style="width: 42%" />
-</colgroup>
-<thead>
-<tr>
-<th>修饰符</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#[unsafe(no_mangle)]</code></td>
-<td>禁止 Rust name mangling，使最终符号名保持为 <code>_start</code></td>
-</tr>
-<tr>
-<td><code>pub</code></td>
-<td>使该 Rust item 对 crate 外可见；在这种入口函数中通常这样声明</td>
-</tr>
-<tr>
-<td><code>extern "C"</code></td>
-<td>使用稳定的 C ABI，而不是 Rust ABI</td>
-</tr>
-<tr>
-<td><code>-&gt; !</code></td>
-<td>表示入口函数不应该返回</td>
-</tr>
-</tbody>
-</table>
-<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
-名和类型信息的符号，例如 <code>fn start()</code> 可能变成
-<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
-<code>_start</code>，所以 <code>no_mangle</code>
-才是保证符号名正确的关键。</p>
-<h3 id="crt0-与-_start-的区别">🧩 <code>crt0</code> 与
-<code>_start</code> 的区别</h3>
-<p>这是最容易混淆的一对概念：</p>
-<ul>
-<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
-Linux 用户程序中由 C runtime startup code 提供，“从哪里开始”。</li>
-<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
-code）的统称，“开始之后帮你做什么”。注意它不是一个固定文件——现代
-Linux/glibc 中启动代码实际由
-<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
-等多个启动对象组成（正文前面出现过的 <code>crt1 / _start</code>
-就是其中之一）。</li>
-</ul>
-<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
-由这套启动代码提供</strong>——<code>_start</code>
-不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p>一句话记忆：<code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
-<p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
-并不负责”准备栈”</strong>。在 Linux
-用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间</span><br><span class="line">   ↓ 建立初始用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳转到 _start</span><br><span class="line">crt1 / _start</span><br><span class="line">   ↓ 解析 argc / argv / envp</span><br><span class="line">   ↓ 初始化 libc / runtime</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<p>所以 crt0
-做的事是”在已有栈上解析参数、初始化运行环境”，而不是”申请一块内存并设置
-RSP”。</p>
-<h4 id="为什么-rust-os-不使用默认的-crt0">为什么 Rust OS 不使用默认的
-<code>crt0</code>？</h4>
-<p>因为面向 Linux 用户态程序的 crt0 假设下面有操作系统：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">ELF loader</span><br><span class="line">   ↓</span><br><span class="line">crt0 / _start</span><br><span class="line">   ↓</span><br><span class="line">libc startup</span><br><span class="line">   ↓</span><br><span class="line">Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<p>而 Rust OS 的启动链是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Firmware / boot environment（传统 PC 上通常是 BIOS 或 UEFI）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓</span><br><span class="line">kernel entry</span><br><span class="line">   ↓</span><br><span class="line">kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
-<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
-crt0</strong>。但要注意：Rust OS 并不是完全没有”启动代码”——bootloader 和
-kernel 自己承担了建立执行环境、设置栈以及进入 kernel
-主逻辑等职责，它们本身就是一种 startup
-code。更准确的表述是：<strong>不使用面向 Linux 用户态程序的默认
-crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
-<h3 id="栈从哪里来">🧩 栈从哪里来？</h3>
-<p>栈并不是”单纯申请一块内存，然后保存一个地址”，要分情况：</p>
-<p><strong>普通 Linux 用户程序</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
-<p><strong>Rust OS</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
-<p>也就是说：在 Linux
-用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
-拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
-bootloader / kernel 早期启动代码自己的职责。</p>
-<p>更准确地说，栈是：</p>
-<blockquote>
-<p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
-CPU 并不存在一个叫”栈对象”的东西。</p>
-</blockquote>
-<p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
-<code>pop</code> / <code>call</code> / <code>ret</code> /
-<code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
-<p>那么 <code>_start</code> 为什么写 <code>loop &#123;&#125;</code> 而不是
-<code>return</code>？因为 <code>_start</code> 是 ELF
-的程序入口，<strong>不是通过普通 <code>call</code>
-指令调用的函数</strong>，因此没有一个正常的调用者向它提供返回地址。若
-<code>_start</code> 返回，CPU
-会尝试按照函数返回约定取出返回地址继续执行，而入口环境并不保证存在这样的返回地址。因此这种程序入口通常定义为
-<code>-&gt; !</code>，并在结束后进入死循环、关机或其他不会返回的路径。</p>
-<h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
-<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
-</blockquote>
-<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
-<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
-之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
-target。它意味着”我要生成一个 Linux 用户程序”，于是链接器默认认为需要
-crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
-main，于是报：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
-<h4
-id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
-<p>含义：cargo → rustc → linker →
-<code>-nostartfiles</code>，告诉链接器<strong>不要自动链接标准的 C
-startup object files</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
-<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
-<table>
-<colgroup>
-<col style="width: 14%" />
-<col style="width: 26%" />
-<col style="width: 21%" />
-<col style="width: 38%" />
-</colgroup>
-<thead>
-<tr>
-<th>平台</th>
-<th>可执行格式</th>
-<th>默认入口</th>
-<th>禁用 C startup</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Linux</td>
-<td>ELF</td>
-<td><code>_start</code></td>
-<td><code>-nostartfiles</code></td>
-</tr>
-<tr>
-<td>Windows</td>
-<td>PE</td>
-<td><code>mainCRTStartup</code></td>
-<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
-</tr>
-<tr>
-<td>macOS</td>
-<td>Mach-O</td>
-<td>自定义</td>
-<td><code>-e __start</code>（配合
-<code>-static</code>、<code>-nostartfiles</code>）</td>
-</tr>
-</tbody>
-</table>
-<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
-<h4 id="为什么不推荐这个方法">为什么不推荐这个方法</h4>
-<p><code>-nostartfiles</code> 去掉的是默认的 C startup object
-files，<strong>并不会让 Linux loader 不再提供初始用户栈</strong>——你的
-<code>_start</code> 仍然会从 Linux
-建立好的初始栈开始执行，只是不会经过默认的 libc/Rust 启动流程。</p>
-<p>真正缺少的是 crt0 / libc startup 做的事：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 / libc startup</span><br><span class="line">   ├── 解析 argc / argv / envp</span><br><span class="line">   ├── libc 初始化</span><br><span class="line">   ├── TLS / runtime 等相关初始化</span><br><span class="line">   └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p>所以”编译成功、运行崩溃”不能一概而论：一个非常简单的 Linux
-<code>no_std</code> + <code>no_main</code>
-程序，只要入口、ABI、链接等处理正确，完全可以运行——例如上面那个空
-<code>loop &#123;&#125;</code> 的 <code>_start</code>
-甚至可以一直运行。是否崩溃，取决于你的 <code>_start</code>
-是否依赖了上面这些缺失的初始化。这个方法之所以”不推荐”，是因为它在”假装自己是
-Linux 程序”，却没有承担 Linux
-程序应有的完整启动环境，越复杂的程序越容易踩坑。</p>
-<h3 id="正解bare-metal-target">🧩 正解：Bare Metal Target</h3>
-<p>真正的方向是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
-<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">thumbv7em   → ARM Cortex-M 等 Thumb-2 / ARMv7E-M 子架构</span><br><span class="line">none        → 没有操作系统</span><br><span class="line">eabihf      → Embedded ABI + hard-float</span><br></pre></td></tr></table></figure>
-<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
-<h4 id="target-triple-是什么">Target Triple 是什么</h4>
-<p>Rust 用 Target Triple 描述目标环境。其一般格式为
-<code>&lt;arch&gt;&lt;sub&gt;-&lt;vendor&gt;-&lt;sys&gt;-&lt;abi&gt;</code>，但有些
-target 会省略某些部分，严格说不一定是”四元组”。例如
-<code>x86_64-unknown-linux-gnu</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
-<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
-就表示没有 OS。</p>
-<h4 id="host-与-target">Host 与 Target</h4>
-<ul>
-<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
-<li><strong>Target</strong>：你希望程序运行的机器，例如
-<code>x86_64-blog_os</code> 裸机 kernel。</li>
-</ul>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
-<p>这种”在一种平台上编译出另一种平台程序”的做法叫<strong>交叉编译（cross
-compilation）</strong>。</p>
-<h3 id="两种启动链的最终对比">🧩 两种启动链的最终对比</h3>
-<pre>
-<code class="mermaid">
-
-graph TD
-    subgraph &quot;普通 Linux 用户程序&quot;
-        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
-        B1 --&gt; C1[&quot;ELF loader&quot;]
-        C1 --&gt; D1[&quot;crt0 &#x2F; _start&quot;]
-        D1 --&gt; E1[&quot;libc &#x2F; Rust startup&quot;]
-        E1 --&gt; F1[&quot;main()&quot;]
-    end
-    subgraph &quot;Rust OS&quot;
-        A2[&quot;硬件&quot;] --&gt; B2[&quot;固件 &#x2F; boot environment（传统 PC 上为 BIOS &#x2F; UEFI）&quot;]
-        B2 --&gt; C2[&quot;Bootloader&quot;]
-        C2 --&gt; D2[&quot;Kernel entry&quot;]
-        D2 --&gt; E2[&quot;Kernel initialization（含设置栈等）&quot;]
-        E2 --&gt; F2[&quot;kernel_main()&quot;]
-    end
-</code>
-</pre>
-<p>典型的 Rust Linux
-用户程序依赖的是操作系统提供的用户态执行环境，并使用
-<code>std</code>、默认 <code>main</code>
-入口机制以及相应的用户态启动代码和运行时支持；Rust OS
-不使用这一套，相应职责由 <strong>bootloader + kernel
-自己承担</strong>。另外注意：在 phil-opp 的 <code>blog_os</code>
-现代版本中，bootloader 本身承担了不少启动工作，所以你的
-<code>_start</code> 并不一定是从 BIOS/UEFI 后直接接管的第一个函数。</p>
-<h4 id="附--target-与---all-targets-不要混">⚠️ 附：<code>--target</code>
-与 <code>--all-targets</code> 不要混</h4>
-<p>Cargo 中：</p>
-<ul>
-<li><code>--target</code>：<strong>编译目标平台</strong>，例如
-<code>x86_64-unknown-linux-gnu</code>。</li>
-<li><code>--all-targets</code>：Cargo package
-中要构建哪些类型的目标（library、binary、test、bench、example）。</li>
-</ul>
-<p>两者完全不是一个概念。</p>
-<h3 id="常见坑rust-analyzer-报-panic_impl-重复">⚠️ 常见坑：rust-analyzer
-报 <code>panic_impl</code> 重复</h3>
-<p>Cargo 的普通测试构建会以 test harness 的方式编译，而 Rust 的 test
-harness 需要 <code>std</code>。所以 <code>no_std</code> kernel binary
-如果被 Cargo 当成普通 test target 构建，就可能和 kernel 自己定义的
-<code>#[panic_handler]</code> 冲突：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">std（test harness） → panic_impl</span><br><span class="line">你的 kernel         → panic_impl</span><br></pre></td></tr></table></figure>
-<p>报错：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">duplicate lang item `panic_impl`</span><br></pre></td></tr></table></figure>
-<p>解决：告诉 Cargo 这个 binary 不是普通测试程序：</p>
-<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[[bin]]</span></span><br><span class="line"><span class="attr">name</span> = <span class="string">&quot;blog_os&quot;</span></span><br><span class="line"><span class="attr">test</span> = <span class="literal">false</span></span><br><span class="line"><span class="attr">bench</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
-<p>（phil-opp 后面的 integration-test 章节也是通过 <code>cfg_attr</code>
-等方式区分测试环境和 kernel 环境。）</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><code>no_std</code> 是”不使用 Rust 标准库”；<code>no_main</code>
-是”不让 Rust 按普通程序方式处理 <code>main</code>“；<code>_start</code>
-是你自己定义的底层入口；真正写 OS 时，我们不使用面向 Linux
-用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
-自己承担。</p>
-</blockquote>
-<p>两条启动链的完整模型：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">普通 Linux 用户程序</span><br><span class="line">OS loader</span><br><span class="line">   ↓</span><br><span class="line">_start</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br><span class="line"></span><br><span class="line">Rust OS</span><br><span class="line">Firmware / boot environment</span><br><span class="line">   ↓</span><br><span class="line">Bootloader</span><br><span class="line">   ↓</span><br><span class="line">Kernel entry</span><br><span class="line">   ↓</span><br><span class="line">Kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
-<p>关键变化：</p>
-<table>
-<thead>
-<tr>
-<th>组件</th>
-<th>普通程序</th>
-<th>Rust OS</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>std</code></td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>默认 <code>main</code> 入口机制</td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>用户态 crt0</td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>Linux 用户态 runtime</td>
-<td>依赖</td>
-<td>不依赖</td>
-</tr>
-</tbody>
-</table>
-<p>但注意：<strong>启动代码 ≠ 消失</strong>。只是从”操作系统提供的
-crt0/libc 启动流程”，换成了”由 bootloader + kernel
-自己承担”的启动流程——这才是这篇文章最值得强调的核心思想。</p>
-<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
-文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
-<ul>
-<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
-href="https://os.phil-opp.com/freestanding-rust-binary/"
-class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
-<li>《Writing an OS in Rust》系列主页：<a
-href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a></li>
-</ul>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <categories>
-        <category>计算机基础</category>
-        <category>Rust</category>
-      </categories>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>no_std</tag>
-        <tag>裸机</tag>
-        <tag>链接器</tag>
       </tags>
   </entry>
 </search>
