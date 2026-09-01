@@ -30,7 +30,7 @@
 <meta property="og:description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T02:26:48.000Z">
-<meta property="article:modified_time" content="2026-09-01T02:39:50.432Z">
+<meta property="article:modified_time" content="2026-09-01T02:44:07.049Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -279,7 +279,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-01 10:26:48 / Modified: 10:39:50" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
+      <time title="Created: 2026-09-01 10:26:48 / Modified: 10:44:07" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
     </span>
     <span class="post-meta-item">
       <span class="post-meta-item-icon">
@@ -309,7 +309,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>9.4k</span>
+      <span>9.6k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -377,15 +377,15 @@ allocator</td>
 </tr>
 <tr>
 <td><code>crt0</code></td>
-<td>通常指 C 程序启动阶段使用的一组启动代码（startup
-code），其中通常包含程序入口 <code>_start</code>，负责在进入
-<code>main()</code> 前完成必要的启动工作</td>
+<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
+用户程序中，启动代码会提供 <code>_start</code>
+等入口相关代码，并负责进入 libc/运行时初始化流程</td>
 <td>启动的”保洁员”</td>
 </tr>
 <tr>
 <td><code>_start</code></td>
-<td>启动代码中的入口函数/符号，在典型 Linux 用户程序中定义在 crt0
-里</td>
+<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
+code 提供</td>
 <td>一切从这开始</td>
 </tr>
 <tr>
@@ -416,10 +416,11 @@ graph TD
     D --&gt; E[&quot;main()&quot;]
 </code>
 </pre>
-<p>补充一个概念：这里的 “libc / Rust startup glue” 就是我们常说的 “Rust
-runtime”——它<strong>不是一个独立、庞大的运行时系统</strong>（不像
-JVM/.NET 那样），而主要指 Rust 为调用 <code>main</code> 所提供的启动
-glue，以及与 libc 等组件的衔接。</p>
+<p>补充一个概念：这里的 “libc / Rust startup glue” 指的是从
+<code>_start</code> 到 <code>main()</code>
+之间的启动与运行时衔接代码。它<strong>并不是一个类似 JVM/.NET
+那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup code
+等组件共同完成相关工作。</p>
 <p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
 <code>e_entry</code>
 字段指定的入口地址</strong>开始执行，而不是直接”找到”某个叫
@@ -451,9 +452,9 @@ graph TD
 <h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
-是宏，最终依赖 <code>std::io</code> 的输出机制，再往下是操作系统提供的
-stdout / 文件描述符：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io::stdout()</span><br><span class="line">   ↓</span><br><span class="line">操作系统提供的 stdout / 文件描述符</span><br></pre></td></tr></table></figure>
+是宏，最终通过 <code>std::io</code> 使用 stdout
+对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
 <p>而裸机环境下只有：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
 <p>标准库不再替你提供 stdout。所以：</p>
@@ -496,11 +497,9 @@ binary 必须提供的处理入口</h4>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
 <h4 id="为什么-os-kernel-通常选-abort">为什么 OS kernel 通常选
 <code>abort</code></h4>
-<p>栈展开需要额外运行时支持，例如 Linux 的
-<code>libunwind</code>、Windows 的
-SEH，而这些通常依赖操作系统环境。kernel
-通常没有必要、也往往没有条件支持完整的 unwinding
-infrastructure，所以选择 abort：</p>
+<p>栈展开需要额外的展开信息和运行时支持，例如 Linux 环境常见的
+<code>libunwind</code>、Windows 的 SEH 等。这些机制在 OS kernel
+中通常过于复杂且没有必要，因此通常选择 abort：</p>
 <figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
 <blockquote>
 <p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
@@ -559,22 +558,25 @@ executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
 名和类型信息的符号，例如 <code>fn start()</code> 可能变成
 <code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
 <code>_start</code>，所以 <code>no_mangle</code>
-才是保证符号名正确的关键（<code>pub</code> 主要影响 Rust
-项目内的可见性与符号保留，并不是”链接器能找到它”的必要条件）。</p>
+才是保证符号名正确的关键。</p>
 <h3 id="crt0-与-_start-的区别">🧩 <code>crt0</code> 与
 <code>_start</code> 的区别</h3>
 <p>这是最容易混淆的一对概念：</p>
 <ul>
-<li><strong><code>_start</code></strong>：启动代码中的入口函数/符号（在典型
-Linux 用户程序中定义在 crt0 里），“从哪里开始”。</li>
-<li><strong><code>crt0</code></strong>：一组启动代码（startup
-code），“开始之后帮你做什么”。</li>
+<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
+Linux 用户程序中由 C runtime startup code 提供，“从哪里开始”。</li>
+<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
+code）的统称，“开始之后帮你做什么”。注意它不是一个固定文件——现代
+Linux/glibc 中启动代码实际由
+<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
+等多个启动对象组成（正文前面出现过的 <code>crt1 / _start</code>
+就是其中之一）。</li>
 </ul>
-<p>关系：<strong>crt0 包含
-<code>_start</code></strong>——<code>_start</code> 不是 crt0
-之外的下一层，而是 crt0 里定义的那个入口函数：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">crt0</span><br><span class="line">  ├── 定义入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p>一句话记忆：<code>_start = 启动代码中的入口函数/符号（从哪里开始）</code>，<code>crt0 = 包含 _start 的一组启动代码（开始之后帮你做什么）</code>。</p>
+<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
+由这套启动代码提供</strong>——<code>_start</code>
+不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p>一句话记忆：<code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
 <p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
 并不负责”准备栈”</strong>。在 Linux
 用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
@@ -617,7 +619,7 @@ CPU 并不存在一个叫”栈对象”的东西。</p>
 的程序入口，<strong>不是通过普通 <code>call</code>
 指令调用的函数</strong>，因此没有一个正常的调用者向它提供返回地址。若
 <code>_start</code> 返回，CPU
-会尝试按照函数返回约定取出返回地址继续执行，而入口环境并不保证存在这样的返回地址。因此裸机入口通常定义为
+会尝试按照函数返回约定取出返回地址继续执行，而入口环境并不保证存在这样的返回地址。因此这种程序入口通常定义为
 <code>-&gt; !</code>，并在结束后进入死循环、关机或其他不会返回的路径。</p>
 <h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
 <h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
@@ -737,8 +739,10 @@ graph TD
     end
 </code>
 </pre>
-<p>普通 Rust 用户程序依赖的是”操作系统提供的环境”（std、默认 main
-入口机制、用户态 crt0、libc/Rust startup）；Rust OS
+<p>典型的 Rust Linux
+用户程序依赖的是操作系统提供的用户态执行环境，并使用
+<code>std</code>、默认 <code>main</code>
+入口机制以及相应的用户态启动代码和运行时支持；Rust OS
 不使用这一套，相应职责由 <strong>bootloader + kernel
 自己承担</strong>。另外注意：在 phil-opp 的 <code>blog_os</code>
 现代版本中，bootloader 本身承担了不少启动工作，所以你的
