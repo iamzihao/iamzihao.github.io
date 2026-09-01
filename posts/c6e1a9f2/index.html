@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、shared_ptr 和 weak_ptr，每块都值得单独深入，这里先打开一扇门。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="C&#x2F;C++ 入门：拓展选学">
+<meta property="og:url" content="https://iamzihao.github.io/posts/c6e1a9f2/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、shared_ptr 和 weak_ptr，每块都值得单独深入，这里先打开一扇门。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-08-28T04:30:00.000Z">
+<meta property="article:modified_time" content="2026-08-28T08:25:01.113Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="CMake">
+<meta property="article:tag" content="C">
+<meta property="article:tag" content="C++">
+<meta property="article:tag" content="编程入门">
+<meta property="article:tag" content="智能指针">
+<meta property="article:tag" content="模板">
+<meta property="article:tag" content="异常">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/c6e1a9f2/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/c6e1a9f2/","path":"posts/c6e1a9f2/","title":"C/C++ 入门：拓展选学"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>C/C++ 入门：拓展选学 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cmake-%E5%85%A5%E9%97%A8"><span class="nav-number">2.</span> <span class="nav-text">🔧 CMake 入门</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81-cmake"><span class="nav-number">2.1.</span> <span class="nav-text">为什么需要 CMake</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%9E%84%E5%BB%BA%E6%B5%81%E7%A8%8B"><span class="nav-number">2.2.</span> <span class="nav-text">构建流程</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A8%A1%E6%9D%BF%E6%B3%9B%E5%9E%8B%E7%BC%96%E7%A8%8B%E5%85%A5%E9%97%A8"><span class="nav-number">3.</span> <span class="nav-text">🧩 模板：泛型编程入门</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%87%BD%E6%95%B0%E6%A8%A1%E6%9D%BF"><span class="nav-number">3.1.</span> <span class="nav-text">函数模板</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%B1%BB%E6%A8%A1%E6%9D%BF"><span class="nav-number">3.2.</span> <span class="nav-text">类模板</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#lambda%E5%B0%B1%E5%9C%B0%E5%AE%9A%E4%B9%89%E7%9A%84%E5%8C%BF%E5%90%8D%E5%87%BD%E6%95%B0"><span class="nav-number">4.</span> <span class="nav-text">🥧 lambda：就地定义的匿名函数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89stdmove-%E4%B8%8E%E5%8F%B3%E5%80%BC%E5%BC%95%E7%94%A8"><span class="nav-number">5.</span> <span class="nav-text">🔄 移动语义：std::move
+与右值引用</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E7%A7%BB%E5%8A%A8"><span class="nav-number">5.1.</span> <span class="nav-text">为什么需要移动</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8F%B3%E5%80%BC%E5%BC%95%E7%94%A8"><span class="nav-number">5.2.</span> <span class="nav-text">右值引用</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%87%BD%E6%95%B0%E6%8C%87%E9%92%88"><span class="nav-number">6.</span> <span class="nav-text">📌 函数指针</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#c-%E9%A3%8E%E6%A0%BC%E7%B1%BB%E5%9E%8B%E8%BD%AC%E6%8D%A2"><span class="nav-number">7.</span> <span class="nav-text">🔀 C++ 风格类型转换</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BC%82%E5%B8%B8"><span class="nav-number">8.</span> <span class="nav-text">🚨 异常</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E8%AF%AD%E6%B3%95"><span class="nav-number">8.1.</span> <span class="nav-text">基本语法</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%B5%84%E6%BA%90%E5%AE%89%E5%85%A8"><span class="nav-number">8.2.</span> <span class="nav-text">资源安全</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#shared_ptr%E5%85%B1%E4%BA%AB%E6%89%80%E6%9C%89%E6%9D%83"><span class="nav-number">9.</span> <span class="nav-text">🤝 shared_ptr：共享所有权</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#weak_ptr%E6%89%93%E7%A0%B4%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8"><span class="nav-number">10.</span> <span class="nav-text">👀 weak_ptr：打破循环引用</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8%E9%97%AE%E9%A2%98"><span class="nav-number">10.1.</span> <span class="nav-text">循环引用问题</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#weak_ptr-%E7%9A%84%E8%A7%A3%E6%B3%95"><span class="nav-number">10.2.</span> <span class="nav-text">weak_ptr 的解法</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">11.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">72</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">44</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">180</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/c6e1a9f2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="C&#x2F;C++ 入门：拓展选学 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          C/C++ 入门：拓展选学
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-08-28 12:30:00 / Modified: 16:25:01" itemprop="dateCreated datePublished" datetime="2026-08-28T12:30:00+08:00">2026-08-28</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B%E5%9F%BA%E7%A1%80/" itemprop="url" rel="index"><span itemprop="name">编程基础</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B%E5%9F%BA%E7%A1%80/C-C/" itemprop="url" rel="index"><span itemprop="name">C/C++</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>7.6k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>14 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、<code>shared_ptr</code>
+和 <code>weak_ptr</code>，每块都值得单独深入，这里先打开一扇门。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CMake</td>
+<td>跨平台构建系统，自动生成编译命令</td>
+<td>构建工具</td>
+</tr>
+<tr>
+<td>target</td>
+<td>CMake 里的构建目标（可执行程序/库）</td>
+<td>要构建的东西</td>
+</tr>
+<tr>
+<td>模板（template）</td>
+<td>以类型为参数的代码生成机制</td>
+<td>泛型</td>
+</tr>
+<tr>
+<td>函数模板</td>
+<td>一套函数逻辑适配多种类型</td>
+<td>泛型函数</td>
+</tr>
+<tr>
+<td>类模板</td>
+<td>一套类逻辑适配多种类型</td>
+<td>泛型类</td>
+</tr>
+<tr>
+<td>异常（exception）</td>
+<td>程序错误传递机制：<code>throw</code> 抛出、<code>catch</code>
+捕获</td>
+<td>错误上报</td>
+</tr>
+<tr>
+<td>lambda</td>
+<td>就地定义的匿名函数，可捕获外部变量</td>
+<td>迷你函数</td>
+</tr>
+<tr>
+<td>右值引用（rvalue reference）</td>
+<td>绑定临时对象的引用，<code>T&amp;&amp;</code></td>
+<td>移动语义的载体</td>
+</tr>
+<tr>
+<td>函数指针</td>
+<td>保存函数地址的指针，可调用</td>
+<td>把函数当数据</td>
+</tr>
+<tr>
+<td><code>static_cast</code> 等</td>
+<td>C++ 风格的显式类型转换</td>
+<td>带类型检查的转换</td>
+</tr>
+<tr>
+<td><code>shared_ptr</code></td>
+<td>共享所有权的智能指针，靠引用计数管理</td>
+<td>多人共享</td>
+</tr>
+<tr>
+<td><code>weak_ptr</code></td>
+<td>不增加引用计数的观察指针</td>
+<td>旁观者</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cmake-入门">🔧 CMake 入门</h3>
+<h4 id="为什么需要-cmake">为什么需要 CMake</h4>
+<p>第 13 章里，两个源文件要手写
+<code>g++ main.cpp math.cpp -o app</code>。文件一多，编译命令就难以维护，还容易漏文件。CMake
+把”有哪些源文件、用什么编译选项”写进一份
+<code>CMakeLists.txt</code>，自动生成构建命令。</p>
+<p>最小示例：</p>
+<figure class="highlight cmake"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># CMakeLists.txt</span></span><br><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.10</span>)</span><br><span class="line"><span class="keyword">project</span>(MyApp)</span><br><span class="line"></span><br><span class="line"><span class="keyword">set</span>(CMAKE_CXX_STANDARD <span class="number">17</span>)          <span class="comment"># 指定 C++17</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">add_executable</span>(app main.cpp <span class="keyword">math</span>.cpp)   <span class="comment"># 源文件组织</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">target_compile_options</span>(app PRIVATE -Wall -Wextra)   <span class="comment"># 编译选项</span></span><br></pre></td></tr></table></figure>
+<p><code>add_executable</code> 的第一个参数是 target
+名，后面是组成它的源文件。target 是 CMake 的核心概念：可执行程序是一个
+target，库也是一个 target。</p>
+<h4 id="构建流程">构建流程</h4>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> build &amp;&amp; <span class="built_in">cd</span> build</span><br><span class="line">cmake ..           <span class="comment"># 根据 CMakeLists.txt 生成构建文件</span></span><br><span class="line">make               <span class="comment"># 按生成的构建文件编译链接</span></span><br><span class="line">./app              <span class="comment"># 运行</span></span><br></pre></td></tr></table></figure>
+<p>也可以不区分平台地写：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>CMake 本身不是编译器，它负责生成编译命令，真正编译的还是
+<code>g++</code>/<code>clang</code> 等。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>add_executable</code></td>
+<td>生成可执行程序 target</td>
+</tr>
+<tr>
+<td><code>add_library</code></td>
+<td>生成库 target</td>
+</tr>
+<tr>
+<td><code>target_compile_options</code></td>
+<td>给某个 target 加编译选项</td>
+</tr>
+<tr>
+<td><code>set(CMAKE_CXX_STANDARD 17)</code></td>
+<td>全局指定 C++ 标准</td>
+</tr>
+</tbody>
+</table>
+<h3 id="模板泛型编程入门">🧩 模板：泛型编程入门</h3>
+<h4 id="函数模板">函数模板</h4>
+<p>第 10 章的
+<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>
+已经用到了模板——<code>vector</code> 是类模板，<code>&lt;int&gt;</code>
+是模板参数。自己写函数模板也很简单：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="function">T <span class="title">myMax</span><span class="params">(T a, T b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a &gt; b ? a : b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">myMax</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;         <span class="comment">// 5，T 推断为 int</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">myMax</span>(<span class="number">3.1</span>, <span class="number">2.9</span>) &lt;&lt; endl;     <span class="comment">// 3.1，T 推断为 double</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">myMax</span>(<span class="string">&#x27;a&#x27;</span>, <span class="string">&#x27;c&#x27;</span>) &lt;&lt; endl;     <span class="comment">// c，T 推断为 char</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>template &lt;typename T&gt;</code> 表示”下面这个函数对任意类型
+T
+都适用”。编译器会在<strong>编译期</strong>根据调用时的实际类型生成对应代码，不是运行时判断类型。</p>
+<h4 id="类模板">类模板</h4>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Box</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    T value;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Box</span>(T v) : <span class="built_in">value</span>(v) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function">T <span class="title">get</span><span class="params">()</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> value;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Box&lt;<span class="type">int</span>&gt; <span class="title">b1</span><span class="params">(<span class="number">42</span>)</span></span>;</span><br><span class="line">    <span class="function">Box&lt;string&gt; <span class="title">b2</span><span class="params">(<span class="string">&quot;hello&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; b<span class="number">1.</span><span class="built_in">get</span>() &lt;&lt; endl;   <span class="comment">// 42</span></span><br><span class="line">    cout &lt;&lt; b<span class="number">2.</span><span class="built_in">get</span>() &lt;&lt; endl;   <span class="comment">// hello</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>语法</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数模板</td>
+<td><code>template &lt;typename T&gt;</code> + 函数</td>
+<td><code>myMax(3, 5)</code></td>
+</tr>
+<tr>
+<td>类模板</td>
+<td><code>template &lt;typename T&gt;</code> + 类</td>
+<td><code>Box&lt;int&gt;</code>、<code>vector&lt;int&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>泛型编程的核心思想：把”类型”也变成参数，一份逻辑服务多种类型。这是
+STL 容器和算法能通吃各种类型的原因。</p>
+</blockquote>
+<h3 id="lambda就地定义的匿名函数">🥧 lambda：就地定义的匿名函数</h3>
+<p>第 9 章 <code>sort</code> 的自定义比较函数其实就用了 lambda。lambda
+是”就地定义、用完即走”的函数，语法：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[捕获列表](参数列表) -&gt; 返回类型 &#123; 函数体 &#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 捕获外部变量 x，返回两数之和</span></span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">auto</span> addX = [x](<span class="type">int</span> a) -&gt; <span class="type">int</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> a + x;</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; <span class="built_in">addX</span>(<span class="number">5</span>) &lt;&lt; endl;   <span class="comment">// 15</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 捕获方式：[] 不捕获，[=] 值捕获，[&amp;] 引用捕获</span></span><br><span class="line">    <span class="type">int</span> base = <span class="number">100</span>;</span><br><span class="line">    <span class="keyword">auto</span> addBase = [&amp;](<span class="type">int</span> a) &#123;   <span class="comment">// 引用捕获，可修改 base</span></span><br><span class="line">        <span class="keyword">return</span> a + base;</span><br><span class="line">    &#125;;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">addBase</span>(<span class="number">1</span>) &lt;&lt; endl;   <span class="comment">// 101</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>捕获写法</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>[]</code></td>
+<td>不捕获外部变量</td>
+</tr>
+<tr>
+<td><code>[x]</code></td>
+<td>值捕获 <code>x</code></td>
+</tr>
+<tr>
+<td><code>[&amp;x]</code></td>
+<td>引用捕获 <code>x</code></td>
+</tr>
+<tr>
+<td><code>[=]</code></td>
+<td>全部值捕获</td>
+</tr>
+<tr>
+<td><code>[&amp;]</code></td>
+<td>全部引用捕获</td>
+</tr>
+</tbody>
+</table>
+<p>配合 STL 算法非常顺手（第 9 章的排序示例）：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">    <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<h3 id="移动语义stdmove-与右值引用">🔄 移动语义：std::move
+与右值引用</h3>
+<h4 id="为什么需要移动">为什么需要移动</h4>
+<p>拷贝构造（第 7
+章）复制内容；但对临时对象来说，复制是浪费——它的资源马上就不要了，不如直接”搬走”。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">big</span><span class="params">(<span class="number">1000000</span>)</span></span>;</span><br><span class="line">vector&lt;<span class="type">int</span>&gt; v2 = big;        <span class="comment">// 拷贝：复制 100 万个元素</span></span><br><span class="line">vector&lt;<span class="type">int</span>&gt; v3 = <span class="built_in">move</span>(big);  <span class="comment">// 移动：把 big 的内部指针搬给 v3，big 变空</span></span><br></pre></td></tr></table></figure>
+<p><code>std::move</code>
+把对象”标记”成可移动的，配合<strong>移动构造/移动赋值</strong>，资源直接转移而不是复制。<code>vector</code>、<code>string</code>
+等标准库类型都自带移动构造。</p>
+<h4 id="右值引用">右值引用</h4>
+<p>右值引用（<code>T&amp;&amp;</code>）绑定临时对象，是移动语义的载体：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    string data;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Buffer</span>(string s) : <span class="built_in">data</span>(<span class="built_in">move</span>(s)) &#123;&#125;   <span class="comment">// 把 s 的内容搬进 data</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 移动构造：把 other 的资源&quot;偷&quot;过来</span></span><br><span class="line">    <span class="built_in">Buffer</span>(Buffer&amp;&amp; other) <span class="keyword">noexcept</span></span><br><span class="line">        : <span class="built_in">data</span>(<span class="built_in">move</span>(other.data))</span><br><span class="line">    &#123;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>要点：</p>
+<table>
+<colgroup>
+<col style="width: 8%" />
+<col style="width: 48%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>对比</th>
+<th>拷贝构造 <code>Buffer(const Buffer&amp;)</code></th>
+<th>移动构造 <code>Buffer(Buffer&amp;&amp;)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数</td>
+<td>左值引用，只读</td>
+<td>右值引用，可修改</td>
+</tr>
+<tr>
+<td>行为</td>
+<td>复制资源</td>
+<td>转移资源</td>
+</tr>
+<tr>
+<td>开销</td>
+<td>与资源大小相关</td>
+<td>通常只是指针/句柄搬运</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>unique_ptr</code> 不能拷贝只能移动（第 8
+章），就是移动语义的典型应用。写自己的资源类时，提供移动构造能显著提升性能。</p>
+</blockquote>
+<h3 id="函数指针">📌 函数指针</h3>
+<p>函数也有地址，可以存进指针、作为参数传递，实现”把函数当数据用”：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span> </span>&#123; <span class="keyword">return</span> a + b; &#125;</span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">mul</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span> </span>&#123; <span class="keyword">return</span> a * b; &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 声明函数指针：返回类型 (*名字)(参数列表)</span></span><br><span class="line">    <span class="built_in">int</span> (*fp)(<span class="type">int</span>, <span class="type">int</span>);</span><br><span class="line"></span><br><span class="line">    fp = add;                  <span class="comment">// 指向 add</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">fp</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;  <span class="comment">// 5，通过指针调用</span></span><br><span class="line"></span><br><span class="line">    fp = mul;                  <span class="comment">// 改指向 mul</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">fp</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;  <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>函数指针最常见的用途是<strong>回调</strong>：把”要执行的操作”作为参数传给别人，由对方在合适的时机调用：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">forEach</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size, <span class="type">int</span> (*action)(<span class="type">int</span>))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] = <span class="built_in">action</span>(arr[i]);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>现代 C++ 里，很多”传函数”的场景可以用 <code>std::function</code> 或
+lambda（更灵活、更安全），但理解函数指针是理解”函数也是一等公民”的基础。</p>
+</blockquote>
+<h3 id="c-风格类型转换">🔀 C++ 风格类型转换</h3>
+<p>第 2 章讲过 <code>static_cast</code>。C++ 提供四种风格化转换，比 C
+风格 <code>(int)x</code> 更明确、更安全：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>转换</th>
+<th>用途</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>static_cast</code></td>
+<td>常规类型转换（数值、父子类指针）</td>
+<td><code>static_cast&lt;int&gt;(3.7)</code></td>
+</tr>
+<tr>
+<td><code>const_cast</code></td>
+<td>去掉或加上 <code>const</code></td>
+<td><code>const_cast&lt;char*&gt;(s)</code></td>
+</tr>
+<tr>
+<td><code>dynamic_cast</code></td>
+<td>多态运行时安全检查（沿继承层级转）</td>
+<td><code>dynamic_cast&lt;Derived*&gt;(p)</code></td>
+</tr>
+<tr>
+<td><code>reinterpret_cast</code></td>
+<td>底层重新解释字节（危险，慎用）</td>
+<td><code>reinterpret_cast&lt;char*&gt;(&amp;x)</code></td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">double</span> d = <span class="number">3.7</span>;</span><br><span class="line"><span class="type">int</span> i = <span class="built_in">static_cast</span>&lt;<span class="type">int</span>&gt;(d);      <span class="comment">// 3，截断小数</span></span><br><span class="line"></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> n = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>* p = <span class="built_in">const_cast</span>&lt;<span class="type">int</span>*&gt;(&amp;n);    <span class="comment">// 去掉 const（慎用，修改可能未定义）</span></span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>C 风格 <code>(int)x</code></th>
+<th><code>static_cast&lt;int&gt;(x)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>意图</td>
+<td>模糊，什么都能转</td>
+<td>明确是”常规转换”</td>
+</tr>
+<tr>
+<td>编译器检查</td>
+<td>基本不检查</td>
+<td>类型不兼容时编译报错</td>
+</tr>
+<tr>
+<td>可读性</td>
+<td>看不出要转成什么类型</td>
+<td>一目了然</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>优先用 C++
+风格转换：代码意图清晰，编译器能帮你抓住错误。<code>reinterpret_cast</code>
+和 <code>const_cast</code> 属于”知道自己在干什么”才用的工具。</p>
+</blockquote>
+<h3 id="异常">🚨 异常</h3>
+<h4 id="基本语法">基本语法</h4>
+<p>异常用于把错误从”发生的地方”传递到”能处理的地方”：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdexcept&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">double</span> <span class="title">divide</span><span class="params">(<span class="type">double</span> a, <span class="type">double</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (b == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">throw</span> <span class="built_in">runtime_error</span>(<span class="string">&quot;除以零&quot;</span>);   <span class="comment">// 抛出异常</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> a / b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="type">double</span> r = <span class="built_in">divide</span>(<span class="number">10</span>, <span class="number">0</span>);</span><br><span class="line">        cout &lt;&lt; r &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">catch</span> (<span class="type">const</span> exception&amp; e) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;出错：&quot;</span> &lt;&lt; e.<span class="built_in">what</span>() &lt;&lt; endl;   <span class="comment">// 出错：除以零</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>throw</code> 把异常对象抛出去，<code>try</code>
+块里出现异常后，程序沿调用栈向上找匹配的
+<code>catch</code>，找到就进入处理，找不到程序会终止。</p>
+<h4 id="资源安全">资源安全</h4>
+<p>异常和 RAII（第 9
+章）是天生一对：抛出异常时会”栈展开”，栈上所有局部对象都会被自动析构。所以资源只要交给
+RAII
+对象（<code>vector</code>、<code>unique_ptr</code>、文件流等），即使中途抛异常也会被正确释放。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">process</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v</span><span class="params">(<span class="number">100</span>)</span></span>;   <span class="comment">// RAII：异常时自动释放</span></span><br><span class="line">    <span class="comment">// 如果这里抛异常，v 的析构函数照常执行</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>反过来，如果靠手动 <code>new</code>/<code>delete</code>
+管理资源，异常路径上的 <code>delete</code>
+很容易被跳过。这就是为什么现代 C++ 强调”RAII + 异常”组合。</p>
+</blockquote>
+<h3 id="shared_ptr共享所有权">🤝 shared_ptr：共享所有权</h3>
+<p>第 9 章的 <code>unique_ptr</code>
+是独占所有权：一块内存只属于一个指针。<code>shared_ptr</code>
+则允许多个指针<strong>共享</strong>同一块内存，靠<strong>引用计数</strong>管理：每多一个持有者计数加一，每少一个减一，计数归零才真正释放内存。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    shared_ptr&lt;<span class="type">int</span>&gt; a = <span class="built_in">make_shared</span>&lt;<span class="type">int</span>&gt;(<span class="number">42</span>);</span><br><span class="line">    shared_ptr&lt;<span class="type">int</span>&gt; b = a;      <span class="comment">// b 和 a 共享，计数变成 2</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; *a &lt;&lt; endl;         <span class="comment">// 42</span></span><br><span class="line">    cout &lt;&lt; a.<span class="built_in">use_count</span>() &lt;&lt; endl;   <span class="comment">// 2</span></span><br><span class="line"></span><br><span class="line">    b.<span class="built_in">reset</span>();                  <span class="comment">// b 放弃持有，计数回到 1</span></span><br><span class="line">    <span class="comment">// a 离开作用域时计数归零，内存才被释放</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th><code>unique_ptr</code></th>
+<th><code>shared_ptr</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>所有权</td>
+<td>独占</td>
+<td>共享</td>
+</tr>
+<tr>
+<td>复制</td>
+<td>禁止，只能移动</td>
+<td>可以复制，计数加一</td>
+</tr>
+<tr>
+<td>释放时机</td>
+<td>析构即释放</td>
+<td>最后一个持有者析构才释放</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>默认首选</td>
+<td>确实需要共享时</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>原则：<strong>默认用
+<code>unique_ptr</code></strong>，只有当多个地方确实需要共同持有同一对象时才换
+<code>shared_ptr</code>。</p>
+</blockquote>
+<h3 id="weak_ptr打破循环引用">👀 weak_ptr：打破循环引用</h3>
+<h4 id="循环引用问题">循环引用问题</h4>
+<p><code>shared_ptr</code> 的一个陷阱：两个对象互相持有对方的
+<code>shared_ptr</code>，双方的引用计数永远不会归零，内存永远不释放。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Node</span> &#123;</span><br><span class="line">    shared_ptr&lt;Node&gt; next;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">auto</span> a = <span class="built_in">make_shared</span>&lt;Node&gt;();</span><br><span class="line">    <span class="keyword">auto</span> b = <span class="built_in">make_shared</span>&lt;Node&gt;();</span><br><span class="line">    a-&gt;next = b;</span><br><span class="line">    b-&gt;next = a;      <span class="comment">// 互相持有：a 和 b 的计数都至少是 2，永远释放不了</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[a] --&gt;|持有 b| B[b]
+    B --&gt;|持有 a| A
+</code>
+</pre>
+<h4 id="weak_ptr-的解法">weak_ptr 的解法</h4>
+<p><code>weak_ptr</code>
+是”旁观者”：它可以指向对象，但<strong>不增加引用计数</strong>，也不拥有对象。要访问对象时，先
+<code>lock()</code> 临时得到一个 <code>shared_ptr</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Node</span> &#123;</span><br><span class="line">    weak_ptr&lt;Node&gt; next;   <span class="comment">// 改用 weak_ptr：不增加计数</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">auto</span> a = <span class="built_in">make_shared</span>&lt;Node&gt;();</span><br><span class="line">    <span class="keyword">auto</span> b = <span class="built_in">make_shared</span>&lt;Node&gt;();</span><br><span class="line">    a-&gt;next = b;</span><br><span class="line">    b-&gt;next = a;           <span class="comment">// 计数各为 1，离开作用域正常释放</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>观察用法：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">weak_ptr&lt;<span class="type">int</span>&gt; w = a;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (<span class="keyword">auto</span> sp = w.<span class="built_in">lock</span>()) &#123;</span><br><span class="line">    <span class="comment">// lock 成功：对象还活着，sp 是临时 shared_ptr</span></span><br><span class="line">    cout &lt;&lt; *sp &lt;&lt; endl;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 对象已被释放</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th><code>shared_ptr</code></th>
+<th><code>weak_ptr</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>所有权</td>
+<td>有</td>
+<td>无</td>
+</tr>
+<tr>
+<td>引用计数</td>
+<td>增加</td>
+<td>不增加</td>
+</tr>
+<tr>
+<td>访问对象</td>
+<td>直接</td>
+<td>先 <code>lock()</code></td>
+</tr>
+<tr>
+<td>用途</td>
+<td>持有共享资源</td>
+<td>打破循环引用、缓存观察</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CMake 是编译器</td>
+<td>CMake 生成构建文件，编译仍由 <code>g++</code>/<code>clang</code>
+完成</td>
+</tr>
+<tr>
+<td>模板在运行时判断类型</td>
+<td>模板在编译期实例化，每种类型生成一份代码</td>
+</tr>
+<tr>
+<td>异常会破坏资源安全</td>
+<td>配合 RAII，栈展开时自动析构，异常反而安全</td>
+</tr>
+<tr>
+<td><code>shared_ptr</code> 越多越好</td>
+<td>共享所有权容易循环引用，能用 <code>unique_ptr</code> 就用它</td>
+</tr>
+<tr>
+<td><code>weak_ptr</code> 可以直接访问对象</td>
+<td><code>weak_ptr</code> 不拥有对象，必须先 <code>lock()</code>
+再访问</td>
+</tr>
+<tr>
+<td>循环引用只是浪费一点内存</td>
+<td>计数永不归零，内存永久泄漏，必须用 <code>weak_ptr</code> 打破</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>拓展选学是一组常用拼图：CMake 管构建，模板写泛型，lambda
+就地定义函数，移动语义搬运资源，函数指针把函数当数据，类型转换用 C++
+风格，异常配 RAII 保证资源安全，<code>shared_ptr</code>
+共享所有权，<code>weak_ptr</code> 打破循环引用。</p>
+</blockquote>
+<p>到这里，C/C++
+入门系列的主线就收尾了：从编译环境、基础语法、函数、指针、引用，到结构体、类与对象、动态内存、STL、面向对象进阶、文件
+IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下来无论是深入某个专题，还是直接上手项目，都已有足够的地基。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/CMake/" rel="tag"># CMake</a>
+              <a href="/tags/C/" rel="tag"># C</a>
+              <a href="/tags/C/" rel="tag"># C++</a>
+              <a href="/tags/%E7%BC%96%E7%A8%8B%E5%85%A5%E9%97%A8/" rel="tag"># 编程入门</a>
+              <a href="/tags/%E6%99%BA%E8%83%BD%E6%8C%87%E9%92%88/" rel="tag"># 智能指针</a>
+              <a href="/tags/%E6%A8%A1%E6%9D%BF/" rel="tag"># 模板</a>
+              <a href="/tags/%E5%BC%82%E5%B8%B8/" rel="tag"># 异常</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/b8d3f6a1/" rel="prev" title="C&#x2F;C++ 入门：多文件工程">
+                  <i class="fa fa-angle-left"></i> C/C++ 入门：多文件工程
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/d9e4b7a3/" rel="next" title="C&#x2F;C++ 入门：数组">
+                  C/C++ 入门：数组 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">368k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">11:09</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

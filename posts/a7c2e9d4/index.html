@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="程序跑完数据就没了，想”留到下次”就得把数据写进文件；文件 IO 流（file stream）就是 C++ 读写文件的通道。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="C&#x2F;C++ 入门：文件 IO 流">
+<meta property="og:url" content="https://iamzihao.github.io/posts/a7c2e9d4/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="程序跑完数据就没了，想”留到下次”就得把数据写进文件；文件 IO 流（file stream）就是 C++ 读写文件的通道。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-08-28T03:30:00.000Z">
+<meta property="article:modified_time" content="2026-08-28T02:58:50.013Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="C">
+<meta property="article:tag" content="C++">
+<meta property="article:tag" content="编程入门">
+<meta property="article:tag" content="文件">
+<meta property="article:tag" content="文件流">
+<meta property="article:tag" content="序列化">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/a7c2e9d4/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/a7c2e9d4/","path":"posts/a7c2e9d4/","title":"C/C++ 入门：文件 IO 流"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>C/C++ 入门：文件 IO 流 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%96%87%E4%BB%B6%E6%B5%81%E7%9A%84%E5%9F%BA%E6%9C%AC%E6%A8%A1%E5%9E%8B"><span class="nav-number">2.</span> <span class="nav-text">🧩 文件流的基本模型</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%96%87%E4%BB%B6%E8%BE%93%E5%85%A5%E8%BE%93%E5%87%BA"><span class="nav-number">3.</span> <span class="nav-text">🛠️ 文件输入输出</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%86%99%E6%96%87%E4%BB%B6ofstream"><span class="nav-number">3.1.</span> <span class="nav-text">写文件：ofstream</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%BB%E6%96%87%E4%BB%B6ifstream"><span class="nav-number">3.2.</span> <span class="nav-text">读文件：ifstream</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%B8%B8%E7%94%A8%E6%89%93%E5%BC%80%E6%A8%A1%E5%BC%8F"><span class="nav-number">3.3.</span> <span class="nav-text">常用打开模式</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%96%87%E6%9C%AC%E6%96%87%E4%BB%B6%E8%AF%BB%E5%86%99"><span class="nav-number">4.</span> <span class="nav-text">📝 文本文件读写</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%80%90%E8%A1%8C%E8%AF%BB%E5%8F%96"><span class="nav-number">4.1.</span> <span class="nav-text">逐行读取</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%86%99%E5%85%A5"><span class="nav-number">4.2.</span> <span class="nav-text">格式化写入</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BA%8C%E8%BF%9B%E5%88%B6%E6%96%87%E4%BB%B6%E8%AF%BB%E5%86%99"><span class="nav-number">5.</span> <span class="nav-text">🧱 二进制文件读写</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E7%94%A8%E6%B3%95"><span class="nav-number">5.1.</span> <span class="nav-text">基本用法</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%87%8D%E8%A6%81%E9%99%90%E5%88%B6"><span class="nav-number">5.2.</span> <span class="nav-text">重要限制</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%B9%E8%B1%A1%E6%8C%81%E4%B9%85%E5%8C%96"><span class="nav-number">6.</span> <span class="nav-text">💾 对象持久化</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AD%97%E6%AE%B5%E5%BA%8F%E5%88%97%E5%8C%96%E6%96%87%E6%9C%AC%E6%96%B9%E6%A1%88"><span class="nav-number">6.1.</span> <span class="nav-text">字段序列化：文本方案</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%89%88%E6%9C%AC%E5%85%BC%E5%AE%B9%E6%84%8F%E8%AF%86"><span class="nav-number">6.2.</span> <span class="nav-text">版本兼容意识</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%94%99%E8%AF%AF%E5%A4%84%E7%90%86"><span class="nav-number">7.</span> <span class="nav-text">⚠️ 错误处理</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%89%93%E5%BC%80%E5%A4%B1%E8%B4%A5"><span class="nav-number">7.1.</span> <span class="nav-text">打开失败</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%BB%E5%86%99%E7%8A%B6%E6%80%81"><span class="nav-number">7.2.</span> <span class="nav-text">读写状态</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%B7%AF%E5%BE%84%E9%97%AE%E9%A2%98"><span class="nav-number">7.3.</span> <span class="nav-text">路径问题</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">72</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">44</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">180</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/a7c2e9d4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="C&#x2F;C++ 入门：文件 IO 流 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          C/C++ 入门：文件 IO 流
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-08-28 11:30:00 / Modified: 10:58:50" itemprop="dateCreated datePublished" datetime="2026-08-28T11:30:00+08:00">2026-08-28</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B%E5%9F%BA%E7%A1%80/" itemprop="url" rel="index"><span itemprop="name">编程基础</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B%E5%9F%BA%E7%A1%80/C-C/" itemprop="url" rel="index"><span itemprop="name">C/C++</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>5.4k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>10 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>程序跑完数据就没了，想”留到下次”就得把数据写进文件；文件 IO 流（file
+stream）就是 C++ 读写文件的通道。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件流（file stream）</td>
+<td>把文件当成数据流的输入输出对象</td>
+<td>读写文件的通道</td>
+</tr>
+<tr>
+<td><code>ifstream</code></td>
+<td>输入文件流，从文件读数据</td>
+<td>读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td>输出文件流，向文件写数据</td>
+<td>写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td>可读可写的文件流</td>
+<td>读写</td>
+</tr>
+<tr>
+<td>文本文件</td>
+<td>以字符形式存储，人能直接阅读</td>
+<td>记事本能打开</td>
+</tr>
+<tr>
+<td>二进制文件</td>
+<td>按内存中的字节原样存储</td>
+<td>紧凑、机器可读</td>
+</tr>
+<tr>
+<td>序列化（serialization）</td>
+<td>把对象转成可存储/传输的字节序列</td>
+<td>对象存盘</td>
+</tr>
+<tr>
+<td>反序列化（deserialization）</td>
+<td>从字节序列恢复出对象</td>
+<td>从盘恢复对象</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
+<p>之前用的 <code>cout</code>、<code>cin</code>
+是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[程序] --&gt; B[ofstream 输出流]
+    B --&gt; C[文件]
+    C --&gt; D[ifstream 输入流]
+    D --&gt; A
+</code>
+</pre>
+<table>
+<thead>
+<tr>
+<th>流对象</th>
+<th>头文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ifstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>从文件读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>向文件写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>既读又写</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
+<h4 id="写文件ofstream">写文件：ofstream</h4>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>ofstream</code>
+默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
+<h4 id="读文件ifstream">读文件：ifstream</h4>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>close()</code>
+也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
+<code>close()</code>
+能让”文件何时关闭”更清晰，也方便在同一个作用域里重新打开别的文件。</p>
+</blockquote>
+<h4 id="常用打开模式">常用打开模式</h4>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ios::in</code></td>
+<td>读模式（<code>ifstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::out</code></td>
+<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::app</code></td>
+<td>追加写</td>
+</tr>
+<tr>
+<td><code>ios::binary</code></td>
+<td>二进制模式</td>
+</tr>
+<tr>
+<td><code>ios::trunc</code></td>
+<td>打开即清空文件</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文本文件读写">📝 文本文件读写</h3>
+<h4 id="逐行读取">逐行读取</h4>
+<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>getline</code>
+读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
+<h4 id="格式化写入">格式化写入</h4>
+<p>文本写入就是”把要保存的字段拼成可读文本”：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>写出的文件内容：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
+<p>反过来读回时，用 <code>getline</code> 按行读，再用
+<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
+<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
+<h4 id="基本用法">基本用法</h4>
+<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
+<code>read</code>/<code>write</code> 操作：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>write</code>/<code>read</code> 的参数都是”字符指针 +
+字节数”，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
+转换。</p>
+<h4 id="重要限制">重要限制</h4>
+<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
+<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><code>string</code>、<code>vector</code>
+内部管理堆内存，把整个对象字节写进文件，存进去的是”指针地址”，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
+<table>
+<thead>
+<tr>
+<th>数据</th>
+<th>二进制直接读写</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code>、<code>double</code>、POD 结构体</td>
+<td>可以</td>
+<td>字节布局稳定</td>
+</tr>
+<tr>
+<td><code>string</code>、<code>vector</code></td>
+<td>不行</td>
+<td>内部有指针，要序列化</td>
+</tr>
+</tbody>
+</table>
+<h3 id="对象持久化">💾 对象持久化</h3>
+<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
+<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
+<p>把对象的每个字段转成文本，逐字段保存：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
+<h4 id="版本兼容意识">版本兼容意识</h4>
+<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是”老文件还能被新程序读”的基础意识。</p>
+<blockquote>
+<p>序列化是很大的话题，工程里常用 JSON、protobuf
+等现成格式。入门阶段先理解”把字段存下来、再读回来”这件事本身。</p>
+</blockquote>
+<h3 id="错误处理">⚠️ 错误处理</h3>
+<h4 id="打开失败">打开失败</h4>
+<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="读写状态">读写状态</h4>
+<p>流对象内部记录着状态标志：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>good()</code></td>
+<td>一切正常</td>
+</tr>
+<tr>
+<td><code>eof()</code></td>
+<td>读到文件末尾（正常情况）</td>
+</tr>
+<tr>
+<td><code>fail()</code></td>
+<td>操作失败，比如类型不匹配、打开失败</td>
+</tr>
+<tr>
+<td><code>bad()</code></td>
+<td>严重错误，比如底层 IO 故障</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>把”读取操作本身”当作判断条件，是最稳妥的写法。</p>
+<h4 id="路径问题">路径问题</h4>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>相对路径</td>
+<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
+</tr>
+<tr>
+<td>绝对路径</td>
+<td>最稳妥，但换机器要改</td>
+</tr>
+<tr>
+<td>目录不存在</td>
+<td>文件流不会自动创建目录，先建目录再打开</td>
+</tr>
+<tr>
+<td>权限不足</td>
+<td>只读文件用写模式打开会失败，先检查权限</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件一定能打开成功</td>
+<td>路径、权限、目录都可能失败，必须检查打开结果</td>
+</tr>
+<tr>
+<td><code>string</code> 可以直接二进制 <code>write</code></td>
+<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
+</tr>
+<tr>
+<td>忘写 <code>close()</code> 会立刻出问题</td>
+<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
+</tr>
+<tr>
+<td>读到 EOF 是错误</td>
+<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
+</tr>
+<tr>
+<td>二进制数据用文本模式读写没关系</td>
+<td>二进制文件要加
+<code>ios::binary</code>，否则可能被换行符转换破坏</td>
+</tr>
+<tr>
+<td>文件格式随便定，反正自己用</td>
+<td>加版本号，为以后格式变更留余地</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
+写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
+POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
+</blockquote>
+<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
+的又一次体现；配合第 10 章的
+<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/C/" rel="tag"># C</a>
+              <a href="/tags/C/" rel="tag"># C++</a>
+              <a href="/tags/%E7%BC%96%E7%A8%8B%E5%85%A5%E9%97%A8/" rel="tag"># 编程入门</a>
+              <a href="/tags/%E6%96%87%E4%BB%B6/" rel="tag"># 文件</a>
+              <a href="/tags/%E6%96%87%E4%BB%B6%E6%B5%81/" rel="tag"># 文件流</a>
+              <a href="/tags/%E5%BA%8F%E5%88%97%E5%8C%96/" rel="tag"># 序列化</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/f5a1c8d3/" rel="prev" title="C&#x2F;C++ 入门：面向对象进阶">
+                  <i class="fa fa-angle-left"></i> C/C++ 入门：面向对象进阶
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/b8d3f6a1/" rel="next" title="C&#x2F;C++ 入门：多文件工程">
+                  C/C++ 入门：多文件工程 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">368k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">11:09</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

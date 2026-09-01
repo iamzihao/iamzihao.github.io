@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="你写了几年代码，却可能从来没想过：main() 到底是谁调进来的？在 Rust OS 的世界里，这个问题会把你一路从 std 拽到 _start，从 crt0 拽到裸机 target。本文把这整条知识链整理成一份可复用的笔记。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust OS 入门：从 main 到 _start">
+<meta property="og:url" content="https://iamzihao.github.io/posts/76bb2795/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="你写了几年代码，却可能从来没想过：main() 到底是谁调进来的？在 Rust OS 的世界里，这个问题会把你一路从 std 拽到 _start，从 crt0 拽到裸机 target。本文把这整条知识链整理成一份可复用的笔记。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-01T02:26:48.000Z">
+<meta property="article:modified_time" content="2026-09-01T02:27:40.271Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="操作系统">
+<meta property="article:tag" content="Rust">
+<meta property="article:tag" content="no_std">
+<meta property="article:tag" content="裸机">
+<meta property="article:tag" content="链接器">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/76bb2795/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/76bb2795/","path":"posts/76bb2795/","title":"Rust OS 入门：从 main 到 _start"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Rust OS 入门：从 main 到 _start | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#main-%E4%B8%8D%E6%98%AF%E7%A8%8B%E5%BA%8F%E7%9C%9F%E6%AD%A3%E7%9A%84%E5%85%A5%E5%8F%A3"><span class="nav-number">2.</span> <span class="nav-text">🧩 main()
+不是程序真正的入口</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#stdcore-%E4%B8%8E-no_std"><span class="nav-number">3.</span> <span class="nav-text">🧩 std、core 与
+no_std</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#no_std-%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.1.</span> <span class="nav-text">#![no_std] 做了什么</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#panicpanic_handler-%E4%B8%8E%E6%A0%88%E5%B1%95%E5%BC%80"><span class="nav-number">4.</span> <span class="nav-text">🧩
+Panic：panic_handler 与栈展开</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-no_std-%E5%90%8E%E5%BF%85%E9%A1%BB%E6%8F%90%E4%BE%9B-panic_handler"><span class="nav-number">4.1.</span> <span class="nav-text">为什么
+no_std 后必须提供 panic_handler</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#panic-%E4%B8%8E%E6%A0%88%E5%B1%95%E5%BC%80stack-unwinding"><span class="nav-number">4.2.</span> <span class="nav-text">Panic 与栈展开（Stack
+Unwinding）</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#no_main-%E4%B8%8E%E8%87%AA%E5%AE%9A%E4%B9%89%E5%85%A5%E5%8F%A3-_start"><span class="nav-number">5.</span> <span class="nav-text">🧩 #![no_main]
+与自定义入口 _start</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#start-%E7%9A%84%E5%87%A0%E4%B8%AA%E5%85%B3%E9%94%AE%E4%BF%AE%E9%A5%B0%E7%AC%A6"><span class="nav-number">5.1.</span> <span class="nav-text">_start
+的几个关键修饰符</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#crt0-%E4%B8%8E-_start-%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">6.</span> <span class="nav-text">🧩 crt0 与
+_start 的区别</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-rust-os-%E4%B8%8D%E8%A6%81-crt0"><span class="nav-number">6.1.</span> <span class="nav-text">为什么 Rust OS 不要
+crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%88%E4%BB%8E%E5%93%AA%E9%87%8C%E6%9D%A5"><span class="nav-number">7.</span> <span class="nav-text">🧩 栈从哪里来？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E4%B8%8E%E9%93%BE%E6%8E%A5%E9%94%99%E8%AF%AF"><span class="nav-number">8.</span> <span class="nav-text">🧩 链接器与链接错误</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%8E%E9%93%BE%E6%8E%A5%E5%99%A8%E7%9A%84%E5%88%86%E5%B7%A5"><span class="nav-number">8.1.</span> <span class="nav-text">编译器与链接器的分工</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E5%87%BA%E7%8E%B0%E9%93%BE%E6%8E%A5%E5%99%A8%E9%94%99%E8%AF%AF"><span class="nav-number">8.2.</span> <span class="nav-text">为什么会出现链接器错误</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%80%E7%A7%8D%E4%B8%B4%E6%97%B6%E6%96%B9%E6%A1%88%E6%89%8B%E5%8A%A8%E4%BC%A0%E9%93%BE%E6%8E%A5%E5%99%A8%E5%8F%82%E6%95%B0"><span class="nav-number">8.3.</span> <span class="nav-text">一种临时方案：手动传链接器参数</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%90%84%E5%B9%B3%E5%8F%B0%E5%8F%82%E6%95%B0%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E5%90%8C"><span class="nav-number">8.4.</span> <span class="nav-text">各平台参数为什么不同</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%8E%A8%E8%8D%90%E8%BF%99%E4%B8%AA%E6%96%B9%E6%B3%95"><span class="nav-number">8.5.</span> <span class="nav-text">为什么”不推荐”这个方法</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%AD%A3%E8%A7%A3bare-metal-target"><span class="nav-number">9.</span> <span class="nav-text">🧩 正解：Bare Metal Target</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#target-triple-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">9.1.</span> <span class="nav-text">Target Triple 是什么</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#host-%E4%B8%8E-target"><span class="nav-number">9.2.</span> <span class="nav-text">Host 与 Target</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E7%A7%8D%E5%90%AF%E5%8A%A8%E9%93%BE%E7%9A%84%E6%9C%80%E7%BB%88%E5%AF%B9%E6%AF%94"><span class="nav-number">10.</span> <span class="nav-text">🧩 两种启动链的最终对比</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%99%84--target-%E4%B8%8E---all-targets-%E4%B8%8D%E8%A6%81%E6%B7%B7"><span class="nav-number">10.1.</span> <span class="nav-text">⚠️ 附：--target
+与 --all-targets 不要混</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E5%9D%91rust-analyzer-%E6%8A%A5-panic_impl-%E9%87%8D%E5%A4%8D"><span class="nav-number">11.</span> <span class="nav-text">⚠️ 常见坑：rust-analyzer
+报 panic_impl 重复</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">72</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">44</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">180</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/76bb2795/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Rust OS 入门：从 main 到 _start | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Rust OS 入门：从 main 到 _start
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-01 10:26:48 / Modified: 10:27:40" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/" itemprop="url" rel="index"><span itemprop="name">计算机基础</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/Rust/" itemprop="url" rel="index"><span itemprop="name">Rust</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>6.2k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>11 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>你写了几年代码，却可能从来没想过：<code>main()</code>
+到底是谁调进来的？在 Rust OS 的世界里，这个问题会把你一路从
+<code>std</code> 拽到 <code>_start</code>，从 <code>crt0</code> 拽到裸机
+target。本文把这整条知识链整理成一份可复用的笔记。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
+Rust》系列教程（<a target="_blank" rel="noopener" href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>Rust 标准库，依赖操作系统提供文件、网络、线程、<code>println!</code>
+等能力</td>
+<td>站在 OS 肩膀上</td>
+</tr>
+<tr>
+<td><code>core</code></td>
+<td>不依赖操作系统的 Rust
+基础库：基本类型、<code>Option</code>/<code>Result</code>、<code>Iterator</code></td>
+<td>OS 里也能用的那一半</td>
+</tr>
+<tr>
+<td><code>no_std</code></td>
+<td>声明当前 crate 不自动链接 <code>std</code></td>
+<td>只用 <code>core</code></td>
+</tr>
+<tr>
+<td><code>panic_handler</code></td>
+<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
+<td>崩溃了怎么办</td>
+</tr>
+<tr>
+<td><code>crt0</code></td>
+<td>C Runtime 0，负责程序启动环境初始化的启动代码</td>
+<td>启动的”保洁员”</td>
+</tr>
+<tr>
+<td><code>_start</code></td>
+<td>程序真正的入口符号，由链接器定位</td>
+<td>一切从这开始</td>
+</tr>
+<tr>
+<td><code>no_main</code></td>
+<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
+<td>入口我自己定</td>
+</tr>
+<tr>
+<td>Target Triple</td>
+<td>描述目标平台的”架构-厂商-OS-ABI”四元组</td>
+<td>给谁编译</td>
+</tr>
+</tbody>
+</table>
+<h3 id="main-不是程序真正的入口">🧩 <code>main()</code>
+不是程序真正的入口</h3>
+<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
+是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
+<p>普通程序的实际调用链是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">OS Loader</span><br><span class="line">   ↓</span><br><span class="line">_start</span><br><span class="line">   ↓</span><br><span class="line">crt0</span><br><span class="line">   ↓</span><br><span class="line">Rust Runtime</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[&quot;操作系统 (OS)&quot;] --&gt; B[&quot;程序入口 _start&quot;]
+    B --&gt; C[&quot;crt0（初始化运行环境）&quot;]
+    C --&gt; D[&quot;Rust Runtime&quot;]
+    D --&gt; E[&quot;main()&quot;]
+</code>
+</pre>
+<p>也就是说：当 CPU 开始执行你的程序时，它进的不是
+<code>main()</code>，而是链接器指定的入口符号
+<code>_start</code>。<code>main()</code>
+只是这条链上”最后被调用”的那个普通函数。</p>
+<h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
+<code>no_std</code></h3>
+<p>Rust 标准库可以理解成两层：</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
+    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
+    S --&gt; C[&quot;core 核心库&quot;]
+    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
+    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
+</code>
+</pre>
+<p>关键理解：<strong><code>core</code>
+不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
+基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
+中。<code>std</code> 则建立在 <code>core</code>
+等基础设施之上，大量依赖操作系统提供的能力。</p>
+<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
+的输出最终要写到操作系统的 stdout：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">  std</span><br><span class="line">   ↓</span><br><span class="line">操作系统提供 stdout</span><br></pre></td></tr></table></figure>
+<p>而裸机环境下只有：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
+<p>没有 stdout。所以：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不使用 std，但仍然可以使用 core</span><br></pre></td></tr></table></figure>
+<h3 id="panicpanic_handler-与栈展开">🧩
+Panic：<code>panic_handler</code> 与栈展开</h3>
+<h4 id="为什么-no_std-后必须提供-panic_handler">为什么
+<code>no_std</code> 后必须提供 <code>panic_handler</code></h4>
+<p>最小程序：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
+<p>会报错：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
+<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
+时应该怎么办？</strong></p>
+<ul>
+<li>普通程序：<code>std</code>
+的运行时帮忙打印错误信息，然后栈展开或终止。</li>
+<li>裸机程序：没有这些设施，只能自己兜底。</li>
+</ul>
+<p>自己提供：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
+<code>-&gt; !</code>
+表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
+<h4 id="panic-与栈展开stack-unwinding">Panic 与栈展开（Stack
+Unwinding）</h4>
+<p>Rust 默认的 panic 策略是栈展开：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">stack unwinding（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
+<p>栈展开需要额外运行时支持，例如 Linux 的
+<code>libunwind</code>、Windows 的 SEH，而这些通常依赖操作系统环境。因此
+OS kernel 中通常直接改用 abort 策略：</p>
+<figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
+<p>即 panic 后<strong>直接终止</strong>，不做复杂的栈展开。</p>
+<h3 id="no_main-与自定义入口-_start">🧩 <code>#![no_main]</code>
+与自定义入口 <code>_start</code></h3>
+<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
+之后，又会出现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
+<p>原因前面已经说过：<code>main()</code> 不是 CPU 真正的入口点，它是由
+Rust runtime 调用的。<code>no_std</code> 下没有 Rust runtime 来调用
+<code>main()</code>，所以：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
+<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
+<code>main()</code>。然后自己定义入口：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="start-的几个关键修饰符"><code>_start</code>
+的几个关键修饰符</h4>
+<table>
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>修饰符</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#[unsafe(no_mangle)]</code></td>
+<td>关闭 name mangling，保证最终符号名就是 <code>_start</code></td>
+</tr>
+<tr>
+<td><code>pub</code></td>
+<td>符号对外可见，链接器/汇编器能找到它</td>
+</tr>
+<tr>
+<td><code>extern "C"</code></td>
+<td>使用 C ABI / calling convention</td>
+</tr>
+<tr>
+<td><code>-&gt; !</code></td>
+<td>永不返回：入口没有调用者，<code>return</code> 无处可去</td>
+</tr>
+</tbody>
+</table>
+<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
+名和类型信息的符号，例如 <code>fn start()</code> 可能变成
+<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
+<code>_start</code>，所以必须 <code>no_mangle</code>。</p>
+<h3 id="crt0-与-_start-的区别">🧩 <code>crt0</code> 与
+<code>_start</code> 的区别</h3>
+<p>这是最容易混淆的一对概念：</p>
+<ul>
+<li><strong><code>_start</code></strong>：一个具体的入口函数/符号，“从哪里开始”。</li>
+<li><strong><code>crt0</code></strong>：一套负责程序启动的 C runtime
+启动代码，“开始之后帮你做什么”。</li>
+</ul>
+<p>关系：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">crt0</span><br><span class="line">  └── 提供 _start</span><br><span class="line">        ↓</span><br><span class="line">      初始化环境（准备栈、获取 argc/argv、初始化部分运行时）</span><br><span class="line">        ↓</span><br><span class="line">      main()</span><br></pre></td></tr></table></figure>
+<p>一句话记忆：<code>_start = "从哪里开始"</code>，<code>crt0 = "开始之后帮你做什么"</code>。</p>
+<h4 id="为什么-rust-os-不要-crt0">为什么 Rust OS 不要
+<code>crt0</code>？</h4>
+<p>因为 <code>crt0</code> 假设下面有操作系统：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Linux</span><br><span class="line">  ↓</span><br><span class="line">crt0</span><br><span class="line">  ↓</span><br><span class="line">libc</span><br><span class="line">  ↓</span><br><span class="line">Rust</span><br></pre></td></tr></table></figure>
+<p>而 Rust OS 的启动链是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">硬件</span><br><span class="line">  ↓</span><br><span class="line">bootloader</span><br><span class="line">  ↓</span><br><span class="line">你的 kernel</span><br></pre></td></tr></table></figure>
+<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
+crt0</strong>。</p>
+<h3 id="栈从哪里来">🧩 栈从哪里来？</h3>
+<p>栈并不是”单纯申请一块内存，然后保存一个地址”，要分情况：</p>
+<ul>
+<li><strong>OS
+环境下</strong>：操作系统负责分配/映射虚拟内存、设置栈区域、设置 CPU
+栈指针寄存器（x86-64 上是 <code>RSP = 栈顶地址</code>），之后
+<code>push</code> / <code>call</code> / <code>sub rsp, ...</code> 都通过
+<code>RSP</code> 操作栈。</li>
+<li><strong>Rust OS 中</strong>：bootloader/kernel
+需要自己完成这部分初始化。</li>
+</ul>
+<p>所以可以记成：</p>
+<blockquote>
+<p><strong>栈本质上是一块内存区域，而 CPU 通过栈指针寄存器（x86-64 的
+<code>RSP</code>）知道当前栈在哪里。</strong></p>
+</blockquote>
+<p><code>_start</code> 之所以写 <code>loop &#123;&#125;</code> 而不是
+<code>return</code>，也是因为：程序入口没有调用者，栈上没有”返回地址”可供
+<code>return</code> 使用。</p>
+<h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
+<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
+</blockquote>
+<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
+<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
+之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
+target。它意味着”我要生成一个 Linux 用户程序”，于是链接器默认认为需要
+crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
+main，于是报：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
+<h4
+id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
+<p>含义：cargo → rustc → linker →
+<code>-nostartfiles</code>，告诉链接器<strong>不要自动加入 C startup
+files</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
+<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
+<table>
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 26%" />
+<col style="width: 21%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>平台</th>
+<th>可执行格式</th>
+<th>默认入口</th>
+<th>禁用 C startup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>ELF</td>
+<td><code>_start</code></td>
+<td><code>-nostartfiles</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>PE</td>
+<td><code>mainCRTStartup</code></td>
+<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>Mach-O</td>
+<td>自定义</td>
+<td><code>-e __start</code>（配合
+<code>-static</code>、<code>-nostartfiles</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
+<h4 id="为什么不推荐这个方法">为什么”不推荐”这个方法</h4>
+<p><code>-nostartfiles</code> 只是告诉链接器”别给我 crt0”，但你仍然在
+Linux 环境下运行。<code>_start</code> 里可能没有：</p>
+<ul>
+<li>初始化栈</li>
+<li>设置 TLS</li>
+<li>初始化运行时</li>
+<li>准备程序参数</li>
+<li>完成 libc 初始化</li>
+</ul>
+<p>结果往往是：<strong>编译成功，运行崩溃</strong>。因为你在”假装自己是
+Linux 程序”，却没有提供 Linux 程序应有的启动环境。</p>
+<h3 id="正解bare-metal-target">🧩 正解：Bare Metal Target</h3>
+<p>真正的方向是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
+<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">thumbv7em   → CPU 架构（ARM）</span><br><span class="line">none        → 没有操作系统</span><br></pre></td></tr></table></figure>
+<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
+<h4 id="target-triple-是什么">Target Triple 是什么</h4>
+<p>Rust 用 Target Triple 描述目标环境，例如
+<code>x86_64-unknown-linux-gnu</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
+<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
+就表示没有 OS。</p>
+<h4 id="host-与-target">Host 与 Target</h4>
+<ul>
+<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
+<li><strong>Target</strong>：你希望程序运行的机器，例如
+<code>x86_64-blog_os</code> 裸机 kernel。</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
+<p>这种”在一种平台上编译出另一种平台程序”的做法叫<strong>交叉编译（cross
+compilation）</strong>。</p>
+<h3 id="两种启动链的最终对比">🧩 两种启动链的最终对比</h3>
+<pre>
+<code class="mermaid">
+
+graph TD
+    subgraph 普通Rust程序
+        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
+        B1 --&gt; C1[&quot;ELF&#x2F;PE loader&quot;]
+        C1 --&gt; D1[&quot;crt0&quot;]
+        D1 --&gt; E1[&quot;Rust runtime&quot;]
+        E1 --&gt; F1[&quot;main()&quot;]
+    end
+    subgraph RustOS
+        A2[&quot;硬件&quot;] --&gt; B2[&quot;BIOS &#x2F; UEFI&quot;]
+        B2 --&gt; C2[&quot;Bootloader&quot;]
+        C2 --&gt; D2[&quot;初始化 CPU &#x2F; 栈&quot;]
+        D2 --&gt; E2[&quot;_start()&quot;]
+        E2 --&gt; F2[&quot;kernel_main()&quot;]
+        F2 --&gt; G2[&quot;你的操作系统&quot;]
+    end
+</code>
+</pre>
+<p>普通 Rust 程序要删掉的是 <code>std</code>、Rust
+runtime、<code>crt0</code> 这一整段”操作系统提供的环境”；Rust OS
+里，这一段的职责由 <strong>bootloader + kernel 自己承担</strong>。</p>
+<h4 id="附--target-与---all-targets-不要混">⚠️ 附：<code>--target</code>
+与 <code>--all-targets</code> 不要混</h4>
+<p>Cargo 中：</p>
+<ul>
+<li><code>--target</code>：<strong>编译目标平台</strong>，例如
+<code>x86_64-unknown-linux-gnu</code>。</li>
+<li><code>--all-targets</code>：Cargo package
+中要构建哪些类型的目标（library、binary、test、bench、example）。</li>
+</ul>
+<p>两者完全不是一个概念。</p>
+<h3 id="常见坑rust-analyzer-报-panic_impl-重复">⚠️ 常见坑：rust-analyzer
+报 <code>panic_impl</code> 重复</h3>
+<p>测试模式会自动引入 <code>std</code>，而你的 kernel 自己定义了
+<code>#[panic_handler]</code>，于是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">std        → panic_impl</span><br><span class="line">你的 kernel → panic_impl</span><br></pre></td></tr></table></figure>
+<p>报错：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">duplicate lang item `panic_impl`</span><br></pre></td></tr></table></figure>
+<p>解决：告诉 Cargo 这个 binary 不是普通测试程序：</p>
+<figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[[bin]]</span></span><br><span class="line"><span class="attr">name</span> = <span class="string">&quot;blog_os&quot;</span></span><br><span class="line"><span class="attr">test</span> = <span class="literal">false</span></span><br><span class="line"><span class="attr">bench</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><code>no_std</code> 是”不使用 Rust 标准库”；<code>no_main</code>
+是”不让 Rust 按普通程序方式处理 <code>main</code>“；<code>_start</code>
+是你自己定义的底层入口；<code>crt0</code>
+是普通用户程序启动时帮你完成环境初始化的启动代码；而真正写 OS 时，我们连
+<code>crt0</code> 都不要，而是让 <strong>bootloader + kernel
+自己负责启动环境</strong>。</p>
+</blockquote>
+<p>整条知识链的骨架：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">普通 Rust 程序（main → Rust runtime → crt0/_start → OS 环境）</span><br><span class="line">        ↓ 删除 std / runtime / crt0</span><br><span class="line">no_std + no_main</span><br><span class="line">        ↓</span><br><span class="line">自定义 _start</span><br><span class="line">        ↓</span><br><span class="line">bootloader + kernel 自己初始化环境</span><br><span class="line">        ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
+<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
+文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
+<ul>
+<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
+target="_blank" rel="noopener" href="https://os.phil-opp.com/freestanding-rust-binary/"
+class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
+<li>《Writing an OS in Rust》系列主页：<a
+target="_blank" rel="noopener" href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a></li>
+</ul>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"># 操作系统</a>
+              <a href="/tags/Rust/" rel="tag"># Rust</a>
+              <a href="/tags/no-std/" rel="tag"># no_std</a>
+              <a href="/tags/%E8%A3%B8%E6%9C%BA/" rel="tag"># 裸机</a>
+              <a href="/tags/%E9%93%BE%E6%8E%A5%E5%99%A8/" rel="tag"># 链接器</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/e2c8a5f6/" rel="prev" title="C&#x2F;C++ 入门：运算符重载与静态成员">
+                  <i class="fa fa-angle-left"></i> C/C++ 入门：运算符重载与静态成员
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">368k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">11:09</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

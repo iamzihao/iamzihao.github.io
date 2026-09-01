@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="代码写到一定规模，塞在单个 .cpp 里就会又长又乱；把代码拆成多个文件，是每个 C&#x2F;C++ 工程的第一步。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="C&#x2F;C++ 入门：多文件工程">
+<meta property="og:url" content="https://iamzihao.github.io/posts/b8d3f6a1/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="代码写到一定规模，塞在单个 .cpp 里就会又长又乱；把代码拆成多个文件，是每个 C&#x2F;C++ 工程的第一步。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-08-28T04:00:00.000Z">
+<meta property="article:modified_time" content="2026-08-30T02:57:29.329Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="C">
+<meta property="article:tag" content="C++">
+<meta property="article:tag" content="编程入门">
+<meta property="article:tag" content="头文件">
+<meta property="article:tag" content="编译单元">
+<meta property="article:tag" content="链接">
+<meta property="article:tag" content="工程结构">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/b8d3f6a1/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/b8d3f6a1/","path":"posts/b8d3f6a1/","title":"C/C++ 入门：多文件工程"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>C/C++ 入门：多文件工程 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E6%8B%86%E5%88%86%E6%96%87%E4%BB%B6"><span class="nav-number">2.</span> <span class="nav-text">🧩 为什么要拆分文件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%BA%90%E6%96%87%E4%BB%B6%E6%8B%86%E5%88%86%E5%A3%B0%E6%98%8E%E4%B8%8E%E5%AE%9E%E7%8E%B0%E5%88%86%E7%A6%BB"><span class="nav-number">3.</span> <span class="nav-text">📂 源文件拆分：声明与实现分离</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%A0%87%E5%87%86%E6%A8%A1%E5%BC%8F"><span class="nav-number">3.1.</span> <span class="nav-text">标准模式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A3%B0%E6%98%8E%E4%B8%8E%E5%AE%9A%E4%B9%89%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">3.2.</span> <span class="nav-text">声明与定义的区别</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%B4%E6%96%87%E4%BB%B6%E8%A7%84%E8%8C%83"><span class="nav-number">4.</span> <span class="nav-text">🛡️ 头文件规范</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#include-guard"><span class="nav-number">4.1.</span> <span class="nav-text">include guard</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#pragma-once"><span class="nav-number">4.2.</span> <span class="nav-text">#pragma once</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%9C%80%E5%B0%8F%E5%8C%85%E5%90%AB"><span class="nav-number">4.3.</span> <span class="nav-text">最小包含</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%8D%95%E5%85%83"><span class="nav-number">5.</span> <span class="nav-text">🧊 编译单元</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%9F%BA%E7%A1%80"><span class="nav-number">6.</span> <span class="nav-text">🔗 链接基础</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E5%B7%A5%E7%A8%8B%E9%94%99%E8%AF%AF"><span class="nav-number">7.</span> <span class="nav-text">⚠️ 常见工程错误</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BE%AA%E7%8E%AF%E5%8C%85%E5%90%AB"><span class="nav-number">7.1.</span> <span class="nav-text">循环包含</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%B4%E6%96%87%E4%BB%B6%E5%86%99%E5%AE%9E%E7%8E%B0"><span class="nav-number">7.2.</span> <span class="nav-text">头文件写实现</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%85%A8%E5%B1%80%E5%8F%98%E9%87%8F%E9%87%8D%E5%A4%8D%E5%AE%9A%E4%B9%89"><span class="nav-number">7.3.</span> <span class="nav-text">全局变量重复定义</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">72</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">44</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">180</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/b8d3f6a1/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="C&#x2F;C++ 入门：多文件工程 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          C/C++ 入门：多文件工程
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-08-28 12:00:00" itemprop="dateCreated datePublished" datetime="2026-08-28T12:00:00+08:00">2026-08-28</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-08-30 10:57:29" itemprop="dateModified" datetime="2026-08-30T10:57:29+08:00">2026-08-30</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B%E5%9F%BA%E7%A1%80/" itemprop="url" rel="index"><span itemprop="name">编程基础</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B%E5%9F%BA%E7%A1%80/C-C/" itemprop="url" rel="index"><span itemprop="name">C/C++</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>3.9k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>7 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>代码写到一定规模，塞在单个 <code>.cpp</code>
+里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>声明（declaration）</td>
+<td>告诉编译器”存在某个函数/变量”，不给出实现</td>
+<td>说存在</td>
+</tr>
+<tr>
+<td>定义（definition）</td>
+<td>给出函数体或变量本体</td>
+<td>说怎么做</td>
+</tr>
+<tr>
+<td>头文件</td>
+<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
+<td>接口</td>
+</tr>
+<tr>
+<td>源文件</td>
+<td>放实现的 <code>.cpp</code> 文件</td>
+<td>实现</td>
+</tr>
+<tr>
+<td>include guard</td>
+<td>防止头文件被重复包含的宏保护</td>
+<td>只包含一次</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>另一种防止重复包含的写法</td>
+<td>简化版守卫</td>
+</tr>
+<tr>
+<td>编译单元</td>
+<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
+<td>独立编译的单位</td>
+</tr>
+<tr>
+<td>符号（symbol）</td>
+<td>函数/变量的名字标识</td>
+<td>链接的钥匙</td>
+</tr>
+<tr>
+<td>未定义引用</td>
+<td>声明了但找不到实现的符号</td>
+<td><code>undefined reference</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
+<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
+可执行程序。多文件工程就是把”源码”这一步拆成多个文件，每个
+<code>.cpp</code> 单独编译成
+<code>.o</code>，最后由链接器拼成可执行程序。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp] --&gt; A1[main.o]
+    B[math.cpp] --&gt; B1[math.o]
+    C[utils.cpp] --&gt; C1[utils.o]
+    A1 --&gt; D[链接]
+    B1 --&gt; D
+    C1 --&gt; D
+    D --&gt; E[可执行程序]
+</code>
+</pre>
+<p>拆文件的收益：</p>
+<table>
+<thead>
+<tr>
+<th>好处</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>可读性</td>
+<td>每个文件只负责一块功能</td>
+</tr>
+<tr>
+<td>复用</td>
+<td>编译好的 <code>.o</code> 或库可以给别人用</td>
+</tr>
+<tr>
+<td>编译速度</td>
+<td>只改一个文件时，只需重编那一个</td>
+</tr>
+<tr>
+<td>协作</td>
+<td>多人各改各的文件，冲突少</td>
+</tr>
+</tbody>
+</table>
+<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
+<h4 id="标准模式">标准模式</h4>
+<p>一个模块通常拆成”头文件（声明）+ 源文件（实现）“两个文件。</p>
+<p>以一个小工具 <code>add</code> 为例：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译时把多个源文件一起交给编译器：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<p>也可以分步编译，先各自生成目标文件再链接：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
+<h4 id="声明与定义的区别">声明与定义的区别</h4>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>类型</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int add(int a, int b);</code></td>
+<td>声明</td>
+<td>告诉编译器”有这个函数”</td>
+</tr>
+<tr>
+<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
+<td>定义</td>
+<td>给出函数体</td>
+</tr>
+</tbody>
+</table>
+<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
+<code>#include "math.h"</code> 就能调用
+<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
+章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
+<h3 id="头文件规范">🛡️ 头文件规范</h3>
+<h4 id="include-guard">include guard</h4>
+<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
+<p>原理：第一次包含时定义 <code>MATH_H</code>
+并展开内容；之后再次包含时，<code>MATH_H</code>
+已存在，整个内容被跳过。</p>
+<h4 id="pragma-once">#pragma once</h4>
+<p>另一种写法更简洁：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>优点</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#ifndef</code> 守卫</td>
+<td>标准 C++，所有编译器都支持</td>
+<td>宏名要唯一，别重名</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>简单、不易写错</td>
+<td>非标准，但主流编译器都支持</td>
+</tr>
+</tbody>
+</table>
+<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
+<h4 id="最小包含">最小包含</h4>
+<p>头文件里尽量只 <code>#include</code>
+真正需要的内容，能不放就不放：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
+<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
+<h3 id="编译单元">🧊 编译单元</h3>
+<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
+<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
+    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
+</code>
+</pre>
+<p>理解”编译单元”是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
+<code>.cpp</code>
+都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
+<blockquote>
+<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
+<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
+</blockquote>
+<h3 id="链接基础">🔗 链接基础</h3>
+<p>编译阶段每个 <code>.cpp</code>
+独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
+<table>
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>链接错误</th>
+<th>原因</th>
+<th>解决</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>undefined reference</code>（未定义引用）</td>
+<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
+<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
+</tr>
+<tr>
+<td><code>multiple definition</code>（重复定义）</td>
+<td>同一个函数/全局变量被定义了两份</td>
+<td>定义只留一处，或把定义移出头文件</td>
+</tr>
+<tr>
+<td>找不到库</td>
+<td><code>-l</code> 参数写错或库未安装</td>
+<td>检查库名和链接参数</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
+<h4 id="循环包含">循环包含</h4>
+<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
+<code>a.h</code>，会形成死循环展开。include guard
+能挡住重复展开，但解决不了”互相依赖”本身。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
+<h4 id="头文件写实现">头文件写实现</h4>
+<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
+包含它，链接时就是重复定义：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
+<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
+<code>inline</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>inline</code>
+的字面意思是”内联”：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
+C++ 里，<code>inline</code>
+对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
+<code>.cpp</code>
+包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
+<blockquote>
+<p>现代编译器对”是否真的内联展开”有自己的判断，<code>inline</code>
+更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
+getter/setter）可以加 <code>inline</code>
+放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
+</blockquote>
+<h4 id="全局变量重复定义">全局变量重复定义</h4>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
+<p>正解是头文件里只声明，源文件里定义：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>头文件里可以随便写实现</td>
+<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
+包含会重复定义</td>
+</tr>
+<tr>
+<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
+<td>两种都可以，保持一种习惯即可</td>
+</tr>
+<tr>
+<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
+<td>最小包含，只用需要的</td>
+</tr>
+<tr>
+<td>链接错误也是编译器错误</td>
+<td>编译已通过，链接失败是符号重复或找不到</td>
+</tr>
+<tr>
+<td>全局变量定义放头文件没问题</td>
+<td>每个编译单元各有一份，链接报重复定义</td>
+</tr>
+<tr>
+<td><code>#include</code> 越多越好，反正不会错</td>
+<td>增加编译依赖和冲突面，保持最小包含</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>多文件工程的骨架是”头文件放声明、源文件放实现”；每个
+<code>.cpp</code> 独立编译成目标文件，链接器负责把符号拼起来；头文件要加
+include guard、保持最小包含，警惕重复定义和循环包含。</p>
+</blockquote>
+<p>到这一章，从第 1 章的”编译流程”到现在的”多文件工程”，已经把 C/C++
+工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
+管理这些编译命令。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/C/" rel="tag"># C</a>
+              <a href="/tags/C/" rel="tag"># C++</a>
+              <a href="/tags/%E7%BC%96%E7%A8%8B%E5%85%A5%E9%97%A8/" rel="tag"># 编程入门</a>
+              <a href="/tags/%E5%A4%B4%E6%96%87%E4%BB%B6/" rel="tag"># 头文件</a>
+              <a href="/tags/%E7%BC%96%E8%AF%91%E5%8D%95%E5%85%83/" rel="tag"># 编译单元</a>
+              <a href="/tags/%E9%93%BE%E6%8E%A5/" rel="tag"># 链接</a>
+              <a href="/tags/%E5%B7%A5%E7%A8%8B%E7%BB%93%E6%9E%84/" rel="tag"># 工程结构</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/a7c2e9d4/" rel="prev" title="C&#x2F;C++ 入门：文件 IO 流">
+                  <i class="fa fa-angle-left"></i> C/C++ 入门：文件 IO 流
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/c6e1a9f2/" rel="next" title="C&#x2F;C++ 入门：拓展选学">
+                  C/C++ 入门：拓展选学 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">368k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">11:09</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
