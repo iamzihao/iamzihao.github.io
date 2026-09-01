@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="你写了几年代码，却可能从来没想过：main() 到底是谁调进来的？在 Rust OS 的世界里，这个问题会把你一路从 std 拽到 _start，从 crt0 拽到裸机 target。本文把这整条知识链整理成一份可复用的笔记。">
+    <meta name="description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Rust OS 入门：从 main 到 _start">
 <meta property="og:url" content="https://iamzihao.github.io/posts/76bb2795/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="你写了几年代码，却可能从来没想过：main() 到底是谁调进来的？在 Rust OS 的世界里，这个问题会把你一路从 std 拽到 _start，从 crt0 拽到裸机 target。本文把这整条知识链整理成一份可复用的笔记。">
+<meta property="og:description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T02:26:48.000Z">
-<meta property="article:modified_time" content="2026-09-01T02:27:40.271Z">
+<meta property="article:modified_time" content="2026-09-01T02:33:42.381Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -278,7 +278,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-01 10:26:48 / Modified: 10:27:40" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
+      <time title="Created: 2026-09-01 10:26:48 / Modified: 10:33:42" itemprop="dateCreated datePublished" datetime="2026-09-01T10:26:48+08:00">2026-09-01</time>
     </span>
     <span class="post-meta-item">
       <span class="post-meta-item-icon">
@@ -308,14 +308,14 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.2k</span>
+      <span>6.4k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>11 mins.</span>
+      <span>12 mins.</span>
     </span>
 </div>
 
@@ -325,10 +325,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>你写了几年代码，却可能从来没想过：<code>main()</code>
-到底是谁调进来的？在 Rust OS 的世界里，这个问题会把你一路从
-<code>std</code> 拽到 <code>_start</code>，从 <code>crt0</code> 拽到裸机
-target。本文把这整条知识链整理成一份可复用的笔记。</p>
+    <div class="post-body" itemprop="articleBody"><p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉还是对自己对计算机的了解很有帮助，于是整理这份笔记。</p>
 <span id="more"></span>
 <blockquote>
 <p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
@@ -374,12 +371,15 @@ class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化�
 </tr>
 <tr>
 <td><code>crt0</code></td>
-<td>C Runtime 0，负责程序启动环境初始化的启动代码</td>
+<td>C Runtime
+0，负责程序启动环境初始化的启动代码，<strong>其中定义了入口符号
+<code>_start</code></strong></td>
 <td>启动的”保洁员”</td>
 </tr>
 <tr>
 <td><code>_start</code></td>
-<td>程序真正的入口符号，由链接器定位</td>
+<td>程序真正的入口符号，由链接器定位，<strong>定义在 crt0
+启动代码中</strong></td>
 <td>一切从这开始</td>
 </tr>
 <tr>
@@ -399,20 +399,19 @@ class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化�
 <p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
 是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
 <p>普通程序的实际调用链是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">OS Loader</span><br><span class="line">   ↓</span><br><span class="line">_start</span><br><span class="line">   ↓</span><br><span class="line">crt0</span><br><span class="line">   ↓</span><br><span class="line">Rust Runtime</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">OS Loader / 内核</span><br><span class="line">   ↓ 加载 ELF，跳转到入口点</span><br><span class="line">crt0（包含 _start，初始化运行环境）</span><br><span class="line">   ↓ 栈对齐 / argc / argv / TLS 等</span><br><span class="line">Rust Runtime / libc</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
 <pre>
 <code class="mermaid">
 
 graph TD
-    A[&quot;操作系统 (OS)&quot;] --&gt; B[&quot;程序入口 _start&quot;]
-    B --&gt; C[&quot;crt0（初始化运行环境）&quot;]
-    C --&gt; D[&quot;Rust Runtime&quot;]
-    D --&gt; E[&quot;main()&quot;]
+    A[&quot;OS Loader &#x2F; 内核&quot;] --&gt;|&quot;跳转到 ELF 入口点&quot;| B[&quot;crt0 中的 _start&quot;]
+    B --&gt;|&quot;初始化环境（栈 &#x2F; argc &#x2F; argv &#x2F; TLS）&quot;| C[&quot;Rust Runtime &#x2F; libc&quot;]
+    C --&gt; D[&quot;main()&quot;]
 </code>
 </pre>
 <p>也就是说：当 CPU 开始执行你的程序时，它进的不是
 <code>main()</code>，而是链接器指定的入口符号
-<code>_start</code>。<code>main()</code>
+<code>_start</code>（该符号由 crt0 启动代码定义）。<code>main()</code>
 只是这条链上”最后被调用”的那个普通函数。</p>
 <h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
 <code>no_std</code></h3>
@@ -523,17 +522,20 @@ Rust runtime 调用的。<code>no_std</code> 下没有 Rust runtime 来调用
 <code>_start</code> 的区别</h3>
 <p>这是最容易混淆的一对概念：</p>
 <ul>
-<li><strong><code>_start</code></strong>：一个具体的入口函数/符号，“从哪里开始”。</li>
+<li><strong><code>_start</code></strong>：一个具体的入口函数/符号，定义在
+crt0 启动代码中，“从哪里开始”。</li>
 <li><strong><code>crt0</code></strong>：一套负责程序启动的 C runtime
 启动代码，“开始之后帮你做什么”。</li>
 </ul>
-<p>关系：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">crt0</span><br><span class="line">  └── 提供 _start</span><br><span class="line">        ↓</span><br><span class="line">      初始化环境（准备栈、获取 argc/argv、初始化部分运行时）</span><br><span class="line">        ↓</span><br><span class="line">      main()</span><br></pre></td></tr></table></figure>
-<p>一句话记忆：<code>_start = "从哪里开始"</code>，<code>crt0 = "开始之后帮你做什么"</code>。</p>
+<p>关系：<strong>crt0 包含
+<code>_start</code></strong>——<code>_start</code> 不是 crt0
+之外的下一层，而是 crt0 里定义的那个入口函数：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">crt0</span><br><span class="line">  ├── 定义入口符号 _start（链接器从这里开始执行）</span><br><span class="line">  ├── 初始化环境（准备栈、获取 argc/argv、初始化部分运行时）</span><br><span class="line">  └── 调用 main()</span><br></pre></td></tr></table></figure>
+<p>一句话记忆：<code>_start = crt0 的入口点（从哪里开始）</code>，<code>crt0 = 包含 _start 的一整套启动代码（开始之后帮你做什么）</code>。</p>
 <h4 id="为什么-rust-os-不要-crt0">为什么 Rust OS 不要
 <code>crt0</code>？</h4>
 <p>因为 <code>crt0</code> 假设下面有操作系统：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Linux</span><br><span class="line">  ↓</span><br><span class="line">crt0</span><br><span class="line">  ↓</span><br><span class="line">libc</span><br><span class="line">  ↓</span><br><span class="line">Rust</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Linux（提供 syscall 等基础能力）</span><br><span class="line">  ↓</span><br><span class="line">crt0（内含 _start，初始化后把控制权交给 libc）</span><br><span class="line">  ↓</span><br><span class="line">libc（__libc_start_main）</span><br><span class="line">  ↓</span><br><span class="line">Rust</span><br></pre></td></tr></table></figure>
 <p>而 Rust OS 的启动链是：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">硬件</span><br><span class="line">  ↓</span><br><span class="line">bootloader</span><br><span class="line">  ↓</span><br><span class="line">你的 kernel</span><br></pre></td></tr></table></figure>
 <p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
@@ -703,7 +705,7 @@ runtime、<code>crt0</code> 这一整段”操作系统提供的环境”；Rust
 自己负责启动环境</strong>。</p>
 </blockquote>
 <p>整条知识链的骨架：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">普通 Rust 程序（main → Rust runtime → crt0/_start → OS 环境）</span><br><span class="line">        ↓ 删除 std / runtime / crt0</span><br><span class="line">no_std + no_main</span><br><span class="line">        ↓</span><br><span class="line">自定义 _start</span><br><span class="line">        ↓</span><br><span class="line">bootloader + kernel 自己初始化环境</span><br><span class="line">        ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">普通 Rust 程序（main ← Rust runtime ← crt0（内含 _start）← OS 环境）</span><br><span class="line">        ↓ 删除 std / runtime / crt0</span><br><span class="line">no_std + no_main</span><br><span class="line">        ↓</span><br><span class="line">自定义 _start</span><br><span class="line">        ↓</span><br><span class="line">bootloader + kernel 自己初始化环境</span><br><span class="line">        ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
 <p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
 文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
 <ul>
@@ -776,7 +778,7 @@ class="uri">https://os.phil-opp.com/</a></li>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:09</span>
+    <span title="Reading time total">11:10</span>
   </span>
 </div>
 <div class="busuanzi-count">
