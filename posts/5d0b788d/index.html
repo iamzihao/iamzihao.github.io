@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="按下电源键的那一秒，CPU 读到的第一条指令到底是什么？在 RAM 空空如也、操作系统还没影子的情况下，电脑是怎么一步步把控制权交给你的 Rust 内核的？">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust OS 入门：从按下电源键到内核接管">
+<meta property="og:url" content="https://iamzihao.github.io/posts/5d0b788d/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="按下电源键的那一秒，CPU 读到的第一条指令到底是什么？在 RAM 空空如也、操作系统还没影子的情况下，电脑是怎么一步步把控制权交给你的 Rust 内核的？">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-01T09:09:52.000Z">
+<meta property="article:modified_time" content="2026-09-01T09:10:42.223Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="操作系统">
+<meta property="article:tag" content="启动流程">
+<meta property="article:tag" content="x86">
+<meta property="article:tag" content="实模式">
+<meta property="article:tag" content="Rust">
+<meta property="article:tag" content="Bootloader">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/5d0b788d/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/5d0b788d/","path":"posts/5d0b788d/","title":"Rust OS 入门：从按下电源键到内核接管"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Rust OS 入门：从按下电源键到内核接管 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%BB%BA%E7%AB%8B%E4%B8%80%E5%BC%A0%E5%90%AF%E5%8A%A8%E5%9C%B0%E5%9B%BE"><span class="nav-number">2.</span> <span class="nav-text">🗺️ 先建立一张”启动地图”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E5%88%9A%E9%80%9A%E7%94%B5%E6%97%B6%E4%BB%80%E4%B9%88%E9%83%BD%E4%B8%8D%E7%9F%A5%E9%81%93"><span class="nav-number">3.</span> <span class="nav-text">🔌 CPU 刚通电时，什么都不知道</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%9B%BA%E4%BB%B6%E5%AD%98%E5%9C%A8%E5%93%AA%E9%87%8C"><span class="nav-number">3.1.</span> <span class="nav-text">固件存在哪里</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#cpu-%E6%80%8E%E4%B9%88%E6%89%BE%E5%88%B0%E5%9B%BA%E4%BB%B6"><span class="nav-number">3.2.</span> <span class="nav-text">CPU 怎么找到固件</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bios-%E4%B8%8A%E7%94%B5%E5%90%8E%E5%B9%B2%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">🧬 BIOS 上电后干什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8E%BB%E5%93%AA%E9%87%8C%E6%89%BE%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F"><span class="nav-number">4.1.</span> <span class="nav-text">去哪里找操作系统</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%A4%84%E5%A4%84%E5%BC%BA%E8%B0%83512-%E5%AD%97%E8%8A%82"><span class="nav-number">5.</span> <span class="nav-text">📦 为什么处处强调”512 字节”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E9%98%B6%E6%AE%B5-bootloader%E6%8E%A5%E5%8A%9B%E6%A3%92"><span class="nav-number">6.</span> <span class="nav-text">🪜 两阶段 Bootloader：接力棒</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E7%9A%84%E6%A8%A1%E5%BC%8F%E5%8F%98%E8%BF%8116-%E4%BD%8D-32-%E4%BD%8D-64-%E4%BD%8D"><span class="nav-number">7.</span> <span class="nav-text">🕰️ CPU 的模式变迁：16 位 → 32
+位 → 64 位</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%84%E5%AD%98%E5%99%A8%E9%80%9F%E8%A7%88rip-%E4%B8%8E-rsp"><span class="nav-number">8.</span> <span class="nav-text">🧮 寄存器速览：RIP 与 RSP</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#rip%E6%8C%87%E4%BB%A4%E6%8C%87%E9%92%88"><span class="nav-number">8.1.</span> <span class="nav-text">RIP：指令指针</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#rsp%E6%A0%88%E6%8C%87%E9%92%88"><span class="nav-number">8.2.</span> <span class="nav-text">RSP：栈指针</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84kernel-%E9%9C%80%E8%A6%81%E7%9F%A5%E9%81%93%E6%9C%BA%E5%99%A8%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">9.</span> <span class="nav-text">🗺️ 内存映射：Kernel
+需要知道机器长什么样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bootimage%E6%8A%8A%E5%90%AF%E5%8A%A8%E7%BB%86%E8%8A%82%E8%97%8F%E8%B5%B7%E6%9D%A5"><span class="nav-number">10.</span> <span class="nav-text">🔗 bootimage：把启动细节藏起来</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0-os-%E5%BA%94%E6%9C%89%E7%9A%84%E5%B1%82%E6%AC%A1%E6%84%9F"><span class="nav-number">11.</span> <span class="nav-text">🏗️ 学习 OS 应有的”层次感”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">73</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">44</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">181</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/5d0b788d/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Rust OS 入门：从按下电源键到内核接管 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Rust OS 入门：从按下电源键到内核接管
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-01 17:09:52 / Modified: 17:10:42" itemprop="dateCreated datePublished" datetime="2026-09-01T17:09:52+08:00">2026-09-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/" itemprop="url" rel="index"><span itemprop="name">计算机基础</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/Rust/" itemprop="url" rel="index"><span itemprop="name">Rust</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>6.2k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>11 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>按下电源键的那一秒，CPU 读到的第一条指令到底是什么？在 RAM
+空空如也、操作系统还没影子的情况下，电脑是怎么一步步把控制权交给你的
+Rust 内核的？</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a target="_blank" rel="noopener" href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的前置铺垫，回答”按下电源键到
+Kernel 接管电脑”之间发生的事。它正好接上上一篇《<a
+href="/posts/76bb2795/">Rust OS 入门：从 main 到
+_start</a>》里没展开的启动链路。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>固件（firmware）</td>
+<td>比操作系统更早运行的软件，存在主板 Flash 上，断电不消失</td>
+<td>启动第一棒</td>
+</tr>
+<tr>
+<td>BIOS / UEFI</td>
+<td>最常见的固件，负责自检、初始化硬件、找启动盘</td>
+<td>找盘、点火</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>Power-On Self Test，开机自检</td>
+<td>体检</td>
+</tr>
+<tr>
+<td>Boot Sector</td>
+<td>磁盘第一个扇区，BIOS 把它加载进内存并执行</td>
+<td>512 字节的入口</td>
+</tr>
+<tr>
+<td>Bootloader</td>
+<td>负责找 Kernel、加载 Kernel、配置 CPU 的程序</td>
+<td>BIOS 与 Kernel 的交接员</td>
+</tr>
+<tr>
+<td>实模式 / 保护模式 / 长模式</td>
+<td>CPU 的 16 位 / 32 位 / 64 位运行模式</td>
+<td>越新越强</td>
+</tr>
+<tr>
+<td>寄存器（register）</td>
+<td>CPU 内部极快的小块存储</td>
+<td>CPU 的便签</td>
+</tr>
+<tr>
+<td>RIP</td>
+<td>指令指针，指向下一条要执行的指令</td>
+<td>程序计数器</td>
+</tr>
+<tr>
+<td>RSP</td>
+<td>栈指针，指向当前栈顶</td>
+<td>栈顶在哪</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>描述内存地址空间中哪些区域可用的表</td>
+<td>内存地图</td>
+</tr>
+<tr>
+<td>bootimage</td>
+<td>把 Bootloader 和你的 Kernel 打包成可启动镜像的工具</td>
+<td>一键出镜像</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="先建立一张启动地图">🗺️ 先建立一张”启动地图”</h3>
+<p>不急着逐句抠细节，先记住整条链路：</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[&quot;按下电源键&quot;] --&gt; B[&quot;CPU Reset&quot;]
+    B --&gt; C[&quot;固件 BIOS &#x2F; UEFI&lt;br&#x2F;&gt;（存在主板 Flash 上）&quot;]
+    C --&gt; D[&quot;POST 自检 + 初始化硬件&quot;]
+    D --&gt; E[&quot;找可引导的存储介质&quot;]
+    E --&gt; F[&quot;读取磁盘第一个扇区&lt;br&#x2F;&gt;（512 字节 Boot Sector）&quot;]
+    F --&gt; G[&quot;第一阶段 Bootloader&quot;]
+    G --&gt; H[&quot;第二阶段 Bootloader&quot;]
+    H --&gt; I[&quot;配置 CPU：16 位 → 32 位 → 64 位&quot;]
+    I --&gt; J[&quot;把 Kernel 加载到 RAM&quot;]
+    J --&gt; K[&quot;跳转到 Kernel 入口，移交控制权&quot;]
+    K --&gt; L[&quot;Kernel 接管电脑&quot;]
+</code>
+</pre>
+<p>整篇文章就是在解释这张图里的每一个箭头。下面按顺序拆开。</p>
+<hr />
+<h3 id="cpu-刚通电时什么都不知道">🔌 CPU 刚通电时，什么都不知道</h3>
+<p>想象一台刚通电的电脑：RAM 里空空如也，没有操作系统，没有程序。那么
+CPU 要去哪里找第一条指令？</p>
+<p>答案是<strong>固件（firmware）</strong>——一个比操作系统更早运行的软件。</p>
+<p>平时我们写个 Rust 程序
+<code>cargo run</code>，背后已经有操作系统、进程、虚拟内存、文件系统、硬盘驱动层层伺候着。但问题是：</p>
+<blockquote>
+<p>操作系统还没启动的时候，谁来负责启动操作系统？</p>
+</blockquote>
+<p>这时候不能指望 Linux / Windows，于是主板上的固件出场了。最常见的就是
+<strong>BIOS</strong> 和 <strong>UEFI</strong>。</p>
+<h4 id="固件存在哪里">固件存在哪里</h4>
+<p>固件<strong>不在 RAM
+里</strong>，而是存储在主板上的一块<strong>非易失性 Flash
+存储器</strong>中：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">                 主板</span><br><span class="line">┌─────────────────────────────────┐</span><br><span class="line">│                                 │</span><br><span class="line">│       CPU                        │</span><br><span class="line">│        │                         │</span><br><span class="line">│       RAM                        │</span><br><span class="line">│                                 │</span><br><span class="line">│       Flash ROM                 │</span><br><span class="line">│       ┌───────────────┐         │</span><br><span class="line">│       │ BIOS / UEFI   │         │</span><br><span class="line">│       │ firmware      │         │</span><br><span class="line">│       └───────────────┘         │</span><br><span class="line">│                                 │</span><br><span class="line">└─────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>所以断电之后：RAM 内容消失，BIOS / UEFI
+的内容还在。这就是为什么你关机以后 BIOS 并不会”消失”。</p>
+<h4 id="cpu-怎么找到固件">CPU 怎么找到固件</h4>
+<p>这是 x86 CPU 的设计规定：上电后 CPU
+进入一种特殊的初始状态，从一个<strong>预定义的地址</strong>开始取指令并执行。这个地址就是固件代码所在的位置。</p>
+<p>这里引出了启动流程中第一个关键概念——<strong>指令指针（Instruction
+Pointer，IP / RIP）</strong>：</p>
+<blockquote>
+<p>“CPU 下一条要执行哪条指令？”</p>
+</blockquote>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">内存：</span><br><span class="line"></span><br><span class="line">0x1000    mov ...</span><br><span class="line">0x1003    add ...</span><br><span class="line">0x1006    jmp ...</span><br><span class="line">           ↑</span><br><span class="line">          IP</span><br></pre></td></tr></table></figure>
+<p>CPU 不断重复”读指令 → 执行 → IP
+移到下一条”，启动的本质就是这条执行链，而链条最开头的指令来自固件。</p>
+<hr />
+<h3 id="bios-上电后干什么">🧬 BIOS 上电后干什么</h3>
+<p>BIOS 的工作可以拆成四步：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">BIOS</span><br><span class="line"> │</span><br><span class="line"> ├── 检查 CPU</span><br><span class="line"> ├── 检查 RAM</span><br><span class="line"> ├── 初始化硬件</span><br><span class="line"> └── 找有没有可以启动的磁盘</span><br></pre></td></tr></table></figure>
+<p>前几步合称 <strong>POST（Power-On Self
+Test，开机自检）</strong>——你开机时看到的厂商
+Logo、听到的提示音、内存检查，都属于这个阶段。</p>
+<h4 id="去哪里找操作系统">去哪里找操作系统</h4>
+<p>老式 BIOS
+的方法非常朴素：<strong>去磁盘的最开始找</strong>。磁盘第一个区域叫<strong>启动扇区（Boot
+Sector）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">磁盘</span><br><span class="line"></span><br><span class="line">0</span><br><span class="line">↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ Boot Sector         │ ← BIOS 找这里</span><br><span class="line">├─────────────────────┤</span><br><span class="line">│                     │</span><br><span class="line">│                     │</span><br><span class="line">│                     │</span><br><span class="line">│ Operating System    │</span><br><span class="line">│                     │</span><br><span class="line">└─────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>BIOS 把这个扇区的内容加载进内存，然后 CPU 开始执行里面的代码。</p>
+<hr />
+<h3 id="为什么处处强调512-字节">📦 为什么处处强调”512 字节”</h3>
+<p>传统 BIOS
+启动时，读取的是磁盘的<strong>第一个扇区（sector）</strong>，而传统磁盘扇区大小是
+<strong>512 bytes</strong>。所以 Bootloader 的起点只有 512
+字节的舞台：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">磁盘第一个扇区</span><br><span class="line"></span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│                              │</span><br><span class="line">│      Bootloader              │</span><br><span class="line">│                              │</span><br><span class="line">│      最多 512 bytes          │</span><br><span class="line">│                              │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>512 字节写一个像样的 Bootloader
+都很勉强，更别说写操作系统了。于是才有了两阶段设计。</p>
+<hr />
+<h3 id="两阶段-bootloader接力棒">🪜 两阶段 Bootloader：接力棒</h3>
+<p><strong>第一阶段 Bootloader（First Stage
+Bootloader）</strong>只有几百字节，它的全部任务就是：找到第二阶段
+Bootloader，把它加载到 RAM，然后跳过去执行。</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[&quot;BIOS&quot;] --&gt;|&quot;读取第一扇区，加载进 RAM&quot;| B[&quot;第一阶段 Bootloader&lt;br&#x2F;&gt;（512 字节）&quot;]
+    B --&gt;|&quot;找到并加载&quot;| C[&quot;第二阶段 Bootloader&quot;]
+    C --&gt;|&quot;找到 Kernel，加载到 RAM&quot;| D[&quot;Kernel&quot;]
+    D --&gt;|&quot;接管电脑&quot;| E[&quot;操作系统&quot;]
+</code>
+</pre>
+<p>为什么不直接让 BIOS 加载 Kernel？因为 BIOS
+太古老、功能太简单——它只负责”我找到一个启动扇区了，这里面的程序你自己玩吧”，剩下的事全部交给
+Bootloader。</p>
+<p><strong>第二阶段 Bootloader</strong> 干的事才是重头戏：</p>
+<ol type="1">
+<li><strong>找 Kernel</strong>：Kernel 在磁盘/SSD 上，Bootloader
+要知道它在哪。</li>
+<li><strong>把 Kernel 放进 RAM</strong>：CPU
+不能直接执行硬盘上的普通文件，必须先读到内存里。比如把
+<code>kernel.bin</code> 加载到 <code>0x100000</code>，再让 CPU
+跳过去执行。</li>
+<li><strong>配置 CPU</strong>：把 CPU 从启动时的 16 位状态配置成 64
+位状态（见下一节）。</li>
+<li><strong>收集机器信息传给
+Kernel</strong>：内存多大、哪些区域可用（见”内存映射”一节）。</li>
+</ol>
+<hr />
+<h3 id="cpu-的模式变迁16-位-32-位-64-位">🕰️ CPU 的模式变迁：16 位 → 32
+位 → 64 位</h3>
+<p>这是启动流程中最容易懵的部分：你的电脑明明是 64 位
+CPU，为什么启动时非得从 16 位开始？</p>
+<p>答案是一个著名的历史包袱：<strong>x86
+为了兼容几十年前的软件，保留了古老的启动机制</strong>。</p>
+<p>最早的 x86 CPU（8086，1981 年的 IBM PC 用的就是它）是 16
+位处理器。后来 Intel 一路升级到 80286、80386……直到现代 x86-64，但 Intel
+没有把老东西扔掉，而是尽量兼容旧软件。所以今天的 CPU 上电后，仍然按照
+1980 年代的规则启动。</p>
+<p>“模式”可以粗略理解为：<strong>CPU
+当前按哪种规则解释指令、访问内存</strong>。你需要知道的三个模式：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>模式</th>
+<th>位数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>实模式（Real Mode）</td>
+<td>16 位</td>
+<td>CPU 上电后的默认状态，启动的起点</td>
+</tr>
+<tr>
+<td>保护模式（Protected Mode）</td>
+<td>32 位</td>
+<td>80386 引入，有内存保护、特权级</td>
+</tr>
+<tr>
+<td>长模式（Long Mode）</td>
+<td>64 位</td>
+<td>现在的 x86-64 运行模式，你的 Rust Kernel 在这里跑</td>
+</tr>
+</tbody>
+</table>
+<p>所以启动过程是：</p>
+<pre>
+<code class="mermaid">
+
+graph LR
+    A[&quot;16-bit Real Mode&lt;br&#x2F;&gt;（上电默认）&quot;] --&gt; B[&quot;32-bit Protected Mode&quot;]
+    B --&gt; C[&quot;开启 PAE &#x2F; 配置页表 &#x2F; 设置 EFER&quot;]
+    C --&gt; D[&quot;64-bit Long Mode&quot;]
+    D --&gt; E[&quot;Rust Kernel&quot;]
+</code>
+</pre>
+<p><strong>为什么不能从 16 位直接跳到 64 位？</strong> 因为 x86
+的历史设计就是这样，中间必须经过一系列”意图并不明显的步骤”——比如往某个寄存器写入魔术数字：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">mov eax, cr0</span><br><span class="line">or eax, 1</span><br><span class="line">mov cr0, eax</span><br></pre></td></tr></table></figure>
+<p>看到
+<code>CR0</code>、<code>CR3</code>、<code>CR4</code>、<code>EFER</code>、<code>PAE</code>、页表、GDT
+这些词先别慌。你现在<strong>不需要全部理解</strong>，只需要知道：</p>
+<blockquote>
+<p>Bootloader 通过修改 CPU 的特殊寄存器和内存管理结构，把 CPU
+从”兼容老系统的状态”配置成现代 64 位状态。</p>
+</blockquote>
+<p>这正是教程作者推荐 <code>bootimage</code>、而不是让你手写 Bootloader
+的原因。</p>
+<hr />
+<h3 id="寄存器速览rip-与-rsp">🧮 寄存器速览：RIP 与 RSP</h3>
+<p>寄存器（register）就是 <strong>CPU
+内部非常非常快的一小块存储空间</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mov rax, 42    ; 把 42 放进 RAX</span><br><span class="line">add rax, 10    ; RAX = RAX + 10  →  最终 RAX = 52</span><br></pre></td></tr></table></figure>
+<p>其中有两个和启动流程强相关的寄存器。</p>
+<h4 id="rip指令指针">RIP：指令指针</h4>
+<blockquote>
+<p>“CPU 下一条要执行的指令在哪？”</p>
+</blockquote>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">内存</span><br><span class="line"></span><br><span class="line">0x1000   mov rax, 1</span><br><span class="line">0x1005   add rax, 2</span><br><span class="line">0x1008   hlt</span><br></pre></td></tr></table></figure>
+<p>RIP 指向 <code>0x1000</code>，CPU 就取这条指令执行，然后 RIP 移到
+<code>0x1005</code>，如此往复。启动的最后一步——“跳转到 Kernel
+入口”——本质就是：</p>
+<blockquote>
+<p>RIP = Kernel 的入口地址</p>
+</blockquote>
+<p>CPU 从此不再执行 Bootloader，而开始执行 Kernel。这就是教程里说的
+<strong>control is transferred to the kernel</strong>。</p>
+<h4 id="rsp栈指针">RSP：栈指针</h4>
+<p>RSP（Stack
+Pointer）指向<strong>当前栈顶地址</strong>，它直接回应上一篇遗留的问题：“创建栈的底层操作是什么？申请内存空间？还是只是给寄存器存一个地址？”</p>
+<p>答案是：<strong>两者都有，但概念上是分开的</strong>。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">先准备一块 RAM：</span><br><span class="line"></span><br><span class="line">0x800000</span><br><span class="line">    ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│              │</span><br><span class="line">│   Stack      │</span><br><span class="line">│              │</span><br><span class="line">└──────────────┘</span><br><span class="line">0x801000</span><br></pre></td></tr></table></figure>
+<p>然后告诉 CPU 把这块内存当栈用：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mov rsp, 0x801000</span><br></pre></td></tr></table></figure>
+<p><strong>分配栈空间 ≠ 设置 RSP</strong>。前者是准备内存，后者只是告诉
+CPU”把这块内存当栈用”。Bootloader 把 CPU 切到 64 位之后，在跳进 Kernel
+之前，就负责把 RSP 设置好。</p>
+<hr />
+<h3 id="内存映射kernel-需要知道机器长什么样">🗺️ 内存映射：Kernel
+需要知道机器长什么样</h3>
+<p>假设电脑有 16GB
+RAM，你可能会天真地认为地址空间里全是可用的内存。实际上不是——里面混杂着可用
+RAM、BIOS/firmware 区域、MMIO（硬件映射）、保留区域等。</p>
+<p>Kernel 必须知道：<strong>哪些地址对应可用
+RAM，哪些区域不能碰</strong>。这个信息就记录在<strong>内存映射（Memory
+Map）</strong>里，由 BIOS 提供、Bootloader 整理后传给 Kernel。</p>
+<p>为什么 Kernel 自己不去问 BIOS？因为 BIOS
+只是<strong>启动阶段的固件接口</strong>，现代操作系统并不是一直依赖它。可以这样理解整个交接关系：</p>
+<blockquote>
+<p><strong>Bootloader 是 BIOS 和 Kernel 之间的”交接员”</strong>——BIOS
+提供硬件信息 → Bootloader 整理 → 传给 Kernel → Kernel 接管。</p>
+</blockquote>
+<hr />
+<h3 id="bootimage把启动细节藏起来">🔗 bootimage：把启动细节藏起来</h3>
+<p>理解了上面的复杂度，就知道为什么教程作者说”我们不会讲解如何编写自己的引导程序”——他在保护你，不让你现在就被
+BIOS + 汇编 + x86 启动细节折磨。</p>
+<p><code>bootimage</code> 工具帮你生成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Bootloader</span><br><span class="line">     +</span><br><span class="line">你的 Kernel</span><br><span class="line">     ↓</span><br><span class="line">bootable image（可启动镜像）</span><br></pre></td></tr></table></figure>
+<p>使用方式：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cargo bootimage</span><br></pre></td></tr></table></figure>
+<p>得到 <code>bootimage.bin</code> 后，用 QEMU 模拟一台电脑启动它：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-x86_64 -drive format=raw,file=bootimage.bin</span><br></pre></td></tr></table></figure>
+<hr />
+<h3 id="学习-os-应有的层次感">🏗️ 学习 OS 应有的”层次感”</h3>
+<p>现在千万不要一头扎进
+<code>CR0</code>、<code>CR3</code>、<code>EFER</code>、GDT、IDT、页表、PAE
+的细节里，否则非常容易崩。先建立这张地图：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">① 硬件</span><br><span class="line">│</span><br><span class="line">├── CPU / RAM / SSD / 主板</span><br><span class="line">│</span><br><span class="line">② Firmware</span><br><span class="line">│</span><br><span class="line">├── BIOS / UEFI</span><br><span class="line">│</span><br><span class="line">③ Bootloader</span><br><span class="line">│</span><br><span class="line">├── 找 Kernel</span><br><span class="line">├── 加载 Kernel</span><br><span class="line">├── 配置 CPU（16 → 32 → 64 位）</span><br><span class="line">└── 给 Kernel 提供硬件信息</span><br><span class="line">│</span><br><span class="line">④ Kernel</span><br><span class="line">│</span><br><span class="line">├── 内存管理 / 中断 / 进程 / 调度</span><br><span class="line">├── 文件系统 / 驱动</span><br><span class="line">│</span><br><span class="line">⑤ 用户空间</span><br><span class="line">│</span><br><span class="line">├── Shell / 应用程序 / 你的 Rust 程序</span><br></pre></td></tr></table></figure>
+<p>你正在看的 Rust OS 教程，恰好处于 <strong>③ Bootloader → ④
+Kernel</strong> 这个交界处。</p>
+<p>最后送一个类比——把电脑启动想象成<strong>一家公司换老板</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">BIOS：  &quot;公司开门了，我检查一下水电、员工、设备。&quot;</span><br><span class="line"></span><br><span class="line">Bootloader：</span><br><span class="line">       &quot;我找到新老板的办公室了。先把办公室准备好，</span><br><span class="line">        顺便把公司的资产清单交给他。&quot;</span><br><span class="line"></span><br><span class="line">Kernel：&quot;现在我接管公司。以后内存、CPU、设备、进程都归我管。&quot;</span><br><span class="line"></span><br><span class="line">User Programs：</span><br><span class="line">       &quot;老板，我想运行 Chrome / 游戏 / Rust 程序。&quot;</span><br></pre></td></tr></table></figure>
+<p>所以 <strong>BIOS → Bootloader → Kernel</strong>
+不是三个独立的程序，而是<strong>电脑启动控制权逐级交接的过程</strong>。</p>
+<hr />
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>按下电源键后，CPU 从主板固件开始取指令，BIOS
+自检并找到启动扇区，Bootloader 接力加载 Kernel 并把 CPU 从 16
+位一路配置到 64 位，最后跳转到 Kernel
+入口——控制权逐级交接，直到内核接管电脑。</p>
+</blockquote>
+<p>真正值得花时间打通的下一条链是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">BIOS</span><br><span class="line"> ↓</span><br><span class="line">Bootloader</span><br><span class="line"> ↓</span><br><span class="line">64-bit Long Mode</span><br><span class="line"> ↓</span><br><span class="line">设置 RSP（栈）</span><br><span class="line"> ↓</span><br><span class="line">设置 RIP（跳转到入口）</span><br><span class="line"> ↓</span><br><span class="line">_start</span><br><span class="line"> ↓</span><br><span class="line">Rust 初始化</span><br><span class="line"> ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
+<p>这条链的后半段——<code>_start</code>、栈、寄存器、<code>no_std</code>、<code>#[no_mangle]</code>、链接器脚本——正是上一篇《<a
+href="/posts/76bb2795/">Rust OS 入门：从 main 到
+_start</a>》的内容。两篇连起来读，启动的完整图景就通了。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"># 操作系统</a>
+              <a href="/tags/%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/" rel="tag"># 启动流程</a>
+              <a href="/tags/x86/" rel="tag"># x86</a>
+              <a href="/tags/%E5%AE%9E%E6%A8%A1%E5%BC%8F/" rel="tag"># 实模式</a>
+              <a href="/tags/Rust/" rel="tag"># Rust</a>
+              <a href="/tags/Bootloader/" rel="tag"># Bootloader</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/76bb2795/" rel="prev" title="Rust OS 入门：从 main 到 _start">
+                  <i class="fa fa-angle-left"></i> Rust OS 入门：从 main 到 _start
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">377k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">11:25</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
