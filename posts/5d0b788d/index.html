@@ -30,7 +30,7 @@
 <meta property="og:description" content="按下电源键的那一秒，CPU 读到的第一条指令到底是什么？在 RAM 空空如也、操作系统还没影子的情况下，电脑是怎么一步步把控制权交给你的 Rust 内核的？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T09:09:52.000Z">
-<meta property="article:modified_time" content="2026-09-01T09:10:42.223Z">
+<meta property="article:modified_time" content="2026-09-01T09:44:47.427Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="启动流程">
@@ -270,7 +270,7 @@
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-01 17:09:52 / Modified: 17:10:42" itemprop="dateCreated datePublished" datetime="2026-09-01T17:09:52+08:00">2026-09-01</time>
+      <time title="Created: 2026-09-01 17:09:52 / Modified: 17:44:47" itemprop="dateCreated datePublished" datetime="2026-09-01T17:09:52+08:00">2026-09-01</time>
     </span>
     <span class="post-meta-item">
       <span class="post-meta-item-icon">
@@ -300,14 +300,14 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.2k</span>
+      <span>6.5k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>11 mins.</span>
+      <span>12 mins.</span>
     </span>
 </div>
 
@@ -437,7 +437,7 @@ CPU 要去哪里找第一条指令？</p>
 <p>固件<strong>不在 RAM
 里</strong>，而是存储在主板上的一块<strong>非易失性 Flash
 存储器</strong>中：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">                 主板</span><br><span class="line">┌─────────────────────────────────┐</span><br><span class="line">│                                 │</span><br><span class="line">│       CPU                        │</span><br><span class="line">│        │                         │</span><br><span class="line">│       RAM                        │</span><br><span class="line">│                                 │</span><br><span class="line">│       Flash ROM                 │</span><br><span class="line">│       ┌───────────────┐         │</span><br><span class="line">│       │ BIOS / UEFI   │         │</span><br><span class="line">│       │ firmware      │         │</span><br><span class="line">│       └───────────────┘         │</span><br><span class="line">│                                 │</span><br><span class="line">└─────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">                 主板</span><br><span class="line">┌─────────────────────────────────┐</span><br><span class="line">│                                 │</span><br><span class="line">│       CPU                       │</span><br><span class="line">│        │                        │</span><br><span class="line">│       RAM                       │</span><br><span class="line">│                                 │</span><br><span class="line">│       Flash ROM                 │</span><br><span class="line">│       ┌───────────────┐         │</span><br><span class="line">│       │ BIOS / UEFI   │         │</span><br><span class="line">│       │ firmware      │         │</span><br><span class="line">│       └───────────────┘         │</span><br><span class="line">│                                 │</span><br><span class="line">└─────────────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>所以断电之后：RAM 内容消失，BIOS / UEFI
 的内容还在。这就是为什么你关机以后 BIOS 并不会”消失”。</p>
 <h4 id="cpu-怎么找到固件">CPU 怎么找到固件</h4>
@@ -470,7 +470,7 @@ Sector）</strong>：</p>
 启动时，读取的是磁盘的<strong>第一个扇区（sector）</strong>，而传统磁盘扇区大小是
 <strong>512 bytes</strong>。所以 Bootloader 的起点只有 512
 字节的舞台：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">磁盘第一个扇区</span><br><span class="line"></span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│                              │</span><br><span class="line">│      Bootloader              │</span><br><span class="line">│                              │</span><br><span class="line">│      最多 512 bytes          │</span><br><span class="line">│                              │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">磁盘第一个扇区</span><br><span class="line"></span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│                              │</span><br><span class="line">│      Bootloader              │</span><br><span class="line">│                              │</span><br><span class="line">│      最多 512 bytes           │</span><br><span class="line">│                              │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>512 字节写一个像样的 Bootloader
 都很勉强，更别说写操作系统了。于是才有了两阶段设计。</p>
 <hr />
@@ -500,14 +500,14 @@ Bootloader。</p>
 <code>kernel.bin</code> 加载到 <code>0x100000</code>，再让 CPU
 跳过去执行。</li>
 <li><strong>配置 CPU</strong>：把 CPU 从启动时的 16 位状态配置成 64
-位状态（见下一节）。</li>
+位状态。</li>
 <li><strong>收集机器信息传给
-Kernel</strong>：内存多大、哪些区域可用（见”内存映射”一节）。</li>
+Kernel</strong>：内存多大、哪些区域可用。</li>
 </ol>
 <hr />
 <h3 id="cpu-的模式变迁16-位-32-位-64-位">🕰️ CPU 的模式变迁：16 位 → 32
 位 → 64 位</h3>
-<p>这是启动流程中最容易懵的部分：你的电脑明明是 64 位
+<p>这是启动流程中最容易懵的部分：电脑明明是 64 位
 CPU，为什么启动时非得从 16 位开始？</p>
 <p>答案是一个著名的历史包袱：<strong>x86
 为了兼容几十年前的软件，保留了古老的启动机制</strong>。</p>
@@ -582,14 +582,24 @@ graph LR
 <p>“CPU 下一条要执行的指令在哪？”</p>
 </blockquote>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">内存</span><br><span class="line"></span><br><span class="line">0x1000   mov rax, 1</span><br><span class="line">0x1005   add rax, 2</span><br><span class="line">0x1008   hlt</span><br></pre></td></tr></table></figure>
+<p>注意三条指令的长度<strong>各不相同</strong>：<code>mov rax, 1</code>
+占 5 字节，<code>add rax, 2</code> 占 3 字节，<code>hlt</code> 只有 1
+字节。这正是 x86 的核心特性——<strong>变长指令集（variable-length
+instruction set）</strong>：指令长度不固定，短则 1 字节（如
+<code>hlt</code>），长则可达十几字节，具体长度取决于操作数、寻址方式等编码细节（上面只是示意图，实际编码长度以汇编器输出为准）。</p>
+<p>这跟 RISC-V、ARM 等<strong>定长指令集（fixed-length instruction
+set）</strong>不同——后者每条指令固定占 4
+字节，取指按固定步长推进即可。x86 的 CPU
+取完一条指令后，要靠<strong>解码</strong>算出这条指令到底占多长，才能把
+RIP 正确推进到下一条指令的起点。理解了这一点，再看”RIP 为什么能从
+<code>0x1000</code> 精确跳到 <code>0x1005</code>“就不会困惑了。</p>
 <p>RIP 指向 <code>0x1000</code>，CPU 就取这条指令执行，然后 RIP 移到
 <code>0x1005</code>，如此往复。启动的最后一步——“跳转到 Kernel
 入口”——本质就是：</p>
 <blockquote>
 <p>RIP = Kernel 的入口地址</p>
 </blockquote>
-<p>CPU 从此不再执行 Bootloader，而开始执行 Kernel。这就是教程里说的
-<strong>control is transferred to the kernel</strong>。</p>
+<p>CPU 从此不再执行 Bootloader，而开始执行 Kernel。</p>
 <h4 id="rsp栈指针">RSP：栈指针</h4>
 <p>RSP（Stack
 Pointer）指向<strong>当前栈顶地址</strong>，它直接回应上一篇遗留的问题：“创建栈的底层操作是什么？申请内存空间？还是只是给寄存器存一个地址？”</p>
@@ -713,7 +723,7 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:25</span>
+    <span title="Reading time total">11:26</span>
   </span>
 </div>
 <div class="busuanzi-count">
