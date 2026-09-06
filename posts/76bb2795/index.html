@@ -30,7 +30,7 @@
 <meta property="og:description" content="师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T02:26:48.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.123Z">
+<meta property="article:modified_time" content="2026-09-06T09:00:19.227Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -277,7 +277,7 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-06 17:00:19" itemprop="dateModified" datetime="2026-09-06T17:00:19+08:00">2026-09-06</time>
     </span>
 
   
@@ -294,14 +294,14 @@ crt0？</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>8.7k</span>
+      <span>8.4k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>16 mins.</span>
+      <span>15 mins.</span>
     </span>
 </div>
 
@@ -592,13 +592,6 @@ CPU 并不存在一个叫”栈”的东西。</p>
 <p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
 <code>pop</code> / <code>call</code> / <code>ret</code> /
 <code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
-<p>那么 <code>_start</code> 为什么写 <code>loop &#123;&#125;</code> 而不是
-<code>return</code>？因为 <code>_start</code> 是 ELF
-的程序入口，<strong>不是通过普通 <code>call</code>
-指令调用的函数</strong>，因此没有一个正常的调用者向它提供返回地址。若
-<code>_start</code> 返回，CPU
-会尝试按照函数返回约定取出返回地址继续执行，而入口环境并不保证存在这样的返回地址。因此这种程序入口通常定义为
-<code>-&gt; !</code>，并在结束后进入死循环、关机或其他不会返回的路径。</p>
 <h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
 <h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
@@ -731,8 +724,6 @@ graph TD
 用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
 自己承担。</p>
 </blockquote>
-<p>两条启动链的完整模型：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">普通 Linux 用户程序</span><br><span class="line">OS loader</span><br><span class="line">   ↓</span><br><span class="line">_start</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br><span class="line"></span><br><span class="line">Rust OS</span><br><span class="line">Firmware / boot environment</span><br><span class="line">   ↓</span><br><span class="line">Bootloader</span><br><span class="line">   ↓</span><br><span class="line">Kernel entry</span><br><span class="line">   ↓</span><br><span class="line">Kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
 <p>关键变化：</p>
 <table>
 <thead>

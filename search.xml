@@ -1269,110 +1269,6 @@ alt="image-20240919184721228" />
       </tags>
   </entry>
   <entry>
-    <title>前端浏览器缓存机制</title>
-    <url>/posts/50ac740b/</url>
-    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
-<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
-<span id="more"></span>
-<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
-<h4 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h4>
-<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
-<ul>
-<li><p><strong>Expires</strong>:
-一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
-<li><p><strong>Cache-Control</strong>:
-这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
-<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
-<ul>
-<li><code>public</code>:
-资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
-<li><code>private</code>:
-资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
-<li><code>no-cache</code>:
-资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
-<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
-<code>200 (from cache)</code>。</p>
-<h4 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
-Caching）</h4>
-<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
-<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
-<ul>
-<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
-<ul>
-<li><strong>Last-Modified</strong>:
-服务器在响应头中返回资源的最后修改时间。</li>
-<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
-<code>Last-Modified</code>
-时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-<li><strong>ETag &amp; If-None-Match</strong>:
-<ul>
-<li><strong>ETag</strong>:
-服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
-<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
-值。服务器比较该值与当前资源的 ETag，如果匹配则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
-<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
-<h4 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h4>
-<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
-JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
-<p><strong>典型用法</strong>：</p>
-<ul>
-<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
-<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
-标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
-</ul>
-<p><strong>总结</strong>：</p>
-<ul>
-<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
-<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
-<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
-</ul>
-<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
-<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
-<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
-是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
-文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
-<h4 id="cdn的工作原理">CDN的工作原理</h4>
-<ol type="1">
-<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
-<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
-<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
-<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
-</ol>
-<h4 id="cdn的主要优势">CDN的主要优势</h4>
-<ol type="1">
-<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
-<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
-<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
-<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
-<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
-</ol>
-<h4 id="cdn的使用场景">CDN的使用场景</h4>
-<ul>
-<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
-<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
-<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
-文件等，通过CDN可以提升资源加载速度。</li>
-</ul>
-<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
-]]></content>
-      <tags>
-        <tag>前端</tag>
-        <tag>浏览器</tag>
-        <tag>缓存</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>编码</title>
     <url>/posts/6f8a188e/</url>
     <content><![CDATA[<h2 id="编码">编码</h2>
@@ -1572,6 +1468,110 @@ JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件�
 ]]></content>
       <tags>
         <tag>编码</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>前端浏览器缓存机制</title>
+    <url>/posts/50ac740b/</url>
+    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
+<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
+<span id="more"></span>
+<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
+<h4 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h4>
+<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
+<ul>
+<li><p><strong>Expires</strong>:
+一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
+<li><p><strong>Cache-Control</strong>:
+这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
+<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
+<ul>
+<li><code>public</code>:
+资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
+<li><code>private</code>:
+资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
+<li><code>no-cache</code>:
+资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
+<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
+<code>200 (from cache)</code>。</p>
+<h4 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
+Caching）</h4>
+<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
+<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
+<ul>
+<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
+<ul>
+<li><strong>Last-Modified</strong>:
+服务器在响应头中返回资源的最后修改时间。</li>
+<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
+<code>Last-Modified</code>
+时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+<li><strong>ETag &amp; If-None-Match</strong>:
+<ul>
+<li><strong>ETag</strong>:
+服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
+<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
+值。服务器比较该值与当前资源的 ETag，如果匹配则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
+<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
+<h4 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h4>
+<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
+JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
+<p><strong>典型用法</strong>：</p>
+<ul>
+<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
+<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
+标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
+</ul>
+<p><strong>总结</strong>：</p>
+<ul>
+<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
+<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
+<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
+</ul>
+<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
+<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
+<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
+是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
+文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
+<h4 id="cdn的工作原理">CDN的工作原理</h4>
+<ol type="1">
+<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
+<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
+<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
+<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
+</ol>
+<h4 id="cdn的主要优势">CDN的主要优势</h4>
+<ol type="1">
+<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
+<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
+<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
+<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
+<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
+</ol>
+<h4 id="cdn的使用场景">CDN的使用场景</h4>
+<ul>
+<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
+<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
+<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
+文件等，通过CDN可以提升资源加载速度。</li>
+</ul>
+<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
+]]></content>
+      <tags>
+        <tag>前端</tag>
+        <tag>浏览器</tag>
+        <tag>缓存</tag>
       </tags>
   </entry>
   <entry>
@@ -7110,6 +7110,185 @@ NVBit“在哪些指令前，插入哪些函数调用”。</p>
       </tags>
   </entry>
   <entry>
+    <title>CMake 入门</title>
+    <url>/posts/233853f2/</url>
+    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
+Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
+IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
+或分别维护 VS/Xcode 工程，成本会直线上升。</p>
+<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
+需要的工程与命令。 <span id="more"></span></p>
+<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
+<ul>
+<li><p><strong>跨平台</strong>：一份
+<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
+Studio、Xcode）。</p></li>
+<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
+<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
+</ul>
+<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
+  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
+  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
+  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
+</code>
+</pre>
+<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
+<ul>
+<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
+<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
+调用本机构建器编译/链接）。</li>
+<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
+Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
+<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
+</ul>
+<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
+<ul>
+<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
+<code>.sln/.vcxproj</code>、Xcode
+<code>.xcodeproj</code>（由生成器决定）。</li>
+<li>CMake
+缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
+<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
+<code>configure_file()</code> 生成的配置头/源文件。</li>
+<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
+</ul>
+<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
+<ul>
+<li>可执行文件：如 <code>build/hello</code>（Windows 为
+<code>build/hello.exe</code>）。</li>
+<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
+<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
+<li>自定义输出：可用
+<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
+调整位置。</li>
+</ul>
+<h3 id="分钟上手">5 分钟上手</h3>
+<p>目录结构：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
+<p><code>CMakeLists.txt</code>：</p>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
+<p><code>src/main.cpp</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>构建与运行：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
+<h3 id="cmake-改变了什么一个对比例子">CMake
+改变了什么：一个对比例子</h3>
+<p>场景：两个源文件
+<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
+Linux 与 Windows 上都能构建。</p>
+<ul>
+<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
+<li><p>Linux（GCC/Clang）：</p></li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li>Windows（MSVC）：</li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li><p>维护代价：命令不通用，IDE
+工程（VS/Xcode）还要各自维护一份。</p></li>
+<li><p>有 CMake（一份脚本到处用）</p></li>
+</ul>
+<p><code>CMakeLists.txt</code>：</p>
+<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
+<p>构建命令（所有平台一致）：</p>
+<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
+<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
+VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
+<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
+<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
+<p>以 Linux 的命令为例：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
+<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
+<code>/std:c++17</code>）。</p></li>
+<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
+<li><p><strong>src/main.cpp
+src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
+<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
+<code>include</code>。</p></li>
+<li><p><strong>-o app</strong>：输出可执行文件名为
+<code>app</code>。</p></li>
+</ul>
+<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
+CMake 希望你“声明语义、自动映射细节”的原因。</p>
+<h3 id="工作原理">工作原理</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
+  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
+  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
+  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
+</code>
+</pre>
+<p>一句话：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
+<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>cmake_minimum_required(VERSION
+3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
+<li><p><strong>project(app LANGUAGES
+CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
+编译器与平台特性。</p></li>
+<li><p><strong>add_executable(app …)</strong>：声明目标
+<code>app</code>；CMake
+为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
+<li><p><strong>target_compile_features(app PRIVATE
+cxx_std_17)</strong>：声明“需要 C++17”，CMake
+按编译器映射成正确开关：</p>
+<ul>
+<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
+<li><p>MSVC：<code>/std:c++17</code></p></li>
+</ul></li>
+<li><p><strong>target_include_directories(app PRIVATE
+include)</strong>：声明头文件目录，按平台生成参数：</p>
+<ul>
+<li><p>GCC/Clang：<code>-I include</code></p></li>
+<li><p>MSVC：<code>/I include</code></p></li>
+</ul></li>
+</ul>
+<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
+<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
+<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
+<ul>
+<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
+<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
+<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
+<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
+平台工程生成方面配合 Xcode。</p></li>
+<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
+</ul>
+<p>此外，CMake
+也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
+往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
+<h3 id="就这么记住">就这么记住</h3>
+<ul>
+<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
+<li><p><strong>总在源码外构建</strong>：<code>-S</code>
+指源码，<code>-B</code> 指构建目录。</p></li>
+<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
+Make 还是 Ninja。</p></li>
+</ul>
+<h3 id="结语">结语</h3>
+<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
+就是省心的那一个。</p>
+]]></content>
+      <tags>
+        <tag>CMake</tag>
+        <tag>构建系统</tag>
+        <tag>C/C++</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
     <url>/posts/f1a2b3c4/</url>
     <content><![CDATA[<p>这篇文章会带你一起，从 FaaS
@@ -7380,185 +7559,6 @@ FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
         <tag>Serverless</tag>
         <tag>FaaS</tag>
         <tag>云原生</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>CMake 入门</title>
-    <url>/posts/233853f2/</url>
-    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
-Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
-IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
-或分别维护 VS/Xcode 工程，成本会直线上升。</p>
-<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
-需要的工程与命令。 <span id="more"></span></p>
-<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
-<ul>
-<li><p><strong>跨平台</strong>：一份
-<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
-Studio、Xcode）。</p></li>
-<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
-<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
-</ul>
-<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
-  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
-  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
-  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
-</code>
-</pre>
-<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
-<ul>
-<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
-<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
-调用本机构建器编译/链接）。</li>
-<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
-Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
-<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
-</ul>
-<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
-<ul>
-<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
-<code>.sln/.vcxproj</code>、Xcode
-<code>.xcodeproj</code>（由生成器决定）。</li>
-<li>CMake
-缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
-<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
-<code>configure_file()</code> 生成的配置头/源文件。</li>
-<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
-</ul>
-<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
-<ul>
-<li>可执行文件：如 <code>build/hello</code>（Windows 为
-<code>build/hello.exe</code>）。</li>
-<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
-<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
-<li>自定义输出：可用
-<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
-调整位置。</li>
-</ul>
-<h3 id="分钟上手">5 分钟上手</h3>
-<p>目录结构：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
-<p><code>CMakeLists.txt</code>：</p>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
-<p><code>src/main.cpp</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>构建与运行：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
-<h3 id="cmake-改变了什么一个对比例子">CMake
-改变了什么：一个对比例子</h3>
-<p>场景：两个源文件
-<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
-Linux 与 Windows 上都能构建。</p>
-<ul>
-<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
-<li><p>Linux（GCC/Clang）：</p></li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li>Windows（MSVC）：</li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li><p>维护代价：命令不通用，IDE
-工程（VS/Xcode）还要各自维护一份。</p></li>
-<li><p>有 CMake（一份脚本到处用）</p></li>
-</ul>
-<p><code>CMakeLists.txt</code>：</p>
-<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
-<p>构建命令（所有平台一致）：</p>
-<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
-<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
-VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
-<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
-<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
-<p>以 Linux 的命令为例：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
-<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
-<code>/std:c++17</code>）。</p></li>
-<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
-<li><p><strong>src/main.cpp
-src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
-<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
-<code>include</code>。</p></li>
-<li><p><strong>-o app</strong>：输出可执行文件名为
-<code>app</code>。</p></li>
-</ul>
-<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
-CMake 希望你“声明语义、自动映射细节”的原因。</p>
-<h3 id="工作原理">工作原理</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
-  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
-  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
-  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
-</code>
-</pre>
-<p>一句话：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
-<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>cmake_minimum_required(VERSION
-3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
-<li><p><strong>project(app LANGUAGES
-CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
-编译器与平台特性。</p></li>
-<li><p><strong>add_executable(app …)</strong>：声明目标
-<code>app</code>；CMake
-为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
-<li><p><strong>target_compile_features(app PRIVATE
-cxx_std_17)</strong>：声明“需要 C++17”，CMake
-按编译器映射成正确开关：</p>
-<ul>
-<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
-<li><p>MSVC：<code>/std:c++17</code></p></li>
-</ul></li>
-<li><p><strong>target_include_directories(app PRIVATE
-include)</strong>：声明头文件目录，按平台生成参数：</p>
-<ul>
-<li><p>GCC/Clang：<code>-I include</code></p></li>
-<li><p>MSVC：<code>/I include</code></p></li>
-</ul></li>
-</ul>
-<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
-<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
-<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
-<ul>
-<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
-<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
-<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
-<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
-平台工程生成方面配合 Xcode。</p></li>
-<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
-</ul>
-<p>此外，CMake
-也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
-往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
-<h3 id="就这么记住">就这么记住</h3>
-<ul>
-<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
-<li><p><strong>总在源码外构建</strong>：<code>-S</code>
-指源码，<code>-B</code> 指构建目录。</p></li>
-<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
-Make 还是 Ninja。</p></li>
-</ul>
-<h3 id="结语">结语</h3>
-<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
-就是省心的那一个。</p>
-]]></content>
-      <tags>
-        <tag>CMake</tag>
-        <tag>构建系统</tag>
-        <tag>C/C++</tag>
       </tags>
   </entry>
   <entry>
@@ -21769,6 +21769,477 @@ PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 入门：从 main 到 _start</title>
+    <url>/posts/76bb2795/</url>
+    <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
+Rust》系列教程（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>Rust 标准库，提供依赖 OS 的高级能力</td>
+<td>站在 OS 肩膀上</td>
+</tr>
+<tr>
+<td><code>core</code></td>
+<td>不依赖 OS 的 Rust 核心库</td>
+<td>裸机也能用</td>
+</tr>
+<tr>
+<td><code>alloc</code></td>
+<td>提供 <code>Vec</code>、<code>Box</code> 等动态分配抽象，需要自己提供
+allocator</td>
+<td>有堆才能用</td>
+</tr>
+<tr>
+<td><code>no_std</code></td>
+<td>不自动链接 <code>std</code>，改用 <code>core</code>
+作为基础环境</td>
+<td>不依赖 std</td>
+</tr>
+<tr>
+<td><code>panic_handler</code></td>
+<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
+<td>崩溃了怎么办</td>
+</tr>
+<tr>
+<td><code>crt0</code></td>
+<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
+用户程序中，启动代码会提供 <code>_start</code>
+等入口相关代码，并负责进入 libc/运行时初始化流程</td>
+<td>启动的”保洁员”</td>
+</tr>
+<tr>
+<td><code>_start</code></td>
+<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
+code 提供</td>
+<td>一切从这开始</td>
+</tr>
+<tr>
+<td><code>no_main</code></td>
+<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
+<td>入口我自己定</td>
+</tr>
+<tr>
+<td>Target Triple</td>
+<td>描述目标平台的字符串，通常包含架构、厂商、操作系统和 ABI 等信息</td>
+<td>给谁编译</td>
+</tr>
+</tbody>
+</table>
+<h3 id="main-不是程序真正的入口">🧩 <code>main()</code>
+不是程序真正的入口</h3>
+<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
+是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
+<p>普通程序的实际调用链是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间、建立初始用户栈、设置 RSP</span><br><span class="line">ELF loader 跳转到 e_entry</span><br><span class="line">   ↓</span><br><span class="line">crt0 中的 _start（解析 argc / argv / envp）</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[&quot;Linux kernel&quot;] --&gt;|&quot;创建进程地址空间 &#x2F; 建立初始用户栈 &#x2F; 设置 RSP&quot;| B[&quot;ELF loader 跳转到 e_entry&quot;]
+    B --&gt;|&quot;入口地址通常对应 crt0 中的 _start&quot;| C[&quot;crt0 中的 _start&quot;]
+    C --&gt;|&quot;解析 argc &#x2F; argv &#x2F; envp&quot;| D[&quot;libc &#x2F; Rust startup glue&quot;]
+    D --&gt; E[&quot;main()&quot;]
+</code>
+</pre>
+<p>这里的 “libc / Rust startup glue” 指的是从 <code>_start</code> 到
+<code>main()</code> 之间的启动与运行时衔接代码。它<strong>并不是一个类似
+JVM/.NET 那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup
+code 等组件共同完成相关工作。</p>
+<p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
+<code>e_entry</code>
+字段指定的入口地址</strong>开始执行，而不是直接”找到”某个叫
+<code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
+crt0 中的 <code>_start</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
+<p><strong>链接器确定程序入口地址，通常将其设置为 <code>_start</code>
+的地址</strong>。<code>main()</code>
+只是这条链上”最后被调用”的那个普通函数。</p>
+<h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
+<code>no_std</code></h3>
+<p>Rust 标准库可以理解成两层：</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
+    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
+    S --&gt; C[&quot;core 核心库&quot;]
+    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
+    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
+</code>
+</pre>
+<p><strong><code>core</code>
+不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
+基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
+中。<code>std</code> 则建立在 <code>core</code>
+等基础设施之上，大量依赖操作系统提供的能力。</p>
+<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
+是宏，最终通过 <code>std::io</code> 使用 stdout
+对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
+<p>而裸机环境下只有：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
+<p>标准库不再替你提供 stdout。所以：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不自动链接 std，默认以 core 为基础</span><br></pre></td></tr></table></figure>
+<p>注意：<code>no_std</code> <strong>不是”不能输出”</strong>。OS kernel
+完全可以自己实现 <code>print!</code>——例如直接写 VGA
+framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp 教程后面
+VGA 文本模式章节要做的事）。</p>
+<p>另外，<code>no_std</code> 也不等于”只能用 <code>core</code>“：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
+<p><code>no_std</code> 会阻止自动链接 <code>std</code>，而
+<code>alloc</code> 可以显式引入（前提是你提供了一个 allocator）。</p>
+<h3 id="panicpanic_handler-与-panic-策略">🧩
+Panic：<code>panic_handler</code> 与 panic 策略</h3>
+<p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
+binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
+<code>abort</code>（panic 的实现方式）。</p>
+<h4
+id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
+binary 必须提供的处理入口</h4>
+<p>最小程序：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
+<p>会报错：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
+<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
+时应该怎么办？</strong> 这个处理机制原本由 <code>std</code>
+提供，<code>no_std</code> 环境下就要自己定义：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
+<code>-&gt; !</code>
+表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
+<h4 id="panic-策略unwind-还是-abort">panic 策略：<code>unwind</code>
+还是 <code>abort</code></h4>
+<p>这是另一个独立的概念：Rust 可以选择 panic 的实现策略。</p>
+<p><code>unwind</code>（栈展开）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
+<p><code>abort</code>（直接终止）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
+<h4 id="为什么选-abort">为什么选 <code>abort</code></h4>
+<p>栈展开需要<strong>额外的展开信息和运行时支持</strong>，例如 Linux
+环境常见的 <code>libunwind</code>、Windows 的 SEH 等。</p>
+<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
+<strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
+是<strong>选择 panic 的实现策略</strong>。</p>
+</blockquote>
+<h3 id="no_main-与自定义入口-_start">🧩 <code>#![no_main]</code>
+与自定义入口 <code>_start</code></h3>
+<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
+之后，又会出现：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
+<p>原因前面已经说过：对于这种 freestanding <code>no_std</code>
+binary，不再使用 Rust
+默认的程序启动入口机制，因此不能依赖默认启动代码去调用
+<code>main()</code>。这与 phil-opp 教程的表述一致：freestanding
+executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
+<code>main</code>。所以：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
+<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
+<code>main()</code>。然后自己定义入口：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="start-的几个关键修饰符"><code>_start</code>
+的几个关键修饰符</h4>
+<table>
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>修饰符</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#[unsafe(no_mangle)]</code></td>
+<td>禁止 Rust name mangling，使最终符号名保持为 <code>_start</code></td>
+</tr>
+<tr>
+<td><code>pub</code></td>
+<td>使该 Rust item 对 crate 外可见；在这种入口函数中通常这样声明</td>
+</tr>
+<tr>
+<td><code>extern "C"</code></td>
+<td>使用稳定的 C ABI，而不是 Rust ABI</td>
+</tr>
+<tr>
+<td><code>-&gt; !</code></td>
+<td>表示入口函数不应该返回</td>
+</tr>
+</tbody>
+</table>
+<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
+名和类型信息的符号，例如 <code>fn start()</code> 可能变成
+<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
+<code>_start</code>，所以 <code>no_mangle</code>
+才是保证符号名正确的关键。</p>
+<h3 id="crt0-与-_start-的区别">🧩 <code>crt0</code> 与
+<code>_start</code> 的区别</h3>
+<p>这是最容易混淆的一对概念：</p>
+<ul>
+<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
+Linux 用户程序中由 C runtime startup code 提供，“从哪里开始”。</li>
+<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
+code）的统称，“开始之后帮你做什么”。注意它不是一个固定文件——现代
+Linux/glibc 中启动代码实际由
+<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
+等多个启动对象组成。</li>
+</ul>
+<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
+由这套启动代码提供</strong>——<code>_start</code>
+不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p><code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
+<p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
+并不负责”准备栈”</strong>。在 Linux
+用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间</span><br><span class="line">   ↓ 建立初始用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳转到 _start</span><br><span class="line">crt1 / _start</span><br><span class="line">   ↓ 解析 argc / argv / envp</span><br><span class="line">   ↓ 初始化 libc / runtime</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<p>所以 crt0
+做的事是”在已有栈上解析参数、初始化运行环境”，而不是”申请一块内存并设置
+RSP”。</p>
+<h4 id="为什么-rust-os-不使用默认的-crt0">为什么 Rust OS 不使用默认的
+<code>crt0</code>？</h4>
+<p>因为面向 Linux 用户态程序的 crt0 假设下面有操作系统：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">ELF loader</span><br><span class="line">   ↓</span><br><span class="line">crt0 / _start</span><br><span class="line">   ↓</span><br><span class="line">libc startup</span><br><span class="line">   ↓</span><br><span class="line">Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<p>而 Rust OS 的启动链是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Firmware / boot environment（传统 PC 上通常是 BIOS 或 UEFI）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓</span><br><span class="line">kernel entry</span><br><span class="line">   ↓</span><br><span class="line">kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
+<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
+crt0</strong>。但要注意：Rust OS 并不是完全没有”启动代码”——bootloader 和
+kernel 自己承担了建立执行环境、设置栈以及进入 kernel
+主逻辑等职责，它们本身就是一种 startup
+code。更准确的表述是：<strong>不使用面向 Linux 用户态程序的默认
+crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
+<h3 id="栈从哪里来">🧩 栈从哪里来？</h3>
+<p>栈并不是”单纯申请一块内存，然后保存一个地址”，要分情况：</p>
+<p><strong>普通 Linux 用户程序</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
+<p><strong>Rust OS</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
+<p>在 Linux
+用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
+拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
+bootloader / kernel 早期启动代码自己的职责。</p>
+<p>更准确地说，栈是：</p>
+<blockquote>
+<p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
+CPU 并不存在一个叫”栈”的东西。</p>
+</blockquote>
+<p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
+<code>pop</code> / <code>call</code> / <code>ret</code> /
+<code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
+<h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
+<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
+</blockquote>
+<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
+<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
+之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
+target。它意味着”我要生成一个 Linux 用户程序”，于是链接器默认认为需要
+crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
+main，于是报：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
+<h4
+id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
+<p>含义：cargo → rustc → linker →
+<code>-nostartfiles</code>，告诉链接器<strong>不要自动链接标准的 C
+startup object files</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
+<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
+<table>
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 26%" />
+<col style="width: 21%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>平台</th>
+<th>可执行格式</th>
+<th>默认入口</th>
+<th>禁用 C startup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>ELF</td>
+<td><code>_start</code></td>
+<td><code>-nostartfiles</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>PE</td>
+<td><code>mainCRTStartup</code></td>
+<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>Mach-O</td>
+<td>自定义</td>
+<td><code>-e __start</code>（配合
+<code>-static</code>、<code>-nostartfiles</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
+<h4 id="为什么不推荐这个方法">为什么不推荐这个方法</h4>
+<p><code>-nostartfiles</code> 去掉的是默认的 C startup object
+files，<strong>并不会让 Linux loader 不再提供初始用户栈</strong>——你的
+<code>_start</code> 仍然会从 Linux
+建立好的初始栈开始执行，只是不会经过默认的 libc/Rust 启动流程。</p>
+<p>真正缺少的是 crt0 / libc startup 做的事：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 / libc startup</span><br><span class="line">   ├── 解析 argc / argv / envp</span><br><span class="line">   ├── libc 初始化</span><br><span class="line">   ├── TLS / runtime 等相关初始化</span><br><span class="line">   └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p>所以”编译成功、运行崩溃”不能一概而论：一个非常简单的 Linux
+<code>no_std</code> + <code>no_main</code>
+程序，只要入口、ABI、链接等处理正确，完全可以运行——例如上面那个空
+<code>loop &#123;&#125;</code> 的 <code>_start</code>
+甚至可以一直运行。是否崩溃，取决于你的 <code>_start</code>
+是否依赖了上面这些缺失的初始化。这个方法之所以”不推荐”，是因为它在”假装自己是
+Linux 程序”，却没有承担 Linux
+程序应有的完整启动环境，越复杂的程序越容易踩坑。</p>
+<h3 id="正解bare-metal-target">🧩 正解：Bare Metal Target</h3>
+<p>真正的方向是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
+<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">thumbv7em   → ARM Cortex-M 等 Thumb-2 / ARMv7E-M 子架构</span><br><span class="line">none        → 没有操作系统</span><br><span class="line">eabihf      → Embedded ABI + hard-float</span><br></pre></td></tr></table></figure>
+<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
+<h4 id="target-triple-是什么">Target Triple 是什么</h4>
+<p>Rust 用 Target Triple 描述目标环境。其一般格式为
+<code>&lt;arch&gt;&lt;sub&gt;-&lt;vendor&gt;-&lt;sys&gt;-&lt;abi&gt;</code>，但有些
+target 会省略某些部分，严格说不一定是”四元组”。例如
+<code>x86_64-unknown-linux-gnu</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
+<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
+就表示没有 OS。</p>
+<h4 id="host-与-target">Host 与 Target</h4>
+<ul>
+<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
+<li><strong>Target</strong>：你希望程序运行的机器，例如
+<code>x86_64-blog_os</code> 裸机 kernel。</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
+<p>这种”在一种平台上编译出另一种平台程序”的做法叫<strong>交叉编译（cross
+compilation）</strong>。</p>
+<h3 id="两种启动链的最终对比">🧩 两种启动链的最终对比</h3>
+<pre>
+<code class="mermaid">
+
+graph TD
+    subgraph &quot;普通 Linux 用户程序&quot;
+        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
+        B1 --&gt; C1[&quot;ELF loader&quot;]
+        C1 --&gt; D1[&quot;crt0 &#x2F; _start&quot;]
+        D1 --&gt; E1[&quot;libc &#x2F; Rust startup&quot;]
+        E1 --&gt; F1[&quot;main()&quot;]
+    end
+    subgraph &quot;Rust OS&quot;
+        A2[&quot;硬件&quot;] --&gt; B2[&quot;固件 &#x2F; boot environment（传统 PC 上为 BIOS &#x2F; UEFI）&quot;]
+        B2 --&gt; C2[&quot;Bootloader&quot;]
+        C2 --&gt; D2[&quot;Kernel entry&quot;]
+        D2 --&gt; E2[&quot;Kernel initialization（含设置栈等）&quot;]
+        E2 --&gt; F2[&quot;kernel_main()&quot;]
+    end
+</code>
+</pre>
+<p>典型的 Rust Linux
+用户程序依赖的是操作系统提供的用户态执行环境，并使用
+<code>std</code>、默认 <code>main</code>
+入口机制以及相应的用户态启动代码和运行时支持；Rust OS
+不使用这一套，相应职责由 <strong>bootloader + kernel
+自己承担</strong>。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><code>no_std</code> 是”不使用 Rust 标准库”；<code>no_main</code>
+是”不让 Rust 按普通程序方式处理 <code>main</code>“；<code>_start</code>
+是你自己定义的底层入口；真正写 OS 时，我们不使用面向 Linux
+用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
+自己承担。</p>
+</blockquote>
+<p>关键变化：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>普通程序</th>
+<th>Rust OS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>默认 <code>main</code> 入口机制</td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>用户态 crt0</td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>Linux 用户态 runtime</td>
+<td>依赖</td>
+<td>不依赖</td>
+</tr>
+</tbody>
+</table>
+<p>但注意：<strong>启动代码 ≠ 消失</strong>。只是从”操作系统提供的
+crt0/libc 启动流程”，换成了”由 bootloader + kernel
+自己承担”的启动流程——这才是这篇文章最值得强调的核心思想。</p>
+<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
+文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
+<ul>
+<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
+href="https://os.phil-opp.com/freestanding-rust-binary/"
+class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
+<li>《Writing an OS in Rust》系列主页：<a
+href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a></li>
+</ul>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>no_std</tag>
+        <tag>裸机</tag>
+        <tag>链接器</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>机密计算入门：数据使用中的安全与TEE</title>
     <url>/posts/84b980d1/</url>
     <content><![CDATA[<p>硬盘加密了、网络加密了，可数据一进内存就是明文——谁来保护”正在被计算的数据”？</p>
@@ -22067,486 +22538,6 @@ TEE + TPM 协作信任要解决的问题。</p>
         <tag>安全</tag>
         <tag>机密计算</tag>
         <tag>内存加密</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 入门：从 main 到 _start</title>
-    <url>/posts/76bb2795/</url>
-    <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
-Rust》系列教程（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>std</code></td>
-<td>Rust 标准库，提供依赖 OS 的高级能力</td>
-<td>站在 OS 肩膀上</td>
-</tr>
-<tr>
-<td><code>core</code></td>
-<td>不依赖 OS 的 Rust 核心库</td>
-<td>裸机也能用</td>
-</tr>
-<tr>
-<td><code>alloc</code></td>
-<td>提供 <code>Vec</code>、<code>Box</code> 等动态分配抽象，需要自己提供
-allocator</td>
-<td>有堆才能用</td>
-</tr>
-<tr>
-<td><code>no_std</code></td>
-<td>不自动链接 <code>std</code>，改用 <code>core</code>
-作为基础环境</td>
-<td>不依赖 std</td>
-</tr>
-<tr>
-<td><code>panic_handler</code></td>
-<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
-<td>崩溃了怎么办</td>
-</tr>
-<tr>
-<td><code>crt0</code></td>
-<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
-用户程序中，启动代码会提供 <code>_start</code>
-等入口相关代码，并负责进入 libc/运行时初始化流程</td>
-<td>启动的”保洁员”</td>
-</tr>
-<tr>
-<td><code>_start</code></td>
-<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
-code 提供</td>
-<td>一切从这开始</td>
-</tr>
-<tr>
-<td><code>no_main</code></td>
-<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
-<td>入口我自己定</td>
-</tr>
-<tr>
-<td>Target Triple</td>
-<td>描述目标平台的字符串，通常包含架构、厂商、操作系统和 ABI 等信息</td>
-<td>给谁编译</td>
-</tr>
-</tbody>
-</table>
-<h3 id="main-不是程序真正的入口">🧩 <code>main()</code>
-不是程序真正的入口</h3>
-<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
-是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
-<p>普通程序的实际调用链是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间、建立初始用户栈、设置 RSP</span><br><span class="line">ELF loader 跳转到 e_entry</span><br><span class="line">   ↓</span><br><span class="line">crt0 中的 _start（解析 argc / argv / envp）</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-graph TD
-    A[&quot;Linux kernel&quot;] --&gt;|&quot;创建进程地址空间 &#x2F; 建立初始用户栈 &#x2F; 设置 RSP&quot;| B[&quot;ELF loader 跳转到 e_entry&quot;]
-    B --&gt;|&quot;入口地址通常对应 crt0 中的 _start&quot;| C[&quot;crt0 中的 _start&quot;]
-    C --&gt;|&quot;解析 argc &#x2F; argv &#x2F; envp&quot;| D[&quot;libc &#x2F; Rust startup glue&quot;]
-    D --&gt; E[&quot;main()&quot;]
-</code>
-</pre>
-<p>这里的 “libc / Rust startup glue” 指的是从 <code>_start</code> 到
-<code>main()</code> 之间的启动与运行时衔接代码。它<strong>并不是一个类似
-JVM/.NET 那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup
-code 等组件共同完成相关工作。</p>
-<p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
-<code>e_entry</code>
-字段指定的入口地址</strong>开始执行，而不是直接”找到”某个叫
-<code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
-crt0 中的 <code>_start</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
-<p><strong>链接器确定程序入口地址，通常将其设置为 <code>_start</code>
-的地址</strong>。<code>main()</code>
-只是这条链上”最后被调用”的那个普通函数。</p>
-<h3 id="stdcore-与-no_std">🧩 <code>std</code>、<code>core</code> 与
-<code>no_std</code></h3>
-<p>Rust 标准库可以理解成两层：</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
-    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
-    S --&gt; C[&quot;core 核心库&quot;]
-    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
-    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
-</code>
-</pre>
-<p><strong><code>core</code>
-不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
-基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
-中。<code>std</code> 则建立在 <code>core</code>
-等基础设施之上，大量依赖操作系统提供的能力。</p>
-<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
-是宏，最终通过 <code>std::io</code> 使用 stdout
-对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
-<p>而裸机环境下只有：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
-<p>标准库不再替你提供 stdout。所以：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不自动链接 std，默认以 core 为基础</span><br></pre></td></tr></table></figure>
-<p>注意：<code>no_std</code> <strong>不是”不能输出”</strong>。OS kernel
-完全可以自己实现 <code>print!</code>——例如直接写 VGA
-framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp 教程后面
-VGA 文本模式章节要做的事）。</p>
-<p>另外，<code>no_std</code> 也不等于”只能用 <code>core</code>“：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
-<p><code>no_std</code> 会阻止自动链接 <code>std</code>，而
-<code>alloc</code> 可以显式引入（前提是你提供了一个 allocator）。</p>
-<h3 id="panicpanic_handler-与-panic-策略">🧩
-Panic：<code>panic_handler</code> 与 panic 策略</h3>
-<p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
-binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
-<code>abort</code>（panic 的实现方式）。</p>
-<h4
-id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
-binary 必须提供的处理入口</h4>
-<p>最小程序：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
-<p>会报错：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
-<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
-时应该怎么办？</strong> 这个处理机制原本由 <code>std</code>
-提供，<code>no_std</code> 环境下就要自己定义：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
-<code>-&gt; !</code>
-表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
-<h4 id="panic-策略unwind-还是-abort">panic 策略：<code>unwind</code>
-还是 <code>abort</code></h4>
-<p>这是另一个独立的概念：Rust 可以选择 panic 的实现策略。</p>
-<p><code>unwind</code>（栈展开）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
-<p><code>abort</code>（直接终止）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
-<h4 id="为什么选-abort">为什么选 <code>abort</code></h4>
-<p>栈展开需要<strong>额外的展开信息和运行时支持</strong>，例如 Linux
-环境常见的 <code>libunwind</code>、Windows 的 SEH 等。</p>
-<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
-<strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
-是<strong>选择 panic 的实现策略</strong>。</p>
-</blockquote>
-<h3 id="no_main-与自定义入口-_start">🧩 <code>#![no_main]</code>
-与自定义入口 <code>_start</code></h3>
-<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
-之后，又会出现：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
-<p>原因前面已经说过：对于这种 freestanding <code>no_std</code>
-binary，不再使用 Rust
-默认的程序启动入口机制，因此不能依赖默认启动代码去调用
-<code>main()</code>。这与 phil-opp 教程的表述一致：freestanding
-executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
-<code>main</code>。所以：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
-<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
-<code>main()</code>。然后自己定义入口：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="start-的几个关键修饰符"><code>_start</code>
-的几个关键修饰符</h4>
-<table>
-<colgroup>
-<col style="width: 57%" />
-<col style="width: 42%" />
-</colgroup>
-<thead>
-<tr>
-<th>修饰符</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#[unsafe(no_mangle)]</code></td>
-<td>禁止 Rust name mangling，使最终符号名保持为 <code>_start</code></td>
-</tr>
-<tr>
-<td><code>pub</code></td>
-<td>使该 Rust item 对 crate 外可见；在这种入口函数中通常这样声明</td>
-</tr>
-<tr>
-<td><code>extern "C"</code></td>
-<td>使用稳定的 C ABI，而不是 Rust ABI</td>
-</tr>
-<tr>
-<td><code>-&gt; !</code></td>
-<td>表示入口函数不应该返回</td>
-</tr>
-</tbody>
-</table>
-<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
-名和类型信息的符号，例如 <code>fn start()</code> 可能变成
-<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
-<code>_start</code>，所以 <code>no_mangle</code>
-才是保证符号名正确的关键。</p>
-<h3 id="crt0-与-_start-的区别">🧩 <code>crt0</code> 与
-<code>_start</code> 的区别</h3>
-<p>这是最容易混淆的一对概念：</p>
-<ul>
-<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
-Linux 用户程序中由 C runtime startup code 提供，“从哪里开始”。</li>
-<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
-code）的统称，“开始之后帮你做什么”。注意它不是一个固定文件——现代
-Linux/glibc 中启动代码实际由
-<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
-等多个启动对象组成。</li>
-</ul>
-<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
-由这套启动代码提供</strong>——<code>_start</code>
-不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p><code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
-<p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
-并不负责”准备栈”</strong>。在 Linux
-用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间</span><br><span class="line">   ↓ 建立初始用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳转到 _start</span><br><span class="line">crt1 / _start</span><br><span class="line">   ↓ 解析 argc / argv / envp</span><br><span class="line">   ↓ 初始化 libc / runtime</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<p>所以 crt0
-做的事是”在已有栈上解析参数、初始化运行环境”，而不是”申请一块内存并设置
-RSP”。</p>
-<h4 id="为什么-rust-os-不使用默认的-crt0">为什么 Rust OS 不使用默认的
-<code>crt0</code>？</h4>
-<p>因为面向 Linux 用户态程序的 crt0 假设下面有操作系统：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">ELF loader</span><br><span class="line">   ↓</span><br><span class="line">crt0 / _start</span><br><span class="line">   ↓</span><br><span class="line">libc startup</span><br><span class="line">   ↓</span><br><span class="line">Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<p>而 Rust OS 的启动链是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Firmware / boot environment（传统 PC 上通常是 BIOS 或 UEFI）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓</span><br><span class="line">kernel entry</span><br><span class="line">   ↓</span><br><span class="line">kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
-<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
-crt0</strong>。但要注意：Rust OS 并不是完全没有”启动代码”——bootloader 和
-kernel 自己承担了建立执行环境、设置栈以及进入 kernel
-主逻辑等职责，它们本身就是一种 startup
-code。更准确的表述是：<strong>不使用面向 Linux 用户态程序的默认
-crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
-<h3 id="栈从哪里来">🧩 栈从哪里来？</h3>
-<p>栈并不是”单纯申请一块内存，然后保存一个地址”，要分情况：</p>
-<p><strong>普通 Linux 用户程序</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
-<p><strong>Rust OS</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
-<p>在 Linux
-用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
-拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
-bootloader / kernel 早期启动代码自己的职责。</p>
-<p>更准确地说，栈是：</p>
-<blockquote>
-<p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
-CPU 并不存在一个叫”栈”的东西。</p>
-</blockquote>
-<p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
-<code>pop</code> / <code>call</code> / <code>ret</code> /
-<code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
-<p>那么 <code>_start</code> 为什么写 <code>loop &#123;&#125;</code> 而不是
-<code>return</code>？因为 <code>_start</code> 是 ELF
-的程序入口，<strong>不是通过普通 <code>call</code>
-指令调用的函数</strong>，因此没有一个正常的调用者向它提供返回地址。若
-<code>_start</code> 返回，CPU
-会尝试按照函数返回约定取出返回地址继续执行，而入口环境并不保证存在这样的返回地址。因此这种程序入口通常定义为
-<code>-&gt; !</code>，并在结束后进入死循环、关机或其他不会返回的路径。</p>
-<h3 id="链接器与链接错误">🧩 链接器与链接错误</h3>
-<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
-</blockquote>
-<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
-<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
-之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
-target。它意味着”我要生成一个 Linux 用户程序”，于是链接器默认认为需要
-crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
-main，于是报：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
-<h4
-id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
-<p>含义：cargo → rustc → linker →
-<code>-nostartfiles</code>，告诉链接器<strong>不要自动链接标准的 C
-startup object files</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
-<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
-<table>
-<colgroup>
-<col style="width: 14%" />
-<col style="width: 26%" />
-<col style="width: 21%" />
-<col style="width: 38%" />
-</colgroup>
-<thead>
-<tr>
-<th>平台</th>
-<th>可执行格式</th>
-<th>默认入口</th>
-<th>禁用 C startup</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Linux</td>
-<td>ELF</td>
-<td><code>_start</code></td>
-<td><code>-nostartfiles</code></td>
-</tr>
-<tr>
-<td>Windows</td>
-<td>PE</td>
-<td><code>mainCRTStartup</code></td>
-<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
-</tr>
-<tr>
-<td>macOS</td>
-<td>Mach-O</td>
-<td>自定义</td>
-<td><code>-e __start</code>（配合
-<code>-static</code>、<code>-nostartfiles</code>）</td>
-</tr>
-</tbody>
-</table>
-<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
-<h4 id="为什么不推荐这个方法">为什么不推荐这个方法</h4>
-<p><code>-nostartfiles</code> 去掉的是默认的 C startup object
-files，<strong>并不会让 Linux loader 不再提供初始用户栈</strong>——你的
-<code>_start</code> 仍然会从 Linux
-建立好的初始栈开始执行，只是不会经过默认的 libc/Rust 启动流程。</p>
-<p>真正缺少的是 crt0 / libc startup 做的事：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 / libc startup</span><br><span class="line">   ├── 解析 argc / argv / envp</span><br><span class="line">   ├── libc 初始化</span><br><span class="line">   ├── TLS / runtime 等相关初始化</span><br><span class="line">   └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p>所以”编译成功、运行崩溃”不能一概而论：一个非常简单的 Linux
-<code>no_std</code> + <code>no_main</code>
-程序，只要入口、ABI、链接等处理正确，完全可以运行——例如上面那个空
-<code>loop &#123;&#125;</code> 的 <code>_start</code>
-甚至可以一直运行。是否崩溃，取决于你的 <code>_start</code>
-是否依赖了上面这些缺失的初始化。这个方法之所以”不推荐”，是因为它在”假装自己是
-Linux 程序”，却没有承担 Linux
-程序应有的完整启动环境，越复杂的程序越容易踩坑。</p>
-<h3 id="正解bare-metal-target">🧩 正解：Bare Metal Target</h3>
-<p>真正的方向是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
-<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">thumbv7em   → ARM Cortex-M 等 Thumb-2 / ARMv7E-M 子架构</span><br><span class="line">none        → 没有操作系统</span><br><span class="line">eabihf      → Embedded ABI + hard-float</span><br></pre></td></tr></table></figure>
-<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
-<h4 id="target-triple-是什么">Target Triple 是什么</h4>
-<p>Rust 用 Target Triple 描述目标环境。其一般格式为
-<code>&lt;arch&gt;&lt;sub&gt;-&lt;vendor&gt;-&lt;sys&gt;-&lt;abi&gt;</code>，但有些
-target 会省略某些部分，严格说不一定是”四元组”。例如
-<code>x86_64-unknown-linux-gnu</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
-<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
-就表示没有 OS。</p>
-<h4 id="host-与-target">Host 与 Target</h4>
-<ul>
-<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
-<li><strong>Target</strong>：你希望程序运行的机器，例如
-<code>x86_64-blog_os</code> 裸机 kernel。</li>
-</ul>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
-<p>这种”在一种平台上编译出另一种平台程序”的做法叫<strong>交叉编译（cross
-compilation）</strong>。</p>
-<h3 id="两种启动链的最终对比">🧩 两种启动链的最终对比</h3>
-<pre>
-<code class="mermaid">
-
-graph TD
-    subgraph &quot;普通 Linux 用户程序&quot;
-        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
-        B1 --&gt; C1[&quot;ELF loader&quot;]
-        C1 --&gt; D1[&quot;crt0 &#x2F; _start&quot;]
-        D1 --&gt; E1[&quot;libc &#x2F; Rust startup&quot;]
-        E1 --&gt; F1[&quot;main()&quot;]
-    end
-    subgraph &quot;Rust OS&quot;
-        A2[&quot;硬件&quot;] --&gt; B2[&quot;固件 &#x2F; boot environment（传统 PC 上为 BIOS &#x2F; UEFI）&quot;]
-        B2 --&gt; C2[&quot;Bootloader&quot;]
-        C2 --&gt; D2[&quot;Kernel entry&quot;]
-        D2 --&gt; E2[&quot;Kernel initialization（含设置栈等）&quot;]
-        E2 --&gt; F2[&quot;kernel_main()&quot;]
-    end
-</code>
-</pre>
-<p>典型的 Rust Linux
-用户程序依赖的是操作系统提供的用户态执行环境，并使用
-<code>std</code>、默认 <code>main</code>
-入口机制以及相应的用户态启动代码和运行时支持；Rust OS
-不使用这一套，相应职责由 <strong>bootloader + kernel
-自己承担</strong>。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><code>no_std</code> 是”不使用 Rust 标准库”；<code>no_main</code>
-是”不让 Rust 按普通程序方式处理 <code>main</code>“；<code>_start</code>
-是你自己定义的底层入口；真正写 OS 时，我们不使用面向 Linux
-用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
-自己承担。</p>
-</blockquote>
-<p>两条启动链的完整模型：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">普通 Linux 用户程序</span><br><span class="line">OS loader</span><br><span class="line">   ↓</span><br><span class="line">_start</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br><span class="line"></span><br><span class="line">Rust OS</span><br><span class="line">Firmware / boot environment</span><br><span class="line">   ↓</span><br><span class="line">Bootloader</span><br><span class="line">   ↓</span><br><span class="line">Kernel entry</span><br><span class="line">   ↓</span><br><span class="line">Kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
-<p>关键变化：</p>
-<table>
-<thead>
-<tr>
-<th>组件</th>
-<th>普通程序</th>
-<th>Rust OS</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>std</code></td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>默认 <code>main</code> 入口机制</td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>用户态 crt0</td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>Linux 用户态 runtime</td>
-<td>依赖</td>
-<td>不依赖</td>
-</tr>
-</tbody>
-</table>
-<p>但注意：<strong>启动代码 ≠ 消失</strong>。只是从”操作系统提供的
-crt0/libc 启动流程”，换成了”由 bootloader + kernel
-自己承担”的启动流程——这才是这篇文章最值得强调的核心思想。</p>
-<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
-文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
-<ul>
-<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
-href="https://os.phil-opp.com/freestanding-rust-binary/"
-class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
-<li>《Writing an OS in Rust》系列主页：<a
-href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a></li>
-</ul>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>no_std</tag>
-        <tag>裸机</tag>
-        <tag>链接器</tag>
       </tags>
   </entry>
   <entry>
