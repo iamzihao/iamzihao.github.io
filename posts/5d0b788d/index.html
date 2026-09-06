@@ -30,7 +30,7 @@
 <meta property="og:description" content="按下电源键的那一秒，CPU 读到的第一条指令到底是什么？在 RAM 空空如也、操作系统还没影子的情况下，电脑是怎么一步步把控制权交给你的 Rust 内核的？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T09:09:52.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.123Z">
+<meta property="article:modified_time" content="2026-09-06T09:05:33.221Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="启动流程">
@@ -178,7 +178,7 @@
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%BB%BA%E7%AB%8B%E4%B8%80%E5%BC%A0%E5%90%AF%E5%8A%A8%E5%9C%B0%E5%9B%BE"><span class="nav-number">2.</span> <span class="nav-text">🗺️ 先建立一张”启动地图”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E5%88%9A%E9%80%9A%E7%94%B5%E6%97%B6%E4%BB%80%E4%B9%88%E9%83%BD%E4%B8%8D%E7%9F%A5%E9%81%93"><span class="nav-number">3.</span> <span class="nav-text">🔌 CPU 刚通电时，什么都不知道</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%9B%BA%E4%BB%B6%E5%AD%98%E5%9C%A8%E5%93%AA%E9%87%8C"><span class="nav-number">3.1.</span> <span class="nav-text">固件存在哪里</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#cpu-%E6%80%8E%E4%B9%88%E6%89%BE%E5%88%B0%E5%9B%BA%E4%BB%B6"><span class="nav-number">3.2.</span> <span class="nav-text">CPU 怎么找到固件</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bios-%E4%B8%8A%E7%94%B5%E5%90%8E%E5%B9%B2%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">🧬 BIOS 上电后干什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8E%BB%E5%93%AA%E9%87%8C%E6%89%BE%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F"><span class="nav-number">4.1.</span> <span class="nav-text">去哪里找操作系统</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%A4%84%E5%A4%84%E5%BC%BA%E8%B0%83512-%E5%AD%97%E8%8A%82"><span class="nav-number">5.</span> <span class="nav-text">📦 为什么处处强调”512 字节”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E9%98%B6%E6%AE%B5-bootloader%E6%8E%A5%E5%8A%9B%E6%A3%92"><span class="nav-number">6.</span> <span class="nav-text">🪜 两阶段 Bootloader：接力棒</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E7%9A%84%E6%A8%A1%E5%BC%8F%E5%8F%98%E8%BF%8116-%E4%BD%8D-32-%E4%BD%8D-64-%E4%BD%8D"><span class="nav-number">7.</span> <span class="nav-text">🕰️ CPU 的模式变迁：16 位 → 32
-位 → 64 位</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%84%E5%AD%98%E5%99%A8%E9%80%9F%E8%A7%88rip-%E4%B8%8E-rsp"><span class="nav-number">8.</span> <span class="nav-text">🧮 寄存器速览：RIP 与 RSP</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#rip%E6%8C%87%E4%BB%A4%E6%8C%87%E9%92%88"><span class="nav-number">8.1.</span> <span class="nav-text">RIP：指令指针</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#rsp%E6%A0%88%E6%8C%87%E9%92%88"><span class="nav-number">8.2.</span> <span class="nav-text">RSP：栈指针</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84kernel-%E9%9C%80%E8%A6%81%E7%9F%A5%E9%81%93%E6%9C%BA%E5%99%A8%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">9.</span> <span class="nav-text">🗺️ 内存映射：Kernel
+位 → 64 位</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%84%E5%AD%98%E5%99%A8%E9%80%9F%E8%A7%88rip-%E4%B8%8E-rsp"><span class="nav-number">8.</span> <span class="nav-text">🧮 寄存器速览：RIP 与 RSP</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#rip%E6%8C%87%E4%BB%A4%E6%8C%87%E9%92%88"><span class="nav-number">8.1.</span> <span class="nav-text">RIP：指令指针</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#rsp%E6%A0%88%E6%8C%87%E9%92%88"><span class="nav-number">8.2.</span> <span class="nav-text">RSP：栈指针</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84kernel-%E9%9C%80%E8%A6%81%E7%9F%A5%E9%81%93%E6%9C%BA%E5%99%A8%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">9.</span> <span class="nav-text">📍 内存映射：Kernel
 需要知道机器长什么样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bootimage%E6%8A%8A%E5%90%AF%E5%8A%A8%E7%BB%86%E8%8A%82%E8%97%8F%E8%B5%B7%E6%9D%A5"><span class="nav-number">10.</span> <span class="nav-text">🔗 bootimage：把启动细节藏起来</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E7%9B%B4%E6%8E%A5%E7%94%A8%E7%8E%B0%E6%88%90%E7%9A%84-grub"><span class="nav-number">10.1.</span> <span class="nav-text">为什么不直接用现成的 GRUB？</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#bootimage-%E8%83%8C%E5%90%8E%E5%88%B0%E5%BA%95%E5%8F%91%E7%94%9F%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">10.2.</span> <span class="nav-text">bootimage 背后到底发生了什么</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0-os-%E5%BA%94%E6%9C%89%E7%9A%84%E5%B1%82%E6%AC%A1%E6%84%9F"><span class="nav-number">11.</span> <span class="nav-text">🏗️ 学习 OS 应有的”层次感”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
@@ -271,7 +271,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-06 17:05:33" itemprop="dateModified" datetime="2026-09-06T17:05:33+08:00">2026-09-06</time>
     </span>
 
   
@@ -604,7 +604,7 @@ Pointer）指向<strong>当前栈顶地址</strong>，它直接回应上一篇�
 CPU”把这块内存当栈用”。Bootloader 把 CPU 切到 64 位之后，在跳进 Kernel
 之前，就负责把 RSP 设置好。</p>
 <hr />
-<h3 id="内存映射kernel-需要知道机器长什么样">🗺️ 内存映射：Kernel
+<h3 id="内存映射kernel-需要知道机器长什么样">📍 内存映射：Kernel
 需要知道机器长什么样</h3>
 <p>假设电脑有 16GB
 RAM，你可能会天真地认为地址空间里全是可用的内存。实际上不是——里面混杂着可用

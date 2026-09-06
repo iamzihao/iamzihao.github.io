@@ -30,7 +30,7 @@
 <meta property="og:description" content="CUDA 报错最迷惑人的地方，不是它报错，而是它经常报在“后面那一行”。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-05-13T01:27:24.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:46:28.551Z">
+<meta property="article:modified_time" content="2026-09-06T09:05:33.209Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CUDA">
@@ -178,7 +178,7 @@
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%BB%BA%E7%AB%8B%E4%B8%80%E4%B8%AA%E5%BF%83%E6%99%BA%E6%A8%A1%E5%9E%8B"><span class="nav-number">2.</span> <span class="nav-text">🧠 先建立一个心智模型</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E5%92%8C-gpu-%E6%80%8E%E4%B9%88%E5%8D%8F%E4%BD%9C"><span class="nav-number">3.</span> <span class="nav-text">🔁 CPU 和 GPU 怎么协作</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#stream-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">🧩 Stream 是什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#gpu-%E5%87%BA%E9%94%99%E6%97%B6%E5%8F%91%E7%94%9F%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">5.</span> <span class="nav-text">💥 GPU 出错时发生了什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#gpu-%E6%80%8E%E4%B9%88%E9%80%9A%E7%9F%A5-cpu"><span class="nav-number">6.</span> <span class="nav-text">📡 GPU 怎么通知 CPU</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E8%B0%83%E7%94%A8%E6%A0%88%E5%88%B0%E5%BA%95%E8%AF%B4%E6%98%8E%E4%BB%80%E4%B9%88"><span class="nav-number">7.</span> <span class="nav-text">🧾 CPU 调用栈到底说明什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-gpu-%E9%94%99%E8%AF%AF%E9%BB%98%E8%AE%A4%E5%8F%AA%E6%9C%89%E4%B8%80%E5%8F%A5%E8%AF%9D"><span class="nav-number">8.</span> <span class="nav-text">🔍 为什么 GPU
 错误默认只有一句话</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cuda_launch_blocking1-%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">9.</span> <span class="nav-text">🛠️
-CUDA_LAUNCH_BLOCKING&#x3D;1 做了什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA-pytorch-%E9%87%8C%E7%9A%84%E5%85%B8%E5%9E%8B%E4%BE%8B%E5%AD%90"><span class="nav-number">10.</span> <span class="nav-text">🧪 一个 PyTorch 里的典型例子</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ccuda-%E9%87%8C%E6%80%8E%E4%B9%88%E6%8A%93%E5%BE%97%E6%9B%B4%E5%87%86"><span class="nav-number">11.</span> <span class="nav-text">🧰 C++&#x2F;CUDA 里怎么抓得更准</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">12.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E6%88%98%E6%8E%92%E6%9F%A5%E9%A1%BA%E5%BA%8F"><span class="nav-number">13.</span> <span class="nav-text">✅ 实战排查顺序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">14.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+CUDA_LAUNCH_BLOCKING&#x3D;1 做了什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA-pytorch-%E9%87%8C%E7%9A%84%E5%85%B8%E5%9E%8B%E4%BE%8B%E5%AD%90"><span class="nav-number">10.</span> <span class="nav-text">🧪 一个 PyTorch 里的典型例子</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ccuda-%E9%87%8C%E6%80%8E%E4%B9%88%E6%8A%93%E5%BE%97%E6%9B%B4%E5%87%86"><span class="nav-number">11.</span> <span class="nav-text">🧰 C++&#x2F;CUDA 里怎么抓得更准</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">12.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E6%88%98%E6%8E%92%E6%9F%A5%E9%A1%BA%E5%BA%8F"><span class="nav-number">13.</span> <span class="nav-text">🪜 实战排查顺序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">14.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -270,7 +270,7 @@ CUDA_LAUNCH_BLOCKING&#x3D;1 做了什么</span></a></li><li class="nav-item nav-
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:46:28" itemprop="dateModified" datetime="2026-09-06T11:46:28+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-06 17:05:33" itemprop="dateModified" datetime="2026-09-06T17:05:33+08:00">2026-09-06</time>
     </span>
 
   
@@ -604,7 +604,7 @@ context，后面只是连续发现错误状态。</td>
 </tr>
 </tbody>
 </table>
-<h3 id="实战排查顺序">✅ 实战排查顺序</h3>
+<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
 <p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
 <p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
