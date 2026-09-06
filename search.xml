@@ -11772,64 +11772,6 @@ Adam、SGD）外面，通过”向前看”的策略来稳定训练过程。</p>
       </tags>
   </entry>
   <entry>
-    <title>KeyMapping：win上使用mac键位</title>
-    <url>/posts/a9a69d93/</url>
-    <content><![CDATA[<p>最近购入了台17年12寸的
-macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command
-键的位置和用法，但是切换回 Windows
-的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP
-win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。
-<span id="more"></span></p>
-<p>本文介绍如何使用 AutoHotkey (v2.0)
-编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
-体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
-<h3 id="核心痛点本地与远程的精神分裂">💡
-核心痛点：本地与远程的”精神分裂”</h3>
-<p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
-<code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
-键就在这个位置）。</p>
-<p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
-Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
-<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
-远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
-的 <code>Win</code> 键。此时，我们在 Mac 上按
-<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
-<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
-<h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
-<p>Windows 提供了 WTSAPI (Windows Terminal Services
-API)，允许我们查询当前会话的信息。通过
-<code>WTSQuerySessionInformation</code>
-函数，我们可以获取连接到当前会话的客户端名称（Client Name）。</p>
-<ul>
-<li><strong>本地登录</strong>：客户端名称通常为空。</li>
-<li><strong>远程登录</strong>：客户端名称会显示发起连接的设备名）。</li>
-</ul>
-<p>利用这一点，我们可以编写一个 <code>IsRemoteMac()</code>
-函数来动态判断当前的上下文。</p>
-<h3 id="脚本实现">🛠️ 脚本实现</h3>
-<p>以下是完整的 AutoHotkey v2 脚本。</p>
-<figure class="highlight ahk"><table><tr><td class="code"><pre><span class="line"><span class="meta">#Requires AutoHotkey v2.0</span></span><br><span class="line"><span class="meta">#SingleInstance Force</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; MacKeys.ahk - Windows 下模拟 Mac 键位布局</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 功能说明：</span></span><br><span class="line"><span class="comment">;   - 将 Alt 键模拟为 Mac 的 Cmd 键</span></span><br><span class="line"><span class="comment">;   - 支持远程 Mac 模式（通过 RDP 连接时）和本地 Windows 模式自动切换</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 使用方式：</span></span><br><span class="line"><span class="comment">;   - 双击运行此脚本，托盘区会出现 AHK 图标</span></span><br><span class="line"><span class="comment">;   - 右键图标可退出或重新加载脚本</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 函数定义</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line">IsRemoteMac() &#123;</span><br><span class="line">    clientName := Trim(GetRdpClientName())</span><br><span class="line">    if (clientName = <span class="string">&quot;&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line"></span><br><span class="line">    if InStr(clientName, <span class="string">&quot;zihao-macbook&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">GetRdpClientName() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">        pBuffer := <span class="number">0</span></span><br><span class="line">        bytes := <span class="number">0</span></span><br><span class="line">        if !DllCall(<span class="string">&quot;wtsapi32\WTSQuerySessionInformationW&quot;</span></span><br><span class="line">            , <span class="string">&quot;Ptr&quot;</span>, <span class="number">0</span>              <span class="comment">; WTS_CURRENT_SERVER_HANDLE</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, -<span class="number">1</span>             <span class="comment">; WTS_CURRENT_SESSION</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, <span class="number">10</span>             <span class="comment">; WTSClientName</span></span><br><span class="line">            , <span class="string">&quot;Ptr*&quot;</span>, &amp;pBuffer</span><br><span class="line">            , <span class="string">&quot;UInt*&quot;</span>, &amp;bytes)</span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">        name := StrGet(pBuffer, <span class="string">&quot;UTF-16&quot;</span>)</span><br><span class="line">        DllCall(<span class="string">&quot;wtsapi32\WTSFreeMemory&quot;</span>, <span class="string">&quot;Ptr&quot;</span>, pBuffer)</span><br><span class="line">        <span class="keyword">return</span> name</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 远程 Mac 模式 (通过 RDP 连接到 Mac 时)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; Alt + Tab -&gt; Win + Tab (任务切换)</span></span><br><span class="line"><span class="title">$!Tab::</span></span><br><span class="line">&#123;</span><br><span class="line">    SendInput <span class="string">&quot;&#123;LAlt up&#125;&quot;</span></span><br><span class="line">    Sleep <span class="number">10</span></span><br><span class="line">    SendEvent <span class="string">&quot;#&#123;Tab&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; Win 键映射</span></span><br><span class="line"><span class="title">$#/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 斜杠 (Win + / -&gt; Ctrl + /)</span></span><br><span class="line"><span class="title">$#b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Win + B -&gt; Ctrl + B)</span></span><br><span class="line"><span class="title">$#s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Win + S -&gt; Ctrl + S)</span></span><br><span class="line"><span class="title">$#-::</span>Send <span class="string">&quot;^-&quot;</span>          <span class="comment">; 缩小 (Win + - -&gt; Ctrl + -)</span></span><br><span class="line"><span class="title">$#=::</span>Send <span class="string">&quot;^=&quot;</span>          <span class="comment">; 放大 (Win + = -&gt; Ctrl + =)</span></span><br><span class="line"><span class="title">$#p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 打印 (Win + P -&gt; Ctrl + P)</span></span><br><span class="line"><span class="title">$#[::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Win + [ -&gt; Ctrl + [)</span></span><br><span class="line"><span class="title">$#t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Win + T -&gt; Ctrl + T)</span></span><br><span class="line"><span class="title">$#+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Win + Shift + K -&gt; Ctrl + Shift + K)</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 (将 Alt 模拟 Mac 的 Cmd 键)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 基础编辑操作 ----</span></span><br><span class="line"><span class="title">$!c::</span>Send <span class="string">&quot;^c&quot;</span>          <span class="comment">; 复制 (Alt + C -&gt; Ctrl + C) 实现 Cmd + C</span></span><br><span class="line"><span class="title">$!v::</span>Send <span class="string">&quot;^v&quot;</span>          <span class="comment">; 粘贴 (Alt + V -&gt; Ctrl + V) 实现 Cmd + V</span></span><br><span class="line"><span class="title">$!x::</span>Send <span class="string">&quot;^x&quot;</span>          <span class="comment">; 剪切 (Alt + X -&gt; Ctrl + X) 实现 Cmd + X</span></span><br><span class="line"><span class="title">$!z::</span>Send <span class="string">&quot;^z&quot;</span>          <span class="comment">; 撤销 (Alt + Z -&gt; Ctrl + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$!+z::</span>Send <span class="string">&quot;^y&quot;</span>         <span class="comment">; 重做 (Alt + Shift + Z -&gt; Ctrl + Y) 实现 Cmd + Shift + Z</span></span><br><span class="line"><span class="title">$!a::</span>Send <span class="string">&quot;^a&quot;</span>          <span class="comment">; 全选 (Alt + A -&gt; Ctrl + A) 实现 Cmd + A</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文件操作 ----</span></span><br><span class="line"><span class="title">$!s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Alt + S -&gt; Ctrl + S) 实现 Cmd + S</span></span><br><span class="line"><span class="title">$!n::</span>Send <span class="string">&quot;^n&quot;</span>          <span class="comment">; 新建 (Alt + N -&gt; Ctrl + N) 实现 Cmd + N</span></span><br><span class="line"><span class="title">$!w::</span>Send <span class="string">&quot;^w&quot;</span>          <span class="comment">; 关闭 (Alt + W -&gt; Ctrl + W) 实现 Cmd + W</span></span><br><span class="line"><span class="title">$!p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 搜索 (Alt + P -&gt; Ctrl + P) 实现 Cmd + P</span></span><br><span class="line"><span class="title">$!,::</span>Send <span class="string">&quot;^,&quot;</span>          <span class="comment">; 菜单 (Alt + , -&gt; Ctrl + ,) 实现 Cmd + ,</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本编辑 ----</span></span><br><span class="line"><span class="title">$!b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Alt + B -&gt; Ctrl + B) 实现 Cmd + B</span></span><br><span class="line"><span class="title">$!f::</span>Send <span class="string">&quot;^f&quot;</span>          <span class="comment">; 查找 (Alt + F -&gt; Ctrl + F) 实现 Cmd + F</span></span><br><span class="line"><span class="title">$!h::</span>Send <span class="string">&quot;^h&quot;</span>          <span class="comment">; 替换 (Alt + H -&gt; Ctrl + H) 实现 Cmd + H</span></span><br><span class="line"><span class="title">$!/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 注释 (Alt + / -&gt; Ctrl + /) 实现 Cmd + /</span></span><br><span class="line"><span class="title">$![::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Alt + [ -&gt; Ctrl + [) 实现 Cmd + [</span></span><br><span class="line"><span class="title">$!+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Alt + Shift + K -&gt; Ctrl + Shift + K) 实现 Cmd + Shift + K</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器/标签页 ----</span></span><br><span class="line"><span class="title">$!t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Alt + T -&gt; Ctrl + T) 实现 Cmd + T</span></span><br><span class="line"><span class="title">$!r::</span>Send <span class="string">&quot;^r&quot;</span>          <span class="comment">; 刷新 (Alt + R -&gt; Ctrl + R) 实现 Cmd + R</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 缩放控制 ----</span></span><br><span class="line"><span class="title">$!=::</span>Send <span class="string">&quot;^&#123;=&#125;&quot;</span>        <span class="comment">; 放大 (Alt + = -&gt; Ctrl + =) 实现 Cmd + =</span></span><br><span class="line"><span class="title">$!-::</span>Send <span class="string">&quot;^&#123;-&#125;&quot;</span>        <span class="comment">; 缩小 (Alt + - -&gt; Ctrl + -) 实现 Cmd + -</span></span><br><span class="line"><span class="title">$!0::</span>Send <span class="string">&quot;^0&quot;</span>          <span class="comment">; 恢复大小 (Alt + 0 -&gt; Ctrl + 0) 实现 Cmd + 0</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 应用专属快捷键</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Typora 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Typora.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!1::</span>Send <span class="string">&quot;^1&quot;</span>          <span class="comment">; 一级标题 (Alt + 1 -&gt; Ctrl + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">    $!2::</span>Send <span class="string">&quot;^2&quot;</span>          <span class="comment">; 二级标题 (Alt + 2 -&gt; Ctrl + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">    $!3::</span>Send <span class="string">&quot;^3&quot;</span>          <span class="comment">; 三级标题 (Alt + 3 -&gt; Ctrl + 3) 实现 Cmd + 3</span></span><br><span class="line"><span class="title">    $!4::</span>Send <span class="string">&quot;^4&quot;</span>          <span class="comment">; 四级标题 (Alt + 4 -&gt; Ctrl + 4) 实现 Cmd + 4</span></span><br><span class="line"><span class="title">    $!5::</span>Send <span class="string">&quot;^5&quot;</span>          <span class="comment">; 五级标题 (Alt + 5 -&gt; Ctrl + 5) 实现 Cmd + 5</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器专属 (Chrome, Edge, Firefox) ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; (WinActive(&quot;ahk_exe chrome.exe&quot;) || WinActive(&quot;ahk_exe msedge.exe&quot;) || WinActive(&quot;ahk_exe firefox.exe&quot;))</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!Left::</span>Send <span class="string">&quot;!&#123;Left&#125;&quot;</span>      <span class="comment">; 后退 (Alt + Left -&gt; Alt + Left) 实现 Cmd + [</span></span><br><span class="line"><span class="title">    $!Right::</span>Send <span class="string">&quot;!&#123;Right&#125;&quot;</span>    <span class="comment">; 前进 (Alt + Right -&gt; Alt + Right) 实现 Cmd + ]</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- VS Code 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Code.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!+p::</span>Send <span class="string">&quot;^+p&quot;</span>        <span class="comment">; 命令面板 (Alt + Shift + P -&gt; Ctrl + Shift + P) 实现 Cmd + Shift + P</span></span><br><span class="line"><span class="title">    $!g::</span>Send <span class="string">&quot;^g&quot;</span>          <span class="comment">; 跳转行号 (Alt + G -&gt; Ctrl + G) 实现 Cmd + G</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 - 通用快捷键 (在应用专属之后处理)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 光标移动 ----</span></span><br><span class="line"><span class="title">$!Left::</span>Send <span class="string">&quot;&#123;Home&#125;&quot;</span>   <span class="comment">; 光标移至行首 (Alt + Left -&gt; Home) 实现 Cmd + Left</span></span><br><span class="line"><span class="title">$!Right::</span>Send <span class="string">&quot;&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至行尾 (Alt + Right -&gt; End) 实现 Cmd + Right</span></span><br><span class="line"><span class="title">$!Up::</span>Send <span class="string">&quot;^&#123;Home&#125;&quot;</span>    <span class="comment">; 光标移至文档头 (Alt + Up -&gt; Ctrl + Home) 实现 Cmd + Up</span></span><br><span class="line"><span class="title">$!Down::</span>Send <span class="string">&quot;^&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至文档尾 (Alt + Down -&gt; Ctrl + End) 实现 Cmd + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本选择 ----</span></span><br><span class="line"><span class="title">$!+Left::</span>Send <span class="string">&quot;+&#123;Home&#125;&quot;</span>     <span class="comment">; 选中至行首 (Alt + Shift + Left -&gt; Shift + Home) 实现 Cmd + Shift + Left</span></span><br><span class="line"><span class="title">$!+Right::</span>Send <span class="string">&quot;+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至行尾 (Alt + Shift + Right -&gt; Shift + End) 实现 Cmd + Shift + Right</span></span><br><span class="line"><span class="title">$!+Up::</span>Send <span class="string">&quot;^+&#123;Home&#125;&quot;</span>      <span class="comment">; 选中至文档头 (Alt + Shift + Up -&gt; Ctrl + Shift + Home) 实现 Cmd + Shift + Up</span></span><br><span class="line"><span class="title">$!+Down::</span>Send <span class="string">&quot;^+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至文档尾 (Alt + Shift + Down -&gt; Ctrl + Shift + End) 实现 Cmd + Shift + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 系统快捷键 ----</span></span><br><span class="line"><span class="title">$!e::</span>Send <span class="string">&quot;#e&quot;</span>          <span class="comment">; 打开资源管理器 (Alt + E -&gt; Win + E) 实现 Cmd + E</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 聚焦搜索 (Alt + Space -&gt; Win + S) 实现 Cmd + Space ----</span></span><br><span class="line"><span class="comment">; 使用 ~ 前缀允许原生 Alt+Space 行为，延迟触发 Win+S</span></span><br><span class="line"><span class="title">~!Space::</span></span><br><span class="line">&#123;</span><br><span class="line">    KeyWait <span class="string">&quot;Alt&quot;</span></span><br><span class="line">    Sleep <span class="number">50</span></span><br><span class="line">    Send <span class="string">&quot;#s&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Win 键特殊映射 ----</span></span><br><span class="line"><span class="title">$#z::</span>Send <span class="string">&quot;!z&quot;</span>          <span class="comment">; 自动换行 (Win + Z -&gt; Alt + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$#1::</span>Send <span class="string">&quot;^!1&quot;</span>         <span class="comment">; 截图并复制 (Win + 1 -&gt; Ctrl + Alt + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">$#2::</span>Send <span class="string">&quot;^!2&quot;</span>         <span class="comment">; 贴图 (Win + 2 -&gt; Ctrl + Alt + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">$#3::</span>Send <span class="string">&quot;^!3&quot;</span>         <span class="comment">; 截图 (Win + 3 -&gt; Ctrl + Alt + 3) 实现 Cmd + 3</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 单击 LAlt 发送 Win 键 ----</span></span><br><span class="line"><span class="title">~LAlt::</span>Send <span class="string">&quot;&#123;Blind&#125;&#123;vkE8&#125;&quot;</span></span><br><span class="line"><span class="title">~LAlt Up::</span></span><br><span class="line">&#123;</span><br><span class="line">    if (<span class="built_in">A_PriorKey</span> = <span class="string">&quot;LAlt&quot;</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        Send <span class="string">&quot;&#123;LWin&#125;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br></pre></td></tr></table></figure>
-<h3 id="如何使用">🚀 如何使用</h3>
-<ol type="1">
-<li>安装 <a href="https://www.autohotkey.com/">AutoHotkey v2</a>。</li>
-<li>创建一个新文件 <code>MacKeys.ahk</code>，将上述代码粘贴进去。</li>
-<li>双击运行即可。</li>
-<li>（可选）将其放入 Windows 的启动文件夹，实现开机自启。</li>
-</ol>
-<p><a
-href="https://github.com/iamzihao/MacKeysMapping.git">仓库地址</a>放到这里，希望这对你有帮助！</p>
-]]></content>
-      <categories>
-        <category>技术工具</category>
-      </categories>
-      <tags>
-        <tag>Windows</tag>
-        <tag>MacOS</tag>
-        <tag>AutoHotkey</tag>
-        <tag>效率工具</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>LaTeX 编译原理与指令指南</title>
     <url>/posts/8af06056/</url>
     <content><![CDATA[<p>写 LaTeX 和用 Word
@@ -11982,6 +11924,64 @@ bibtex，什么时候该重新编译以修正交叉引用，直到文件完全�
         <tag>工具</tag>
         <tag>LaTeX</tag>
         <tag>编译原理</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>KeyMapping：win上使用mac键位</title>
+    <url>/posts/a9a69d93/</url>
+    <content><![CDATA[<p>最近购入了台17年12寸的
+macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command
+键的位置和用法，但是切换回 Windows
+的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP
+win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。
+<span id="more"></span></p>
+<p>本文介绍如何使用 AutoHotkey (v2.0)
+编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
+体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
+<h3 id="核心痛点本地与远程的精神分裂">💡
+核心痛点：本地与远程的”精神分裂”</h3>
+<p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
+<code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
+键就在这个位置）。</p>
+<p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
+Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
+<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
+远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
+的 <code>Win</code> 键。此时，我们在 Mac 上按
+<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
+<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
+<h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
+<p>Windows 提供了 WTSAPI (Windows Terminal Services
+API)，允许我们查询当前会话的信息。通过
+<code>WTSQuerySessionInformation</code>
+函数，我们可以获取连接到当前会话的客户端名称（Client Name）。</p>
+<ul>
+<li><strong>本地登录</strong>：客户端名称通常为空。</li>
+<li><strong>远程登录</strong>：客户端名称会显示发起连接的设备名）。</li>
+</ul>
+<p>利用这一点，我们可以编写一个 <code>IsRemoteMac()</code>
+函数来动态判断当前的上下文。</p>
+<h3 id="脚本实现">🛠️ 脚本实现</h3>
+<p>以下是完整的 AutoHotkey v2 脚本。</p>
+<figure class="highlight ahk"><table><tr><td class="code"><pre><span class="line"><span class="meta">#Requires AutoHotkey v2.0</span></span><br><span class="line"><span class="meta">#SingleInstance Force</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; MacKeys.ahk - Windows 下模拟 Mac 键位布局</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 功能说明：</span></span><br><span class="line"><span class="comment">;   - 将 Alt 键模拟为 Mac 的 Cmd 键</span></span><br><span class="line"><span class="comment">;   - 支持远程 Mac 模式（通过 RDP 连接时）和本地 Windows 模式自动切换</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; 使用方式：</span></span><br><span class="line"><span class="comment">;   - 双击运行此脚本，托盘区会出现 AHK 图标</span></span><br><span class="line"><span class="comment">;   - 右键图标可退出或重新加载脚本</span></span><br><span class="line"><span class="comment">;</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 函数定义</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line">IsRemoteMac() &#123;</span><br><span class="line">    clientName := Trim(GetRdpClientName())</span><br><span class="line">    if (clientName = <span class="string">&quot;&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line"></span><br><span class="line">    if InStr(clientName, <span class="string">&quot;zihao-macbook&quot;</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">GetRdpClientName() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">        pBuffer := <span class="number">0</span></span><br><span class="line">        bytes := <span class="number">0</span></span><br><span class="line">        if !DllCall(<span class="string">&quot;wtsapi32\WTSQuerySessionInformationW&quot;</span></span><br><span class="line">            , <span class="string">&quot;Ptr&quot;</span>, <span class="number">0</span>              <span class="comment">; WTS_CURRENT_SERVER_HANDLE</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, -<span class="number">1</span>             <span class="comment">; WTS_CURRENT_SESSION</span></span><br><span class="line">            , <span class="string">&quot;Int&quot;</span>, <span class="number">10</span>             <span class="comment">; WTSClientName</span></span><br><span class="line">            , <span class="string">&quot;Ptr*&quot;</span>, &amp;pBuffer</span><br><span class="line">            , <span class="string">&quot;UInt*&quot;</span>, &amp;bytes)</span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">        name := StrGet(pBuffer, <span class="string">&quot;UTF-16&quot;</span>)</span><br><span class="line">        DllCall(<span class="string">&quot;wtsapi32\WTSFreeMemory&quot;</span>, <span class="string">&quot;Ptr&quot;</span>, pBuffer)</span><br><span class="line">        <span class="keyword">return</span> name</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 远程 Mac 模式 (通过 RDP 连接到 Mac 时)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; Alt + Tab -&gt; Win + Tab (任务切换)</span></span><br><span class="line"><span class="title">$!Tab::</span></span><br><span class="line">&#123;</span><br><span class="line">    SendInput <span class="string">&quot;&#123;LAlt up&#125;&quot;</span></span><br><span class="line">    Sleep <span class="number">10</span></span><br><span class="line">    SendEvent <span class="string">&quot;#&#123;Tab&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; Win 键映射</span></span><br><span class="line"><span class="title">$#/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 斜杠 (Win + / -&gt; Ctrl + /)</span></span><br><span class="line"><span class="title">$#b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Win + B -&gt; Ctrl + B)</span></span><br><span class="line"><span class="title">$#s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Win + S -&gt; Ctrl + S)</span></span><br><span class="line"><span class="title">$#-::</span>Send <span class="string">&quot;^-&quot;</span>          <span class="comment">; 缩小 (Win + - -&gt; Ctrl + -)</span></span><br><span class="line"><span class="title">$#=::</span>Send <span class="string">&quot;^=&quot;</span>          <span class="comment">; 放大 (Win + = -&gt; Ctrl + =)</span></span><br><span class="line"><span class="title">$#p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 打印 (Win + P -&gt; Ctrl + P)</span></span><br><span class="line"><span class="title">$#[::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Win + [ -&gt; Ctrl + [)</span></span><br><span class="line"><span class="title">$#t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Win + T -&gt; Ctrl + T)</span></span><br><span class="line"><span class="title">$#+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Win + Shift + K -&gt; Ctrl + Shift + K)</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 (将 Alt 模拟 Mac 的 Cmd 键)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 基础编辑操作 ----</span></span><br><span class="line"><span class="title">$!c::</span>Send <span class="string">&quot;^c&quot;</span>          <span class="comment">; 复制 (Alt + C -&gt; Ctrl + C) 实现 Cmd + C</span></span><br><span class="line"><span class="title">$!v::</span>Send <span class="string">&quot;^v&quot;</span>          <span class="comment">; 粘贴 (Alt + V -&gt; Ctrl + V) 实现 Cmd + V</span></span><br><span class="line"><span class="title">$!x::</span>Send <span class="string">&quot;^x&quot;</span>          <span class="comment">; 剪切 (Alt + X -&gt; Ctrl + X) 实现 Cmd + X</span></span><br><span class="line"><span class="title">$!z::</span>Send <span class="string">&quot;^z&quot;</span>          <span class="comment">; 撤销 (Alt + Z -&gt; Ctrl + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$!+z::</span>Send <span class="string">&quot;^y&quot;</span>         <span class="comment">; 重做 (Alt + Shift + Z -&gt; Ctrl + Y) 实现 Cmd + Shift + Z</span></span><br><span class="line"><span class="title">$!a::</span>Send <span class="string">&quot;^a&quot;</span>          <span class="comment">; 全选 (Alt + A -&gt; Ctrl + A) 实现 Cmd + A</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文件操作 ----</span></span><br><span class="line"><span class="title">$!s::</span>Send <span class="string">&quot;^s&quot;</span>          <span class="comment">; 保存 (Alt + S -&gt; Ctrl + S) 实现 Cmd + S</span></span><br><span class="line"><span class="title">$!n::</span>Send <span class="string">&quot;^n&quot;</span>          <span class="comment">; 新建 (Alt + N -&gt; Ctrl + N) 实现 Cmd + N</span></span><br><span class="line"><span class="title">$!w::</span>Send <span class="string">&quot;^w&quot;</span>          <span class="comment">; 关闭 (Alt + W -&gt; Ctrl + W) 实现 Cmd + W</span></span><br><span class="line"><span class="title">$!p::</span>Send <span class="string">&quot;^p&quot;</span>          <span class="comment">; 搜索 (Alt + P -&gt; Ctrl + P) 实现 Cmd + P</span></span><br><span class="line"><span class="title">$!,::</span>Send <span class="string">&quot;^,&quot;</span>          <span class="comment">; 菜单 (Alt + , -&gt; Ctrl + ,) 实现 Cmd + ,</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本编辑 ----</span></span><br><span class="line"><span class="title">$!b::</span>Send <span class="string">&quot;^b&quot;</span>          <span class="comment">; 加粗 (Alt + B -&gt; Ctrl + B) 实现 Cmd + B</span></span><br><span class="line"><span class="title">$!f::</span>Send <span class="string">&quot;^f&quot;</span>          <span class="comment">; 查找 (Alt + F -&gt; Ctrl + F) 实现 Cmd + F</span></span><br><span class="line"><span class="title">$!h::</span>Send <span class="string">&quot;^h&quot;</span>          <span class="comment">; 替换 (Alt + H -&gt; Ctrl + H) 实现 Cmd + H</span></span><br><span class="line"><span class="title">$!/::</span>Send <span class="string">&quot;^/&quot;</span>          <span class="comment">; 注释 (Alt + / -&gt; Ctrl + /) 实现 Cmd + /</span></span><br><span class="line"><span class="title">$![::</span>Send <span class="string">&quot;^[&quot;</span>          <span class="comment">; 反缩进 (Alt + [ -&gt; Ctrl + [) 实现 Cmd + [</span></span><br><span class="line"><span class="title">$!+k::</span>Send <span class="string">&quot;^+k&quot;</span>        <span class="comment">; 插入代码块 (Alt + Shift + K -&gt; Ctrl + Shift + K) 实现 Cmd + Shift + K</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器/标签页 ----</span></span><br><span class="line"><span class="title">$!t::</span>Send <span class="string">&quot;^t&quot;</span>          <span class="comment">; 新建标签页 (Alt + T -&gt; Ctrl + T) 实现 Cmd + T</span></span><br><span class="line"><span class="title">$!r::</span>Send <span class="string">&quot;^r&quot;</span>          <span class="comment">; 刷新 (Alt + R -&gt; Ctrl + R) 实现 Cmd + R</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 缩放控制 ----</span></span><br><span class="line"><span class="title">$!=::</span>Send <span class="string">&quot;^&#123;=&#125;&quot;</span>        <span class="comment">; 放大 (Alt + = -&gt; Ctrl + =) 实现 Cmd + =</span></span><br><span class="line"><span class="title">$!-::</span>Send <span class="string">&quot;^&#123;-&#125;&quot;</span>        <span class="comment">; 缩小 (Alt + - -&gt; Ctrl + -) 实现 Cmd + -</span></span><br><span class="line"><span class="title">$!0::</span>Send <span class="string">&quot;^0&quot;</span>          <span class="comment">; 恢复大小 (Alt + 0 -&gt; Ctrl + 0) 实现 Cmd + 0</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 应用专属快捷键</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Typora 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Typora.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!1::</span>Send <span class="string">&quot;^1&quot;</span>          <span class="comment">; 一级标题 (Alt + 1 -&gt; Ctrl + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">    $!2::</span>Send <span class="string">&quot;^2&quot;</span>          <span class="comment">; 二级标题 (Alt + 2 -&gt; Ctrl + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">    $!3::</span>Send <span class="string">&quot;^3&quot;</span>          <span class="comment">; 三级标题 (Alt + 3 -&gt; Ctrl + 3) 实现 Cmd + 3</span></span><br><span class="line"><span class="title">    $!4::</span>Send <span class="string">&quot;^4&quot;</span>          <span class="comment">; 四级标题 (Alt + 4 -&gt; Ctrl + 4) 实现 Cmd + 4</span></span><br><span class="line"><span class="title">    $!5::</span>Send <span class="string">&quot;^5&quot;</span>          <span class="comment">; 五级标题 (Alt + 5 -&gt; Ctrl + 5) 实现 Cmd + 5</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 浏览器专属 (Chrome, Edge, Firefox) ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; (WinActive(&quot;ahk_exe chrome.exe&quot;) || WinActive(&quot;ahk_exe msedge.exe&quot;) || WinActive(&quot;ahk_exe firefox.exe&quot;))</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!Left::</span>Send <span class="string">&quot;!&#123;Left&#125;&quot;</span>      <span class="comment">; 后退 (Alt + Left -&gt; Alt + Left) 实现 Cmd + [</span></span><br><span class="line"><span class="title">    $!Right::</span>Send <span class="string">&quot;!&#123;Right&#125;&quot;</span>    <span class="comment">; 前进 (Alt + Right -&gt; Alt + Right) 实现 Cmd + ]</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- VS Code 专属 ----</span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac() &amp;&amp; WinActive(&quot;ahk_exe Code.exe&quot;)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="title">    $!+p::</span>Send <span class="string">&quot;^+p&quot;</span>        <span class="comment">; 命令面板 (Alt + Shift + P -&gt; Ctrl + Shift + P) 实现 Cmd + Shift + P</span></span><br><span class="line"><span class="title">    $!g::</span>Send <span class="string">&quot;^g&quot;</span>          <span class="comment">; 跳转行号 (Alt + G -&gt; Ctrl + G) 实现 Cmd + G</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="meta">#HotIf</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="comment">; 本地 Windows 模式 - 通用快捷键 (在应用专属之后处理)</span></span><br><span class="line"><span class="comment">; ============================================================================</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf !IsRemoteMac()</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 光标移动 ----</span></span><br><span class="line"><span class="title">$!Left::</span>Send <span class="string">&quot;&#123;Home&#125;&quot;</span>   <span class="comment">; 光标移至行首 (Alt + Left -&gt; Home) 实现 Cmd + Left</span></span><br><span class="line"><span class="title">$!Right::</span>Send <span class="string">&quot;&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至行尾 (Alt + Right -&gt; End) 实现 Cmd + Right</span></span><br><span class="line"><span class="title">$!Up::</span>Send <span class="string">&quot;^&#123;Home&#125;&quot;</span>    <span class="comment">; 光标移至文档头 (Alt + Up -&gt; Ctrl + Home) 实现 Cmd + Up</span></span><br><span class="line"><span class="title">$!Down::</span>Send <span class="string">&quot;^&#123;End&#125;&quot;</span>   <span class="comment">; 光标移至文档尾 (Alt + Down -&gt; Ctrl + End) 实现 Cmd + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 文本选择 ----</span></span><br><span class="line"><span class="title">$!+Left::</span>Send <span class="string">&quot;+&#123;Home&#125;&quot;</span>     <span class="comment">; 选中至行首 (Alt + Shift + Left -&gt; Shift + Home) 实现 Cmd + Shift + Left</span></span><br><span class="line"><span class="title">$!+Right::</span>Send <span class="string">&quot;+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至行尾 (Alt + Shift + Right -&gt; Shift + End) 实现 Cmd + Shift + Right</span></span><br><span class="line"><span class="title">$!+Up::</span>Send <span class="string">&quot;^+&#123;Home&#125;&quot;</span>      <span class="comment">; 选中至文档头 (Alt + Shift + Up -&gt; Ctrl + Shift + Home) 实现 Cmd + Shift + Up</span></span><br><span class="line"><span class="title">$!+Down::</span>Send <span class="string">&quot;^+&#123;End&#125;&quot;</span>     <span class="comment">; 选中至文档尾 (Alt + Shift + Down -&gt; Ctrl + Shift + End) 实现 Cmd + Shift + Down</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 系统快捷键 ----</span></span><br><span class="line"><span class="title">$!e::</span>Send <span class="string">&quot;#e&quot;</span>          <span class="comment">; 打开资源管理器 (Alt + E -&gt; Win + E) 实现 Cmd + E</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 聚焦搜索 (Alt + Space -&gt; Win + S) 实现 Cmd + Space ----</span></span><br><span class="line"><span class="comment">; 使用 ~ 前缀允许原生 Alt+Space 行为，延迟触发 Win+S</span></span><br><span class="line"><span class="title">~!Space::</span></span><br><span class="line">&#123;</span><br><span class="line">    KeyWait <span class="string">&quot;Alt&quot;</span></span><br><span class="line">    Sleep <span class="number">50</span></span><br><span class="line">    Send <span class="string">&quot;#s&quot;</span></span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- Win 键特殊映射 ----</span></span><br><span class="line"><span class="title">$#z::</span>Send <span class="string">&quot;!z&quot;</span>          <span class="comment">; 自动换行 (Win + Z -&gt; Alt + Z) 实现 Cmd + Z</span></span><br><span class="line"><span class="title">$#1::</span>Send <span class="string">&quot;^!1&quot;</span>         <span class="comment">; 截图并复制 (Win + 1 -&gt; Ctrl + Alt + 1) 实现 Cmd + 1</span></span><br><span class="line"><span class="title">$#2::</span>Send <span class="string">&quot;^!2&quot;</span>         <span class="comment">; 贴图 (Win + 2 -&gt; Ctrl + Alt + 2) 实现 Cmd + 2</span></span><br><span class="line"><span class="title">$#3::</span>Send <span class="string">&quot;^!3&quot;</span>         <span class="comment">; 截图 (Win + 3 -&gt; Ctrl + Alt + 3) 实现 Cmd + 3</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ---- 单击 LAlt 发送 Win 键 ----</span></span><br><span class="line"><span class="title">~LAlt::</span>Send <span class="string">&quot;&#123;Blind&#125;&#123;vkE8&#125;&quot;</span></span><br><span class="line"><span class="title">~LAlt Up::</span></span><br><span class="line">&#123;</span><br><span class="line">    if (<span class="built_in">A_PriorKey</span> = <span class="string">&quot;LAlt&quot;</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        Send <span class="string">&quot;&#123;LWin&#125;&quot;</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#HotIf</span></span><br></pre></td></tr></table></figure>
+<h3 id="如何使用">🚀 如何使用</h3>
+<ol type="1">
+<li>安装 <a href="https://www.autohotkey.com/">AutoHotkey v2</a>。</li>
+<li>创建一个新文件 <code>MacKeys.ahk</code>，将上述代码粘贴进去。</li>
+<li>双击运行即可。</li>
+<li>（可选）将其放入 Windows 的启动文件夹，实现开机自启。</li>
+</ol>
+<p><a
+href="https://github.com/iamzihao/MacKeysMapping.git">仓库地址</a>放到这里，希望这对你有帮助！</p>
+]]></content>
+      <categories>
+        <category>技术工具</category>
+      </categories>
+      <tags>
+        <tag>Windows</tag>
+        <tag>MacOS</tag>
+        <tag>AutoHotkey</tag>
+        <tag>效率工具</tag>
       </tags>
   </entry>
   <entry>
@@ -13746,6 +13746,393 @@ with LLVM</a></li>
         <tag>LLVM</tag>
         <tag>编译器</tag>
         <tag>IR</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
+    <url>/posts/48c29df2/</url>
+    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
+<span id="more"></span></p>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Port（端口）</strong></td>
+<td>操作系统给网络程序分配的逻辑入口编号。</td>
+<td>一台机器里不同网络服务的门牌号</td>
+</tr>
+<tr>
+<td><strong>SSH</strong></td>
+<td>Secure Shell，远程登录与加密隧道工具。</td>
+<td>远程终端 + 隧道</td>
+</tr>
+<tr>
+<td><strong>RemoteForward</strong></td>
+<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
+<td>让服务器“借用”你本机端口</td>
+</tr>
+<tr>
+<td><strong>LocalForward</strong></td>
+<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
+<td>让本机访问远端服务</td>
+</tr>
+<tr>
+<td><strong>Proxy（代理）</strong></td>
+<td>代理服务，代替客户端向目标站点发请求。</td>
+<td>中间人转发流量</td>
+</tr>
+<tr>
+<td><strong>VS Code Port Forwarding</strong></td>
+<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
+<td>帮你转发，但有时会帮倒忙</td>
+</tr>
+</tbody>
+</table>
+<p>如果用更白话的话说：</p>
+<ul>
+<li><code>SSH</code>
+不只是远程登录工具，本质上还能顺手带一条加密管道</li>
+<li><code>RemoteForward</code>
+是让远端机器“借用”当前客户端上的某个端口</li>
+<li><code>LocalForward</code>
+是让本地机器“借道”去访问远端的某个端口</li>
+<li><code>Proxy</code>
+不是目标服务本身，而是一个代你转发请求的中间层</li>
+<li><code>VS Code 自动端口转发</code>
+则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
+</ul>
+<h3 id="程序program端口port套接字socket到底是什么关系">🧱
+程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
+<ul>
+<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
+<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
+<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
+<code>7897</code>，可以理解成网络入口的门牌号</li>
+<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
+IP:端口”之后形成的那个网络端点</li>
+</ul>
+<p>放到这次问题里看，会更容易理解：</p>
+<ul>
+<li>不是“端口自己在工作”，而是某个程序（program /
+process）创建了套接字（socket）并监听（listen）这个端口</li>
+<li>更准确地说，通常是同一个 <code>IP:端口</code>
+组合的监听套接字，只能被一个程序成功持有，比如
+<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
+<li>所以看到 <code>7897</code>
+在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
+<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
+这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
+</ul>
+<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
+<ul>
+<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
+<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
+<code>VS Code</code> 或 <code>ssh</code> helper</li>
+</ul>
+<p>一旦监听者变了，流量路径就会跟着变。</p>
+<p>这也是为什么这次故障排查不能只看“<code>7897</code>
+通不通”，还得看：</p>
+<ul>
+<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
+<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
+<code>7897</code></li>
+<li>或者两边是否在不同阶段都试图接管这个端口</li>
+</ul>
+<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
+自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
+<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
+<p>我使用的设备如下：</p>
+<ul>
+<li>macbook pro 2020</li>
+<li>win xiaoxin 14pro 2021</li>
+<li>linux 实验室的高性能服务器 atlanta</li>
+</ul>
+<p>当时的 SSH 配置如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<ul>
+<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
+<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
+<code>7897</code></li>
+<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
+隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
+<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
+的代理入口</li>
+</ul>
+<p>也就是说，<code>atlanta</code>
+并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
+<p>可以看这张链路拓扑图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
+<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
+<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
+<p>这意味着：</p>
+<ul>
+<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
+<li><code>atlanta</code> 也可以有一个自己的
+<code>127.0.0.1:7897</code></li>
+<li>SSH 的
+<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
+</ul>
+<p>问题在于，<strong>VS Code Remote SSH
+还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
+<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
+在监听，它可能会再做一层类似这样的映射：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>不过这里要注意一件事：<strong>这不是 VS Code
+的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>而 <code>atlanta 7897</code> 本来又是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
+<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
+<p>按当时的现象，最合理的解释是：</p>
+<ol type="1">
+<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
+<li>SSH 按配置建立了 <code>RemoteForward</code>，使
+<code>atlanta:7897 -&gt; Win本地:7897</code></li>
+<li>VS Code 又检测到远端 <code>7897</code>
+正在监听，于是自动做了端口转发</li>
+<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
+占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
+<li>因此，真正危险的情况更像是：VS Code
+因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
+本地 <code>7897</code></strong></li>
+<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
+的入口，还会被 VS Code 的转发链路卷进去</li>
+<li>最终结果就是：本地代理流量绕回
+SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
+</ol>
+<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
+<p>当时观察到的两个现象正好支持这个推断：</p>
+<ul>
+<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
+<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
+</ul>
+<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
+端口转发到底是怎么工作的</h3>
+<h4 id="remoteforward">RemoteForward</h4>
+<p><code>RemoteForward A B:C</code></p>
+<p>意思是：</p>
+<ul>
+<li>在远端机器监听 <code>A</code></li>
+<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
+</ul>
+<p>这里的配置：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>等价于：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这里很容易混淆的一点是：</p>
+<ul>
+<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
+<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
+</ul>
+<p>它真正表达的是：</p>
+<ul>
+<li>由远端程序去连接 <code>atlanta:7897</code></li>
+<li>SSH 再把这条连接转交给当前客户端本机的
+<code>127.0.0.1:7897</code></li>
+</ul>
+<p>所以更准确的理解应该是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
+连接里双向流动。也就是说：</p>
+<ul>
+<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
+的请求，会被送到当前客户端的 <code>7897</code></li>
+<li>当前客户端上的代理再去访问外网</li>
+<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
+</ul>
+<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
+<code>atlanta:7897</code>”。<code>RemoteForward</code>
+解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
+<p>因此，只要在 <code>atlanta</code> 上配置：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
+<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
+<p>VS Code Remote SSH 会做另一件事：</p>
+<ul>
+<li>发现远端某个端口在监听</li>
+<li>自动把它映射到本机</li>
+<li>让你本机直接访问远端服务</li>
+</ul>
+<p>这个功能本来是给
+<code>3000</code>、<code>8080</code>、<code>8888</code>
+这类开发服务准备的，比如远端起了 Web
+服务，你本机浏览器可以直接打开。</p>
+<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
+SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
+<p>典型应用场景一般有这些：</p>
+<ul>
+<li>远端跑了前端开发服务器，比如
+Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
+<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
+面板，本机可以直接点开预览</li>
+<li>远端临时起了一个调试
+API、管理后台或文档站，不想专门手敲隧道命令</li>
+<li>容器、跳板机或云主机里的服务只监听
+<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
+</ul>
+<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
+<ul>
+<li>端口是给人看的</li>
+<li>访问方向通常是“本机去看远端”</li>
+<li>即使换一个本地端口也无所谓，只要能打开就行</li>
+</ul>
+<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
+<ul>
+<li><code>process</code>：轮询远端
+<code>/proc</code>，找哪些进程正在监听端口</li>
+<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
+</ul>
+<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
+Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
+<code>4123</code>。</p>
+<p>所以对这次故障，更严谨的表述应该是：</p>
+<ul>
+<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
+<code>7897</code>”</li>
+<li>而是“VS Code 会自动转发远端
+<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
+<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
+</ul>
+<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
+隧道的代理口，确实属于“不该自动转发的端口”。</p>
+<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
+<ul>
+<li>开发端口通常是“给你打开页面用的”</li>
+<li>代理端口则是“给别的流量继续转发用的”</li>
+</ul>
+<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
+接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
+<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
+<p>因为它会同时制造两种错觉：</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 40%" />
+<col style="width: 45%" />
+</colgroup>
+<thead>
+<tr>
+<th>现象</th>
+<th>容易误判成什么</th>
+<th>实际更可能是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>atlanta curl</code> 无响应</td>
+<td>远端没网、机场挂了</td>
+<td>远端代理口被错误转发</td>
+</tr>
+<tr>
+<td>Win 本地机场节点看起来正常</td>
+<td>机场没问题</td>
+<td>但本地代理出口发生环路</td>
+</tr>
+<tr>
+<td>断开 VS Code SSH 后马上恢复</td>
+<td>偶发网络波动</td>
+<td>SSH/VS Code 转发链路有问题</td>
+</tr>
+<tr>
+<td>删除自动转发 <code>7897</code> 后恢复</td>
+<td>临时玄学</td>
+<td>端口冲突被解除</td>
+</tr>
+</tbody>
+</table>
+<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
+<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
+<p>下次再遇到类似问题，可以按这个顺序排查。</p>
+<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
+到底谁在监听</h4>
+<p>Windows 可以看：</p>
+<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
+<p>macOS / Linux 可以看：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>重点不是只看“有没有监听”，而是看：</p>
+<ul>
+<li>是 Clash 在监听</li>
+<li>还是 VS Code helper / SSH client 在监听</li>
+<li>还是两边都试图占这个端口</li>
+</ul>
+<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
+的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
+<h3 id="常见误区">🚫 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
+<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
+会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
+</tr>
+<tr>
+<td>看到节点正常，就说明代理没问题</td>
+<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
+</tr>
+<tr>
+<td><code>curl</code> 没输出一定是目标网站挂了</td>
+<td>不对。端口回环、代理黑洞、DNS
+被错误接管都可能表现成“卡死没输出”。</td>
+</tr>
+<tr>
+<td>VS Code 自动转发一定是好事</td>
+<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
+SSH 的 <code>RemoteForward</code>，又被 VS Code
+自动纳入端口转发候选；一旦 VS Code
+因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
+</blockquote>
+<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
+Clash，最稳的策略就三条：</p>
+<ul>
+<li>禁掉 VS Code 对代理端口的自动转发</li>
+<li>让远端端口和本地代理端口不要同号</li>
+<li>把不同设备的远端代理端口编号分开</li>
+</ul>
+<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
+]]></content>
+      <categories>
+        <category>网络</category>
+        <category>开发环境</category>
+      </categories>
+      <tags>
+        <tag>Clash</tag>
+        <tag>SSH</tag>
+        <tag>VS Code</tag>
+        <tag>端口转发</tag>
+        <tag>Proxy</tag>
       </tags>
   </entry>
   <entry>
@@ -18176,393 +18563,6 @@ flowchart LR
         <tag>C++</tag>
         <tag>编程入门</tag>
         <tag>引用</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
-    <url>/posts/48c29df2/</url>
-    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
-<span id="more"></span></p>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Port（端口）</strong></td>
-<td>操作系统给网络程序分配的逻辑入口编号。</td>
-<td>一台机器里不同网络服务的门牌号</td>
-</tr>
-<tr>
-<td><strong>SSH</strong></td>
-<td>Secure Shell，远程登录与加密隧道工具。</td>
-<td>远程终端 + 隧道</td>
-</tr>
-<tr>
-<td><strong>RemoteForward</strong></td>
-<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
-<td>让服务器“借用”你本机端口</td>
-</tr>
-<tr>
-<td><strong>LocalForward</strong></td>
-<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
-<td>让本机访问远端服务</td>
-</tr>
-<tr>
-<td><strong>Proxy（代理）</strong></td>
-<td>代理服务，代替客户端向目标站点发请求。</td>
-<td>中间人转发流量</td>
-</tr>
-<tr>
-<td><strong>VS Code Port Forwarding</strong></td>
-<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
-<td>帮你转发，但有时会帮倒忙</td>
-</tr>
-</tbody>
-</table>
-<p>如果用更白话的话说：</p>
-<ul>
-<li><code>SSH</code>
-不只是远程登录工具，本质上还能顺手带一条加密管道</li>
-<li><code>RemoteForward</code>
-是让远端机器“借用”当前客户端上的某个端口</li>
-<li><code>LocalForward</code>
-是让本地机器“借道”去访问远端的某个端口</li>
-<li><code>Proxy</code>
-不是目标服务本身，而是一个代你转发请求的中间层</li>
-<li><code>VS Code 自动端口转发</code>
-则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
-</ul>
-<h3 id="程序program端口port套接字socket到底是什么关系">🧱
-程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
-<ul>
-<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
-<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
-<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
-<code>7897</code>，可以理解成网络入口的门牌号</li>
-<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
-IP:端口”之后形成的那个网络端点</li>
-</ul>
-<p>放到这次问题里看，会更容易理解：</p>
-<ul>
-<li>不是“端口自己在工作”，而是某个程序（program /
-process）创建了套接字（socket）并监听（listen）这个端口</li>
-<li>更准确地说，通常是同一个 <code>IP:端口</code>
-组合的监听套接字，只能被一个程序成功持有，比如
-<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
-<li>所以看到 <code>7897</code>
-在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
-<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
-这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
-</ul>
-<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
-<ul>
-<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
-<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
-<code>VS Code</code> 或 <code>ssh</code> helper</li>
-</ul>
-<p>一旦监听者变了，流量路径就会跟着变。</p>
-<p>这也是为什么这次故障排查不能只看“<code>7897</code>
-通不通”，还得看：</p>
-<ul>
-<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
-<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
-<code>7897</code></li>
-<li>或者两边是否在不同阶段都试图接管这个端口</li>
-</ul>
-<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
-自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
-<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
-<p>我使用的设备如下：</p>
-<ul>
-<li>macbook pro 2020</li>
-<li>win xiaoxin 14pro 2021</li>
-<li>linux 实验室的高性能服务器 atlanta</li>
-</ul>
-<p>当时的 SSH 配置如下：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<ul>
-<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
-<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
-<code>7897</code></li>
-<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
-隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
-<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
-的代理入口</li>
-</ul>
-<p>也就是说，<code>atlanta</code>
-并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
-<p>可以看这张链路拓扑图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
-<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
-<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
-<p>这意味着：</p>
-<ul>
-<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
-<li><code>atlanta</code> 也可以有一个自己的
-<code>127.0.0.1:7897</code></li>
-<li>SSH 的
-<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
-</ul>
-<p>问题在于，<strong>VS Code Remote SSH
-还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
-<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
-在监听，它可能会再做一层类似这样的映射：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>不过这里要注意一件事：<strong>这不是 VS Code
-的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>而 <code>atlanta 7897</code> 本来又是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
-<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
-<p>按当时的现象，最合理的解释是：</p>
-<ol type="1">
-<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
-<li>SSH 按配置建立了 <code>RemoteForward</code>，使
-<code>atlanta:7897 -&gt; Win本地:7897</code></li>
-<li>VS Code 又检测到远端 <code>7897</code>
-正在监听，于是自动做了端口转发</li>
-<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
-占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
-<li>因此，真正危险的情况更像是：VS Code
-因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
-本地 <code>7897</code></strong></li>
-<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
-的入口，还会被 VS Code 的转发链路卷进去</li>
-<li>最终结果就是：本地代理流量绕回
-SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
-</ol>
-<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
-<p>当时观察到的两个现象正好支持这个推断：</p>
-<ul>
-<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
-<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
-</ul>
-<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
-端口转发到底是怎么工作的</h3>
-<h4 id="remoteforward">RemoteForward</h4>
-<p><code>RemoteForward A B:C</code></p>
-<p>意思是：</p>
-<ul>
-<li>在远端机器监听 <code>A</code></li>
-<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
-</ul>
-<p>这里的配置：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>等价于：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这里很容易混淆的一点是：</p>
-<ul>
-<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
-<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
-</ul>
-<p>它真正表达的是：</p>
-<ul>
-<li>由远端程序去连接 <code>atlanta:7897</code></li>
-<li>SSH 再把这条连接转交给当前客户端本机的
-<code>127.0.0.1:7897</code></li>
-</ul>
-<p>所以更准确的理解应该是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
-连接里双向流动。也就是说：</p>
-<ul>
-<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
-的请求，会被送到当前客户端的 <code>7897</code></li>
-<li>当前客户端上的代理再去访问外网</li>
-<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
-</ul>
-<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
-<code>atlanta:7897</code>”。<code>RemoteForward</code>
-解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
-<p>因此，只要在 <code>atlanta</code> 上配置：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
-<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
-<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
-<p>VS Code Remote SSH 会做另一件事：</p>
-<ul>
-<li>发现远端某个端口在监听</li>
-<li>自动把它映射到本机</li>
-<li>让你本机直接访问远端服务</li>
-</ul>
-<p>这个功能本来是给
-<code>3000</code>、<code>8080</code>、<code>8888</code>
-这类开发服务准备的，比如远端起了 Web
-服务，你本机浏览器可以直接打开。</p>
-<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
-SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
-<p>典型应用场景一般有这些：</p>
-<ul>
-<li>远端跑了前端开发服务器，比如
-Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
-<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
-面板，本机可以直接点开预览</li>
-<li>远端临时起了一个调试
-API、管理后台或文档站，不想专门手敲隧道命令</li>
-<li>容器、跳板机或云主机里的服务只监听
-<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
-</ul>
-<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
-<ul>
-<li>端口是给人看的</li>
-<li>访问方向通常是“本机去看远端”</li>
-<li>即使换一个本地端口也无所谓，只要能打开就行</li>
-</ul>
-<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
-<ul>
-<li><code>process</code>：轮询远端
-<code>/proc</code>，找哪些进程正在监听端口</li>
-<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
-</ul>
-<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
-Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
-<code>4123</code>。</p>
-<p>所以对这次故障，更严谨的表述应该是：</p>
-<ul>
-<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
-<code>7897</code>”</li>
-<li>而是“VS Code 会自动转发远端
-<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
-<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
-</ul>
-<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
-隧道的代理口，确实属于“不该自动转发的端口”。</p>
-<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
-<ul>
-<li>开发端口通常是“给你打开页面用的”</li>
-<li>代理端口则是“给别的流量继续转发用的”</li>
-</ul>
-<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
-接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
-<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
-<p>因为它会同时制造两种错觉：</p>
-<table>
-<colgroup>
-<col style="width: 15%" />
-<col style="width: 40%" />
-<col style="width: 45%" />
-</colgroup>
-<thead>
-<tr>
-<th>现象</th>
-<th>容易误判成什么</th>
-<th>实际更可能是什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>atlanta curl</code> 无响应</td>
-<td>远端没网、机场挂了</td>
-<td>远端代理口被错误转发</td>
-</tr>
-<tr>
-<td>Win 本地机场节点看起来正常</td>
-<td>机场没问题</td>
-<td>但本地代理出口发生环路</td>
-</tr>
-<tr>
-<td>断开 VS Code SSH 后马上恢复</td>
-<td>偶发网络波动</td>
-<td>SSH/VS Code 转发链路有问题</td>
-</tr>
-<tr>
-<td>删除自动转发 <code>7897</code> 后恢复</td>
-<td>临时玄学</td>
-<td>端口冲突被解除</td>
-</tr>
-</tbody>
-</table>
-<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
-<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
-<p>下次再遇到类似问题，可以按这个顺序排查。</p>
-<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
-到底谁在监听</h4>
-<p>Windows 可以看：</p>
-<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
-<p>macOS / Linux 可以看：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>重点不是只看“有没有监听”，而是看：</p>
-<ul>
-<li>是 Clash 在监听</li>
-<li>还是 VS Code helper / SSH client 在监听</li>
-<li>还是两边都试图占这个端口</li>
-</ul>
-<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
-的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
-<h3 id="常见误区">🚫 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
-<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
-会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
-</tr>
-<tr>
-<td>看到节点正常，就说明代理没问题</td>
-<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
-</tr>
-<tr>
-<td><code>curl</code> 没输出一定是目标网站挂了</td>
-<td>不对。端口回环、代理黑洞、DNS
-被错误接管都可能表现成“卡死没输出”。</td>
-</tr>
-<tr>
-<td>VS Code 自动转发一定是好事</td>
-<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
-SSH 的 <code>RemoteForward</code>，又被 VS Code
-自动纳入端口转发候选；一旦 VS Code
-因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
-</blockquote>
-<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
-Clash，最稳的策略就三条：</p>
-<ul>
-<li>禁掉 VS Code 对代理端口的自动转发</li>
-<li>让远端端口和本地代理端口不要同号</li>
-<li>把不同设备的远端代理端口编号分开</li>
-</ul>
-<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
-]]></content>
-      <categories>
-        <category>网络</category>
-        <category>开发环境</category>
-      </categories>
-      <tags>
-        <tag>Clash</tag>
-        <tag>SSH</tag>
-        <tag>VS Code</tag>
-        <tag>端口转发</tag>
-        <tag>Proxy</tag>
       </tags>
   </entry>
   <entry>
@@ -23248,6 +23248,233 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
+    <url>/posts/a5117577/</url>
+    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
+只是地图上的一种东西。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
+href="/posts/5d0b788d/">Rust OS
+入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
+需要知道机器长什么样”那一节，把”物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel”彻底讲透。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理内存（Physical Memory）</td>
+<td>真正的 RAM 硬件</td>
+<td>可读写的存储芯片</td>
+</tr>
+<tr>
+<td>物理地址（Physical Address）</td>
+<td>CPU 访问物理资源时产生的地址</td>
+<td>不一定是 RAM 的地址</td>
+</tr>
+<tr>
+<td>物理地址空间（Physical Address Space）</td>
+<td>CPU 眼中全部地址的集合</td>
+<td>一张地址地图，RAM 只是其中一种</td>
+</tr>
+<tr>
+<td>MMIO（Memory-Mapped I/O）</td>
+<td>把设备寄存器映射进地址空间</td>
+<td>读写内存 = 操作硬件</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>记录地址区域用途的地图</td>
+<td>Kernel 靠它分辨”能碰/不能碰”</td>
+</tr>
+<tr>
+<td>Reserved</td>
+<td>地址空间里存在但 OS 不能用的区域</td>
+<td>千万别拿来当 RAM</td>
+</tr>
+<tr>
+<td>虚拟地址（Virtual Address）</td>
+<td>程序看到的地址，经 MMU 翻译</td>
+<td>程序眼里的地址是”假的”</td>
+</tr>
+</tbody>
+</table>
+<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
+<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
+RAM，那确实很简单：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
+<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
+时产生的地址叫<strong>物理地址（Physical
+Address）</strong>，而<strong>这个地址背后的东西不一定是
+RAM</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
+只是其中一种资源。</strong></p>
+</blockquote>
+<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
+<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
+<p>逐个来看：</p>
+<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
+本身不规定”这里必须放什么”，启动后由操作系统动态填充：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
+<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
+附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
+访问它时路径是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
+<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
+ROM</strong>。</p>
+<p><strong>MMIO</strong>：见下一节。</p>
+<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
+<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
+<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
+的思想很简单：</p>
+<blockquote>
+<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
+</blockquote>
+<p>硬件工程师的思路是：CPU 本来就有”读地址 /
+写地址”的机制，那干脆把设备寄存器也放进地址空间，CPU
+就不需要额外的指令来访问设备了。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
+<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
+<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
+附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
+MMIO，只是地址和机制更复杂。</p>
+<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
+<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
+<ul>
+<li>被硬件使用</li>
+<li>被固件使用</li>
+<li>对应 MMIO</li>
+<li>有特殊用途</li>
+<li>芯片组保留区域</li>
+</ul>
+<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
+<p>所以 OS 必须非常小心地区分”绿色 = 可以拿来用，红色 = 千万别碰，黄色 =
+硬件”。</p>
+<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</h3>
+<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
+Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
+不能靠猜</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
+<p>它需要一张地图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>整个启动链路串起来就是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
+<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
+Allocator</h3>
+<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
+为例，下一步就是 <strong>Frame
+Allocator（物理页帧分配器）</strong>：</p>
+<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
+是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
+frame</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
+<p>之后所有内存需求都从这里申请：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
+<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
+Memory</strong> 就是接下来最自然的学习路线。</p>
+<h3 id="虚拟地址程序看到的地址是假的">🕳️
+虚拟地址：程序看到的地址是”假的”</h3>
+<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
+<p>通常<strong>并不是 RAM
+的物理地址</strong>，而是<strong>虚拟地址（Virtual
+Address）</strong>。现代操作系统的地址翻译链路是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
+<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
+<code>0x7FFF0000</code>，实际过程是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
+<p>所以 <code>0x7FFF0000</code> 不是”RAM 第 0x7FFF0000
+个字节”，而是”当前这个进程看到的虚拟地址”。由此可以建立三层概念：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一层：虚拟地址空间</td>
+<td>程序看到的地址</td>
+<td><code>0x7FFF0000</code></td>
+</tr>
+<tr>
+<td>第二层：物理地址空间</td>
+<td>MMU 翻译后的地址</td>
+<td><code>0x12345000</code></td>
+</tr>
+<tr>
+<td>第三层：真正的硬件</td>
+<td>地址最终对应的东西</td>
+<td>RAM / MMIO / Firmware / Reserved</td>
+</tr>
+</tbody>
+</table>
+<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>再回到开头的疑问：“16GB RAM 里面有什么？”要分两种情况回答：</p>
+<ul>
+<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
+Stack/Heap、Page Tables、各进程的
+Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
+<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
+RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
+控制区域等。</li>
+</ul>
+<p><strong>这两个”内存里有什么”不是一回事。</strong></p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
+只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
+分辨”能碰 / 不能碰 / 是硬件”，才能安全地建立 Frame
+Allocator，进而进入虚拟内存的世界。</p>
+</blockquote>
+<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
+Virtual Address</strong> 继续：搞清”一个 4 KiB
+的物理页帧到底是什么，Page Table
+怎么把虚拟地址翻译成物理地址”，前面的所有概念就会真正串起来。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <categories>
+        <category>计算机基础</category>
+        <category>Rust</category>
+      </categories>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>内存管理</tag>
+        <tag>物理地址</tag>
+        <tag>MMIO</tag>
+        <tag>Memory Map</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 入门：ELF 与程序内存布局——从文件里的段到运行时的堆栈</title>
     <url>/posts/625ab01d/</url>
     <content><![CDATA[<p>编译出来的”可执行文件”里到底长什么样？它和程序运行时的内存（Stack、Heap、<code>.bss</code>……）又是什么关系？</p>
@@ -23527,233 +23754,6 @@ Heap 不是文件的一部分，而是加载完成后的运行时产物。</stro
         <tag>链接器</tag>
         <tag>ELF</tag>
         <tag>内存布局</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
-    <url>/posts/a5117577/</url>
-    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
-只是地图上的一种东西。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
-href="/posts/5d0b788d/">Rust OS
-入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
-需要知道机器长什么样”那一节，把”物理地址空间里到底有什么、Bootloader
-为什么要把 Memory Map 传给 Kernel”彻底讲透。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>物理内存（Physical Memory）</td>
-<td>真正的 RAM 硬件</td>
-<td>可读写的存储芯片</td>
-</tr>
-<tr>
-<td>物理地址（Physical Address）</td>
-<td>CPU 访问物理资源时产生的地址</td>
-<td>不一定是 RAM 的地址</td>
-</tr>
-<tr>
-<td>物理地址空间（Physical Address Space）</td>
-<td>CPU 眼中全部地址的集合</td>
-<td>一张地址地图，RAM 只是其中一种</td>
-</tr>
-<tr>
-<td>MMIO（Memory-Mapped I/O）</td>
-<td>把设备寄存器映射进地址空间</td>
-<td>读写内存 = 操作硬件</td>
-</tr>
-<tr>
-<td>Memory Map</td>
-<td>记录地址区域用途的地图</td>
-<td>Kernel 靠它分辨”能碰/不能碰”</td>
-</tr>
-<tr>
-<td>Reserved</td>
-<td>地址空间里存在但 OS 不能用的区域</td>
-<td>千万别拿来当 RAM</td>
-</tr>
-<tr>
-<td>虚拟地址（Virtual Address）</td>
-<td>程序看到的地址，经 MMU 翻译</td>
-<td>程序眼里的地址是”假的”</td>
-</tr>
-</tbody>
-</table>
-<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
-<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
-RAM，那确实很简单：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
-<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
-时产生的地址叫<strong>物理地址（Physical
-Address）</strong>，而<strong>这个地址背后的东西不一定是
-RAM</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
-只是其中一种资源。</strong></p>
-</blockquote>
-<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
-<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
-<p>逐个来看：</p>
-<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
-本身不规定”这里必须放什么”，启动后由操作系统动态填充：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
-<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
-附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
-访问它时路径是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
-<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
-ROM</strong>。</p>
-<p><strong>MMIO</strong>：见下一节。</p>
-<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
-<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
-<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
-的思想很简单：</p>
-<blockquote>
-<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
-</blockquote>
-<p>硬件工程师的思路是：CPU 本来就有”读地址 /
-写地址”的机制，那干脆把设备寄存器也放进地址空间，CPU
-就不需要额外的指令来访问设备了。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
-<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
-<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
-附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
-MMIO，只是地址和机制更复杂。</p>
-<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
-<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
-<ul>
-<li>被硬件使用</li>
-<li>被固件使用</li>
-<li>对应 MMIO</li>
-<li>有特殊用途</li>
-<li>芯片组保留区域</li>
-</ul>
-<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
-<p>所以 OS 必须非常小心地区分”绿色 = 可以拿来用，红色 = 千万别碰，黄色 =
-硬件”。</p>
-<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
-Map：Bootloader 为什么要传给 Kernel</h3>
-<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
-Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
-不能靠猜</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
-<p>它需要一张地图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
-<p>整个启动链路串起来就是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
-<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
-Allocator</h3>
-<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
-为例，下一步就是 <strong>Frame
-Allocator（物理页帧分配器）</strong>：</p>
-<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
-是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
-frame</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
-<p>之后所有内存需求都从这里申请：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
-<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
-Memory</strong> 就是接下来最自然的学习路线。</p>
-<h3 id="虚拟地址程序看到的地址是假的">🕳️
-虚拟地址：程序看到的地址是”假的”</h3>
-<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
-<p>通常<strong>并不是 RAM
-的物理地址</strong>，而是<strong>虚拟地址（Virtual
-Address）</strong>。现代操作系统的地址翻译链路是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
-<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
-<code>0x7FFF0000</code>，实际过程是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
-<p>所以 <code>0x7FFF0000</code> 不是”RAM 第 0x7FFF0000
-个字节”，而是”当前这个进程看到的虚拟地址”。由此可以建立三层概念：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>层级</th>
-<th>内容</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>第一层：虚拟地址空间</td>
-<td>程序看到的地址</td>
-<td><code>0x7FFF0000</code></td>
-</tr>
-<tr>
-<td>第二层：物理地址空间</td>
-<td>MMU 翻译后的地址</td>
-<td><code>0x12345000</code></td>
-</tr>
-<tr>
-<td>第三层：真正的硬件</td>
-<td>地址最终对应的东西</td>
-<td>RAM / MMIO / Firmware / Reserved</td>
-</tr>
-</tbody>
-</table>
-<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>再回到开头的疑问：“16GB RAM 里面有什么？”要分两种情况回答：</p>
-<ul>
-<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
-Stack/Heap、Page Tables、各进程的
-Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
-<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
-RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
-控制区域等。</li>
-</ul>
-<p><strong>这两个”内存里有什么”不是一回事。</strong></p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
-只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
-分辨”能碰 / 不能碰 / 是硬件”，才能安全地建立 Frame
-Allocator，进而进入虚拟内存的世界。</p>
-</blockquote>
-<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
-Virtual Address</strong> 继续：搞清”一个 4 KiB
-的物理页帧到底是什么，Page Table
-怎么把虚拟地址翻译成物理地址”，前面的所有概念就会真正串起来。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <categories>
-        <category>计算机基础</category>
-        <category>Rust</category>
-      </categories>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>内存管理</tag>
-        <tag>物理地址</tag>
-        <tag>MMIO</tag>
-        <tag>Memory Map</tag>
       </tags>
   </entry>
 </search>
