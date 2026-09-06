@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="物理地址（Physical Address）是一张地址地图，RAM 只是地图上的一种东西。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map">
+<meta property="og:url" content="https://iamzihao.github.io/posts/a5117577/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="物理地址（Physical Address）是一张地址地图，RAM 只是地图上的一种东西。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-02T02:20:00.000Z">
+<meta property="article:modified_time" content="2026-09-02T02:21:15.394Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="操作系统">
+<meta property="article:tag" content="Rust">
+<meta property="article:tag" content="内存管理">
+<meta property="article:tag" content="物理地址">
+<meta property="article:tag" content="MMIO">
+<meta property="article:tag" content="Memory Map">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/a5117577/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/a5117577/","path":"posts/a5117577/","title":"Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80-ram-%E5%9C%B0%E5%9D%80"><span class="nav-number">2.</span> <span class="nav-text">🧩 物理地址 ≠ RAM 地址</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80%E7%A9%BA%E9%97%B4%E9%87%8C%E6%9C%89%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">🗺️ 物理地址空间里有什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#mmio%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84-io"><span class="nav-number">4.</span> <span class="nav-text">🔌 MMIO：内存映射 I&#x2F;O</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#reserved%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E7%A2%B0"><span class="nav-number">5.</span> <span class="nav-text">⚠️ Reserved：为什么不能碰</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#memory-mapbootloader-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E4%BC%A0%E7%BB%99-kernel"><span class="nav-number">6.</span> <span class="nav-text">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-memory-map-%E5%88%B0-frame-allocator"><span class="nav-number">7.</span> <span class="nav-text">🧱 从 Memory Map 到 Frame
+Allocator</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%99%9A%E6%8B%9F%E5%9C%B0%E5%9D%80%E7%A8%8B%E5%BA%8F%E7%9C%8B%E5%88%B0%E7%9A%84%E5%9C%B0%E5%9D%80%E6%98%AF%E5%81%87%E7%9A%84"><span class="nav-number">8.</span> <span class="nav-text">🕳️
+虚拟地址：程序看到的地址是”假的”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E5%BC%A0%E5%9B%BE%E4%B8%B2%E8%B5%B7%E5%85%A8%E9%83%A8"><span class="nav-number">9.</span> <span class="nav-text">🎨 一张图串起全部</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">75</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">44</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">187</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/a5117577/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-02 10:20:00 / Modified: 10:21:15" itemprop="dateCreated datePublished" datetime="2026-09-02T10:20:00+08:00">2026-09-02</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">In</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/" itemprop="url" rel="index"><span itemprop="name">计算机基础</span></a>
+        </span>
+          , 
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/Rust/" itemprop="url" rel="index"><span itemprop="name">Rust</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>4k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>7 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>物理地址（Physical Address）是一张地址地图，RAM
+只是地图上的一种东西。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a target="_blank" rel="noopener" href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
+href="/posts/5d0b788d/">Rust OS
+入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
+需要知道机器长什么样”那一节，把”物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel”彻底讲透。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理内存（Physical Memory）</td>
+<td>真正的 RAM 硬件</td>
+<td>可读写的存储芯片</td>
+</tr>
+<tr>
+<td>物理地址（Physical Address）</td>
+<td>CPU 访问物理资源时产生的地址</td>
+<td>不一定是 RAM 的地址</td>
+</tr>
+<tr>
+<td>物理地址空间（Physical Address Space）</td>
+<td>CPU 眼中全部地址的集合</td>
+<td>一张地址地图，RAM 只是其中一种</td>
+</tr>
+<tr>
+<td>MMIO（Memory-Mapped I/O）</td>
+<td>把设备寄存器映射进地址空间</td>
+<td>读写内存 = 操作硬件</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>记录地址区域用途的地图</td>
+<td>Kernel 靠它分辨”能碰/不能碰”</td>
+</tr>
+<tr>
+<td>Reserved</td>
+<td>地址空间里存在但 OS 不能用的区域</td>
+<td>千万别拿来当 RAM</td>
+</tr>
+<tr>
+<td>虚拟地址（Virtual Address）</td>
+<td>程序看到的地址，经 MMU 翻译</td>
+<td>程序眼里的地址是”假的”</td>
+</tr>
+</tbody>
+</table>
+<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
+<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
+RAM，那确实很简单：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
+<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
+时产生的地址叫<strong>物理地址（Physical
+Address）</strong>，而<strong>这个地址背后的东西不一定是
+RAM</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
+只是其中一种资源。</strong></p>
+</blockquote>
+<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
+<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
+<p>逐个来看：</p>
+<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
+本身不规定”这里必须放什么”，启动后由操作系统动态填充：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
+<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
+附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
+访问它时路径是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
+<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
+ROM</strong>。</p>
+<p><strong>MMIO</strong>：见下一节。</p>
+<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
+<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
+<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
+的思想很简单：</p>
+<blockquote>
+<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
+</blockquote>
+<p>硬件工程师的思路是：CPU 本来就有”读地址 /
+写地址”的机制，那干脆把设备寄存器也放进地址空间，CPU
+就不需要额外的指令来访问设备了。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
+<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
+<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
+附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
+MMIO，只是地址和机制更复杂。</p>
+<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
+<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
+<ul>
+<li>被硬件使用</li>
+<li>被固件使用</li>
+<li>对应 MMIO</li>
+<li>有特殊用途</li>
+<li>芯片组保留区域</li>
+</ul>
+<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
+<p>所以 OS 必须非常小心地区分”绿色 = 可以拿来用，红色 = 千万别碰，黄色 =
+硬件”。</p>
+<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</h3>
+<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
+Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
+不能靠猜</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
+<p>它需要一张地图：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>整个启动链路串起来就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
+<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
+Allocator</h3>
+<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
+为例，下一步就是 <strong>Frame
+Allocator（物理页帧分配器）</strong>：</p>
+<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
+是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
+frame</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
+<p>之后所有内存需求都从这里申请：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
+<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
+Memory</strong> 就是接下来最自然的学习路线。</p>
+<h3 id="虚拟地址程序看到的地址是假的">🕳️
+虚拟地址：程序看到的地址是”假的”</h3>
+<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
+<p>通常<strong>并不是 RAM
+的物理地址</strong>，而是<strong>虚拟地址（Virtual
+Address）</strong>。现代操作系统的地址翻译链路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
+<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
+<code>0x7FFF0000</code>，实际过程是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
+<p>所以 <code>0x7FFF0000</code> 不是”RAM 第 0x7FFF0000
+个字节”，而是”当前这个进程看到的虚拟地址”。由此可以建立三层概念：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一层：虚拟地址空间</td>
+<td>程序看到的地址</td>
+<td><code>0x7FFF0000</code></td>
+</tr>
+<tr>
+<td>第二层：物理地址空间</td>
+<td>MMU 翻译后的地址</td>
+<td><code>0x12345000</code></td>
+</tr>
+<tr>
+<td>第三层：真正的硬件</td>
+<td>地址最终对应的东西</td>
+<td>RAM / MMIO / Firmware / Reserved</td>
+</tr>
+</tbody>
+</table>
+<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>再回到开头的疑问：“16GB RAM 里面有什么？”要分两种情况回答：</p>
+<ul>
+<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
+Stack/Heap、Page Tables、各进程的
+Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
+<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
+RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
+控制区域等。</li>
+</ul>
+<p><strong>这两个”内存里有什么”不是一回事。</strong></p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
+只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
+分辨”能碰 / 不能碰 / 是硬件”，才能安全地建立 Frame
+Allocator，进而进入虚拟内存的世界。</p>
+</blockquote>
+<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
+Virtual Address</strong> 继续：搞清”一个 4 KiB
+的物理页帧到底是什么，Page Table
+怎么把虚拟地址翻译成物理地址”，前面的所有概念就会真正串起来。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"># 操作系统</a>
+              <a href="/tags/Rust/" rel="tag"># Rust</a>
+              <a href="/tags/%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86/" rel="tag"># 内存管理</a>
+              <a href="/tags/%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80/" rel="tag"># 物理地址</a>
+              <a href="/tags/MMIO/" rel="tag"># MMIO</a>
+              <a href="/tags/Memory-Map/" rel="tag"># Memory Map</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/5d0b788d/" rel="prev" title="Rust OS 入门：从按下电源键到内核接管">
+                  <i class="fa fa-angle-left"></i> Rust OS 入门：从按下电源键到内核接管
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/625ab01d/" rel="next" title="Rust OS 入门：ELF 与程序内存布局——从文件里的段到运行时的堆栈">
+                  Rust OS 入门：ELF 与程序内存布局——从文件里的段到运行时的堆栈 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">388k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">11:45</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

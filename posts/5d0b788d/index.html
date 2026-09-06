@@ -30,7 +30,7 @@
 <meta property="og:description" content="按下电源键的那一秒，CPU 读到的第一条指令到底是什么？在 RAM 空空如也、操作系统还没影子的情况下，电脑是怎么一步步把控制权交给你的 Rust 内核的？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-01T09:09:52.000Z">
-<meta property="article:modified_time" content="2026-09-01T09:48:14.082Z">
+<meta property="article:modified_time" content="2026-09-04T09:12:51.347Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="启动流程">
@@ -179,7 +179,7 @@
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%BB%BA%E7%AB%8B%E4%B8%80%E5%BC%A0%E5%90%AF%E5%8A%A8%E5%9C%B0%E5%9B%BE"><span class="nav-number">2.</span> <span class="nav-text">🗺️ 先建立一张”启动地图”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E5%88%9A%E9%80%9A%E7%94%B5%E6%97%B6%E4%BB%80%E4%B9%88%E9%83%BD%E4%B8%8D%E7%9F%A5%E9%81%93"><span class="nav-number">3.</span> <span class="nav-text">🔌 CPU 刚通电时，什么都不知道</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%9B%BA%E4%BB%B6%E5%AD%98%E5%9C%A8%E5%93%AA%E9%87%8C"><span class="nav-number">3.1.</span> <span class="nav-text">固件存在哪里</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#cpu-%E6%80%8E%E4%B9%88%E6%89%BE%E5%88%B0%E5%9B%BA%E4%BB%B6"><span class="nav-number">3.2.</span> <span class="nav-text">CPU 怎么找到固件</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bios-%E4%B8%8A%E7%94%B5%E5%90%8E%E5%B9%B2%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">🧬 BIOS 上电后干什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8E%BB%E5%93%AA%E9%87%8C%E6%89%BE%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F"><span class="nav-number">4.1.</span> <span class="nav-text">去哪里找操作系统</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%A4%84%E5%A4%84%E5%BC%BA%E8%B0%83512-%E5%AD%97%E8%8A%82"><span class="nav-number">5.</span> <span class="nav-text">📦 为什么处处强调”512 字节”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E9%98%B6%E6%AE%B5-bootloader%E6%8E%A5%E5%8A%9B%E6%A3%92"><span class="nav-number">6.</span> <span class="nav-text">🪜 两阶段 Bootloader：接力棒</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E7%9A%84%E6%A8%A1%E5%BC%8F%E5%8F%98%E8%BF%8116-%E4%BD%8D-32-%E4%BD%8D-64-%E4%BD%8D"><span class="nav-number">7.</span> <span class="nav-text">🕰️ CPU 的模式变迁：16 位 → 32
 位 → 64 位</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%84%E5%AD%98%E5%99%A8%E9%80%9F%E8%A7%88rip-%E4%B8%8E-rsp"><span class="nav-number">8.</span> <span class="nav-text">🧮 寄存器速览：RIP 与 RSP</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#rip%E6%8C%87%E4%BB%A4%E6%8C%87%E9%92%88"><span class="nav-number">8.1.</span> <span class="nav-text">RIP：指令指针</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#rsp%E6%A0%88%E6%8C%87%E9%92%88"><span class="nav-number">8.2.</span> <span class="nav-text">RSP：栈指针</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84kernel-%E9%9C%80%E8%A6%81%E7%9F%A5%E9%81%93%E6%9C%BA%E5%99%A8%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">9.</span> <span class="nav-text">🗺️ 内存映射：Kernel
-需要知道机器长什么样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bootimage%E6%8A%8A%E5%90%AF%E5%8A%A8%E7%BB%86%E8%8A%82%E8%97%8F%E8%B5%B7%E6%9D%A5"><span class="nav-number">10.</span> <span class="nav-text">🔗 bootimage：把启动细节藏起来</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0-os-%E5%BA%94%E6%9C%89%E7%9A%84%E5%B1%82%E6%AC%A1%E6%84%9F"><span class="nav-number">11.</span> <span class="nav-text">🏗️ 学习 OS 应有的”层次感”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+需要知道机器长什么样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bootimage%E6%8A%8A%E5%90%AF%E5%8A%A8%E7%BB%86%E8%8A%82%E8%97%8F%E8%B5%B7%E6%9D%A5"><span class="nav-number">10.</span> <span class="nav-text">🔗 bootimage：把启动细节藏起来</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E7%9B%B4%E6%8E%A5%E7%94%A8%E7%8E%B0%E6%88%90%E7%9A%84-grub"><span class="nav-number">10.1.</span> <span class="nav-text">为什么不直接用现成的 GRUB？</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#bootimage-%E8%83%8C%E5%90%8E%E5%88%B0%E5%BA%95%E5%8F%91%E7%94%9F%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">10.2.</span> <span class="nav-text">bootimage 背后到底发生了什么</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0-os-%E5%BA%94%E6%9C%89%E7%9A%84%E5%B1%82%E6%AC%A1%E6%84%9F"><span class="nav-number">11.</span> <span class="nav-text">🏗️ 学习 OS 应有的”层次感”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -194,7 +194,7 @@
   <nav class="site-state">
       <div class="site-state-item site-state-posts">
         <a href="/archives/">
-          <span class="site-state-item-count">73</span>
+          <span class="site-state-item-count">75</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -205,7 +205,7 @@
       </div>
       <div class="site-state-item site-state-tags">
           <a href="/tags/">
-        <span class="site-state-item-count">181</span>
+        <span class="site-state-item-count">187</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -268,9 +268,15 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-09-01 17:09:52 / Modified: 17:48:14" itemprop="dateCreated datePublished" datetime="2026-09-01T17:09:52+08:00">2026-09-01</time>
+      <time title="Created: 2026-09-01 17:09:52" itemprop="dateCreated datePublished" datetime="2026-09-01T17:09:52+08:00">2026-09-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-09-04 17:12:51" itemprop="dateModified" datetime="2026-09-04T17:12:51+08:00">2026-09-04</time>
     </span>
     <span class="post-meta-item">
       <span class="post-meta-item-icon">
@@ -300,14 +306,14 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.5k</span>
+      <span>7.9k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>12 mins.</span>
+      <span>14 mins.</span>
     </span>
 </div>
 
@@ -634,17 +640,75 @@ Map）</strong>里，由 BIOS 提供、Bootloader 整理后传给 Kernel。</p>
 <h3 id="bootimage把启动细节藏起来">🔗 bootimage：把启动细节藏起来</h3>
 <p>理解了上面的复杂度，就知道为什么教程作者说”我们不会讲解如何编写自己的引导程序”——他在保护你，不让你现在就被
 BIOS + 汇编 + x86 启动细节折磨。</p>
+<h4 id="为什么不直接用现成的-grub">为什么不直接用现成的 GRUB？</h4>
+<p>既然 Bootloader
+这么复杂，那能不能直接用别人写好的引导程序？可以，但先要解决一个”接口”问题：</p>
+<blockquote>
+<p>每个操作系统都实现自己的引导程序，而这套引导程序只对单个操作系统有效。</p>
+</blockquote>
+<p>1995 年，自由软件基金会（Free Software
+Foundation，FSF）颁布了一个开源的引导程序标准——<strong>Multiboot
+标准（Multiboot
+Specification）</strong>。它定义了引导程序和操作系统之间的统一接口：任何适配
+Multiboot 的引导程序，都能加载任何同样适配 Multiboot
+的操作系统。<strong>GNU GRUB</strong> 就是一个可供参考的 Multiboot
+实现，也是最热门的 Linux 引导程序之一。</p>
+<p>要编写一个适配 Multiboot 的内核，只需要在内核文件开头插入一段被称为
+<strong>Multiboot 头（Multiboot header）</strong> 的数据片段，GRUB
+就能认出并引导这个内核。</p>
+<p>但 GRUB 和 Multiboot 标准也有一些已知的问题：</p>
+<ul>
+<li><strong>只支持 32 位保护模式</strong>：引导之后，你依然需要自己配置
+CPU 切换到 64 位长模式；</li>
+<li><strong>设计重心是”引导程序简单”，而不是”内核简单”</strong>：内核需要以调整过的默认页长度（default
+page size）链接，否则 GRUB 找不到内核的 Multiboot 头；引导信息（boot
+information）包含大量与架构相关的数据，启动时直接传给操作系统，没有经过清晰的抽象；</li>
+<li><strong>文档没有被详细解释</strong>：阅读相关文档需要一定经验；</li>
+<li><strong>开发时必须安装 GRUB</strong>：这加大了基于 Windows 或 macOS
+开发内核的难度。</li>
+</ul>
+<p>出于这些考虑，教程作者决定不使用 GRUB 或 Multiboot 标准。不过
+Multiboot 支持也在 <code>bootimage</code>
+的开发计划之中，从原理上讲，未来用 GRUB 引导你的内核是可能的。</p>
 <p><code>bootimage</code> 工具帮你生成：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Bootloader</span><br><span class="line">     +</span><br><span class="line">你的 Kernel</span><br><span class="line">     ↓</span><br><span class="line">bootable image（可启动镜像）</span><br></pre></td></tr></table></figure>
 <p>使用方式：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cargo bootimage</span><br></pre></td></tr></table></figure>
 <p>得到 <code>bootimage.bin</code> 后，用 QEMU 模拟一台电脑启动它：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-x86_64 -drive format=raw,file=bootimage.bin</span><br></pre></td></tr></table></figure>
+<h4 id="bootimage-背后到底发生了什么">bootimage 背后到底发生了什么</h4>
+<p>实际 <code>cargo bootimage</code> 在幕后做了三步：</p>
+<ol type="1">
+<li><strong>编译 kernel</strong>：等价于 <code>cargo build</code>，产出
+<strong>kernel ELF</strong>（内核的可执行文件，入口是
+<code>_start</code>）；</li>
+<li><strong>编译 bootloader</strong>：把 <code>bootloader</code> crate
+编译成独立的引导程序；</li>
+<li><strong>组合成镜像</strong>：把 kernel ELF <strong>按字节拼到
+bootloader 的末尾</strong>，生成可启动的磁盘镜像（bootable disk
+image）。</li>
+</ol>
+<p>组合完成后，<code>bootimage.bin</code>
+内部其实是三层结构——正好呼应前面讲的两阶段 Bootloader：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">bootimage.bin</span><br><span class="line">│</span><br><span class="line">├── BIOS boot code      ← 类似 Stage 1：最前面的小入口，BIOS 把控制权交进来</span><br><span class="line">│</span><br><span class="line">├── bootloader          ← 类似 Stage 2：主体引导程序，负责加载内核</span><br><span class="line">│</span><br><span class="line">└── kernel ELF          ← 你的 Rust 代码</span><br></pre></td></tr></table></figure>
+<p>BIOS 启动时只会读磁盘最前面的扇区，所以 bootloader
+也被设计成了”小入口 + 主体”的两段式：前面一小段代码（类似第一阶段
+Bootloader）负责把控制权从 BIOS
+手中接过来，随后才是真正干活的引导程序主体（类似第二阶段
+Bootloader）——它来解析内核 ELF、把控制权交给
+<code>_start</code>。启动的接力棒从 BIOS → 小入口 → 引导主体 →
+内核，一路传下去。</p>
+<blockquote>
+<p>kernel ELF 内部长什么样、BIOS 为什么不能直接启动它、bootloader
+又是怎么把它的各个段加载进内存的——这些细节我们在《<a
+href="/posts/625ab01d/">Rust OS 入门：ELF
+与程序内存布局</a>》里完整展开。这里只需要记住一句话：<strong>kernel ELF
+是操作系统本体，bootloader 是启动它的工具，bootimage
+是把两者装进同一个”能开机的硬盘”。</strong></p>
+</blockquote>
 <hr />
 <h3 id="学习-os-应有的层次感">🏗️ 学习 OS 应有的”层次感”</h3>
-<p>现在千万不要一头扎进
-<code>CR0</code>、<code>CR3</code>、<code>EFER</code>、GDT、IDT、页表、PAE
-的细节里，否则非常容易崩。先建立这张地图：</p>
+<p>建立这张地图：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">① 硬件</span><br><span class="line">│</span><br><span class="line">├── CPU / RAM / SSD / 主板</span><br><span class="line">│</span><br><span class="line">② Firmware</span><br><span class="line">│</span><br><span class="line">├── BIOS / UEFI</span><br><span class="line">│</span><br><span class="line">③ Bootloader</span><br><span class="line">│</span><br><span class="line">├── 找 Kernel</span><br><span class="line">├── 加载 Kernel</span><br><span class="line">├── 配置 CPU（16 → 32 → 64 位）</span><br><span class="line">└── 给 Kernel 提供硬件信息</span><br><span class="line">│</span><br><span class="line">④ Kernel</span><br><span class="line">│</span><br><span class="line">├── 内存管理 / 中断 / 进程 / 调度</span><br><span class="line">├── 文件系统 / 驱动</span><br><span class="line">│</span><br><span class="line">⑤ 用户空间</span><br><span class="line">│</span><br><span class="line">├── Shell / 应用程序 / 你的 Rust 程序</span><br></pre></td></tr></table></figure>
 <p>你正在看的 Rust OS 教程，恰好处于 <strong>③ Bootloader → ④
 Kernel</strong> 这个交界处。</p>
@@ -662,7 +726,8 @@ Kernel</strong> 这个交界处。</p>
 </blockquote>
 <p>真正值得花时间打通的下一条链是：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">BIOS</span><br><span class="line"> ↓</span><br><span class="line">Bootloader</span><br><span class="line"> ↓</span><br><span class="line">64-bit Long Mode</span><br><span class="line"> ↓</span><br><span class="line">设置 RSP（栈）</span><br><span class="line"> ↓</span><br><span class="line">设置 RIP（跳转到入口）</span><br><span class="line"> ↓</span><br><span class="line">_start</span><br><span class="line"> ↓</span><br><span class="line">Rust 初始化</span><br><span class="line"> ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
-<p>这条链的后半段——<code>_start</code>、栈、寄存器、<code>no_std</code>、<code>#[no_mangle]</code>、链接器脚本——正是上一篇《<a
+<p>这条链的后半段——<code>_start</code>
+入口、<code>no_std</code>/<code>no_main</code>、栈从哪里来、自定义编译目标与链接参数——正是上一篇《<a
 href="/posts/76bb2795/">Rust OS 入门：从 main 到
 _start</a>》的内容。两篇连起来读，启动的完整图景就通了。</p>
 <p>Happy Hacking! 🎉</p>
@@ -692,6 +757,9 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
                 </a>
             </div>
             <div class="post-nav-item">
+                <a href="/posts/a5117577/" rel="next" title="Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map">
+                  Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map <i class="fa fa-angle-right"></i>
+                </a>
             </div>
           </div>
     </footer>
@@ -722,13 +790,13 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">377k</span>
+    <span title="Word count total">388k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:26</span>
+    <span title="Reading time total">11:45</span>
   </span>
 </div>
 <div class="busuanzi-count">
