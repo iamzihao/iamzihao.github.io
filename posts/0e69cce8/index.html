@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="前三篇的语法与思想，最终都落在一段真实的 VGA 代码上。这篇把教程里的 ScreenChar、Buffer、Writer 和那句 unsafe &#123; &amp;mut *buffer &#125; 逐行翻译成”人话”，并演示一种拆解 Rust 代码的方法。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust OS 前置：逐行拆解 VGA 的 Writer">
+<meta property="og:url" content="https://iamzihao.github.io/posts/0e69cce8/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="前三篇的语法与思想，最终都落在一段真实的 VGA 代码上。这篇把教程里的 ScreenChar、Buffer、Writer 和那句 unsafe &#123; &amp;mut *buffer &#125; 逐行翻译成”人话”，并演示一种拆解 Rust 代码的方法。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-07T04:05:00.000Z">
+<meta property="article:modified_time" content="2026-09-07T07:43:47.539Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="Rust">
+<meta property="article:tag" content="VGA">
+<meta property="article:tag" content="裸指针">
+<meta property="article:tag" content="unsafe">
+<meta property="article:tag" content="Writer">
+<meta property="article:tag" content="综合实践">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/0e69cce8/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/0e69cce8/","path":"posts/0e69cce8/","title":"Rust OS 前置：逐行拆解 VGA 的 Writer"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Rust OS 前置：逐行拆解 VGA 的 Writer | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B4%A0%E6%9D%90%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 素材速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E5%B1%82screenchar%E4%B8%80%E4%B8%AA%E5%B1%8F%E5%B9%95%E6%A0%BC%E5%AD%90"><span class="nav-number">2.</span> <span class="nav-text">🧱
+第一层：ScreenChar——一个屏幕格子</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E5%B1%82buffer%E6%95%B4%E5%9D%97%E5%B1%8F%E5%B9%95"><span class="nav-number">3.</span> <span class="nav-text">📐 第二层：Buffer——整块屏幕</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E5%B1%82writer%E5%86%99%E5%AD%97%E7%9A%84%E4%BA%BA"><span class="nav-number">4.</span> <span class="nav-text">🖋️ 第三层：Writer——“写字的人”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E5%B1%82%E6%8A%8A%E5%9C%B0%E5%9D%80%E5%8F%98%E6%88%90%E5%BC%95%E7%94%A8"><span class="nav-number">5.</span> <span class="nav-text">🔀 第四层：把地址变成引用</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E5%B1%82%E5%AE%8C%E6%95%B4%E9%93%BE%E8%B7%AF"><span class="nav-number">6.</span> <span class="nav-text">🧭 第五层：完整链路</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0%E6%96%B9%E6%B3%95rust-%E4%BB%A3%E7%A0%81%E5%8F%AF%E4%BB%A5%E5%89%A5%E6%B4%8B%E8%91%B1"><span class="nav-number">7.</span> <span class="nav-text">🧅 学习方法：Rust
+代码可以”剥洋葱”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">8.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">80</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">200</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/0e69cce8/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Rust OS 前置：逐行拆解 VGA 的 Writer | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Rust OS 前置：逐行拆解 VGA 的 Writer
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-07 12:05:00 / Modified: 15:43:47" itemprop="dateCreated datePublished" datetime="2026-09-07T12:05:00+08:00">2026-09-07</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>2.7k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>5 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>前三篇的语法与思想，最终都落在一段真实的 VGA 代码上。这篇把教程里的
+<code>ScreenChar</code>、<code>Buffer</code>、<code>Writer</code> 和那句
+<code>unsafe &#123; &amp;mut *buffer &#125;</code>
+逐行翻译成”人话”，并演示一种拆解 Rust 代码的方法。</p>
+<span id="more"></span>
+<blockquote>
+<p>前置阅读：《<a href="/posts/5bfe3d1c/">从 C 到 Rust</a>》《<a
+href="/posts/4b7500f7/">借用与生命周期</a>》《<a
+href="/posts/7ddab86c/">属性与内存布局</a>》，以及《<a
+href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
+</blockquote>
+<h3 id="素材速读">📚 素材速读</h3>
+<p>下面是接下来要拆的完整代码（来自 VGA 文本模式模块的核心结构）：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;</span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    column_position: <span class="type">usize</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="第一层screenchar一个屏幕格子">🧱
+第一层：ScreenChar——一个屏幕格子</h3>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span>                          <span class="comment">// 布局对齐 C/硬件（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,            <span class="comment">// 字符 ASCII 码，1 字节</span></span><br><span class="line">    color_code: ColorCode,          <span class="comment">// 颜色属性，1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>人话版：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ScreenChar = 一个屏幕格子</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ ASCII │ Color│</span><br><span class="line">└──────────────┘</span><br></pre></td></tr></table></figure>
+<h3 id="第二层buffer整块屏幕">📐 第二层：Buffer——整块屏幕</h3>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;    <span class="comment">// 行数（篇一：const）</span></span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;     <span class="comment">// 列数</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#[repr(transparent)]</span>                <span class="comment">// 单字段包装，零开销（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; <span class="number">80</span>]; <span class="number">25</span>],  <span class="comment">// 25 行 × 80 列（篇一：二维数组）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>人话版：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Buffer = 25 × 80 个屏幕格子</span><br><span class="line">┌──────────────────────┐</span><br><span class="line">│ □ □ □ □ ... □        │  第 0 行</span><br><span class="line">│ □ □ □ □ ... □        │  第 1 行</span><br><span class="line">│ ...                  │</span><br><span class="line">│ □ □ □ □ ... □        │  第 24 行</span><br><span class="line">└──────────────────────┘</span><br></pre></td></tr></table></figure>
+<h3 id="第三层writer写字的人">🖋️ 第三层：Writer——“写字的人”</h3>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;                  <span class="comment">// pub：模块外可见（篇一）</span></span><br><span class="line">    column_position: <span class="type">usize</span>,          <span class="comment">// 当前写到第几列</span></span><br><span class="line">    color_code: ColorCode,           <span class="comment">// 用什么颜色</span></span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,     <span class="comment">// VGA 屏幕在哪（篇二：&#x27;static）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>人话版：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Writer = 一个&quot;写字的人&quot;，它记录：</span><br><span class="line">  - 当前写到第几列（column_position）</span><br><span class="line">  - 用什么颜色（color_code）</span><br><span class="line">  - VGA 屏幕在哪（buffer：&#x27;static 可变引用，因为显存始终存在）</span><br></pre></td></tr></table></figure>
+<h3 id="第四层把地址变成引用">🔀 第四层：把地址变成引用</h3>
+<p>看这两个步骤，每一步都在前一篇出现过：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;   <span class="comment">// ① 整数地址 → 裸指针（篇二：as、*mut）</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">writer</span> = <span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *buffer &#125;;  <span class="comment">// ② 裸指针 → 可变引用（篇二：unsafe、*、&amp;mut）</span></span><br></pre></td></tr></table></figure>
+<p>① 人话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">0xb8000            硬件内存地址（VGA 显存起点）</span><br><span class="line">   ↓ as</span><br><span class="line">*mut Buffer        解释成&quot;指向 Buffer 的裸指针&quot;——只是一个地址</span><br></pre></td></tr></table></figure>
+<p>② 人话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">*mut Buffer</span><br><span class="line">   ↓ *（解引用）</span><br><span class="line">Buffer</span><br><span class="line">   ↓ &amp;mut（可变借用）</span><br><span class="line">&amp;&#x27;static mut Buffer</span><br><span class="line">   ↓</span><br><span class="line">交给 Writer</span><br></pre></td></tr></table></figure>
+<p>组合起来，<code>unsafe &#123; &amp;mut *buffer &#125;</code> 的意思是：</p>
+<blockquote>
+<p><strong>通过裸指针找到那块显存，把它借成一个可修改的 Rust 引用，交给
+Writer 使用。</strong></p>
+</blockquote>
+<p>外面套 <code>unsafe</code> 是因为 Rust 无法证明 <code>0xb8000</code>
+真的有 <code>Buffer</code>——这是硬件规定的事实，由程序员负责声明。</p>
+<h3 id="第五层完整链路">🧭 第五层：完整链路</h3>
+<p>把整条链画出来：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">硬件地址 0xb8000</span><br><span class="line">   │ as</span><br><span class="line">   ▼</span><br><span class="line">*mut Buffer</span><br><span class="line">   │ unsafe + *（解引用）</span><br><span class="line">   ▼</span><br><span class="line">Buffer（显存内容）</span><br><span class="line">   │ &amp;mut</span><br><span class="line">   ▼</span><br><span class="line">&amp;&#x27;static mut Buffer</span><br><span class="line">   │</span><br><span class="line">   ▼</span><br><span class="line">Writer</span><br><span class="line">   ├── column_position   当前列</span><br><span class="line">   ├── color_code        颜色</span><br><span class="line">   └── buffer            显存引用</span><br><span class="line">          │ write_byte(b&#x27;A&#x27;)</span><br><span class="line">          ▼</span><br><span class="line">   buffer.chars[row][col] = ScreenChar &#123; ... &#125;   ← 写内存</span><br><span class="line">          │ VGA 硬件读取这块内存</span><br><span class="line">          ▼</span><br><span class="line">          屏幕显示</span><br></pre></td></tr></table></figure>
+<h3 id="学习方法rust-代码可以剥洋葱">🧅 学习方法：Rust
+代码可以”剥洋葱”</h3>
+<p>看到类似的表达式不要当成”一整坨语法”，而是<strong>从右往左一层层拆</strong>：</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *(<span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer) &#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">unsafe            这里有 Rust 无法自动证明安全的操作</span><br><span class="line">0xb8000           一个整数地址</span><br><span class="line">as *mut Buffer    把地址解释成 Buffer 的裸指针</span><br><span class="line">*                 解引用，找到 Buffer</span><br><span class="line">&amp;mut              把 Buffer 借成可修改引用</span><br></pre></td></tr></table></figure>
+<p>Rust 代码几乎都可以这样拆开读。学 Rust OS
+时，最值得先打通的主线就一条：</p>
+<blockquote>
+<p><strong>对象 → 所有权 → 引用 → 借用 → <code>&amp;mut</code> → 裸指针
+→ <code>unsafe</code> → 生命周期</strong></p>
+</blockquote>
+<p>这条线弄明白后，后面
+<code>Writer</code>、<code>Volatile</code>、<code>lazy_static!</code>、<code>spin::Mutex</code>、中断处理这些模块，基本都围绕同一套思想展开——只是包装越来越厚。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>VGA 的 <code>Writer</code>
+把前三篇的语法串成了一条完整链路：<code>struct</code>
+描述硬件结构（<code>repr</code> 保证布局）→ 整数地址经 <code>as</code>
+变裸指针 → <code>unsafe</code> + 解引用变成
+<code>&amp;'static mut</code> 引用 → 封装成 <code>Writer</code>
+提供安全的写屏接口。读这类代码的关键是”剥洋葱”：一层层拆开看每一步做了什么。</p>
+</blockquote>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Rust/" rel="tag"># Rust</a>
+              <a href="/tags/VGA/" rel="tag"># VGA</a>
+              <a href="/tags/%E8%A3%B8%E6%8C%87%E9%92%88/" rel="tag"># 裸指针</a>
+              <a href="/tags/unsafe/" rel="tag"># unsafe</a>
+              <a href="/tags/Writer/" rel="tag"># Writer</a>
+              <a href="/tags/%E7%BB%BC%E5%90%88%E5%AE%9E%E8%B7%B5/" rel="tag"># 综合实践</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/7ddab86c/" rel="prev" title="Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive">
+                  <i class="fa fa-angle-left"></i> Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">401k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">12:10</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
