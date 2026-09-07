@@ -30,13 +30,13 @@
 <meta property="og:description" content="编译出来的”可执行文件”里到底长什么样？它和程序运行时的内存（Stack、Heap、.bss……）又是什么关系？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-04T03:08:00.000Z">
-<meta property="article:modified_time" content="2026-09-07T01:23:43.573Z">
+<meta property="article:modified_time" content="2026-09-07T01:34:40.723Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="编译原理">
 <meta property="article:tag" content="Rust">
-<meta property="article:tag" content="ELF">
 <meta property="article:tag" content="链接器">
+<meta property="article:tag" content="ELF">
 <meta property="article:tag" content="内存布局">
 <meta name="twitter:card" content="summary">
 
@@ -272,7 +272,7 @@ Heap：运行时的产物，不在文件里</span></a></li><li class="nav-item n
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-07 09:23:43" itemprop="dateModified" datetime="2026-09-07T09:23:43+08:00">2026-09-07</time>
+      <time title="Modified: 2026-09-07 09:34:40" itemprop="dateModified" datetime="2026-09-07T09:34:40+08:00">2026-09-07</time>
     </span>
 
   
@@ -289,7 +289,7 @@ Heap：运行时的产物，不在文件里</span></a></li><li class="nav-item n
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.4k</span>
+      <span>5.2k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -524,8 +524,48 @@ Heap：运行时的产物，不在文件里</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">High Address</span><br><span class="line">+----------------+</span><br><span class="line">| Stack          |   ← ❌ 并不在 ELF 文件里</span><br><span class="line">+----------------+</span><br><span class="line">| Heap           |   ← ❌ 并不在 ELF 文件里</span><br><span class="line">+----------------+</span><br><span class="line">| .bss           |</span><br><span class="line">+----------------+</span><br><span class="line">| .data          |</span><br><span class="line">+----------------+</span><br><span class="line">| .rodata        |</span><br><span class="line">+----------------+</span><br><span class="line">| .text          |</span><br><span class="line">+----------------+</span><br><span class="line">Low Address</span><br></pre></td></tr></table></figure>
 <p><strong>Stack 和 Heap 是 loader
 完成后、进程运行时才存在的东西</strong>，由操作系统（或
-bootloader）在加载阶段创建，而不是编译产物。准确的图应该是把”文件里有什么”和”运行时有什么”分两层看：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">文件里（ELF）                         运行时（进程地址空间）               </span><br><span class="line">┌──────────────────────────────┐      ┌───────────────────────────────────┐  高地址</span><br><span class="line">│ .text   代码                 │      │ Stack  ← loader 创建，向下增长    │</span><br><span class="line">│ .rodata 只读常量             │      │ Heap   ← 运行时动态分配，向上增长 │</span><br><span class="line">│ .data   已初始化变量         │      │ .bss   （已被 loader 清零）       │</span><br><span class="line">│ .bss    未初始化（只记大小） │      │ .data                             │</span><br><span class="line">└──────────────────────────────┘      │ .rodata                           │</span><br><span class="line">                                      │ .text                             │</span><br><span class="line">                                      └───────────────────────────────────┘  低地址</span><br></pre></td></tr></table></figure>
+bootloader）在加载阶段创建，而不是编译产物。把”文件里有什么”和”运行时有什么”对照起来看：</p>
+<table>
+<thead>
+<tr>
+<th>内容</th>
+<th>文件里（ELF）</th>
+<th>运行时（进程地址空间）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.text</code></td>
+<td>代码</td>
+<td>低地址（loader 搬入）</td>
+</tr>
+<tr>
+<td><code>.rodata</code></td>
+<td>只读常量</td>
+<td>低地址</td>
+</tr>
+<tr>
+<td><code>.data</code></td>
+<td>已初始化变量</td>
+<td>低地址</td>
+</tr>
+<tr>
+<td><code>.bss</code></td>
+<td>未初始化，只记大小</td>
+<td>低地址，被 loader 清零</td>
+</tr>
+<tr>
+<td><strong>Stack</strong></td>
+<td><strong>不存在</strong></td>
+<td><strong>高地址</strong>，loader 创建、向下增长</td>
+</tr>
+<tr>
+<td><strong>Heap</strong></td>
+<td><strong>不存在</strong></td>
+<td>运行时创建、向上增长</td>
+</tr>
+</tbody>
+</table>
 <p>中间的 <strong>loader</strong> 做的事：解析 Program Header，把左侧的
 <code>PT_LOAD</code> 段搬进右侧对应位置 → <code>.bss</code>
 在内存里被清零 → 创建 Stack / Heap。</p>
@@ -585,8 +625,8 @@ Heap 不是文件的一部分，而是加载完成后的运行时产物。</stro
               <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"># 操作系统</a>
               <a href="/tags/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86/" rel="tag"># 编译原理</a>
               <a href="/tags/Rust/" rel="tag"># Rust</a>
-              <a href="/tags/ELF/" rel="tag"># ELF</a>
               <a href="/tags/%E9%93%BE%E6%8E%A5%E5%99%A8/" rel="tag"># 链接器</a>
+              <a href="/tags/ELF/" rel="tag"># ELF</a>
               <a href="/tags/%E5%86%85%E5%AD%98%E5%B8%83%E5%B1%80/" rel="tag"># 内存布局</a>
           </div>
 
@@ -629,13 +669,13 @@ Heap 不是文件的一部分，而是加载完成后的运行时产物。</stro
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">388k</span>
+    <span title="Word count total">387k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:45</span>
+    <span title="Reading time total">11:44</span>
   </span>
 </div>
 <div class="busuanzi-count">
