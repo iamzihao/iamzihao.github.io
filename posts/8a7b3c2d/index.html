@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="是否曾想在咖啡馆、酒店或任何有网络的地方，像坐在自己书房一样操作家里的电脑？无论是访问重要文件、运行特定软件，还是进行远程维护，直接访问一台不在身边的计算机都是一个常见的需求。 传统方法（如公网 IP + 端口转发）配置复杂且有安全风险。本文将介绍一种极其简单且安全的组合方案：Tailscale + Windows 远程桌面，让你轻松实现稳定、高效的远程访问。">
+    <meta name="description" content="在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网 IP + 端口转发）配置复杂且有安全风险，本文介绍 Tailscale + Windows 远程桌面 的组合方案。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="内网穿透与远程桌面：用 Tailscale 随时随地访问你的 Windows">
 <meta property="og:url" content="https://iamzihao.github.io/posts/8a7b3c2d/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="是否曾想在咖啡馆、酒店或任何有网络的地方，像坐在自己书房一样操作家里的电脑？无论是访问重要文件、运行特定软件，还是进行远程维护，直接访问一台不在身边的计算机都是一个常见的需求。 传统方法（如公网 IP + 端口转发）配置复杂且有安全风险。本文将介绍一种极其简单且安全的组合方案：Tailscale + Windows 远程桌面，让你轻松实现稳定、高效的远程访问。">
+<meta property="og:description" content="在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网 IP + 端口转发）配置复杂且有安全风险，本文介绍 Tailscale + Windows 远程桌面 的组合方案。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-10-16T04:42:21.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.112Z">
+<meta property="article:modified_time" content="2026-09-07T03:18:00.033Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="Windows">
 <meta property="article:tag" content="内网穿透">
@@ -194,13 +194,13 @@ vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a c
   <nav class="site-state">
       <div class="site-state-item site-state-posts">
         <a href="/archives/">
-          <span class="site-state-item-count">75</span>
+          <span class="site-state-item-count">76</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
           <a href="/tags/">
-        <span class="site-state-item-count">185</span>
+        <span class="site-state-item-count">188</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -271,7 +271,7 @@ vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-07 11:18:00" itemprop="dateModified" datetime="2026-09-07T11:18:00+08:00">2026-09-07</time>
     </span>
 
   
@@ -288,7 +288,7 @@ vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>4.4k</span>
+      <span>4.3k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -305,10 +305,9 @@ vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a c
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>是否曾想在咖啡馆、酒店或任何有网络的地方，像坐在自己书房一样操作家里的电脑？无论是访问重要文件、运行特定软件，还是进行远程维护，直接访问一台不在身边的计算机都是一个常见的需求。</p>
-<p>传统方法（如公网 IP +
-端口转发）配置复杂且有安全风险。本文将介绍一种极其简单且安全的组合方案：<strong>Tailscale
-+ Windows 远程桌面</strong>，让你轻松实现稳定、高效的远程访问。</p>
+    <div class="post-body" itemprop="articleBody"><p>在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网
+IP + 端口转发）配置复杂且有安全风险，本文介绍 <strong>Tailscale +
+Windows 远程桌面</strong> 的组合方案。</p>
 <span id="more"></span>
 <h3 id="一网络基础概念速览">🧩 一、网络基础概念速览</h3>
 <p>在深入主题之前，我们先快速过一遍几个核心的网络概念，这有助于你理解为什么需要“内网穿透”。</p>
@@ -597,13 +596,13 @@ IP 地址，然后点击连接，按提示输入主机的用户名和密码。</
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">387k</span>
+    <span title="Word count total">391k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:44</span>
+    <span title="Reading time total">11:51</span>
   </span>
 </div>
 <div class="busuanzi-count">

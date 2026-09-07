@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="你的电脑里其实一直藏着一台”只进不出的保险箱电脑”——Windows 的 BitLocker、指纹登录全靠它，但你可能从没见过它干活。">
+    <meta name="description" content="TPM（Trusted Platform Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的 BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="TPM从零理解：保险箱里的密码世界">
 <meta property="og:url" content="https://iamzihao.github.io/posts/fd7258a1/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="你的电脑里其实一直藏着一台”只进不出的保险箱电脑”——Windows 的 BitLocker、指纹登录全靠它，但你可能从没见过它干活。">
+<meta property="og:description" content="TPM（Trusted Platform Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的 BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-25T06:03:27.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:46:28.563Z">
+<meta property="article:modified_time" content="2026-09-07T03:18:00.029Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="机密计算">
@@ -198,13 +198,13 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
   <nav class="site-state">
       <div class="site-state-item site-state-posts">
         <a href="/archives/">
-          <span class="site-state-item-count">75</span>
+          <span class="site-state-item-count">76</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
           <a href="/tags/">
-        <span class="site-state-item-count">185</span>
+        <span class="site-state-item-count">188</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -275,7 +275,7 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:46:28" itemprop="dateModified" datetime="2026-09-06T11:46:28+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-07 11:18:00" itemprop="dateModified" datetime="2026-09-07T11:18:00+08:00">2026-09-07</time>
     </span>
 
   
@@ -292,7 +292,7 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.9k</span>
+      <span>6k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -309,8 +309,9 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>你的电脑里其实一直藏着一台”只进不出的保险箱电脑”——Windows 的
-BitLocker、指纹登录全靠它，但你可能从没见过它干活。</p>
+    <div class="post-body" itemprop="articleBody"><p>TPM（Trusted Platform
+Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的
+BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
@@ -770,13 +771,13 @@ blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sea
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">387k</span>
+    <span title="Word count total">391k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">11:44</span>
+    <span title="Reading time total">11:51</span>
   </span>
 </div>
 <div class="busuanzi-count">
