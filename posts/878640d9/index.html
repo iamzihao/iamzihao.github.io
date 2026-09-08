@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 一句话版：作者想让”普通的、老的 GPU&#x2F;NPU”（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
+    <meta name="description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 一句话版：作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
 <meta property="og:type" content="article">
 <meta property="og:title" content="ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？">
 <meta property="og:url" content="https://iamzihao.github.io/posts/878640d9/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 一句话版：作者想让”普通的、老的 GPU&#x2F;NPU”（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
+<meta property="og:description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 一句话版：作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T07:49:20.000Z">
-<meta property="article:modified_time" content="2026-09-08T07:55:39.448Z">
+<meta property="article:modified_time" content="2026-09-08T08:03:22.358Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -268,7 +268,7 @@ Packet：高速公路上的一辆辆货车</span></a></li></ol></li><li class="n
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-08 15:49:20 / Modified: 15:55:39" itemprop="dateCreated datePublished" datetime="2026-09-08T15:49:20+08:00">2026-09-08</time>
+      <time title="Created: 2026-09-08 15:49:20 / Modified: 16:03:22" itemprop="dateCreated datePublished" datetime="2026-09-08T15:49:20+08:00">2026-09-08</time>
     </span>
 
   
@@ -304,8 +304,9 @@ Packet：高速公路上的一辆辆货车</span></a></li></ol></li><li class="n
     
     <div class="post-body" itemprop="articleBody"><blockquote>
 <p>论文：<strong>ccAI: A Compatible and Confidential System for AI
-Computing</strong>（MICRO 2025） 一句话版：作者想让”普通的、老的
-GPU/NPU”（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。</p>
+Computing</strong>（MICRO 2025）</p>
+<p>一句话版：作者想让普通的、老的 GPU/NPU（统称 xPU）也能安全地跑
+AI，同时尽量不改原来的软件和硬件。</p>
 </blockquote>
 <p>这是 <strong>ccAI 论文精读系列</strong>
 的第一篇，只回答两个问题：<strong>为什么 AI 计算需要保密？为什么 GPU
@@ -332,9 +333,8 @@ computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机�
 </blockquote>
 <p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
 Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
-Machine（受保护的虚拟机）</strong>——注意，这里不是 Apache TVM
-编译器。</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">        Host OS</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│        TVM          │</span><br><span class="line">│  AI Application     │</span><br><span class="line">│  模型 / 用户数据    │  🔒 别人看不了</span><br><span class="line">│  GPU Driver         │</span><br><span class="line">└─────────┬───────────┘</span><br><span class="line">          ↓</span><br><span class="line">         GPU</span><br></pre></td></tr></table></figure>
+Machine（受保护的虚拟机）</strong>——注意这里不是 Apache TVM 编译器。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">        Host OS</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│        TVM          │</span><br><span class="line">│  AI Application     │</span><br><span class="line">│  模型 / 用户数据      │  🔒 别人看不了</span><br><span class="line">│  GPU Driver         │</span><br><span class="line">└─────────┬───────────┘</span><br><span class="line">          ↓</span><br><span class="line">         GPU</span><br></pre></td></tr></table></figure>
 <p>TVM 把 CPU 侧的软件栈（AI
 应用、驱动、库）保护起来了。但问题马上出现：</p>
 <blockquote>
@@ -353,8 +353,8 @@ GPU？</h2>
 <ul>
 <li>云服务器里<strong>存量</strong>大多是 A100、T4、RTX 4090
 这类没有专门安全硬件的设备；</li>
-<li>还有国产 GPU、NPU、FPGA，架构五花八门；</li>
-<li>“为了安全把所有 GPU 换成 H100”——成本不可接受。</li>
+<li>还有国产 GPU、NPU、FPGA，架构各不相同；</li>
+<li>为了安全把所有 GPU 换成 H100 —— 成本不可接受。</li>
 </ul>
 <p>插一句，论文实验里用到的 xPU 包括 NVIDIA A100、RTX 4090
 Ti、T4、Tenstorrent N150d（NPU）、Enflame S60（国产
@@ -366,7 +366,7 @@ GPU），就是为了证明这套方案<strong>不是只能保护一种 GPU</str
 </blockquote>
 <h2 id="突破口pcie-是所有-xpu-的共同通道">💡 突破口：PCIe 是所有 xPU
 的共同通道</h2>
-<p>GPU 内部千差万别，但有一个共同点——它们都通过 <strong>PCIe</strong>
+<p>GPU 内部差别很大，但有一个共同点——它们都通过 <strong>PCIe</strong>
 插在主机上，跟 CPU/内存通信：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">A100 ──┐</span><br><span class="line">T4 ────┤</span><br><span class="line">4090 ──┤── PCIe ── CPU</span><br><span class="line">NPU ───┤</span><br><span class="line">FPGA ──┘</span><br></pre></td></tr></table></figure>
 <p>于是作者的思路是：</p>
@@ -383,7 +383,7 @@ Packet</h2>
 之间主要有两类交互。</p>
 <h3 id="dma搬数据的">DMA：搬数据的</h3>
 <p>GPU 算 AI 需要把模型、输入数据从 CPU 内存拿过来。如果让 CPU
-一字节一字节搬，会慢死。于是有了 <strong>DMA（Direct Memory
+一字节一字节搬，会很慢。于是有了 <strong>DMA（Direct Memory
 Access）</strong>：设备自己去内存里拿数据，CPU
 只需告诉它”源地址、目标地址、长度”。</p>
 <blockquote>

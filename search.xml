@@ -24295,8 +24295,9 @@ Writer 使用。</strong></p>
     <url>/posts/878640d9/</url>
     <content><![CDATA[<blockquote>
 <p>论文：<strong>ccAI: A Compatible and Confidential System for AI
-Computing</strong>（MICRO 2025） 一句话版：作者想让”普通的、老的
-GPU/NPU”（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。</p>
+Computing</strong>（MICRO 2025）</p>
+<p>一句话版：作者想让普通的、老的 GPU/NPU（统称 xPU）也能安全地跑
+AI，同时尽量不改原来的软件和硬件。</p>
 </blockquote>
 <p>这是 <strong>ccAI 论文精读系列</strong>
 的第一篇，只回答两个问题：<strong>为什么 AI 计算需要保密？为什么 GPU
@@ -24323,9 +24324,8 @@ computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机�
 </blockquote>
 <p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
 Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
-Machine（受保护的虚拟机）</strong>——注意，这里不是 Apache TVM
-编译器。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">        Host OS</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│        TVM          │</span><br><span class="line">│  AI Application     │</span><br><span class="line">│  模型 / 用户数据    │  🔒 别人看不了</span><br><span class="line">│  GPU Driver         │</span><br><span class="line">└─────────┬───────────┘</span><br><span class="line">          ↓</span><br><span class="line">         GPU</span><br></pre></td></tr></table></figure>
+Machine（受保护的虚拟机）</strong>——注意这里不是 Apache TVM 编译器。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">        Host OS</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│        TVM          │</span><br><span class="line">│  AI Application     │</span><br><span class="line">│  模型 / 用户数据      │  🔒 别人看不了</span><br><span class="line">│  GPU Driver         │</span><br><span class="line">└─────────┬───────────┘</span><br><span class="line">          ↓</span><br><span class="line">         GPU</span><br></pre></td></tr></table></figure>
 <p>TVM 把 CPU 侧的软件栈（AI
 应用、驱动、库）保护起来了。但问题马上出现：</p>
 <blockquote>
@@ -24344,8 +24344,8 @@ GPU？</h2>
 <ul>
 <li>云服务器里<strong>存量</strong>大多是 A100、T4、RTX 4090
 这类没有专门安全硬件的设备；</li>
-<li>还有国产 GPU、NPU、FPGA，架构五花八门；</li>
-<li>“为了安全把所有 GPU 换成 H100”——成本不可接受。</li>
+<li>还有国产 GPU、NPU、FPGA，架构各不相同；</li>
+<li>为了安全把所有 GPU 换成 H100 —— 成本不可接受。</li>
 </ul>
 <p>插一句，论文实验里用到的 xPU 包括 NVIDIA A100、RTX 4090
 Ti、T4、Tenstorrent N150d（NPU）、Enflame S60（国产
@@ -24357,7 +24357,7 @@ GPU），就是为了证明这套方案<strong>不是只能保护一种 GPU</str
 </blockquote>
 <h2 id="突破口pcie-是所有-xpu-的共同通道">💡 突破口：PCIe 是所有 xPU
 的共同通道</h2>
-<p>GPU 内部千差万别，但有一个共同点——它们都通过 <strong>PCIe</strong>
+<p>GPU 内部差别很大，但有一个共同点——它们都通过 <strong>PCIe</strong>
 插在主机上，跟 CPU/内存通信：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">A100 ──┐</span><br><span class="line">T4 ────┤</span><br><span class="line">4090 ──┤── PCIe ── CPU</span><br><span class="line">NPU ───┤</span><br><span class="line">FPGA ──┘</span><br></pre></td></tr></table></figure>
 <p>于是作者的思路是：</p>
@@ -24374,7 +24374,7 @@ Packet</h2>
 之间主要有两类交互。</p>
 <h3 id="dma搬数据的">DMA：搬数据的</h3>
 <p>GPU 算 AI 需要把模型、输入数据从 CPU 内存拿过来。如果让 CPU
-一字节一字节搬，会慢死。于是有了 <strong>DMA（Direct Memory
+一字节一字节搬，会很慢。于是有了 <strong>DMA（Direct Memory
 Access）</strong>：设备自己去内存里拿数据，CPU
 只需告诉它”源地址、目标地址、长度”。</p>
 <blockquote>
@@ -24692,7 +24692,7 @@ tag，不一致就说明被动过手脚。</p>
 加密返回，TVM 解密后使用。</p>
 <h3 id="为什么这套能兼容各种-xpu">为什么这套能兼容各种 xPU？</h3>
 <p>不同 xPU 的 DMA/MMIO
-实现五花八门，但<strong>它们的流量最终都是标准格式的 PCIe
+实现各不相同，但<strong>它们的流量最终都是标准格式的 PCIe
 packet</strong>。Filter 只认 packet 属性、Handler 只动
 header/payload，跟”这是 NVIDIA 还是某
 NPU”无关。这就是兼容性的技术根源。</p>
@@ -24883,7 +24883,8 @@ application——只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
 <p>对比那些需要定制 API、改 xPU 软件栈甚至改硬件的方案，ccAI
 对原有应用确实更透明。</p>
-<h2 id="rq2安全性威胁模型很狠">🛡️ RQ2：安全性——威胁模型很”狠”</h2>
+<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
+RQ2：安全性——假设攻击者控制特权软件</h2>
 <p>RQ2
 假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
 software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
@@ -24943,7 +24944,7 @@ Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
 重新设计安全机制。</p>
 <h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
 89%</h2>
-<p>作者把”未优化的 ccAI”和”优化后的 ccAI”对比，结果很夸张：<strong>E2E
+<p>作者把”未优化的 ccAI”和”优化后的 ccAI”对比，效果显著：<strong>E2E
 latency overhead 降低了 88.7%～89.8%</strong>。</p>
 <p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
 再读一点 → 再问一次）。三个优化对症下药：</p>
