@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="接前两篇：动机与背景 → 设计与实现。机制讲完了，本篇看作者怎么证明它真的 work——§8 Evaluation 用 6 个 Research Questions（RQ） 逐个验证兼容性、安全性、性能和极端场景。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结">
+<meta property="og:url" content="https://iamzihao.github.io/posts/9f387285/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="接前两篇：动机与背景 → 设计与实现。机制讲完了，本篇看作者怎么证明它真的 work——§8 Evaluation 用 6 个 Research Questions（RQ） 逐个验证兼容性、安全性、性能和极端场景。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-08T08:45:00.000Z">
+<meta property="article:modified_time" content="2026-09-08T07:52:58.218Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="TEE">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="AI">
+<meta property="article:tag" content="机密计算">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="性能测试">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/9f387285/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/9f387285/","path":"posts/9f387285/","title":"ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#rq-%E6%80%BB%E8%A7%88"><span class="nav-number">1.</span> <span class="nav-text">📋 RQ 总览</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rq1%E5%85%BC%E5%AE%B9%E6%80%A7%E7%9C%9F%E4%B8%8D%E6%98%AF%E5%8F%AA%E6%94%AF%E6%8C%81%E4%B8%80%E7%A7%8D-gpu"><span class="nav-number">2.</span> <span class="nav-text">✅ RQ1：兼容性——真不是只支持一种
+GPU</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rq2%E5%AE%89%E5%85%A8%E6%80%A7%E5%A8%81%E8%83%81%E6%A8%A1%E5%9E%8B%E5%BE%88%E7%8B%A0"><span class="nav-number">3.</span> <span class="nav-text">🛡️ RQ2：安全性——威胁模型很”狠”</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rq3%E6%80%A7%E8%83%BD0.055.67-%E6%80%8E%E4%B9%88%E6%9D%A5%E7%9A%84"><span class="nav-number">4.</span> <span class="nav-text">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rq4%E6%8D%A2%E6%A8%A1%E5%9E%8B%E6%8D%A2-xpu%E7%A8%B3%E5%AE%9A%E6%80%A7%E9%AA%8C%E8%AF%81"><span class="nav-number">5.</span> <span class="nav-text">🔁 RQ4：换模型、换
+xPU——稳定性验证</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%8D%E5%90%8C-llm"><span class="nav-number">5.1.</span> <span class="nav-text">不同 LLM</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%8D%E5%90%8C-xpu"><span class="nav-number">5.2.</span> <span class="nav-text">不同 xPU</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rq5%E4%BC%98%E5%8C%96overhead-%E9%99%8D%E4%BA%86%E7%BA%A6-89"><span class="nav-number">6.</span> <span class="nav-text">⚡ RQ5：优化——overhead 降了约
+89%</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rq6%E6%9E%81%E7%AB%AF%E6%83%85%E5%86%B5%E6%95%85%E6%84%8F%E6%8A%8A%E7%8E%AF%E5%A2%83%E6%90%9E%E5%B7%AE"><span class="nav-number">7.</span> <span class="nav-text">🌪️ RQ6：极端情况——故意把环境搞差</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93%E8%BF%99%E7%AF%87%E8%AE%BA%E6%96%87%E5%88%B0%E5%BA%95%E8%AF%81%E6%98%8E%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">8.</span> <span class="nav-text">🧾 总结：这篇论文到底证明了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E8%AF%BB%E6%89%8D%E6%9C%89%E6%94%B6%E8%8E%B7"><span class="nav-number">8.1.</span> <span class="nav-text">怎么读才有收获</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%BA%9B%E5%80%BC%E5%BE%97%E5%B8%A6%E7%9D%80%E8%B5%B0%E7%9A%84%E8%A7%82%E5%AF%9F"><span class="nav-number">8.2.</span> <span class="nav-text">一些值得带着走的观察</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%B3%BB%E5%88%97%E5%9B%9E%E9%A1%BE"><span class="nav-number">9.</span> <span class="nav-text">📚 系列回顾</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">83</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">203</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/9f387285/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-08 16:45:00 / Modified: 15:52:58" itemprop="dateCreated datePublished" datetime="2026-09-08T16:45:00+08:00">2026-09-08</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>3.4k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>6 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>接前两篇：<a
+href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
+href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
+work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
+逐个验证兼容性、安全性、性能和极端场景。</p>
+</blockquote>
+<span id="more"></span>
+<h2 id="rq-总览">📋 RQ 总览</h2>
+<table>
+<thead>
+<tr>
+<th>RQ</th>
+<th>问题</th>
+<th>一句话答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RQ1</td>
+<td>兼容性怎么样？</td>
+<td>真跑通了 5 种不同厂商的 xPU</td>
+</tr>
+<tr>
+<td>RQ2</td>
+<td>能不能防住攻击者？</td>
+<td>链路完整：可信 + 保密 + 防篡改</td>
+</tr>
+<tr>
+<td>RQ3</td>
+<td>LLM 上性能损失多少？</td>
+<td>overhead 只有 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>RQ4</td>
+<td>换不同 LLM / xPU 呢？</td>
+<td>依然稳定，且不随模型大小线性变差</td>
+</tr>
+<tr>
+<td>RQ5</td>
+<td>优化有没有用？</td>
+<td>E2E overhead 直接降约 89%</td>
+</tr>
+<tr>
+<td>RQ6</td>
+<td>极端情况呢？</td>
+<td>带宽砍半、显存不够也不崩</td>
+</tr>
+</tbody>
+</table>
+<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭的 PCIe-SC 原型。</p>
+<h2 id="rq1兼容性真不是只支持一种-gpu">✅ RQ1：兼容性——真不是只支持一种
+GPU</h2>
+<p>ccAI 最核心的卖点是”不改硬件、不改驱动、不改应用”，所以 RQ1
+直接拿不同架构的 <strong>5 种 xPU</strong> 真机测试：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
+<p>跑的还是真实软件栈：CUDA 12.1、NVIDIA Driver 550.90.07、Tenstorrent
+的 tt-buda 等。全程没有修改 GPU 硬件、NVIDIA driver、CUDA 或 AI
+application——只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
+<p>对比那些需要定制 API、改 xPU 软件栈甚至改硬件的方案，ccAI
+对原有应用确实更透明。</p>
+<h2 id="rq2安全性威胁模型很狠">🛡️ RQ2：安全性——威胁模型很”狠”</h2>
+<p>RQ2
+假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
+software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
+<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
+完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
+通信完整</strong>，缺一不可。</p>
+<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</h2>
+<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
+<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E2E Latency</strong></td>
+<td>从输入问题到完整回答生成的总时长</td>
+</tr>
+<tr>
+<td><strong>TPS</strong></td>
+<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
+</tr>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
+</tr>
+</tbody>
+</table>
+<p>结果：<strong>overhead
+0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
+100ms，5% overhead 就是约 105ms。</p>
+<p><strong>为什么没慢很多？</strong>
+因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
+加密；大量普通包走 A4
+免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
+<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
+xPU——稳定性验证</h2>
+<h3 id="不同-llm">不同 LLM</h3>
+<p>从小到大多种模型都测了，整体 overhead
+<strong>0.72%～4.76%</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
+<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
+是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
+2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
+带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
+<h3 id="不同-xpu">不同 xPU</h3>
+<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
+Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
+<strong>0.58%～2.40%</strong>。</p>
+<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
+的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
+重新设计安全机制。</p>
+<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
+89%</h2>
+<p>作者把”未优化的 ccAI”和”优化后的 ccAI”对比，结果很夸张：<strong>E2E
+latency overhead 降低了 88.7%～89.8%</strong>。</p>
+<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
+再读一点 → 再问一次）。三个优化对症下药：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
+<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
+次数大幅减少。</p>
+<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
+<p>最后作者主动”加难度”：</p>
+<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
+一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
+<strong>4.45%</strong>。</p>
+<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
+<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
+间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
+<strong>83%</strong>。但 ccAI 在”本来就慢”的基础上<strong>额外增加的
+overhead 小于 2%</strong>。</p>
+<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
+的额外代价依然可控。</p>
+<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">兼容性     ✅ 5 种不同 xPU，不改硬件/驱动/应用</span><br><span class="line">安全性     ✅ 加密 + 完整性 + 可信建立全链路</span><br><span class="line">LLM 性能   ✅ overhead 0.05%～5.67%</span><br><span class="line">多模型     ✅ 0.72%～4.76%，不随模型大小线性恶化</span><br><span class="line">多 xPU     ✅ 0.58%～2.40%</span><br><span class="line">优化效果   ✅ E2E overhead 降低约 89%</span><br><span class="line">极端场景   ✅ 带宽减半 / 显存溢出仍可控</span><br></pre></td></tr></table></figure>
+<p>整套系统一句话：</p>
+<blockquote>
+<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
+PCIe
+通道上加一个”安全检查站”（PCIe-SC），旁边配一个软件”翻译员”（Adaptor）。</strong></p>
+</blockquote>
+<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
+layer（共同抽象层）</strong>。</p>
+<h3 id="怎么读才有收获">怎么读才有收获</h3>
+<p>论文机制部分读懂后，真正的”懂”是把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
+5（Filter 规则）/ 6（Attestation 协议）/
+7-8（实验）</strong>，串起来就是全篇。</p>
+<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
+<ul>
+<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
+LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
+的表现需要另外验证。</li>
+<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
+分级不是论文的锦上添花，而是”安全性和性能可兼得”的命门——只保护值得保护的数据。</li>
+<li><strong>信任链依赖前提</strong>：整套安全建立在 Secure Boot / HRoT
+可信、TVM 可信的前提上，攻击模型是”特权软件”，不含对 PCIe-SC
+物理硬件的破坏。</li>
+</ul>
+<h2 id="系列回顾">📚 系列回顾</h2>
+<ul>
+<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
+背景</li>
+<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
+精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
+Handler / Adaptor / 信任建立 / 实现</li>
+<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
+</ul>
+<p>如果对背景概念想补课，可以看站内的 <a
+href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
+href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em>
+的入门精读笔记，全部实验数据来自论文原文。）</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/TEE/" rel="tag"># TEE</a>
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/AI/" rel="tag"># AI</a>
+              <a href="/tags/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" rel="tag"># 机密计算</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95/" rel="tag"># 性能测试</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/25a4a786/" rel="prev" title="ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC">
+                  <i class="fa fa-angle-left"></i> ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">414k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">12:32</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

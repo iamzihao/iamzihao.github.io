@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CCPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个”门卫”，再在软件侧配一个”翻译员”，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC">
+<meta property="og:url" content="https://iamzihao.github.io/posts/25a4a786/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CCPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个”门卫”，再在软件侧配一个”翻译员”，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
+<meta property="article:modified_time" content="2026-09-08T07:52:26.260Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="TEE">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="AI">
+<meta property="article:tag" content="机密计算">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="FPGA">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/25a4a786/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/25a4a786/","path":"posts/25a4a786/","title":"ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E7%9C%8B%E6%80%BB%E6%9E%B6%E6%9E%84%E5%9B%9B%E4%B8%AA%E8%A7%92%E8%89%B2%E4%B8%80%E5%8F%B0%E6%88%8F"><span class="nav-number">1.</span> <span class="nav-text">🗺️ 先看总架构：四个角色一台戏</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E7%AB%99packet-filter%E8%BF%99%E4%B8%AA%E5%8C%85%E8%AF%A5%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">🚧 第一站：Packet
+Filter——这个包该怎么处理？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E5%85%A8%E9%83%BD%E5%8A%A0%E5%AF%86"><span class="nav-number">2.1.</span> <span class="nav-text">为什么不能”全都加密”？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9B%9B%E7%A7%8D%E5%AE%89%E5%85%A8%E5%8A%A8%E4%BD%9C-a1a4"><span class="nav-number">2.2.</span> <span class="nav-text">四种安全动作 A1~A4 ⭐</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#filter-%E7%9C%8B%E4%B8%89%E4%B8%AA%E5%B1%9E%E6%80%A7"><span class="nav-number">2.3.</span> <span class="nav-text">Filter 看三个属性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#l1-l2-%E4%B8%A4%E7%BA%A7%E8%A1%A8%E5%85%88%E6%8C%A1%E5%9D%8F%E4%BA%BA%E5%86%8D%E7%BB%99%E5%A5%BD%E4%BA%BA%E5%88%86%E7%B1%BB"><span class="nav-number">2.4.</span> <span class="nav-text">L1 &#x2F; L2
+两级表：先挡坏人，再给好人分类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%A7%84%E5%88%99%E6%9C%AC%E8%BA%AB%E4%B9%9F%E8%A6%81%E4%BF%9D%E6%8A%A4"><span class="nav-number">2.5.</span> <span class="nav-text">规则本身也要保护</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E4%BE%8B%E5%AD%90"><span class="nav-number">2.6.</span> <span class="nav-text">完整例子</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E7%AB%99packet-handler%E7%9C%9F%E6%AD%A3%E6%8A%8A%E5%AE%89%E5%85%A8%E5%81%9A%E5%87%BA%E6%9D%A5"><span class="nav-number">3.</span> <span class="nav-text">🔐 第二站：Packet
+Handler——真正把安全做出来</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%85%89%E5%8A%A0%E5%AF%86%E4%B8%8D%E5%A4%9F"><span class="nav-number">3.1.</span> <span class="nav-text">为什么光加密不够？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA-packet-%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E5%A4%84%E7%90%86%E7%9A%84"><span class="nav-number">3.2.</span> <span class="nav-text">一个 packet 是怎么被处理的？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%99%E5%A5%97%E8%83%BD%E5%85%BC%E5%AE%B9%E5%90%84%E7%A7%8D-xpu"><span class="nav-number">3.3.</span> <span class="nav-text">为什么这套能兼容各种 xPU？</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E7%AB%99adaptor%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E7%94%A8%E6%94%B9%E9%A9%B1%E5%8A%A8"><span class="nav-number">4.</span> <span class="nav-text">🧑‍💼
+第三站：Adaptor——为什么不用改驱动？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E7%AB%99trust-establishment%E5%87%AD%E4%BB%80%E4%B9%88%E4%BF%A1%E8%BF%99%E5%8F%B0%E6%9C%BA%E5%99%A8"><span class="nav-number">5.</span> <span class="nav-text">🔑 第四站：Trust
+Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#secure-boot-hrot-blade"><span class="nav-number">5.1.</span> <span class="nav-text">Secure Boot + HRoT-Blade</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#remote-attestation"><span class="nav-number">5.2.</span> <span class="nav-text">Remote Attestation</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#key-exchange"><span class="nav-number">5.3.</span> <span class="nav-text">Key Exchange</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E7%AB%99implementation%E4%BD%9C%E8%80%85%E7%9C%9F%E5%81%9A%E5%87%BA%E6%9D%A5%E4%BA%86"><span class="nav-number">6.</span> <span class="nav-text">🛠️
+第五站：Implementation——作者真做出来了</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">📌 小结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">83</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">203</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/25a4a786/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-08 16:20:00 / Modified: 15:52:26" itemprop="dateCreated datePublished" datetime="2026-09-08T16:20:00+08:00">2026-09-08</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>5.5k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>10 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>接上一篇《<a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a>》：CCPU 侧用 TVM
+保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——<strong>在 CPU 和 xPU
+之间的 PCIe 上插一个”门卫”，再在软件侧配一个”翻译员”，让老 GPU
+也能机密计算。</strong></p>
+</blockquote>
+<p>本篇讲清四个组件怎么配合：<strong>Adaptor</strong>（兼容）、<strong>Packet
+Filter</strong>（决策）、<strong>Packet
+Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后落到
+§7 作者真做出来的原型。</p>
+<span id="more"></span>
+<h2 id="先看总架构四个角色一台戏">🗺️ 先看总架构：四个角色一台戏</h2>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">                 User</span><br><span class="line">                  │ 加密的 workload</span><br><span class="line">                  ↓</span><br><span class="line">┌──────────────────────────────────┐</span><br><span class="line">│              TVM                 │</span><br><span class="line">│  AI App → xPU Driver → Adaptor  │  ← 软件侧</span><br><span class="line">└────────────────┬─────────────────┘</span><br><span class="line">                 │ PCIe</span><br><span class="line">                 ↓</span><br><span class="line">        ┌──────────────────┐</span><br><span class="line">        │     PCIe-SC      │  ← 硬件侧（新插的门卫）</span><br><span class="line">        │                  │</span><br><span class="line">        │  Packet Filter   │  🚧 决策：放不放？怎么处理？</span><br><span class="line">        │       ↓          │</span><br><span class="line">        │  Packet Handler  │  🔐 执行：加密/完整性</span><br><span class="line">        │       ↓          │</span><br><span class="line">        │   HRoT-Blade     │  🔑 信任：证明自己没被换</span><br><span class="line">        └────────┬─────────┘</span><br><span class="line">                 │ PCIe</span><br><span class="line">                 ↓</span><br><span class="line">               GPU / NPU</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>一句话角色</th>
+<th>解决什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Adaptor</strong></td>
+<td>🧑‍💼 翻译员/协调员</td>
+<td>G1 兼容性：让老软件不用改</td>
+</tr>
+<tr>
+<td><strong>Packet Filter</strong></td>
+<td>🚧 门卫</td>
+<td>判断每个 packet 该 A1/A2/A3/A4</td>
+</tr>
+<tr>
+<td><strong>Packet Handler</strong></td>
+<td>🔐 执行员</td>
+<td>真的做加解密、完整性检查</td>
+</tr>
+<tr>
+<td><strong>HRoT-Blade</strong></td>
+<td>🔑 信任中心</td>
+<td>Secure Boot / 远程证明 / 密钥交换</td>
+</tr>
+</tbody>
+</table>
+<p>一句话分工：<strong>Adaptor 解决”怎么兼容原来的 xPU 软件”，PCIe-SC
+解决”怎么保护 PCIe 上的数据”。</strong></p>
+<p>下面沿着”一个 packet 的旅程”走一遍。</p>
+<h2 id="第一站packet-filter这个包该怎么处理">🚧 第一站：Packet
+Filter——这个包该怎么处理？</h2>
+<h3 id="为什么不能全都加密">为什么不能”全都加密”？</h3>
+<p>直觉方案是把 PCIe 流量全部加密。但 PCIe
+上跑的东西重要程度完全不同：</p>
+<ul>
+<li>AI 模型参数、输入数据 → 高度机密</li>
+<li>中断、普通状态寄存器读取 → 不敏感</li>
+<li>恶意/未知设备的请求 → 压根不该出现</li>
+</ul>
+<p>全都加密既浪费性能，也管不住”不该出现的包”。所以论文走<strong>细粒度安全（fine-grained
+security）</strong>路线：按 packet 属性分类处置。</p>
+<h3 id="四种安全动作-a1a4">四种安全动作 A1~A4 ⭐</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Action</th>
+<th>全称含义</th>
+<th>做什么</th>
+<th>类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A1</strong></td>
+<td>Prohibited</td>
+<td>禁止，直接丢弃</td>
+<td>🚫 不让进</td>
+</tr>
+<tr>
+<td><strong>A2</strong></td>
+<td>Write-Read Protected</td>
+<td>加密/解密 + 完整性检查</td>
+<td>🔐🛡️ 特级安检</td>
+</tr>
+<tr>
+<td><strong>A3</strong></td>
+<td>Write Protected</td>
+<td>只做完整性检查</td>
+<td>🛡️ 普通安检</td>
+</tr>
+<tr>
+<td><strong>A4</strong></td>
+<td>Full Accessible</td>
+<td>直接通过</td>
+<td>➡️ 免检</td>
+</tr>
+</tbody>
+</table>
+<p>安全性从高到低：A2 &gt; A3 &gt;
+A4。<strong>安全性越高，性能代价越大</strong>，所以才要分级，而不是一刀切全加密。</p>
+<h3 id="filter-看三个属性">Filter 看三个属性</h3>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">① Packet Type            这个包是干嘛的？Memory Read / Write / Interrupt / MMIO / DMA</span><br><span class="line">② Interacting Parties    谁和谁在通信？合法 TVM ↔ xPU？还是未知设备 → xPU？</span><br><span class="line">③ Address Space Sensitivity  访问的地址是不是敏感区域？（如模型参数所在内存）</span><br></pre></td></tr></table></figure>
+<p>同样是 Memory Write，发往敏感区域就该 A2，发往普通区域只要
+A3；未知设备发来的，A1 直接丢。</p>
+<h3 id="l1-l2-两级表先挡坏人再给好人分类">L1 / L2
+两级表：先挡坏人，再给好人分类</h3>
+<p>一个包进来，先过两道门：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">   PCIe Packet</span><br><span class="line">        ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L1 Table  │  ← &quot;你有资格进来吗？&quot;（查 requester 是否授权）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">  合法？↙    ↘否</span><br><span class="line">     ↓       ↓</span><br><span class="line">┌────────────┐ A1 🚫 DROP</span><br><span class="line">│  L2 Table  │  ← &quot;该享受什么待遇？&quot;（查 type + 地址是否敏感）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">   ┌──┴───────┐</span><br><span class="line">   ↓          ↓</span><br><span class="line">  A2 🔐      A3 🛡️ / A4 ➡️</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>L1 负责挡坏人（不授权 → A1），L2 负责给好人分类（按敏感度给
+A2/A3/A4）。</strong></p>
+</blockquote>
+<p>为了让规则不至于为每种 xPU 写爆，还引入了
+<strong>Mask</strong>：一条规则可以声明”我只关心这几个字段”，其余字段忽略。</p>
+<h3 id="规则本身也要保护">规则本身也要保护</h3>
+<p>攻击者把规则表里”敏感地址 → A2”改成”→ A4”就全完了。所以 policy
+由用户通过 Adaptor 下发，<strong>存进 configuration space
+前先加密，使用时再解密</strong>，防止注入恶意配置。</p>
+<h3 id="完整例子">完整例子</h3>
+<p>TVM-1 向 xPU 写一段模型参数（地址落在敏感区
+<code>0x2000~0x3000</code>）：</p>
+<ol type="1">
+<li><strong>L1</strong>：Requester = TVM-1，是授权方 → ✅ 放行</li>
+<li><strong>L2</strong>：Type = Memory Write + 地址敏感 →
+<strong>A2</strong></li>
+<li>转交 Packet Handler 执行</li>
+</ol>
+<p>反过来，未知设备发同样的包：L1 就不授权 →
+<strong>A1</strong>，直接丢，根本走不到加密环节。</p>
+<h2 id="第二站packet-handler真正把安全做出来">🔐 第二站：Packet
+Handler——真正把安全做出来</h2>
+<p>Filter 只是”决定”，真正动手的是
+Handler：加解密、安全检查、完整性验证。</p>
+<h3 id="为什么光加密不够">为什么光加密不够？</h3>
+<p>加密解决 <strong>Confidentiality</strong>（别人看不懂），但不解决
+<strong>Integrity</strong>（别人改不了）。攻击者看不懂密文，却可能篡改它，让
+GPU 拿到被改过的数据。所以 A2 要同时上两道：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Confidentiality  → 加密（AES）</span><br><span class="line">Integrity        → Authentication Tag（认证标签）</span><br></pre></td></tr></table></figure>
+<p><strong>Authentication Tag</strong>
+可以理解成<strong>防篡改封条</strong>：发送前对数据算出一个 tag（如
+<code>ABC123</code>）跟着数据走；接收方拿到数据重算
+tag，不一致就说明被动过手脚。</p>
+<h3 id="一个-packet-是怎么被处理的">一个 packet 是怎么被处理的？</h3>
+<p>Handler 不会把整包囫囵处理，而是把 <strong>Header 和 Payload
+分开</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">   ├── Header ──────→ Header Queue（原样走，不动）</span><br><span class="line">   └── Payload ─────→ Payload Queue</span><br><span class="line">                          ↓</span><br><span class="line">                  Security Engine</span><br><span class="line">                    ┌─────┴─────┐</span><br><span class="line">                    ↓           ↓</span><br><span class="line">              AES-SHA      Authentication</span><br><span class="line">               Engine      Tag Manager</span><br><span class="line">                    └─────┬─────┘</span><br><span class="line">                          ↓</span><br><span class="line">                     重新组合 Packet</span><br></pre></td></tr></table></figure>
+<p>A2 的完整五步（以 TVM 向 GPU 发模型参数为例）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">① Packet 到达   ┌────────┬──────────────┐</span><br><span class="line">                │ Header │ Model Data   │</span><br><span class="line">                └────────┴──────────────┘</span><br><span class="line">② Filter 判断   授权 TVM + 敏感地址 → A2</span><br><span class="line">③ 拆包          Header → Header Queue，Payload → Payload Queue</span><br><span class="line">④ 处理 Payload  AES 加密 → Encrypted Data</span><br><span class="line">                Integrity 计算 → Authentication Tag</span><br><span class="line">⑤ 重组发出      ┌────────┬────────────────┬────────────┐</span><br><span class="line">                │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">                └────────┴────────────────┴────────────┘</span><br><span class="line">                          ↓ PCIe</span><br><span class="line">                        xPU</span><br></pre></td></tr></table></figure>
+<p>xPU → TVM 的返回数据（D2H）走同样的流程反向处理：结果经 PCIe-SC
+加密返回，TVM 解密后使用。</p>
+<h3 id="为什么这套能兼容各种-xpu">为什么这套能兼容各种 xPU？</h3>
+<p>不同 xPU 的 DMA/MMIO
+实现五花八门，但<strong>它们的流量最终都是标准格式的 PCIe
+packet</strong>。Filter 只认 packet 属性、Handler 只动
+header/payload，跟”这是 NVIDIA 还是某
+NPU”无关。这就是兼容性的技术根源。</p>
+<h2 id="第三站adaptor为什么不用改驱动">🧑‍💼
+第三站：Adaptor——为什么不用改驱动？</h2>
+<p>你可能会问：PCIe-SC 都能拦包加密了，还要 Adaptor 干嘛？</p>
+<p>关键区别：<strong>PCIe-SC 只看得见 PCIe packet，看不懂 AI
+任务</strong>。它看到一个包访问
+<code>0x12340000</code>，但不知道这块内存是模型参数、输入数据还是临时
+buffer。而 <strong>Adaptor 住在 TVM
+里，知道当前任务的数据在哪、哪些敏感</strong>。所以：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Adaptor（软件语义）：&quot;这个任务要保护哪些数据&quot; → 准备数据</span><br><span class="line">     ↓</span><br><span class="line">PCIe-SC（通信安全）：&quot;这个 packet 该怎么处理&quot; → 加密/完整性/放行</span><br></pre></td></tr></table></figure>
+<p>Adaptor 干两件事：</p>
+<ol type="1">
+<li><strong>通过 MMIO 与 PCIe-SC 交互</strong>：查询任务
+metadata（数据地址、大小），下发安全规则。</li>
+<li><strong>处理 xPU task</strong>：找到敏感数据 → 加密 → 放进
+<strong>bounce buffer</strong> → 传给 xPU。</li>
+</ol>
+<p><strong>bounce buffer</strong> =
+加密后再发货的”临时中转仓库”：敏感数据不直接上 PCIe，先被 Adaptor
+加密到一块安全装货区，PCIe 上跑的已经是密文。</p>
+<p>这样做的最大收益是<strong>不动老软件</strong>：不是去改 AI
+App、Runtime、Driver，而是在旁边<strong>新增</strong>一个兼容层。论文原型里这个”新增”是一个叫
+<strong><code>ccAI_adaptor</code> 的 kernel module</strong>——原生 xPU
+driver 一个字节都不改。</p>
+<p>换一种 xPU 怎么办？比如从 NVIDIA A100 换成某个 NPU：不需要重设计
+PCIe-SC，只需给 Adaptor 更新 <strong>software-based kernel
+patches</strong>（经 secure boot
+校验后激活），就能支持新的内存分配方式——这就是论文说的
+<strong>compatible system updates</strong>。</p>
+<h2 id="第四站trust-establishment凭什么信这台机器">🔑 第四站：Trust
+Establishment——凭什么信这台机器？</h2>
+<p>前面解决了”数据怎么保护”，但还有个更根本的问题：</p>
+<blockquote>
+<p><strong>你怎么知道这台 PCIe-SC 里跑的还是 ccAI
+的代码，而不是被攻击者换成了”偷密钥再加密”的木马版？</strong></p>
+</blockquote>
+<p>如果门卫本身不可信，加密就是给贼上锁。§6 用三步建立信任：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Secure Boot（先确认机器没被换）</span><br><span class="line">     ↓</span><br><span class="line">Remote Attestation（再向远程用户证明）</span><br><span class="line">     ↓</span><br><span class="line">Key Exchange（最后才把密钥交给它）</span><br></pre></td></tr></table></figure>
+<h3 id="secure-boot-hrot-blade">Secure Boot + HRoT-Blade</h3>
+<p>CPU 侧有硬件信任根（HRoT）保护 TVM，但 <strong>PCIe-SC
+是另一块独立硬件</strong>，CPU 的启动信任链管不到它。所以论文给 PCIe-SC
+配了自己的信任根：<strong>HRoT-Blade</strong>（一个 TPM-compatible
+的信任模块）。</p>
+<p>启动时 HRoT-Blade 做
+<strong>Measurement</strong>——给每个组件算”指纹”（hash）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">HRoT-Blade</span><br><span class="line">   ↓ 读取并验证 PCIe-SC firmware（解密 bitstream/firmware）</span><br><span class="line">   ↓ 读取并验证 Packet Filter</span><br><span class="line">   ↓ 测量结果记入 PCR（Platform Configuration Register，安全启动的记录本）</span><br><span class="line">   ↓ 全部符合预期 → 启动 PCIe-SC</span><br></pre></td></tr></table></figure>
+<p>firmware 被改过 → 指纹不同 → 拒绝启动。</p>
+<h3 id="remote-attestation">Remote Attestation</h3>
+<p>用户人在远程，看不到云服务器内部。服务器光说”我没问题”没用，必须给出<strong>密码学上可验证的证明</strong>。Attestation
+Report 大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">r = (n, PCRs, S(PCRs))</span><br><span class="line">    │    │      └─ 对 PCR 的签名</span><br><span class="line">    │    └──────── 当前各组件安全状态</span><br><span class="line">    └───────────── nonce：用户这次临时出的随机数</span><br></pre></td></tr></table></figure>
+<p><strong>Nonce</strong>
+是防重放的：用户每次给一个新随机数，要求把它签进报告里。否则攻击者可以拿”机器健康时期”的旧报告反复骗人。</p>
+<h3 id="key-exchange">Key Exchange</h3>
+<p>环境可信了，最后一步是把 workload
+加密密钥安全交给平台（不能明文走网络）。密钥交换完成后，完整流程闭环：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">用户加密 AI workload → TVM 解密 → Adaptor 准备数据</span><br><span class="line">→ PCIe-SC 加密成密文 PCIe packet → xPU 计算</span><br><span class="line">→ 结果再经 PCIe-SC 加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<h2 id="第五站implementation作者真做出来了">🛠️
+第五站：Implementation——作者真做出来了</h2>
+<p>论文用 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭了原型，实现两个东西：</p>
+<p><strong>① Adaptor（软件）</strong> - 新增 <code>ccAI_adaptor</code>
+kernel module（不改 CUDA / GPU Driver / AI Application） - 提供
+<code>encrypt_data()</code> / <code>decrypt_data()</code>，用
+<strong>AES-128</strong> + Intel <strong>AES-NI</strong> 加速 - 分到
+<strong>64 KB MMIO 区域</strong> 控制 PCIe-SC（下发规则到 L1/L2、启停
+H2D/D2H 传输、查状态）</p>
+<p><strong>② PCIe-SC（FPGA 硬件）</strong> - 分配 <strong>4 KB BAR
+空间</strong>存放 L1/L2 规则表 - Packet Filter 从 header
+提取三要素做匹配：<strong>Packet Type</strong>（Memory
+Read/Write…）、<strong>Route ID</strong>（谁发/发给谁）、<strong>Payload
+Metadata</strong>（start/end address，访问哪段内存）</p>
+<h2 id="小结">📌 小结</h2>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>职责</th>
+<th>关键点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Packet Filter</td>
+<td>决策</td>
+<td>L1 挡坏人 → L2 给好人分级 → A1~A4</td>
+</tr>
+<tr>
+<td>Packet Handler</td>
+<td>执行</td>
+<td>Header/Payload 分离，AES + Auth Tag</td>
+</tr>
+<tr>
+<td>Adaptor</td>
+<td>兼容</td>
+<td>加密进 bounce buffer、<code>ccAI_adaptor</code> 新增不改老驱动</td>
+</tr>
+<tr>
+<td>HRoT-Blade</td>
+<td>信任</td>
+<td>Measurement → PCR → Attestation → Key Exchange</td>
+</tr>
+</tbody>
+</table>
+<p>到这里，“能不能做、怎么做”都清楚了。剩下最后一个问题：<strong>加了这么多安全操作，GPU
+会不会慢成蜗牛？</strong> 论文实验里号称开销只有
+0.05%～5.67%——下一篇就看作者怎么用 RQ1~RQ6
+六个实验证明这套东西真的又快又兼容：<strong>ccAI
+精读（三）：实现与实验</strong>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em> 的入门精读笔记。）</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/TEE/" rel="tag"># TEE</a>
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/AI/" rel="tag"># AI</a>
+              <a href="/tags/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" rel="tag"># 机密计算</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/FPGA/" rel="tag"># FPGA</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/878640d9/" rel="prev" title="ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？">
+                  <i class="fa fa-angle-left"></i> ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/9f387285/" rel="next" title="ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结">
+                  ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">414k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">12:32</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

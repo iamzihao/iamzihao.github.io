@@ -24290,4 +24290,730 @@ Writer 使用。</strong></p>
         <tag>综合实践</tag>
       </tags>
   </entry>
+  <entry>
+    <title>ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？</title>
+    <url>/posts/878640d9/</url>
+    <content><![CDATA[<blockquote>
+<p>论文：<strong>ccAI: A Compatible and Confidential System for AI
+Computing</strong>（MICRO 2025） 一句话版：作者想让”普通的、老的
+GPU/NPU”（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。</p>
+</blockquote>
+<p>这是 <strong>ccAI 论文精读系列</strong>
+的第一篇，只回答两个问题：<strong>为什么 AI 计算需要保密？为什么 GPU
+是其中的短板？</strong></p>
+<span id="more"></span>
+<h2 id="一个场景模型上云gpu-是云厂商的">🏢 一个场景：模型上云，GPU
+是云厂商的</h2>
+<p>假设你是公司，把自己训练的大模型放到云服务器上跑推理。数据链路长这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你的 AI 模型 + 用户数据</span><br><span class="line">          ↓</span><br><span class="line">      云服务器</span><br><span class="line">          ├── CPU</span><br><span class="line">          └── GPU  ← 云厂商的 GPU</span><br></pre></td></tr></table></figure>
+<p>模型参数、用户输入、中间计算结果、最终输出——都要经过云厂商的
+GPU。如果云服务器里存在<strong>恶意的特权软件</strong>（云厂商的运维人员、被攻破的管理程序，都属于威胁模型的一部分），理论上它可能尝试读取这些数据。而模型参数和用户数据，都是商业机密。</p>
+<p>我们希望的是：</p>
+<blockquote>
+<p><strong>即使云服务器的某些软件是恶意的，也不能偷看到 AI
+数据。</strong></p>
+</blockquote>
+<p>这就是 <strong>Confidential Computing（机密计算）</strong>
+要解决的问题。论文把它落到加速器上，叫 <strong>confidential xPU
+computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机密。</p>
+<h2 id="cpu-侧已经有答案gpu-侧没有">🔐 CPU 侧已经有答案，GPU 侧没有</h2>
+<p>CPU 这一侧的机密计算已经比较成熟，思路一句话：</p>
+<blockquote>
+<p><strong>给程序划一个”别人不能看的房间”。</strong></p>
+</blockquote>
+<p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
+Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
+Machine（受保护的虚拟机）</strong>——注意，这里不是 Apache TVM
+编译器。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">        Host OS</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│        TVM          │</span><br><span class="line">│  AI Application     │</span><br><span class="line">│  模型 / 用户数据    │  🔒 别人看不了</span><br><span class="line">│  GPU Driver         │</span><br><span class="line">└─────────┬───────────┘</span><br><span class="line">          ↓</span><br><span class="line">         GPU</span><br></pre></td></tr></table></figure>
+<p>TVM 把 CPU 侧的软件栈（AI
+应用、驱动、库）保护起来了。但问题马上出现：</p>
+<blockquote>
+<p><strong>数据一旦离开 TVM，通过 PCIe 传给
+GPU，就是明文裸奔。</strong></p>
+</blockquote>
+<p>模型参数在 PCIe
+总线上传输时，谁都能看、谁都能改。这就是这篇论文真正要解决的痛点：</p>
+<blockquote>
+<p><strong>怎么让”老 GPU”也能安全地参与机密 AI 计算？</strong></p>
+</blockquote>
+<h2 id="为什么不直接换新-gpu-改-gpu">❌ 为什么不直接换新 GPU / 改
+GPU？</h2>
+<p>最直觉的方案：给 GPU 加上安全硬件。新 GPU
+确实可以这么做（比如某些新卡自带内存加密、安全启动、远程证明）。但现实是：</p>
+<ul>
+<li>云服务器里<strong>存量</strong>大多是 A100、T4、RTX 4090
+这类没有专门安全硬件的设备；</li>
+<li>还有国产 GPU、NPU、FPGA，架构五花八门；</li>
+<li>“为了安全把所有 GPU 换成 H100”——成本不可接受。</li>
+</ul>
+<p>插一句，论文实验里用到的 xPU 包括 NVIDIA A100、RTX 4090
+Ti、T4、Tenstorrent N150d（NPU）、Enflame S60（国产
+GPU），就是为了证明这套方案<strong>不是只能保护一种 GPU</strong>。</p>
+<p>所以作者把问题反了过来：</p>
+<blockquote>
+<p><strong>能不能不改 GPU 本身、不改 GPU
+软件，只在外面加一层东西，把普通 GPU 保护起来？</strong></p>
+</blockquote>
+<h2 id="突破口pcie-是所有-xpu-的共同通道">💡 突破口：PCIe 是所有 xPU
+的共同通道</h2>
+<p>GPU 内部千差万别，但有一个共同点——它们都通过 <strong>PCIe</strong>
+插在主机上，跟 CPU/内存通信：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">A100 ──┐</span><br><span class="line">T4 ────┤</span><br><span class="line">4090 ──┤── PCIe ── CPU</span><br><span class="line">NPU ───┤</span><br><span class="line">FPGA ──┘</span><br></pre></td></tr></table></figure>
+<p>于是作者的思路是：</p>
+<blockquote>
+<p><strong>我不管 GPU 内部怎么实现，我只管 PCIe
+上跑的数据。</strong></p>
+</blockquote>
+<p>论文里的原话是 <strong>leveraging the PCIe interconnect as a common
+abstraction layer</strong>——把 PCIe 当成不同 xPU
+的统一接口。这是理解全文最关键的一句。</p>
+<h2 id="背景小课dma-mmio-pcie-packet">📚 背景小课：DMA / MMIO / PCIe
+Packet</h2>
+<p>在讲 ccAI 怎么”拦”之前，得先知道 PCIe 上到底跑什么。xPU 和 CPU
+之间主要有两类交互。</p>
+<h3 id="dma搬数据的">DMA：搬数据的</h3>
+<p>GPU 算 AI 需要把模型、输入数据从 CPU 内存拿过来。如果让 CPU
+一字节一字节搬，会慢死。于是有了 <strong>DMA（Direct Memory
+Access）</strong>：设备自己去内存里拿数据，CPU
+只需告诉它”源地址、目标地址、长度”。</p>
+<blockquote>
+<p>类比：搬家。没有 DMA 是你自己一箱一箱搬；有 DMA
+是叫搬家公司，你报个地址就行。🚚</p>
+</blockquote>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 内存  ──(DMA Read)──  GPU</span><br><span class="line"> AI Model 1.2GB             │</span><br><span class="line">                            ↓</span><br><span class="line">                         计算</span><br></pre></td></tr></table></figure>
+<p>所以论文说：<strong>DMA 用于 data/code
+exchange（搬数据/代码）</strong>。</p>
+<h3 id="mmio控制设备的">MMIO：控制设备的</h3>
+<p>GPU 内部有一堆寄存器（控制、状态、命令）。CPU
+想喊”开始计算！“或问”现在啥状态？“，就要访问这些寄存器。<strong>MMIO（Memory-Mapped
+I/O）</strong> 的做法是把寄存器”伪装”成内存地址：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">地址 0x1000 → GPU 控制寄存器</span><br><span class="line">地址 0x1004 → GPU 状态寄存器</span><br><span class="line">地址 0x1008 → GPU 命令寄存器</span><br></pre></td></tr></table></figure>
+<p>CPU 写 <code>0x1000</code>，看起来像写内存，实际是在操作 GPU
+寄存器。</p>
+<blockquote>
+<p>类比：DMA 是 🚚 搬货，MMIO 是 🎮 按按钮。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>DMA</th>
+<th>MMIO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>干什么</td>
+<td>搬大量数据</td>
+<td>控制设备</td>
+</tr>
+<tr>
+<td>典型内容</td>
+<td>模型、输入数据、代码</td>
+<td>命令、寄存器状态</td>
+</tr>
+<tr>
+<td>数据量</td>
+<td>通常很大</td>
+<td>通常很小</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么不能直接保护-dmammio">为什么不能直接保护 DMA/MMIO？</h3>
+<p>因为<strong>每个 xPU 的 DMA/MMIO 实现都不一样</strong>：有的 GPU 带
+MMU，有的 NPU 不带；驱动更是各家各写（NVIDIA Driver、Xilinx
+Driver……）。想设计一个统一的 DMA/MMIO 安全机制，几乎不可能。</p>
+<p>但它们的 DMA/MMIO
+流量，最终都会变成同一个东西，在同一个通道上跑：</p>
+<h3 id="pcie-packet高速公路上的一辆辆货车">PCIe
+Packet：高速公路上的一辆辆货车</h3>
+<p>把 PCIe 想成 CPU↔︎xPU 之间的高速公路，<strong>Packet
+就是路上的货车</strong>。每辆货车两部分：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌────────────────────────────────┐</span><br><span class="line">│            PCIe Packet         │</span><br><span class="line">├────────────────┬───────────────┤</span><br><span class="line">│    Header      │    Payload    │</span><br><span class="line">│  （物流单）     │   （真正的货） │</span><br><span class="line">└────────────────┴───────────────┘</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>Header =
+物流单</strong>：这是什么包、谁发的、发给谁、访问哪块地址、多大。具体包括
+Format、Type、Data Length、Requester ID、Completer ID、Address/Routing
+Info 等字段。</li>
+<li><strong>Payload = 真正的数据</strong>：比如一段 AI
+模型数据、一批输入。</li>
+</ul>
+<p>这就是 ccAI 下手的粒度：</p>
+<blockquote>
+<p><strong>ccAI 工作在 PCIe packet level，而不是针对某一种 xPU
+的内部结构。</strong></p>
+</blockquote>
+<h2 id="威胁模型与三个设计目标">🎯 威胁模型与三个设计目标</h2>
+<p>保护对象很明确——在 PCIe 上跑来跑去的：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">输入数据 / AI 模型 / 中间结果 / 输出结果</span><br></pre></td></tr></table></figure>
+<p>论文给自己立了三个目标：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>目标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>G1 Compatibility</strong></td>
+<td>不改 GPU、不改 Driver、不改 Application、不换特殊 CPU</td>
+</tr>
+<tr>
+<td><strong>G2 Security</strong></td>
+<td>数据、模型、代码、中间结果全部受保护，可远程证明</td>
+</tr>
+<tr>
+<td><strong>G3 Performance</strong></td>
+<td>不能为了安全把 GPU 拖成蜗牛 🐌</td>
+</tr>
+</tbody>
+</table>
+<p>关于 G2 有个直觉问题：PCIe
+上跑的东西重要程度不一样——有模型数据，也有中断、控制信息。<strong>全都加密</strong>既浪费又没必要。所以论文设计了
+<strong>细粒度安全控制（fine-grained
+security）</strong>，按数据包属性给四种处置：禁止 / 完整性+加密 /
+只完整性 / 直接通过（A1~A4）。具体怎么判断，是下一篇的主题。</p>
+<h2 id="本篇小结">📌 本篇小结</h2>
+<p>先记住这 5 个词，后面全靠它们：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>东西</th>
+<th>一句话理解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>xPU</strong></td>
+<td>GPU/NPU/FPGA 等 AI 加速器的统称</td>
+</tr>
+<tr>
+<td><strong>TVM</strong></td>
+<td>受保护的虚拟机，保护 CPU 侧软件</td>
+</tr>
+<tr>
+<td><strong>PCIe</strong></td>
+<td>CPU ↔︎ xPU 的共同高速通道</td>
+</tr>
+<tr>
+<td><strong>PCIe Packet</strong></td>
+<td>PCIe 上的一条条消息，有 Header（物流单）和 Payload（货）</td>
+</tr>
+<tr>
+<td><strong>Confidential xPU Computing</strong></td>
+<td>让普通加速器执行 AI 时数据/模型仍保密</td>
+</tr>
+</tbody>
+</table>
+<p>下一篇进入正题：作者往 CPU 和 GPU 之间塞了一个”门卫”
+<strong>PCIe-SC</strong>，又写了一个”翻译员”
+<strong>Adaptor</strong>，看它们怎么做到不换
+GPU、不改驱动还能保护数据——<strong>ccAI 精读（二）：不换 GPU
+也能机密计算</strong>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em> 的入门精读笔记，带小白视角改写。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</title>
+    <url>/posts/25a4a786/</url>
+    <content><![CDATA[<blockquote>
+<p>接上一篇《<a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a>》：CCPU 侧用 TVM
+保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——<strong>在 CPU 和 xPU
+之间的 PCIe 上插一个”门卫”，再在软件侧配一个”翻译员”，让老 GPU
+也能机密计算。</strong></p>
+</blockquote>
+<p>本篇讲清四个组件怎么配合：<strong>Adaptor</strong>（兼容）、<strong>Packet
+Filter</strong>（决策）、<strong>Packet
+Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后落到
+§7 作者真做出来的原型。</p>
+<span id="more"></span>
+<h2 id="先看总架构四个角色一台戏">🗺️ 先看总架构：四个角色一台戏</h2>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">                 User</span><br><span class="line">                  │ 加密的 workload</span><br><span class="line">                  ↓</span><br><span class="line">┌──────────────────────────────────┐</span><br><span class="line">│              TVM                 │</span><br><span class="line">│  AI App → xPU Driver → Adaptor  │  ← 软件侧</span><br><span class="line">└────────────────┬─────────────────┘</span><br><span class="line">                 │ PCIe</span><br><span class="line">                 ↓</span><br><span class="line">        ┌──────────────────┐</span><br><span class="line">        │     PCIe-SC      │  ← 硬件侧（新插的门卫）</span><br><span class="line">        │                  │</span><br><span class="line">        │  Packet Filter   │  🚧 决策：放不放？怎么处理？</span><br><span class="line">        │       ↓          │</span><br><span class="line">        │  Packet Handler  │  🔐 执行：加密/完整性</span><br><span class="line">        │       ↓          │</span><br><span class="line">        │   HRoT-Blade     │  🔑 信任：证明自己没被换</span><br><span class="line">        └────────┬─────────┘</span><br><span class="line">                 │ PCIe</span><br><span class="line">                 ↓</span><br><span class="line">               GPU / NPU</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>一句话角色</th>
+<th>解决什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Adaptor</strong></td>
+<td>🧑‍💼 翻译员/协调员</td>
+<td>G1 兼容性：让老软件不用改</td>
+</tr>
+<tr>
+<td><strong>Packet Filter</strong></td>
+<td>🚧 门卫</td>
+<td>判断每个 packet 该 A1/A2/A3/A4</td>
+</tr>
+<tr>
+<td><strong>Packet Handler</strong></td>
+<td>🔐 执行员</td>
+<td>真的做加解密、完整性检查</td>
+</tr>
+<tr>
+<td><strong>HRoT-Blade</strong></td>
+<td>🔑 信任中心</td>
+<td>Secure Boot / 远程证明 / 密钥交换</td>
+</tr>
+</tbody>
+</table>
+<p>一句话分工：<strong>Adaptor 解决”怎么兼容原来的 xPU 软件”，PCIe-SC
+解决”怎么保护 PCIe 上的数据”。</strong></p>
+<p>下面沿着”一个 packet 的旅程”走一遍。</p>
+<h2 id="第一站packet-filter这个包该怎么处理">🚧 第一站：Packet
+Filter——这个包该怎么处理？</h2>
+<h3 id="为什么不能全都加密">为什么不能”全都加密”？</h3>
+<p>直觉方案是把 PCIe 流量全部加密。但 PCIe
+上跑的东西重要程度完全不同：</p>
+<ul>
+<li>AI 模型参数、输入数据 → 高度机密</li>
+<li>中断、普通状态寄存器读取 → 不敏感</li>
+<li>恶意/未知设备的请求 → 压根不该出现</li>
+</ul>
+<p>全都加密既浪费性能，也管不住”不该出现的包”。所以论文走<strong>细粒度安全（fine-grained
+security）</strong>路线：按 packet 属性分类处置。</p>
+<h3 id="四种安全动作-a1a4">四种安全动作 A1~A4 ⭐</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Action</th>
+<th>全称含义</th>
+<th>做什么</th>
+<th>类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A1</strong></td>
+<td>Prohibited</td>
+<td>禁止，直接丢弃</td>
+<td>🚫 不让进</td>
+</tr>
+<tr>
+<td><strong>A2</strong></td>
+<td>Write-Read Protected</td>
+<td>加密/解密 + 完整性检查</td>
+<td>🔐🛡️ 特级安检</td>
+</tr>
+<tr>
+<td><strong>A3</strong></td>
+<td>Write Protected</td>
+<td>只做完整性检查</td>
+<td>🛡️ 普通安检</td>
+</tr>
+<tr>
+<td><strong>A4</strong></td>
+<td>Full Accessible</td>
+<td>直接通过</td>
+<td>➡️ 免检</td>
+</tr>
+</tbody>
+</table>
+<p>安全性从高到低：A2 &gt; A3 &gt;
+A4。<strong>安全性越高，性能代价越大</strong>，所以才要分级，而不是一刀切全加密。</p>
+<h3 id="filter-看三个属性">Filter 看三个属性</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① Packet Type            这个包是干嘛的？Memory Read / Write / Interrupt / MMIO / DMA</span><br><span class="line">② Interacting Parties    谁和谁在通信？合法 TVM ↔ xPU？还是未知设备 → xPU？</span><br><span class="line">③ Address Space Sensitivity  访问的地址是不是敏感区域？（如模型参数所在内存）</span><br></pre></td></tr></table></figure>
+<p>同样是 Memory Write，发往敏感区域就该 A2，发往普通区域只要
+A3；未知设备发来的，A1 直接丢。</p>
+<h3 id="l1-l2-两级表先挡坏人再给好人分类">L1 / L2
+两级表：先挡坏人，再给好人分类</h3>
+<p>一个包进来，先过两道门：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">   PCIe Packet</span><br><span class="line">        ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L1 Table  │  ← &quot;你有资格进来吗？&quot;（查 requester 是否授权）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">  合法？↙    ↘否</span><br><span class="line">     ↓       ↓</span><br><span class="line">┌────────────┐ A1 🚫 DROP</span><br><span class="line">│  L2 Table  │  ← &quot;该享受什么待遇？&quot;（查 type + 地址是否敏感）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">   ┌──┴───────┐</span><br><span class="line">   ↓          ↓</span><br><span class="line">  A2 🔐      A3 🛡️ / A4 ➡️</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>L1 负责挡坏人（不授权 → A1），L2 负责给好人分类（按敏感度给
+A2/A3/A4）。</strong></p>
+</blockquote>
+<p>为了让规则不至于为每种 xPU 写爆，还引入了
+<strong>Mask</strong>：一条规则可以声明”我只关心这几个字段”，其余字段忽略。</p>
+<h3 id="规则本身也要保护">规则本身也要保护</h3>
+<p>攻击者把规则表里”敏感地址 → A2”改成”→ A4”就全完了。所以 policy
+由用户通过 Adaptor 下发，<strong>存进 configuration space
+前先加密，使用时再解密</strong>，防止注入恶意配置。</p>
+<h3 id="完整例子">完整例子</h3>
+<p>TVM-1 向 xPU 写一段模型参数（地址落在敏感区
+<code>0x2000~0x3000</code>）：</p>
+<ol type="1">
+<li><strong>L1</strong>：Requester = TVM-1，是授权方 → ✅ 放行</li>
+<li><strong>L2</strong>：Type = Memory Write + 地址敏感 →
+<strong>A2</strong></li>
+<li>转交 Packet Handler 执行</li>
+</ol>
+<p>反过来，未知设备发同样的包：L1 就不授权 →
+<strong>A1</strong>，直接丢，根本走不到加密环节。</p>
+<h2 id="第二站packet-handler真正把安全做出来">🔐 第二站：Packet
+Handler——真正把安全做出来</h2>
+<p>Filter 只是”决定”，真正动手的是
+Handler：加解密、安全检查、完整性验证。</p>
+<h3 id="为什么光加密不够">为什么光加密不够？</h3>
+<p>加密解决 <strong>Confidentiality</strong>（别人看不懂），但不解决
+<strong>Integrity</strong>（别人改不了）。攻击者看不懂密文，却可能篡改它，让
+GPU 拿到被改过的数据。所以 A2 要同时上两道：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Confidentiality  → 加密（AES）</span><br><span class="line">Integrity        → Authentication Tag（认证标签）</span><br></pre></td></tr></table></figure>
+<p><strong>Authentication Tag</strong>
+可以理解成<strong>防篡改封条</strong>：发送前对数据算出一个 tag（如
+<code>ABC123</code>）跟着数据走；接收方拿到数据重算
+tag，不一致就说明被动过手脚。</p>
+<h3 id="一个-packet-是怎么被处理的">一个 packet 是怎么被处理的？</h3>
+<p>Handler 不会把整包囫囵处理，而是把 <strong>Header 和 Payload
+分开</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">   ├── Header ──────→ Header Queue（原样走，不动）</span><br><span class="line">   └── Payload ─────→ Payload Queue</span><br><span class="line">                          ↓</span><br><span class="line">                  Security Engine</span><br><span class="line">                    ┌─────┴─────┐</span><br><span class="line">                    ↓           ↓</span><br><span class="line">              AES-SHA      Authentication</span><br><span class="line">               Engine      Tag Manager</span><br><span class="line">                    └─────┬─────┘</span><br><span class="line">                          ↓</span><br><span class="line">                     重新组合 Packet</span><br></pre></td></tr></table></figure>
+<p>A2 的完整五步（以 TVM 向 GPU 发模型参数为例）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① Packet 到达   ┌────────┬──────────────┐</span><br><span class="line">                │ Header │ Model Data   │</span><br><span class="line">                └────────┴──────────────┘</span><br><span class="line">② Filter 判断   授权 TVM + 敏感地址 → A2</span><br><span class="line">③ 拆包          Header → Header Queue，Payload → Payload Queue</span><br><span class="line">④ 处理 Payload  AES 加密 → Encrypted Data</span><br><span class="line">                Integrity 计算 → Authentication Tag</span><br><span class="line">⑤ 重组发出      ┌────────┬────────────────┬────────────┐</span><br><span class="line">                │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">                └────────┴────────────────┴────────────┘</span><br><span class="line">                          ↓ PCIe</span><br><span class="line">                        xPU</span><br></pre></td></tr></table></figure>
+<p>xPU → TVM 的返回数据（D2H）走同样的流程反向处理：结果经 PCIe-SC
+加密返回，TVM 解密后使用。</p>
+<h3 id="为什么这套能兼容各种-xpu">为什么这套能兼容各种 xPU？</h3>
+<p>不同 xPU 的 DMA/MMIO
+实现五花八门，但<strong>它们的流量最终都是标准格式的 PCIe
+packet</strong>。Filter 只认 packet 属性、Handler 只动
+header/payload，跟”这是 NVIDIA 还是某
+NPU”无关。这就是兼容性的技术根源。</p>
+<h2 id="第三站adaptor为什么不用改驱动">🧑‍💼
+第三站：Adaptor——为什么不用改驱动？</h2>
+<p>你可能会问：PCIe-SC 都能拦包加密了，还要 Adaptor 干嘛？</p>
+<p>关键区别：<strong>PCIe-SC 只看得见 PCIe packet，看不懂 AI
+任务</strong>。它看到一个包访问
+<code>0x12340000</code>，但不知道这块内存是模型参数、输入数据还是临时
+buffer。而 <strong>Adaptor 住在 TVM
+里，知道当前任务的数据在哪、哪些敏感</strong>。所以：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Adaptor（软件语义）：&quot;这个任务要保护哪些数据&quot; → 准备数据</span><br><span class="line">     ↓</span><br><span class="line">PCIe-SC（通信安全）：&quot;这个 packet 该怎么处理&quot; → 加密/完整性/放行</span><br></pre></td></tr></table></figure>
+<p>Adaptor 干两件事：</p>
+<ol type="1">
+<li><strong>通过 MMIO 与 PCIe-SC 交互</strong>：查询任务
+metadata（数据地址、大小），下发安全规则。</li>
+<li><strong>处理 xPU task</strong>：找到敏感数据 → 加密 → 放进
+<strong>bounce buffer</strong> → 传给 xPU。</li>
+</ol>
+<p><strong>bounce buffer</strong> =
+加密后再发货的”临时中转仓库”：敏感数据不直接上 PCIe，先被 Adaptor
+加密到一块安全装货区，PCIe 上跑的已经是密文。</p>
+<p>这样做的最大收益是<strong>不动老软件</strong>：不是去改 AI
+App、Runtime、Driver，而是在旁边<strong>新增</strong>一个兼容层。论文原型里这个”新增”是一个叫
+<strong><code>ccAI_adaptor</code> 的 kernel module</strong>——原生 xPU
+driver 一个字节都不改。</p>
+<p>换一种 xPU 怎么办？比如从 NVIDIA A100 换成某个 NPU：不需要重设计
+PCIe-SC，只需给 Adaptor 更新 <strong>software-based kernel
+patches</strong>（经 secure boot
+校验后激活），就能支持新的内存分配方式——这就是论文说的
+<strong>compatible system updates</strong>。</p>
+<h2 id="第四站trust-establishment凭什么信这台机器">🔑 第四站：Trust
+Establishment——凭什么信这台机器？</h2>
+<p>前面解决了”数据怎么保护”，但还有个更根本的问题：</p>
+<blockquote>
+<p><strong>你怎么知道这台 PCIe-SC 里跑的还是 ccAI
+的代码，而不是被攻击者换成了”偷密钥再加密”的木马版？</strong></p>
+</blockquote>
+<p>如果门卫本身不可信，加密就是给贼上锁。§6 用三步建立信任：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot（先确认机器没被换）</span><br><span class="line">     ↓</span><br><span class="line">Remote Attestation（再向远程用户证明）</span><br><span class="line">     ↓</span><br><span class="line">Key Exchange（最后才把密钥交给它）</span><br></pre></td></tr></table></figure>
+<h3 id="secure-boot-hrot-blade">Secure Boot + HRoT-Blade</h3>
+<p>CPU 侧有硬件信任根（HRoT）保护 TVM，但 <strong>PCIe-SC
+是另一块独立硬件</strong>，CPU 的启动信任链管不到它。所以论文给 PCIe-SC
+配了自己的信任根：<strong>HRoT-Blade</strong>（一个 TPM-compatible
+的信任模块）。</p>
+<p>启动时 HRoT-Blade 做
+<strong>Measurement</strong>——给每个组件算”指纹”（hash）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">HRoT-Blade</span><br><span class="line">   ↓ 读取并验证 PCIe-SC firmware（解密 bitstream/firmware）</span><br><span class="line">   ↓ 读取并验证 Packet Filter</span><br><span class="line">   ↓ 测量结果记入 PCR（Platform Configuration Register，安全启动的记录本）</span><br><span class="line">   ↓ 全部符合预期 → 启动 PCIe-SC</span><br></pre></td></tr></table></figure>
+<p>firmware 被改过 → 指纹不同 → 拒绝启动。</p>
+<h3 id="remote-attestation">Remote Attestation</h3>
+<p>用户人在远程，看不到云服务器内部。服务器光说”我没问题”没用，必须给出<strong>密码学上可验证的证明</strong>。Attestation
+Report 大概是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">r = (n, PCRs, S(PCRs))</span><br><span class="line">    │    │      └─ 对 PCR 的签名</span><br><span class="line">    │    └──────── 当前各组件安全状态</span><br><span class="line">    └───────────── nonce：用户这次临时出的随机数</span><br></pre></td></tr></table></figure>
+<p><strong>Nonce</strong>
+是防重放的：用户每次给一个新随机数，要求把它签进报告里。否则攻击者可以拿”机器健康时期”的旧报告反复骗人。</p>
+<h3 id="key-exchange">Key Exchange</h3>
+<p>环境可信了，最后一步是把 workload
+加密密钥安全交给平台（不能明文走网络）。密钥交换完成后，完整流程闭环：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户加密 AI workload → TVM 解密 → Adaptor 准备数据</span><br><span class="line">→ PCIe-SC 加密成密文 PCIe packet → xPU 计算</span><br><span class="line">→ 结果再经 PCIe-SC 加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<h2 id="第五站implementation作者真做出来了">🛠️
+第五站：Implementation——作者真做出来了</h2>
+<p>论文用 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭了原型，实现两个东西：</p>
+<p><strong>① Adaptor（软件）</strong> - 新增 <code>ccAI_adaptor</code>
+kernel module（不改 CUDA / GPU Driver / AI Application） - 提供
+<code>encrypt_data()</code> / <code>decrypt_data()</code>，用
+<strong>AES-128</strong> + Intel <strong>AES-NI</strong> 加速 - 分到
+<strong>64 KB MMIO 区域</strong> 控制 PCIe-SC（下发规则到 L1/L2、启停
+H2D/D2H 传输、查状态）</p>
+<p><strong>② PCIe-SC（FPGA 硬件）</strong> - 分配 <strong>4 KB BAR
+空间</strong>存放 L1/L2 规则表 - Packet Filter 从 header
+提取三要素做匹配：<strong>Packet Type</strong>（Memory
+Read/Write…）、<strong>Route ID</strong>（谁发/发给谁）、<strong>Payload
+Metadata</strong>（start/end address，访问哪段内存）</p>
+<h2 id="小结">📌 小结</h2>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>职责</th>
+<th>关键点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Packet Filter</td>
+<td>决策</td>
+<td>L1 挡坏人 → L2 给好人分级 → A1~A4</td>
+</tr>
+<tr>
+<td>Packet Handler</td>
+<td>执行</td>
+<td>Header/Payload 分离，AES + Auth Tag</td>
+</tr>
+<tr>
+<td>Adaptor</td>
+<td>兼容</td>
+<td>加密进 bounce buffer、<code>ccAI_adaptor</code> 新增不改老驱动</td>
+</tr>
+<tr>
+<td>HRoT-Blade</td>
+<td>信任</td>
+<td>Measurement → PCR → Attestation → Key Exchange</td>
+</tr>
+</tbody>
+</table>
+<p>到这里，“能不能做、怎么做”都清楚了。剩下最后一个问题：<strong>加了这么多安全操作，GPU
+会不会慢成蜗牛？</strong> 论文实验里号称开销只有
+0.05%～5.67%——下一篇就看作者怎么用 RQ1~RQ6
+六个实验证明这套东西真的又快又兼容：<strong>ccAI
+精读（三）：实现与实验</strong>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em> 的入门精读笔记。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+        <tag>FPGA</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
+    <url>/posts/9f387285/</url>
+    <content><![CDATA[<blockquote>
+<p>接前两篇：<a
+href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
+href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
+work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
+逐个验证兼容性、安全性、性能和极端场景。</p>
+</blockquote>
+<span id="more"></span>
+<h2 id="rq-总览">📋 RQ 总览</h2>
+<table>
+<thead>
+<tr>
+<th>RQ</th>
+<th>问题</th>
+<th>一句话答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RQ1</td>
+<td>兼容性怎么样？</td>
+<td>真跑通了 5 种不同厂商的 xPU</td>
+</tr>
+<tr>
+<td>RQ2</td>
+<td>能不能防住攻击者？</td>
+<td>链路完整：可信 + 保密 + 防篡改</td>
+</tr>
+<tr>
+<td>RQ3</td>
+<td>LLM 上性能损失多少？</td>
+<td>overhead 只有 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>RQ4</td>
+<td>换不同 LLM / xPU 呢？</td>
+<td>依然稳定，且不随模型大小线性变差</td>
+</tr>
+<tr>
+<td>RQ5</td>
+<td>优化有没有用？</td>
+<td>E2E overhead 直接降约 89%</td>
+</tr>
+<tr>
+<td>RQ6</td>
+<td>极端情况呢？</td>
+<td>带宽砍半、显存不够也不崩</td>
+</tr>
+</tbody>
+</table>
+<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭的 PCIe-SC 原型。</p>
+<h2 id="rq1兼容性真不是只支持一种-gpu">✅ RQ1：兼容性——真不是只支持一种
+GPU</h2>
+<p>ccAI 最核心的卖点是”不改硬件、不改驱动、不改应用”，所以 RQ1
+直接拿不同架构的 <strong>5 种 xPU</strong> 真机测试：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
+<p>跑的还是真实软件栈：CUDA 12.1、NVIDIA Driver 550.90.07、Tenstorrent
+的 tt-buda 等。全程没有修改 GPU 硬件、NVIDIA driver、CUDA 或 AI
+application——只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
+<p>对比那些需要定制 API、改 xPU 软件栈甚至改硬件的方案，ccAI
+对原有应用确实更透明。</p>
+<h2 id="rq2安全性威胁模型很狠">🛡️ RQ2：安全性——威胁模型很”狠”</h2>
+<p>RQ2
+假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
+software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
+<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
+完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
+通信完整</strong>，缺一不可。</p>
+<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</h2>
+<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
+<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E2E Latency</strong></td>
+<td>从输入问题到完整回答生成的总时长</td>
+</tr>
+<tr>
+<td><strong>TPS</strong></td>
+<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
+</tr>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
+</tr>
+</tbody>
+</table>
+<p>结果：<strong>overhead
+0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
+100ms，5% overhead 就是约 105ms。</p>
+<p><strong>为什么没慢很多？</strong>
+因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
+加密；大量普通包走 A4
+免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
+<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
+xPU——稳定性验证</h2>
+<h3 id="不同-llm">不同 LLM</h3>
+<p>从小到大多种模型都测了，整体 overhead
+<strong>0.72%～4.76%</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
+<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
+是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
+2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
+带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
+<h3 id="不同-xpu">不同 xPU</h3>
+<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
+Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
+<strong>0.58%～2.40%</strong>。</p>
+<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
+的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
+重新设计安全机制。</p>
+<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
+89%</h2>
+<p>作者把”未优化的 ccAI”和”优化后的 ccAI”对比，结果很夸张：<strong>E2E
+latency overhead 降低了 88.7%～89.8%</strong>。</p>
+<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
+再读一点 → 再问一次）。三个优化对症下药：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
+<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
+次数大幅减少。</p>
+<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
+<p>最后作者主动”加难度”：</p>
+<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
+一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
+<strong>4.45%</strong>。</p>
+<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
+<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
+间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
+<strong>83%</strong>。但 ccAI 在”本来就慢”的基础上<strong>额外增加的
+overhead 小于 2%</strong>。</p>
+<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
+的额外代价依然可控。</p>
+<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">兼容性     ✅ 5 种不同 xPU，不改硬件/驱动/应用</span><br><span class="line">安全性     ✅ 加密 + 完整性 + 可信建立全链路</span><br><span class="line">LLM 性能   ✅ overhead 0.05%～5.67%</span><br><span class="line">多模型     ✅ 0.72%～4.76%，不随模型大小线性恶化</span><br><span class="line">多 xPU     ✅ 0.58%～2.40%</span><br><span class="line">优化效果   ✅ E2E overhead 降低约 89%</span><br><span class="line">极端场景   ✅ 带宽减半 / 显存溢出仍可控</span><br></pre></td></tr></table></figure>
+<p>整套系统一句话：</p>
+<blockquote>
+<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
+PCIe
+通道上加一个”安全检查站”（PCIe-SC），旁边配一个软件”翻译员”（Adaptor）。</strong></p>
+</blockquote>
+<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
+layer（共同抽象层）</strong>。</p>
+<h3 id="怎么读才有收获">怎么读才有收获</h3>
+<p>论文机制部分读懂后，真正的”懂”是把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
+5（Filter 规则）/ 6（Attestation 协议）/
+7-8（实验）</strong>，串起来就是全篇。</p>
+<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
+<ul>
+<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
+LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
+的表现需要另外验证。</li>
+<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
+分级不是论文的锦上添花，而是”安全性和性能可兼得”的命门——只保护值得保护的数据。</li>
+<li><strong>信任链依赖前提</strong>：整套安全建立在 Secure Boot / HRoT
+可信、TVM 可信的前提上，攻击模型是”特权软件”，不含对 PCIe-SC
+物理硬件的破坏。</li>
+</ul>
+<h2 id="系列回顾">📚 系列回顾</h2>
+<ul>
+<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
+背景</li>
+<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
+精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
+Handler / Adaptor / 信任建立 / 实现</li>
+<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
+</ul>
+<p>如果对背景概念想补课，可以看站内的 <a
+href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
+href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em>
+的入门精读笔记，全部实验数据来自论文原文。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+        <tag>性能测试</tag>
+      </tags>
+  </entry>
 </search>
