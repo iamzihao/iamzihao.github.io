@@ -24687,7 +24687,10 @@ tag，不一致就说明被动过手脚。</p>
 <p>Handler 不会把整包囫囵处理，而是把 <strong>Header 和 Payload
 分开</strong>：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">   ├── Header ──────→ Header Queue（原样走，不动）</span><br><span class="line">   └── Payload ─────→ Payload Queue</span><br><span class="line">                          ↓</span><br><span class="line">                  Security Engine</span><br><span class="line">                    ┌─────┴─────┐</span><br><span class="line">                    ↓           ↓</span><br><span class="line">              AES-SHA      Authentication</span><br><span class="line">               Engine      Tag Manager</span><br><span class="line">                    └─────┬─────┘</span><br><span class="line">                          ↓</span><br><span class="line">                     重新组合 Packet</span><br></pre></td></tr></table></figure>
-<p>A2 的完整五步（以 TVM 向 GPU 发模型参数为例）：</p>
+<p>A2 的完整五步（以 TVM 向 GPU
+发模型参数为例；图里画的是安全引擎加解密的通用处理——真实 H2D 方向
+payload 在 TVM 侧已被 Adaptor 加密，这里 Handler
+做的是解密与完整性校验；D2H 返回方向才真正加密上 PCIe）：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① Packet 到达   ┌────────┬──────────────┐</span><br><span class="line">                │ Header │ Model Data   │</span><br><span class="line">                └────────┴──────────────┘</span><br><span class="line">② Filter 判断   授权 TVM + 敏感地址 → A2</span><br><span class="line">③ 拆包          Header → Header Queue，Payload → Payload Queue</span><br><span class="line">④ 处理 Payload  AES 加密 → Encrypted Data</span><br><span class="line">                Integrity 计算 → Authentication Tag</span><br><span class="line">⑤ 重组发出      ┌────────┬────────────────┬────────────┐</span><br><span class="line">                │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">                └────────┴────────────────┴────────────┘</span><br><span class="line">                          ↓ PCIe</span><br><span class="line">                        xPU</span><br></pre></td></tr></table></figure>
 <p>xPU → TVM 的返回数据（D2H）走同样的流程反向处理：结果经 PCIe-SC
 加密返回，TVM 解密后使用。</p>
@@ -24751,8 +24754,17 @@ Report 大概是：</p>
 是防重放的：用户每次给一个新随机数，要求把它签进报告里。否则攻击者可以拿机器健康时期的旧报告反复骗人。</p>
 <h3 id="key-exchange">Key Exchange</h3>
 <p>环境可信了，最后一步是把 workload
-加密密钥安全交给平台（不能明文走网络）。密钥交换完成后，完整流程闭环：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户加密 AI workload → TVM 解密 → Adaptor 准备数据</span><br><span class="line">→ PCIe-SC 加密成密文 PCIe packet → xPU 计算</span><br><span class="line">→ 结果再经 PCIe-SC 加密返回 → TVM</span><br></pre></td></tr></table></figure>
+加密密钥安全交给平台（不能明文走网络）。之后，从用户把任务送进来到结果取回，数据全程的明文/密文状态是这样流转的：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User（明文：模型 + 输入）</span><br><span class="line">    │</span><br><span class="line">    │ ① 用户用协商好的密钥加密 workload</span><br><span class="line">    ▼</span><br><span class="line">  网络 / 云主机  ── 密文 ──</span><br><span class="line">    ▼</span><br><span class="line">┌───────────────────────────────────────┐</span><br><span class="line">│ TVM                                  │</span><br><span class="line">│ ② 解密 ① → 任务变回明文              │</span><br><span class="line">│ （模型 / 输入暂存在 TVM 内存）       │</span><br><span class="line">│                                      │</span><br><span class="line">│ ③ Adaptor encrypt_data()（AES-128）  │</span><br><span class="line">│ → 密文写入 bounce buffer             │</span><br><span class="line">└───────────────────────────────────────┘</span><br><span class="line">    │ ④ PCIe 上跑的是密文</span><br><span class="line">    ▼</span><br><span class="line">┌───────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC                              │</span><br><span class="line">│ Packet Filter 决策（A2）→            │</span><br><span class="line">│ Packet Handler ⑤ 解密 payload        │</span><br><span class="line">│ + 完整性校验                         │</span><br><span class="line">└───────────────────────────────────────┘</span><br><span class="line">    │ ⑥ 明文</span><br><span class="line">    ▼</span><br><span class="line">  xPU 计算（模型 / 中间结果 / 结果 明文）</span><br><span class="line">    │ ⑦ 明文结果 → PCIe-SC 加密（D2H）</span><br><span class="line">    ▼</span><br><span class="line">┌───────────────────────────────────────┐</span><br><span class="line">│ TVM                                  │</span><br><span class="line">│ Adaptor ⑧ 解密 → 明文结果            │</span><br><span class="line">│ （等待远程用户取回）                 │</span><br><span class="line">└───────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>这里出现了两道加密，不是重复劳动：<strong>①
+的密钥</strong>是远程证明后用户与平台协商的（SessionKey），保护网络和云主机这一段；<strong>②
+的密钥</strong>（Adaptor 加密用的）是 TVM 与 PCIe-SC
+在各自信任模块里协商的对称密钥，保护 TVM → xPU 之间的 PCIe
+总线（论文威胁模型里攻击者可以 snoop
+PCIe），任务结束双方销毁。明文只在两个可信边界内出现：TVM 内部、xPU
+内部。方向要记清：H2D（任务下去）是 Adaptor 加密、PCIe-SC
+解密；D2H（结果上来）反过来，PCIe-SC 加密、Adaptor 解密——同一个 AES
+引擎双向工作。</p>
 <h2 id="第五站implementation作者真做出来了">🛠️
 第五站：Implementation——作者真做出来了</h2>
 <p>论文用 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
