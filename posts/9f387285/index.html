@@ -30,7 +30,7 @@
 <meta property="og:description" content="接前两篇：动机与背景 → 设计与实现。机制讲完了，本篇看作者怎么证明它真的 work——§8 Evaluation 用 6 个 Research Questions（RQ） 逐个验证兼容性、安全性、性能和极端场景。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:45:00.000Z">
-<meta property="article:modified_time" content="2026-09-08T08:03:16.509Z">
+<meta property="article:modified_time" content="2026-09-08T08:09:27.794Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -269,7 +269,7 @@ xPU——稳定性验证</span></a><ol class="nav-child"><li class="nav-item nav
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-08 16:45:00 / Modified: 16:03:16" itemprop="dateCreated datePublished" datetime="2026-09-08T16:45:00+08:00">2026-09-08</time>
+      <time title="Created: 2026-09-08 16:45:00 / Modified: 16:09:27" itemprop="dateCreated datePublished" datetime="2026-09-08T16:45:00+08:00">2026-09-08</time>
     </span>
 
   
@@ -357,7 +357,7 @@ work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
 搭的 PCIe-SC 原型。</p>
 <h2 id="rq1兼容性真不是只支持一种-gpu">✅ RQ1：兼容性——真不是只支持一种
 GPU</h2>
-<p>ccAI 最核心的卖点是”不改硬件、不改驱动、不改应用”，所以 RQ1
+<p>ccAI 最核心的卖点是不改硬件、不改驱动、不改应用，所以 RQ1
 直接拿不同架构的 <strong>5 种 xPU</strong> 真机测试：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
 <p>跑的还是真实软件栈：CUDA 12.1、NVIDIA Driver 550.90.07、Tenstorrent
@@ -427,7 +427,7 @@ Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
 重新设计安全机制。</p>
 <h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
 89%</h2>
-<p>作者把”未优化的 ccAI”和”优化后的 ccAI”对比，效果显著：<strong>E2E
+<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
 latency overhead 降低了 88.7%～89.8%</strong>。</p>
 <p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
 再读一点 → 再问一次）。三个优化对症下药：</p>
@@ -435,14 +435,14 @@ latency overhead 降低了 88.7%～89.8%</strong>。</p>
 <p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
 次数大幅减少。</p>
 <h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
-<p>最后作者主动”加难度”：</p>
+<p>最后作者主动加难度：</p>
 <p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
 一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
 <strong>4.45%</strong>。</p>
 <p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
 <strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
 间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
-<strong>83%</strong>。但 ccAI 在”本来就慢”的基础上<strong>额外增加的
+<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
 overhead 小于 2%</strong>。</p>
 <p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
 的额外代价依然可控。</p>
@@ -452,12 +452,12 @@ overhead 小于 2%</strong>。</p>
 <blockquote>
 <p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
 PCIe
-通道上加一个”安全检查站”（PCIe-SC），旁边配一个软件”翻译员”（Adaptor）。</strong></p>
+通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
 </blockquote>
 <p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
 layer（共同抽象层）</strong>。</p>
 <h3 id="怎么读才有收获">怎么读才有收获</h3>
-<p>论文机制部分读懂后，真正的”懂”是把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
 <p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
 5（Filter 规则）/ 6（Attestation 协议）/
@@ -468,9 +468,9 @@ layer（共同抽象层）</strong>。</p>
 LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
 的表现需要另外验证。</li>
 <li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
-分级不是论文的锦上添花，而是”安全性和性能可兼得”的命门——只保护值得保护的数据。</li>
+分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
 <li><strong>信任链依赖前提</strong>：整套安全建立在 Secure Boot / HRoT
-可信、TVM 可信的前提上，攻击模型是”特权软件”，不含对 PCIe-SC
+可信、TVM 可信的前提上，攻击模型是特权软件，不含对 PCIe-SC
 物理硬件的破坏。</li>
 </ul>
 <h2 id="系列回顾">📚 系列回顾</h2>

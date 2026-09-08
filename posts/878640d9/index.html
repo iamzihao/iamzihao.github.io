@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 一句话版：作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
+    <meta name="description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
 <meta property="og:type" content="article">
 <meta property="og:title" content="ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？">
 <meta property="og:url" content="https://iamzihao.github.io/posts/878640d9/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 一句话版：作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
+<meta property="og:description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T07:49:20.000Z">
-<meta property="article:modified_time" content="2026-09-08T08:03:22.358Z">
+<meta property="article:modified_time" content="2026-09-08T08:09:00.908Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -268,7 +268,7 @@ Packet：高速公路上的一辆辆货车</span></a></li></ol></li><li class="n
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-08 15:49:20 / Modified: 16:03:22" itemprop="dateCreated datePublished" datetime="2026-09-08T15:49:20+08:00">2026-09-08</time>
+      <time title="Created: 2026-09-08 15:49:20 / Modified: 16:09:00" itemprop="dateCreated datePublished" datetime="2026-09-08T15:49:20+08:00">2026-09-08</time>
     </span>
 
   
@@ -305,7 +305,7 @@ Packet：高速公路上的一辆辆货车</span></a></li></ol></li><li class="n
     <div class="post-body" itemprop="articleBody"><blockquote>
 <p>论文：<strong>ccAI: A Compatible and Confidential System for AI
 Computing</strong>（MICRO 2025）</p>
-<p>一句话版：作者想让普通的、老的 GPU/NPU（统称 xPU）也能安全地跑
+<p>作者想让普通的、老的 GPU/NPU（统称 xPU）也能安全地跑
 AI，同时尽量不改原来的软件和硬件。</p>
 </blockquote>
 <p>这是 <strong>ccAI 论文精读系列</strong>
@@ -329,7 +329,7 @@ computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机�
 <h2 id="cpu-侧已经有答案gpu-侧没有">🔐 CPU 侧已经有答案，GPU 侧没有</h2>
 <p>CPU 这一侧的机密计算已经比较成熟，思路一句话：</p>
 <blockquote>
-<p><strong>给程序划一个”别人不能看的房间”。</strong></p>
+<p><strong>给程序划一个别人不能看的房间。</strong></p>
 </blockquote>
 <p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
 Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
@@ -344,7 +344,7 @@ GPU，就是明文裸奔。</strong></p>
 <p>模型参数在 PCIe
 总线上传输时，谁都能看、谁都能改。这就是这篇论文真正要解决的痛点：</p>
 <blockquote>
-<p><strong>怎么让”老 GPU”也能安全地参与机密 AI 计算？</strong></p>
+<p><strong>怎么让老 GPU 也能安全地参与机密 AI 计算？</strong></p>
 </blockquote>
 <h2 id="为什么不直接换新-gpu-改-gpu">❌ 为什么不直接换新 GPU / 改
 GPU？</h2>
@@ -379,13 +379,13 @@ abstraction layer</strong>——把 PCIe 当成不同 xPU
 的统一接口。这是理解全文最关键的一句。</p>
 <h2 id="背景小课dma-mmio-pcie-packet">📚 背景小课：DMA / MMIO / PCIe
 Packet</h2>
-<p>在讲 ccAI 怎么”拦”之前，得先知道 PCIe 上到底跑什么。xPU 和 CPU
+<p>在讲 ccAI 怎么拦之前，得先知道 PCIe 上到底跑什么。xPU 和 CPU
 之间主要有两类交互。</p>
 <h3 id="dma搬数据的">DMA：搬数据的</h3>
 <p>GPU 算 AI 需要把模型、输入数据从 CPU 内存拿过来。如果让 CPU
 一字节一字节搬，会很慢。于是有了 <strong>DMA（Direct Memory
 Access）</strong>：设备自己去内存里拿数据，CPU
-只需告诉它”源地址、目标地址、长度”。</p>
+只需告诉它源地址、目标地址、长度。</p>
 <blockquote>
 <p>类比：搬家。没有 DMA 是你自己一箱一箱搬；有 DMA
 是叫搬家公司，你报个地址就行。🚚</p>
@@ -395,8 +395,9 @@ Access）</strong>：设备自己去内存里拿数据，CPU
 exchange（搬数据/代码）</strong>。</p>
 <h3 id="mmio控制设备的">MMIO：控制设备的</h3>
 <p>GPU 内部有一堆寄存器（控制、状态、命令）。CPU
-想喊”开始计算！“或问”现在啥状态？“，就要访问这些寄存器。<strong>MMIO（Memory-Mapped
-I/O）</strong> 的做法是把寄存器”伪装”成内存地址：</p>
+要下达开始计算的命令，或查询 GPU
+当前的状态，就要访问这些寄存器。<strong>MMIO（Memory-Mapped
+I/O）</strong> 的做法是把寄存器伪装成内存地址：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">地址 0x1000 → GPU 控制寄存器</span><br><span class="line">地址 0x1004 → GPU 状态寄存器</span><br><span class="line">地址 0x1008 → GPU 命令寄存器</span><br></pre></td></tr></table></figure>
 <p>CPU 写 <code>0x1000</code>，看起来像写内存，实际是在操作 GPU
 寄存器。</p>
@@ -524,8 +525,8 @@ security）</strong>，按数据包属性给四种处置：禁止 / 完整性+�
 </tr>
 </tbody>
 </table>
-<p>下一篇进入正题：作者往 CPU 和 GPU 之间塞了一个”门卫”
-<strong>PCIe-SC</strong>，又写了一个”翻译员”
+<p>下一篇进入正题：作者往 CPU 和 GPU 之间塞了一个门卫
+<strong>PCIe-SC</strong>，又写了一个翻译员
 <strong>Adaptor</strong>，看它们怎么做到不换
 GPU、不改驱动还能保护数据——<strong>ccAI 精读（二）：不换 GPU
 也能机密计算</strong>。</p>
