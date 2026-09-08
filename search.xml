@@ -24423,7 +24423,7 @@ I/O）</strong> 的做法是把寄存器伪装成内存地址：</p>
 </table>
 <h3 id="为什么不能直接保护-dmammio">为什么不能直接保护 DMA/MMIO？</h3>
 <p>因为<strong>每个 xPU 的 DMA/MMIO 实现都不一样</strong>：有的 GPU 带
-MMU，有的 NPU 不带；驱动更是各家各写（NVIDIA Driver、Xilinx
+MMU，有的 TPU 不带；驱动更是各家各写（NVIDIA Driver、Xilinx
 Driver……）。想设计一个统一的 DMA/MMIO 安全机制，几乎不可能。</p>
 <p>但它们的 DMA/MMIO
 流量，最终都会变成同一个东西，在同一个通道上跑：</p>
@@ -24479,7 +24479,7 @@ Info 等字段。</li>
 上跑的东西重要程度不一样——有模型数据，也有中断、控制信息。<strong>全都加密</strong>既浪费又没必要。所以论文设计了
 <strong>细粒度安全控制（fine-grained
 security）</strong>，按数据包属性给四种处置：禁止 / 完整性+加密 /
-只完整性 / 直接通过（A1~A4）。具体怎么判断，是下一篇的主题。</p>
+完整性+安全校验 / 直接通过（A1~A4）。具体怎么判断，是下一篇的主题。</p>
 <h2 id="本篇小结">📌 本篇小结</h2>
 <p>先记住这 5 个词，后面全靠它们：</p>
 <table>
@@ -24549,7 +24549,7 @@ Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后�
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
 <h2 id="先看总架构四个角色一台戏">🗺️ 先看总架构：四个角色一台戏</h2>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">      │  加密的 workload</span><br><span class="line">      ↓</span><br><span class="line">┌───────────────────────────────────────────┐</span><br><span class="line">│ TVM（软件侧，受保护虚拟机）              │</span><br><span class="line">│                                          │</span><br><span class="line">│ 并列装了三样组件：                       │</span><br><span class="line">│ ① xPU 原生软件栈                         │</span><br><span class="line">│     App / Driver / Libs（不改）          │</span><br><span class="line">│ ② Adaptor（新增）                        │</span><br><span class="line">│     与 PCIe-SC 交互；识别并加密数据      │</span><br><span class="line">│ ③ TVM Trust Modules（新增）              │</span><br><span class="line">│     密钥管理、远程证明                   │</span><br><span class="line">└───────────────────────────────────────────┘</span><br><span class="line">      │ PCIe</span><br><span class="line">      ↓</span><br><span class="line">┌───────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC（硬件）← 插在服务器 PCIe 端口    │</span><br><span class="line">│                                          │</span><br><span class="line">│ Packet Filter（L1/L2 → A1~A4）           │</span><br><span class="line">│      ↓                                   │</span><br><span class="line">│ Packet Handlers（AES 加密 / 完整性）     │</span><br><span class="line">│                                          │</span><br><span class="line">│ HRoT-Blade ← 信任控制面，不处理数据包    │</span><br><span class="line">│     Secure Boot / 远程证明 / 密钥        │</span><br><span class="line">└───────────────────────────────────────────┘</span><br><span class="line">      │ Internal PCIe（xPU 连到 PCIe-SC 上）</span><br><span class="line">      ↓</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">      │  加密的 workload</span><br><span class="line">      ↓</span><br><span class="line">┌───────────────────────────────────────────┐</span><br><span class="line">│ TVM（软件侧，受保护虚拟机）                   │</span><br><span class="line">│                                           │</span><br><span class="line">│ 并列装了三样组件：                           │</span><br><span class="line">│ ① xPU 原生软件栈                            │</span><br><span class="line">│     App / Driver / Libs（不改）            │</span><br><span class="line">│ ② Adaptor（新增）                          │</span><br><span class="line">│     与 PCIe-SC 交互；识别并加密数据          │</span><br><span class="line">│ ③ TVM Trust Modules（新增）                │</span><br><span class="line">│     密钥管理、远程证明                       │</span><br><span class="line">└───────────────────────────────────────────┘</span><br><span class="line">      │ PCIe</span><br><span class="line">      ↓</span><br><span class="line">┌───────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC（硬件）← 插在服务器 PCIe 端口         │</span><br><span class="line">│                                           │</span><br><span class="line">│ Packet Filter（L1/L2 → A1~A4）             │</span><br><span class="line">│      ↓                                    │</span><br><span class="line">│ Packet Handlers（AES 加密 / 完整性）        │</span><br><span class="line">│                                           │</span><br><span class="line">│ HRoT-Blade ← 信任控制面，不处理数据包         │</span><br><span class="line">│     Secure Boot / 远程证明 / 密钥           │</span><br><span class="line">└───────────────────────────────────────────┘</span><br><span class="line">      │ Internal PCIe（xPU 连到 PCIe-SC 上）</span><br><span class="line">      ↓</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
 <table>
 <thead>
 <tr>
@@ -24628,7 +24628,7 @@ security）</strong>路线：按 packet 属性分类处置。</p>
 <tr>
 <td><strong>A3</strong></td>
 <td>Write Protected</td>
-<td>只做完整性检查</td>
+<td>完整性检查 + 安全校验（如核对 xPU 页表寄存器）</td>
 <td>🛡️ 普通安检</td>
 </tr>
 <tr>
@@ -24831,6 +24831,11 @@ work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
 <span id="more"></span>
 <h2 id="rq-总览">📋 RQ 总览</h2>
 <table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
 <thead>
 <tr>
 <th>RQ</th>
@@ -24841,8 +24846,8 @@ work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
 <tbody>
 <tr>
 <td>RQ1</td>
-<td>兼容性怎么样？</td>
-<td>真跑通了 5 种不同厂商的 xPU</td>
+<td>与现有方案比，兼容性如何？</td>
+<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
 </tr>
 <tr>
 <td>RQ2</td>
@@ -24873,17 +24878,22 @@ work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
 </table>
 <p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
 搭的 PCIe-SC 原型。</p>
-<h2 id="rq1兼容性真不是只支持一种-gpu">✅ RQ1：兼容性——真不是只支持一种
-GPU</h2>
-<p>ccAI 最核心的卖点是不改硬件、不改驱动、不改应用，所以 RQ1
-直接拿不同架构的 <strong>5 种 xPU</strong> 真机测试：</p>
+<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
+<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
+2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
+TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
+即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
+软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
+加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
-<p>跑的还是真实软件栈：CUDA 12.1、NVIDIA Driver 550.90.07、Tenstorrent
-的 tt-buda 等。全程没有修改 GPU 硬件、NVIDIA driver、CUDA 或 AI
-application——只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
+RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
+12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
+硬件、NVIDIA driver、CUDA 或 AI
+application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
-<p>对比那些需要定制 API、改 xPU 软件栈甚至改硬件的方案，ccAI
-对原有应用确实更透明。</p>
+<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
+上实际跑起来慢多少，是后面 RQ4 的事。</p>
 <h2 id="rq2安全性假设攻击者控制特权软件">🛡️
 RQ2：安全性——假设攻击者控制特权软件</h2>
 <p>RQ2
@@ -24987,9 +24997,10 @@ LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真�
 的表现需要另外验证。</li>
 <li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
 分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
-<li><strong>信任链依赖前提</strong>：整套安全建立在 Secure Boot / HRoT
-可信、TVM 可信的前提上，攻击模型是特权软件，不含对 PCIe-SC
-物理硬件的破坏。</li>
+<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
+固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
+两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
+sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
 </ul>
 <h2 id="系列回顾">📚 系列回顾</h2>
 <ul>
