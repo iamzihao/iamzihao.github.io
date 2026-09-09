@@ -24548,24 +24548,29 @@ Filter</strong>（决策）、<strong>Packet
 Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后落到
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
-<h2 id="先看总架构四个角色一台戏">🗺️ 先看总架构：四个角色一台戏</h2>
-<pre class="mermaid">flowchart TB
-    U["Remote User"] -->|加密的 workload| TVM
-    subgraph TVM["TVM（软件侧，受保护虚拟机）"]
+<h2 id="总架构">🗺️ 总架构</h2>
+<pre>
+<code class="mermaid">
+
+flowchart TB
+    U[&quot;Remote User&quot;] --&gt;|加密的 workload| TVM
+    subgraph TVM[&quot;TVM（软件侧，受保护虚拟机）&quot;]
         direction LR
-        SW["① xPU 原生软件栈<br/>App / Driver / Libs（不改）"]
-        AD["② Adaptor（新增）<br/>与 PCIe-SC 交互；识别并加密数据"]
-        TM["③ TVM Trust Modules（ccAI 部署）<br/>密钥管理、远程证明"]
+        SW[&quot;① xPU 原生软件栈&lt;br&#x2F;&gt;App &#x2F; Driver &#x2F; Libs（不改）&quot;]
+        AD[&quot;② Adaptor（新增）&lt;br&#x2F;&gt;与 PCIe-SC 交互；识别并加密数据&quot;]
+        TM[&quot;③ TVM Trust Modules（ccAI 部署）&lt;br&#x2F;&gt;密钥管理、远程证明&quot;]
     end
-    TVM -->|PCIe| SC
-    subgraph SC["PCIe-SC（硬件）← 插在服务器 PCIe 端口"]
+    TVM --&gt;|PCIe| SC
+    subgraph SC[&quot;PCIe-SC（硬件）← 插在服务器 PCIe 端口&quot;]
         direction TB
-        F["Packet Filter（L1/L2 → A1~A4）"]
-        H["Packet Handlers（AES 加密 / 完整性）"]
-        HR["HRoT-Blade<br/>信任控制面，不处理数据包<br/>（Secure Boot / 远程证明 / 密钥）"]
-        F --> H
+        F[&quot;Packet Filter（L1&#x2F;L2 → A1~A4）&quot;]
+        H[&quot;Packet Handlers（AES 加密 &#x2F; 完整性）&quot;]
+        HR[&quot;HRoT-Blade&lt;br&#x2F;&gt;信任控制面，不处理数据包&lt;br&#x2F;&gt;（Secure Boot &#x2F; 远程证明 &#x2F; 密钥）&quot;]
+        F --&gt; H
     end
-    SC -->|Internal PCIe<br/>xPU 插在 PCIe-SC 上| X["GPU / NPU"]</pre>
+    SC --&gt;|Internal PCIe&lt;br&#x2F;&gt;xPU 插在 PCIe-SC 上| X[&quot;GPU &#x2F; NPU&quot;]
+</code>
+</pre>
 <table>
 <thead>
 <tr>
@@ -24775,16 +24780,21 @@ Report 大概是：</p>
 <h3 id="key-exchange">Key Exchange</h3>
 <p>环境可信了，最后一步是把 workload
 加密密钥安全交给平台（不能明文走网络）。之后，从用户把任务送进来到结果取回，数据全程的明文/密文状态是这样流转的：</p>
-<pre class="mermaid">flowchart TB
+<pre>
+<code class="mermaid">
+
+flowchart TB
     classDef cipher fill:#fdecea,stroke:#d64541;
     classDef plain fill:#e8f5e9,stroke:#388e3c;
-    RU["Remote User<br/>（明文：模型 + 输入）"]:::plain -->|① 用户用协商的密钥加密| NW["网络 / 云主机<br/>（密文传输）"]:::cipher
-    NW -->|② TVM 解密 ①| TVM2["任务变回明文<br/>（模型 / 输入暂存 TVM 内存）"]:::plain
-    TVM2 -->|③ Adaptor encrypt_data()（AES-128）| BB["密文写入 bounce buffer"]:::cipher
-    BB -->|④ PCIe 上跑的是密文| SC2["PCIe-SC：Filter 决策（A2）→<br/>⑤ Handler 解密 payload + 完整性校验"]:::plain
-    SC2 -->|⑥ 明文| XPU["xPU 计算<br/>（模型 / 中间结果 / 结果 明文）"]:::plain
-    XPU -->|⑦ 明文结果 → PCIe-SC 加密（D2H）| RET["PCIe 返回密文"]:::cipher
-    RET -->|⑧ Adaptor 解密| TVM3["TVM：明文结果<br/>（等待远程用户取回）"]:::plain</pre>
+    RU[&quot;Remote User&lt;br&#x2F;&gt;（明文：模型 + 输入）&quot;]:::plain --&gt;|① 用户用协商的密钥加密| NW[&quot;网络 &#x2F; 云主机&lt;br&#x2F;&gt;（密文传输）&quot;]:::cipher
+    NW --&gt;|② TVM 解密 ①| TVM2[&quot;任务变回明文&lt;br&#x2F;&gt;（模型 &#x2F; 输入暂存 TVM 内存）&quot;]:::plain
+    TVM2 --&gt;|③ Adaptor encrypt_data()（AES-128）| BB[&quot;密文写入 bounce buffer&quot;]:::cipher
+    BB --&gt;|④ PCIe 上跑的是密文| SC2[&quot;PCIe-SC：Filter 决策（A2）→&lt;br&#x2F;&gt;⑤ Handler 解密 payload + 完整性校验&quot;]:::plain
+    SC2 --&gt;|⑥ 明文| XPU[&quot;xPU 计算&lt;br&#x2F;&gt;（模型 &#x2F; 中间结果 &#x2F; 结果 明文）&quot;]:::plain
+    XPU --&gt;|⑦ 明文结果 → PCIe-SC 加密（D2H）| RET[&quot;PCIe 返回密文&quot;]:::cipher
+    RET --&gt;|⑧ Adaptor 解密| TVM3[&quot;TVM：明文结果&lt;br&#x2F;&gt;（等待远程用户取回）&quot;]:::plain
+</code>
+</pre>
 <p>这里出现了两道加密，不是重复劳动：<strong>①
 的密钥</strong>是远程证明后用户与平台协商的（SessionKey），保护网络和云主机这一段；<strong>②
 的密钥</strong>（Adaptor 加密用的）是 TVM 与 PCIe-SC

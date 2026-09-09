@@ -30,7 +30,7 @@
 <meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个门卫，再在软件侧配一个翻译员，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执行）、HR">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T01:29:29.871Z">
+<meta property="article:modified_time" content="2026-09-09T01:33:06.129Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -178,7 +178,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E7%9C%8B%E6%80%BB%E6%9E%B6%E6%9E%84%E5%9B%9B%E4%B8%AA%E8%A7%92%E8%89%B2%E4%B8%80%E5%8F%B0%E6%88%8F"><span class="nav-number">1.</span> <span class="nav-text">🗺️ 先看总架构：四个角色一台戏</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E7%AB%99packet-filter%E8%BF%99%E4%B8%AA%E5%8C%85%E8%AF%A5%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">🚧 第一站：Packet
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E6%9E%B6%E6%9E%84"><span class="nav-number">1.</span> <span class="nav-text">🗺️ 总架构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E7%AB%99packet-filter%E8%BF%99%E4%B8%AA%E5%8C%85%E8%AF%A5%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">🚧 第一站：Packet
 Filter——这个包该怎么处理？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E5%85%A8%E9%83%BD%E5%8A%A0%E5%AF%86"><span class="nav-number">2.1.</span> <span class="nav-text">为什么不能全都加密？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9B%9B%E7%A7%8D%E5%AE%89%E5%85%A8%E5%8A%A8%E4%BD%9C-a1a4"><span class="nav-number">2.2.</span> <span class="nav-text">四种安全动作 A1~A4 ⭐</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#filter-%E7%9C%8B%E4%B8%89%E4%B8%AA%E5%B1%9E%E6%80%A7"><span class="nav-number">2.3.</span> <span class="nav-text">Filter 看三个属性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#l1-l2-%E4%B8%A4%E7%BA%A7%E8%A1%A8%E5%85%88%E6%8C%A1%E5%9D%8F%E4%BA%BA%E5%86%8D%E7%BB%99%E5%A5%BD%E4%BA%BA%E5%88%86%E7%B1%BB"><span class="nav-number">2.4.</span> <span class="nav-text">L1 &#x2F; L2
 两级表：先挡坏人，再给好人分类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%A7%84%E5%88%99%E6%9C%AC%E8%BA%AB%E4%B9%9F%E8%A6%81%E4%BF%9D%E6%8A%A4"><span class="nav-number">2.5.</span> <span class="nav-text">规则本身也要保护</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E4%BE%8B%E5%AD%90"><span class="nav-number">2.6.</span> <span class="nav-text">完整例子</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E7%AB%99packet-handler%E7%9C%9F%E6%AD%A3%E6%8A%8A%E5%AE%89%E5%85%A8%E5%81%9A%E5%87%BA%E6%9D%A5"><span class="nav-number">3.</span> <span class="nav-text">🔐 第二站：Packet
 Handler——真正把安全做出来</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%85%89%E5%8A%A0%E5%AF%86%E4%B8%8D%E5%A4%9F"><span class="nav-number">3.1.</span> <span class="nav-text">为什么光加密不够？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA-packet-%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E5%A4%84%E7%90%86%E7%9A%84"><span class="nav-number">3.2.</span> <span class="nav-text">一个 packet 是怎么被处理的？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%99%E5%A5%97%E8%83%BD%E5%85%BC%E5%AE%B9%E5%90%84%E7%A7%8D-xpu"><span class="nav-number">3.3.</span> <span class="nav-text">为什么这套能兼容各种 xPU？</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E7%AB%99adaptor%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E7%94%A8%E6%94%B9%E9%A9%B1%E5%8A%A8"><span class="nav-number">4.</span> <span class="nav-text">🧑‍💼
@@ -276,7 +276,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 09:29:29" itemprop="dateModified" datetime="2026-09-09T09:29:29+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-09 09:33:06" itemprop="dateModified" datetime="2026-09-09T09:33:06+08:00">2026-09-09</time>
     </span>
 
   
@@ -293,14 +293,14 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.5k</span>
+      <span>7k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>12 mins.</span>
+      <span>13 mins.</span>
     </span>
 </div>
 
@@ -322,24 +322,29 @@ Filter</strong>（决策）、<strong>Packet
 Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后落到
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
-<h2 id="先看总架构四个角色一台戏">🗺️ 先看总架构：四个角色一台戏</h2>
-<pre class="mermaid">flowchart TB
-    U["Remote User"] -->|加密的 workload| TVM
-    subgraph TVM["TVM（软件侧，受保护虚拟机）"]
+<h2 id="总架构">🗺️ 总架构</h2>
+<pre>
+<code class="mermaid">
+
+flowchart TB
+    U[&quot;Remote User&quot;] --&gt;|加密的 workload| TVM
+    subgraph TVM[&quot;TVM（软件侧，受保护虚拟机）&quot;]
         direction LR
-        SW["① xPU 原生软件栈<br/>App / Driver / Libs（不改）"]
-        AD["② Adaptor（新增）<br/>与 PCIe-SC 交互；识别并加密数据"]
-        TM["③ TVM Trust Modules（ccAI 部署）<br/>密钥管理、远程证明"]
+        SW[&quot;① xPU 原生软件栈&lt;br&#x2F;&gt;App &#x2F; Driver &#x2F; Libs（不改）&quot;]
+        AD[&quot;② Adaptor（新增）&lt;br&#x2F;&gt;与 PCIe-SC 交互；识别并加密数据&quot;]
+        TM[&quot;③ TVM Trust Modules（ccAI 部署）&lt;br&#x2F;&gt;密钥管理、远程证明&quot;]
     end
-    TVM -->|PCIe| SC
-    subgraph SC["PCIe-SC（硬件）← 插在服务器 PCIe 端口"]
+    TVM --&gt;|PCIe| SC
+    subgraph SC[&quot;PCIe-SC（硬件）← 插在服务器 PCIe 端口&quot;]
         direction TB
-        F["Packet Filter（L1/L2 → A1~A4）"]
-        H["Packet Handlers（AES 加密 / 完整性）"]
-        HR["HRoT-Blade<br/>信任控制面，不处理数据包<br/>（Secure Boot / 远程证明 / 密钥）"]
-        F --> H
+        F[&quot;Packet Filter（L1&#x2F;L2 → A1~A4）&quot;]
+        H[&quot;Packet Handlers（AES 加密 &#x2F; 完整性）&quot;]
+        HR[&quot;HRoT-Blade&lt;br&#x2F;&gt;信任控制面，不处理数据包&lt;br&#x2F;&gt;（Secure Boot &#x2F; 远程证明 &#x2F; 密钥）&quot;]
+        F --&gt; H
     end
-    SC -->|Internal PCIe<br/>xPU 插在 PCIe-SC 上| X["GPU / NPU"]</pre>
+    SC --&gt;|Internal PCIe&lt;br&#x2F;&gt;xPU 插在 PCIe-SC 上| X[&quot;GPU &#x2F; NPU&quot;]
+</code>
+</pre>
 <table>
 <thead>
 <tr>
@@ -549,16 +554,21 @@ Report 大概是：</p>
 <h3 id="key-exchange">Key Exchange</h3>
 <p>环境可信了，最后一步是把 workload
 加密密钥安全交给平台（不能明文走网络）。之后，从用户把任务送进来到结果取回，数据全程的明文/密文状态是这样流转的：</p>
-<pre class="mermaid">flowchart TB
+<pre>
+<code class="mermaid">
+
+flowchart TB
     classDef cipher fill:#fdecea,stroke:#d64541;
     classDef plain fill:#e8f5e9,stroke:#388e3c;
-    RU["Remote User<br/>（明文：模型 + 输入）"]:::plain -->|① 用户用协商的密钥加密| NW["网络 / 云主机<br/>（密文传输）"]:::cipher
-    NW -->|② TVM 解密 ①| TVM2["任务变回明文<br/>（模型 / 输入暂存 TVM 内存）"]:::plain
-    TVM2 -->|③ Adaptor encrypt_data()（AES-128）| BB["密文写入 bounce buffer"]:::cipher
-    BB -->|④ PCIe 上跑的是密文| SC2["PCIe-SC：Filter 决策（A2）→<br/>⑤ Handler 解密 payload + 完整性校验"]:::plain
-    SC2 -->|⑥ 明文| XPU["xPU 计算<br/>（模型 / 中间结果 / 结果 明文）"]:::plain
-    XPU -->|⑦ 明文结果 → PCIe-SC 加密（D2H）| RET["PCIe 返回密文"]:::cipher
-    RET -->|⑧ Adaptor 解密| TVM3["TVM：明文结果<br/>（等待远程用户取回）"]:::plain</pre>
+    RU[&quot;Remote User&lt;br&#x2F;&gt;（明文：模型 + 输入）&quot;]:::plain --&gt;|① 用户用协商的密钥加密| NW[&quot;网络 &#x2F; 云主机&lt;br&#x2F;&gt;（密文传输）&quot;]:::cipher
+    NW --&gt;|② TVM 解密 ①| TVM2[&quot;任务变回明文&lt;br&#x2F;&gt;（模型 &#x2F; 输入暂存 TVM 内存）&quot;]:::plain
+    TVM2 --&gt;|③ Adaptor encrypt_data()（AES-128）| BB[&quot;密文写入 bounce buffer&quot;]:::cipher
+    BB --&gt;|④ PCIe 上跑的是密文| SC2[&quot;PCIe-SC：Filter 决策（A2）→&lt;br&#x2F;&gt;⑤ Handler 解密 payload + 完整性校验&quot;]:::plain
+    SC2 --&gt;|⑥ 明文| XPU[&quot;xPU 计算&lt;br&#x2F;&gt;（模型 &#x2F; 中间结果 &#x2F; 结果 明文）&quot;]:::plain
+    XPU --&gt;|⑦ 明文结果 → PCIe-SC 加密（D2H）| RET[&quot;PCIe 返回密文&quot;]:::cipher
+    RET --&gt;|⑧ Adaptor 解密| TVM3[&quot;TVM：明文结果&lt;br&#x2F;&gt;（等待远程用户取回）&quot;]:::plain
+</code>
+</pre>
 <p>这里出现了两道加密，不是重复劳动：<strong>①
 的密钥</strong>是远程证明后用户与平台协商的（SessionKey），保护网络和云主机这一段；<strong>②
 的密钥</strong>（Adaptor 加密用的）是 TVM 与 PCIe-SC
@@ -688,7 +698,7 @@ System for AI Computing</em> 的入门精读笔记。）</p>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:34</span>
+    <span title="Reading time total">12:35</span>
   </span>
 </div>
 <div class="busuanzi-count">
