@@ -3034,82 +3034,6 @@ TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和�
       </tags>
   </entry>
   <entry>
-    <title>Dotfiles</title>
-    <url>/posts/e5afd7e1/</url>
-    <content><![CDATA[<p>在 Linux 或 macOS
-系统中，以点（<code>.</code>）开头的文件和文件夹统称
-<code>dotfiles</code>（如
-<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
-Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
-<span id="more"></span></p>
-<h3
-id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
-<p>我们通常会经历几个阶段： 1.
-<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
-2. <strong>自动化脚本的萌芽</strong>：编写 Shell
-脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
-3. <strong>Git 裸仓库的炫技</strong>：使用
-<code>git bare repository</code>
-是一个更高级的方案，它允许我们直接在主目录下用 Git
-进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
-Git 操作的直观性。</p>
-<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
-GNU Stow 的舞台。</p>
-<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
-的哲学：一个优雅的“符号链接农场”</h3>
-<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
-Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
-<p>想象一下： * 你的 <code>~/dotfiles</code>
-目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
-<code>nvim</code>, <code>git</code>,
-<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
-<code>~</code> 是需要播种的<strong>土地</strong>。</p>
-<p><code>stow</code>
-命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
-<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
-<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
-Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
-仓库是所有配置的唯一“真理之源”（Single Source of
-Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
-<strong>配置的部署</strong>：主目录 <code>~</code>
-下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
-<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
-<code>dotfiles</code>
-仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
-会负责实现它。</p>
-<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
-<ol type="1">
-<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
-最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
-下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
-目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
-<li><p><strong>高度模块化 (Modular)</strong>
-每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
-Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
-配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
-配置？只需选择性地 <code>stow</code>
-即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
-<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
-与 <code>git</code>
-结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
-几条命令，一个熟悉的环境便跃然屏上。</p></li>
-<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
-在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
-</ol>
-<h3 id="结论大道至简">结论：大道至简</h3>
-<p>在 dotfiles 管理的江湖里，<code>stow</code>
-并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
-<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
-值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
-]]></content>
-      <tags>
-        <tag>Linux</tag>
-        <tag>Git</tag>
-        <tag>工具</tag>
-        <tag>Dotfiles</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>终端与Shell：从入门到看懂，一篇就够</title>
     <url>/posts/82543a5f/</url>
     <content><![CDATA[<p>“终端”“Shell”“cmd”“bash”“zsh”“PowerLevel10k”这些名词容易让初学者混淆。本文用“三层模型
@@ -3369,6 +3293,82 @@ cmd, WSL 等不同 Shell。</td>
         <tag>Shell</tag>
         <tag>Windows</tag>
         <tag>macOS</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Dotfiles</title>
+    <url>/posts/e5afd7e1/</url>
+    <content><![CDATA[<p>在 Linux 或 macOS
+系统中，以点（<code>.</code>）开头的文件和文件夹统称
+<code>dotfiles</code>（如
+<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
+Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
+<span id="more"></span></p>
+<h3
+id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
+<p>我们通常会经历几个阶段： 1.
+<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
+2. <strong>自动化脚本的萌芽</strong>：编写 Shell
+脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
+3. <strong>Git 裸仓库的炫技</strong>：使用
+<code>git bare repository</code>
+是一个更高级的方案，它允许我们直接在主目录下用 Git
+进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
+Git 操作的直观性。</p>
+<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
+GNU Stow 的舞台。</p>
+<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
+的哲学：一个优雅的“符号链接农场”</h3>
+<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
+Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
+<p>想象一下： * 你的 <code>~/dotfiles</code>
+目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
+<code>nvim</code>, <code>git</code>,
+<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
+<code>~</code> 是需要播种的<strong>土地</strong>。</p>
+<p><code>stow</code>
+命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
+<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
+<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
+Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
+仓库是所有配置的唯一“真理之源”（Single Source of
+Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
+<strong>配置的部署</strong>：主目录 <code>~</code>
+下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
+<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
+<code>dotfiles</code>
+仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
+会负责实现它。</p>
+<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
+<ol type="1">
+<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
+最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
+下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
+目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
+<li><p><strong>高度模块化 (Modular)</strong>
+每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
+Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
+配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
+配置？只需选择性地 <code>stow</code>
+即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
+<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
+与 <code>git</code>
+结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
+几条命令，一个熟悉的环境便跃然屏上。</p></li>
+<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
+在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
+</ol>
+<h3 id="结论大道至简">结论：大道至简</h3>
+<p>在 dotfiles 管理的江湖里，<code>stow</code>
+并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
+<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
+值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
+]]></content>
+      <tags>
+        <tag>Linux</tag>
+        <tag>Git</tag>
+        <tag>工具</tag>
+        <tag>Dotfiles</tag>
       </tags>
   </entry>
   <entry>
@@ -4169,6 +4169,120 @@ v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）�
       </tags>
   </entry>
   <entry>
+    <title>混合加密入门：集安全与效率于一身的艺术</title>
+    <url>/posts/8c9a7e4f/</url>
+    <content><![CDATA[<p>加密需要在安全与效率之间权衡。把数据加密比作锁门，会面临一个两难选择：</p>
+<ul>
+<li><strong>对称加密</strong>像一把普通的房门钥匙：开锁和上锁都用同一把，速度飞快，但把这把唯一的钥匙安全地交给远方的朋友却成了一个大难题。</li>
+<li><strong>非对称加密</strong>则像一个银行保险箱：对外提供一个只能存东西的“公钥”（存款口），而取东西的“私钥”（保险箱钥匙）则由自己牢牢保管。它完美解决了密钥分发问题，但操作起来却相对“笨重”，处理大量数据时效率不高。</li>
+</ul>
+<p>有没有一种方法，能让我们同时拥有对称加密的“快”和非对称加密的“稳”呢？答案是肯定的，这就是我们今天要探讨的主角——<strong>混合加密
+(Hybrid Encryption)</strong>。</p>
+<span id="more"></span>
+<h3 id="一加密世界的两大支柱">🏛️ 一、加密世界的两大支柱</h3>
+<p>要理解混合加密的精妙之处，我们首先要掌握它的两个核心构建模块：对称加密与非对称加密。</p>
+<h4 id="对称加密速度的王者">🔑 对称加密：速度的王者</h4>
+<p>对称加密（Symmetric
+Encryption）是最直观的加密形式。它的特点是<strong>加密和解密使用同一个密钥</strong>。</p>
+<ul>
+<li><strong>工作原理</strong>：<code>解密( 加密(数据, 密钥), 密钥) = 原始数据</code></li>
+<li><strong>优点</strong>：算法成熟，计算速度快，适合加密大体积的文件或数据流。</li>
+<li><strong>缺点</strong>：<strong>密钥分发困难</strong>。如何在不安全的网络上，将这把“万能钥匙”安全地送到接收者手中，是其最大的软肋。一旦密钥在传输过程中被窃取，整个加密体系便形同虚设。</li>
+<li><strong>常见算法</strong>：<code>AES (Advanced Encryption Standard)</code></li>
+</ul>
+<p>可以把它想象成你家的门锁，你和家人用同一把钥匙开门，非常方便。但如果你想给一个远方的朋友这把钥匙，你必须通过一个绝对可靠的方式（比如当面交付）送达，否则风险极高。</p>
+<h4 id="非对称加密安全的基石">👥 非对称加密：安全的基石</h4>
+<p>为了解决密钥分发的难题，非对称加密（Asymmetric
+Encryption）应运而生。它拥有一对数学上相关的密钥：<strong>公钥 (Public
+Key)</strong> 和 <strong>私钥 (Private Key)</strong>。</p>
+<ul>
+<li><strong>公钥</strong>：可以任意公开，任何人都可以获取。它用于<strong>加密数据</strong>和<strong>验证签名</strong>。</li>
+<li><strong>私钥</strong>：必须严格保密，只有持有者知道。它用于<strong>解密数据</strong>和<strong>生成签名</strong>。</li>
+</ul>
+<p>它的工作流分为两种： 1. <strong>加密/解密</strong>：<code>A</code>
+想给 <code>B</code> 发送机密消息。<code>A</code> 用 <code>B</code>
+的公钥加密消息，<code>B</code>
+收到后用自己的私钥解密。其他人即使截获了消息，没有 <code>B</code>
+的私钥也无法破解。 2. <strong>签名/验证</strong>：<code>A</code>
+想证明某条消息确实是自己发的。<code>A</code>
+用自己的私钥对消息“签名”，并将签名连同消息一起发给
+<code>B</code>。<code>B</code> 用 <code>A</code>
+的公”钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
+且未被篡改。</p>
+<ul>
+<li><strong>优点</strong>：完美解决了密钥分发问题，安全性高，且能实现数字签名。</li>
+<li><strong>缺点</strong>：计算复杂度高，加密速度远慢于对称加密，不适合直接加密大量数据。</li>
+<li><strong>常见算法</strong>：<code>RSA</code>, <code>ECC</code></li>
+</ul>
+<p>这就像一个公开的邮箱（公钥），任何人都可以往里投信，但只有持有唯一钥匙（私钥）的你才能打开邮箱取信。</p>
+<h3 id="二融合之道混合加密如何工作">🤝
+二、融合之道：混合加密如何工作</h3>
+<p>混合加密的核心思想是<strong>“取长补短”</strong>： &gt;
+用非对称加密的“安全”来弥补对称加密在“密钥分发”上的短板； &gt;
+用对称加密的“高效”来解决非对称加密在“处理大数据”上的性能瓶颈。</p>
+<p>它的执行流程如同一场精心编排的双人舞：</p>
+<ol type="1">
+<li><strong>生成会话密钥</strong>：发送方（比如，你的浏览器）针对本次通信，随机生成一个临时的、一次性的<strong>对称密钥</strong>（也称“会话密钥”）。</li>
+<li><strong>加密数据</strong>：发送方使用这个<strong>会话密钥</strong>，通过对称加密算法（如
+AES）加密要发送的全部<strong>正文数据</strong>。这一步速度很快。</li>
+<li><strong>加密会话密钥</strong>：为了安全地把会话密钥交给接收方（比如，网站服务器），发送方使用接收方的<strong>公钥</strong>，通过非对称加密算法（如
+RSA）只对这个短小的<strong>会话密钥</strong>进行加密。这一步虽然慢，但因为加密的数据量极小，所以几乎不影响整体效率。</li>
+<li><strong>发送</strong>：发送方将<strong>“第 2
+步加密后的正文”</strong>和<strong>“第 3
+步加密后的会话密钥”</strong>打包，一起发送给接收方。</li>
+<li><strong>解密会话密钥</strong>：接收方收到后，首先用自己的<strong>私钥</strong>解密出原始的<strong>会话密钥</strong>。</li>
+<li><strong>解密数据</strong>：接收方现在拥有了安全的会话密钥，于是用它通过对称解密算法，高效地解密出全部<strong>正文数据</strong>。</li>
+</ol>
+<p>至此，一次安全又高效的通信便完成了。</p>
+我们可以用下面这个流程图来清晰地展示这个过程：
+<pre class="mermaid">sequenceDiagram
+    participant Sender as 发送方
+    participant Receiver as 接收方
+
+    Note over Sender, Receiver: 混合加密流程
+
+    Sender->>Sender: 1. 生成临时对称密钥 (Session Key)
+    Sender->>Sender: 2. 用对称密钥加密<br/>大量数据 (AES)
+    
+    rect rgba(255, 220, 220, 0.4)
+        note right of Sender: 获取接收方的公钥
+        Sender->>Sender: 3. 用接收方的公钥加密<br/>对称密钥 (RSA)
+    end
+    
+    Sender->>Receiver: 4. 发送 [加密的数据] + [加密的对称密钥]
+    
+    rect rgba(220, 255, 220, 0.4)
+        Receiver->>Receiver: 5. 用自己的私钥解密<br/>对称密钥
+        note right of Receiver: 获得对称密钥
+        Receiver->>Receiver: 6. 用对称密钥解密<br/>大量数据
+    end
+    
+    Receiver->>Sender: 通信已安全建立</pre>
+<h3 id="三现实世界的应用">🌍 三、现实世界的应用</h3>
+<p>混合加密并非象牙塔里的理论，它早已深入我们日常数字生活的方方面面：</p>
+<ul>
+<li><strong>HTTPS/TLS</strong>：你访问的所有 <code>https://</code>
+网站，其安全基石都是 TLS 协议，而 TLS
+的核心就是混合加密。你的浏览器和服务器通过非对称加密协商出一个会话密钥，之后的所有应用数据都通过这个对称密钥进行加密传输。</li>
+<li><strong>PGP/GPG 邮件加密</strong>：当你使用 GPG 加密一封邮件时，GPG
+会随机生成一个对称密钥来加密你的邮件内容，然后用收件人的 GPG
+公钥来加密这个对称密钥。</li>
+<li><strong>SSH 连接</strong>：我们用 <code>ssh</code>
+登录服务器时，同样利用了混合加密来建立安全信道，保护我们输入的命令和服务器返回的数据不被窃听。</li>
+<li><strong>安全聊天应用 (Signal,
+Telegram)</strong>：这些端到端加密的聊天工具，同样采用类似的混合加密模型来保护每一条消息的安全。</li>
+</ul>
+<h3 id="四总结">✨ 四、总结</h3>
+<p>混合加密通过一种极为务实和优雅的方式，将对称加密与非对称加密的优势完美结合，构建了当今网络安全通信的骨架。它告诉我们，在工程领域，最优的解决方案往往不是单一技术的极致发挥，而是多种技术恰到好处的协同与融合。</p>
+<p>下一次，当你看到浏览器地址栏那把绿色的小锁时，希望你能想起背后这套安全与效率并存的“混合之舞”。</p>
+]]></content>
+      <tags>
+        <tag>安全</tag>
+        <tag>加密</tag>
+        <tag>密码学</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Linux 包管理：从入门到进阶的实战指南</title>
     <url>/posts/3b71e21f/</url>
     <content><![CDATA[<p>包管理器是操作系统里负责安装、删除、查询和管理软件包的工具，可以类比手机上的应用商店。本文从概念到实操、从单机到团队，整理一份跨发行版的包管理学习大纲与命令速查。</p>
@@ -4437,120 +4551,6 @@ APT 演示即可迁移。</p>
         <tag>Linux</tag>
         <tag>包管理</tag>
         <tag>Package</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>混合加密入门：集安全与效率于一身的艺术</title>
-    <url>/posts/8c9a7e4f/</url>
-    <content><![CDATA[<p>加密需要在安全与效率之间权衡。把数据加密比作锁门，会面临一个两难选择：</p>
-<ul>
-<li><strong>对称加密</strong>像一把普通的房门钥匙：开锁和上锁都用同一把，速度飞快，但把这把唯一的钥匙安全地交给远方的朋友却成了一个大难题。</li>
-<li><strong>非对称加密</strong>则像一个银行保险箱：对外提供一个只能存东西的“公钥”（存款口），而取东西的“私钥”（保险箱钥匙）则由自己牢牢保管。它完美解决了密钥分发问题，但操作起来却相对“笨重”，处理大量数据时效率不高。</li>
-</ul>
-<p>有没有一种方法，能让我们同时拥有对称加密的“快”和非对称加密的“稳”呢？答案是肯定的，这就是我们今天要探讨的主角——<strong>混合加密
-(Hybrid Encryption)</strong>。</p>
-<span id="more"></span>
-<h3 id="一加密世界的两大支柱">🏛️ 一、加密世界的两大支柱</h3>
-<p>要理解混合加密的精妙之处，我们首先要掌握它的两个核心构建模块：对称加密与非对称加密。</p>
-<h4 id="对称加密速度的王者">🔑 对称加密：速度的王者</h4>
-<p>对称加密（Symmetric
-Encryption）是最直观的加密形式。它的特点是<strong>加密和解密使用同一个密钥</strong>。</p>
-<ul>
-<li><strong>工作原理</strong>：<code>解密( 加密(数据, 密钥), 密钥) = 原始数据</code></li>
-<li><strong>优点</strong>：算法成熟，计算速度快，适合加密大体积的文件或数据流。</li>
-<li><strong>缺点</strong>：<strong>密钥分发困难</strong>。如何在不安全的网络上，将这把“万能钥匙”安全地送到接收者手中，是其最大的软肋。一旦密钥在传输过程中被窃取，整个加密体系便形同虚设。</li>
-<li><strong>常见算法</strong>：<code>AES (Advanced Encryption Standard)</code></li>
-</ul>
-<p>可以把它想象成你家的门锁，你和家人用同一把钥匙开门，非常方便。但如果你想给一个远方的朋友这把钥匙，你必须通过一个绝对可靠的方式（比如当面交付）送达，否则风险极高。</p>
-<h4 id="非对称加密安全的基石">👥 非对称加密：安全的基石</h4>
-<p>为了解决密钥分发的难题，非对称加密（Asymmetric
-Encryption）应运而生。它拥有一对数学上相关的密钥：<strong>公钥 (Public
-Key)</strong> 和 <strong>私钥 (Private Key)</strong>。</p>
-<ul>
-<li><strong>公钥</strong>：可以任意公开，任何人都可以获取。它用于<strong>加密数据</strong>和<strong>验证签名</strong>。</li>
-<li><strong>私钥</strong>：必须严格保密，只有持有者知道。它用于<strong>解密数据</strong>和<strong>生成签名</strong>。</li>
-</ul>
-<p>它的工作流分为两种： 1. <strong>加密/解密</strong>：<code>A</code>
-想给 <code>B</code> 发送机密消息。<code>A</code> 用 <code>B</code>
-的公钥加密消息，<code>B</code>
-收到后用自己的私钥解密。其他人即使截获了消息，没有 <code>B</code>
-的私钥也无法破解。 2. <strong>签名/验证</strong>：<code>A</code>
-想证明某条消息确实是自己发的。<code>A</code>
-用自己的私钥对消息“签名”，并将签名连同消息一起发给
-<code>B</code>。<code>B</code> 用 <code>A</code>
-的公”钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
-且未被篡改。</p>
-<ul>
-<li><strong>优点</strong>：完美解决了密钥分发问题，安全性高，且能实现数字签名。</li>
-<li><strong>缺点</strong>：计算复杂度高，加密速度远慢于对称加密，不适合直接加密大量数据。</li>
-<li><strong>常见算法</strong>：<code>RSA</code>, <code>ECC</code></li>
-</ul>
-<p>这就像一个公开的邮箱（公钥），任何人都可以往里投信，但只有持有唯一钥匙（私钥）的你才能打开邮箱取信。</p>
-<h3 id="二融合之道混合加密如何工作">🤝
-二、融合之道：混合加密如何工作</h3>
-<p>混合加密的核心思想是<strong>“取长补短”</strong>： &gt;
-用非对称加密的“安全”来弥补对称加密在“密钥分发”上的短板； &gt;
-用对称加密的“高效”来解决非对称加密在“处理大数据”上的性能瓶颈。</p>
-<p>它的执行流程如同一场精心编排的双人舞：</p>
-<ol type="1">
-<li><strong>生成会话密钥</strong>：发送方（比如，你的浏览器）针对本次通信，随机生成一个临时的、一次性的<strong>对称密钥</strong>（也称“会话密钥”）。</li>
-<li><strong>加密数据</strong>：发送方使用这个<strong>会话密钥</strong>，通过对称加密算法（如
-AES）加密要发送的全部<strong>正文数据</strong>。这一步速度很快。</li>
-<li><strong>加密会话密钥</strong>：为了安全地把会话密钥交给接收方（比如，网站服务器），发送方使用接收方的<strong>公钥</strong>，通过非对称加密算法（如
-RSA）只对这个短小的<strong>会话密钥</strong>进行加密。这一步虽然慢，但因为加密的数据量极小，所以几乎不影响整体效率。</li>
-<li><strong>发送</strong>：发送方将<strong>“第 2
-步加密后的正文”</strong>和<strong>“第 3
-步加密后的会话密钥”</strong>打包，一起发送给接收方。</li>
-<li><strong>解密会话密钥</strong>：接收方收到后，首先用自己的<strong>私钥</strong>解密出原始的<strong>会话密钥</strong>。</li>
-<li><strong>解密数据</strong>：接收方现在拥有了安全的会话密钥，于是用它通过对称解密算法，高效地解密出全部<strong>正文数据</strong>。</li>
-</ol>
-<p>至此，一次安全又高效的通信便完成了。</p>
-我们可以用下面这个流程图来清晰地展示这个过程：
-<pre class="mermaid">sequenceDiagram
-    participant Sender as 发送方
-    participant Receiver as 接收方
-
-    Note over Sender, Receiver: 混合加密流程
-
-    Sender->>Sender: 1. 生成临时对称密钥 (Session Key)
-    Sender->>Sender: 2. 用对称密钥加密<br/>大量数据 (AES)
-    
-    rect rgba(255, 220, 220, 0.4)
-        note right of Sender: 获取接收方的公钥
-        Sender->>Sender: 3. 用接收方的公钥加密<br/>对称密钥 (RSA)
-    end
-    
-    Sender->>Receiver: 4. 发送 [加密的数据] + [加密的对称密钥]
-    
-    rect rgba(220, 255, 220, 0.4)
-        Receiver->>Receiver: 5. 用自己的私钥解密<br/>对称密钥
-        note right of Receiver: 获得对称密钥
-        Receiver->>Receiver: 6. 用对称密钥解密<br/>大量数据
-    end
-    
-    Receiver->>Sender: 通信已安全建立</pre>
-<h3 id="三现实世界的应用">🌍 三、现实世界的应用</h3>
-<p>混合加密并非象牙塔里的理论，它早已深入我们日常数字生活的方方面面：</p>
-<ul>
-<li><strong>HTTPS/TLS</strong>：你访问的所有 <code>https://</code>
-网站，其安全基石都是 TLS 协议，而 TLS
-的核心就是混合加密。你的浏览器和服务器通过非对称加密协商出一个会话密钥，之后的所有应用数据都通过这个对称密钥进行加密传输。</li>
-<li><strong>PGP/GPG 邮件加密</strong>：当你使用 GPG 加密一封邮件时，GPG
-会随机生成一个对称密钥来加密你的邮件内容，然后用收件人的 GPG
-公钥来加密这个对称密钥。</li>
-<li><strong>SSH 连接</strong>：我们用 <code>ssh</code>
-登录服务器时，同样利用了混合加密来建立安全信道，保护我们输入的命令和服务器返回的数据不被窃听。</li>
-<li><strong>安全聊天应用 (Signal,
-Telegram)</strong>：这些端到端加密的聊天工具，同样采用类似的混合加密模型来保护每一条消息的安全。</li>
-</ul>
-<h3 id="四总结">✨ 四、总结</h3>
-<p>混合加密通过一种极为务实和优雅的方式，将对称加密与非对称加密的优势完美结合，构建了当今网络安全通信的骨架。它告诉我们，在工程领域，最优的解决方案往往不是单一技术的极致发挥，而是多种技术恰到好处的协同与融合。</p>
-<p>下一次，当你看到浏览器地址栏那把绿色的小锁时，希望你能想起背后这套安全与效率并存的“混合之舞”。</p>
-]]></content>
-      <tags>
-        <tag>安全</tag>
-        <tag>加密</tag>
-        <tag>密码学</tag>
       </tags>
   </entry>
   <entry>
@@ -9267,6 +9267,269 @@ X
       </tags>
   </entry>
   <entry>
+    <title>Clash 与网络代理详解</title>
+    <url>/posts/755f751e/</url>
+    <content><![CDATA[<p>本文梳理 VPN、TUN
+模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>VPN</strong></td>
+<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
+<td>秘密隧道</td>
+</tr>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
+<td>传话筒</td>
+</tr>
+<tr>
+<td><strong>Clash</strong></td>
+<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
+<td>智能调度员</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
+<td>分流路牌</td>
+</tr>
+<tr>
+<td><strong>TUN</strong></td>
+<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
+<td>虚拟网卡</td>
+</tr>
+<tr>
+<td><strong>Mixin</strong></td>
+<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
+<td>补丁包</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>VPN</th>
+<th>代理 (Proxy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工作层级</strong></td>
+<td>操作系统层 (OSI L3 网络层)</td>
+<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
+</tr>
+<tr>
+<td><strong>接管范围</strong></td>
+<td>全局接管（通常），所有软件流量都走隧道</td>
+<td>仅接管支持代理设置的软件 (如浏览器)</td>
+</tr>
+<tr>
+<td><strong>加密程度</strong></td>
+<td>全程加密，强调安全性</td>
+<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
+</tr>
+<tr>
+<td><strong>灵活性</strong></td>
+<td>较差，通常“全走”或“全不走”</td>
+<td>极高，可按域名/进程分流</td>
+</tr>
+<tr>
+<td><strong>典型协议</strong></td>
+<td>WireGuard, OpenVPN, IPSec</td>
+<td>HTTP, Socks5, Shadowsocks, VMess</td>
+</tr>
+</tbody>
+</table>
+</blockquote>
+<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
+<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
+<h4 id="global-全局模式">1. Global 全局模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
+<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
+的所有活动。</li>
+<li><strong>缺点</strong>：访问国内网站（如
+B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
+</ul>
+<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
+<ul>
+<li><strong>原理</strong>：根据预设的规则列表（Rule
+List）智能判断。</li>
+<li><strong>流程</strong>：
+<ol type="1">
+<li>拦截请求。</li>
+<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
+<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
+</ol></li>
+<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
+</ul>
+<h4 id="direct-直连模式">3. Direct 直连模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
+<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
+</ul>
+<h4 id="script-脚本模式">4. Script 脚本模式</h4>
+<ul>
+<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
+<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
+</ul>
+<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
+<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
+Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
+<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
+7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
+7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
+<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
+<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
+<pre>
+<code class="mermaid">
+
+graph TD;
+    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
+    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
+    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
+    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
+    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
+</code>
+</pre>
+<ol type="1">
+<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
+<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
+<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
+<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
+3)，它处理的是 IP
+数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
+<li><strong>用户态处理</strong>：Clash 读取 TUN
+设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
+</ol>
+<blockquote>
+<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
+VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
+</blockquote>
+<blockquote>
+<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
+<p>这是一个核心问题：<strong>TUN
+模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
+<ul>
+<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
+Clash
+能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
+Clash 核心。</li>
+<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
+</ul>
+<p><strong>结论</strong>：开启 TUN
+模式并选择<strong>规则模式</strong>，意味着
+“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
+</blockquote>
+<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
+<p>在 Windows/macOS 上开启 TUN
+模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
+<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
+<strong>Service Mode</strong>。</p>
+<ul>
+<li><strong>守护进程</strong>：Service Mode
+会安装一个后台系统服务（Daemon）。</li>
+<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
+劫持、TUN 路由）。</li>
+<li><strong>UI 分离</strong>：Clash
+的图形界面（UI）只需要以普通权限运行，通过 IPC
+接口指挥后台服务干活。</li>
+<li><strong>主要作用</strong>：
+<ol type="1">
+<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
+<li><strong>系统级抗杀</strong>：UI
+关闭了，后台代理服务依然可以在线。</li>
+<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
+</ol></li>
+</ul>
+<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
+<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
+<h4 id="核心结构">核心结构</h4>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
+<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
+<p>很多时候我们使用机场提供的订阅链接，这个 URL
+下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
+TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
+<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
+<ul>
+<li><strong>原理</strong>：Clash
+启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
+配置，将两者<strong>合并</strong>。</li>
+<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
+<li><strong>用途</strong>：
+<ul>
+<li>强制开启 TUN 模式。</li>
+<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
+<li>添加个人的局域网 IP 直连规则。</li>
+</ul></li>
+</ul>
+<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
+模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
+IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
+浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
+的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
+</blockquote>
+<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
+<ol type="1">
+<li><strong>“开了全局模式就是最安全的”</strong>
+<ul>
+<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
+HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
+</ul></li>
+<li><strong>“Ping 值低网速就快”</strong>
+<ul>
+<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
+<code>TCP Handshake</code>
+时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
+等）。</li>
+</ul></li>
+<li><strong>“TUN 模式会影响打游戏吗？”</strong>
+<ul>
+<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
+协议，普通代理模式无法代理 UDP，必须开启 TUN
+模式才能让游戏流量走代理加速。</li>
+</ul></li>
+<li><strong>Clash 是 VPN 吗？</strong>
+<ul>
+<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
+<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
+VPN 几乎一致（接管全系统流量）。</li>
+</ul></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>Network</tag>
+        <tag>VPN</tag>
+        <tag>代理</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>BIOS</title>
     <url>/posts/ea91aa61/</url>
     <content><![CDATA[<p>从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里
@@ -10546,269 +10809,6 @@ AH、BH）：</p>
         <tag>固件</tag>
         <tag>启动流程</tag>
         <tag>UEFI</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Clash 与网络代理详解</title>
-    <url>/posts/755f751e/</url>
-    <content><![CDATA[<p>本文梳理 VPN、TUN
-模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>VPN</strong></td>
-<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
-<td>秘密隧道</td>
-</tr>
-<tr>
-<td><strong>Proxy</strong></td>
-<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
-<td>传话筒</td>
-</tr>
-<tr>
-<td><strong>Clash</strong></td>
-<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
-<td>智能调度员</td>
-</tr>
-<tr>
-<td><strong>Rule</strong></td>
-<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
-<td>分流路牌</td>
-</tr>
-<tr>
-<td><strong>TUN</strong></td>
-<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
-<td>虚拟网卡</td>
-</tr>
-<tr>
-<td><strong>Mixin</strong></td>
-<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
-<td>补丁包</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
-<table>
-<colgroup>
-<col style="width: 24%" />
-<col style="width: 20%" />
-<col style="width: 56%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>VPN</th>
-<th>代理 (Proxy)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>工作层级</strong></td>
-<td>操作系统层 (OSI L3 网络层)</td>
-<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
-</tr>
-<tr>
-<td><strong>接管范围</strong></td>
-<td>全局接管（通常），所有软件流量都走隧道</td>
-<td>仅接管支持代理设置的软件 (如浏览器)</td>
-</tr>
-<tr>
-<td><strong>加密程度</strong></td>
-<td>全程加密，强调安全性</td>
-<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
-</tr>
-<tr>
-<td><strong>灵活性</strong></td>
-<td>较差，通常“全走”或“全不走”</td>
-<td>极高，可按域名/进程分流</td>
-</tr>
-<tr>
-<td><strong>典型协议</strong></td>
-<td>WireGuard, OpenVPN, IPSec</td>
-<td>HTTP, Socks5, Shadowsocks, VMess</td>
-</tr>
-</tbody>
-</table>
-</blockquote>
-<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
-<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
-<h4 id="global-全局模式">1. Global 全局模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
-<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
-的所有活动。</li>
-<li><strong>缺点</strong>：访问国内网站（如
-B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
-</ul>
-<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
-<ul>
-<li><strong>原理</strong>：根据预设的规则列表（Rule
-List）智能判断。</li>
-<li><strong>流程</strong>：
-<ol type="1">
-<li>拦截请求。</li>
-<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
-<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
-</ol></li>
-<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
-</ul>
-<h4 id="direct-直连模式">3. Direct 直连模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
-<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
-</ul>
-<h4 id="script-脚本模式">4. Script 脚本模式</h4>
-<ul>
-<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
-<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
-</ul>
-<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
-<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
-Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
-<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
-7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
-7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
-<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
-<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
-<pre>
-<code class="mermaid">
-
-graph TD;
-    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
-    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
-    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
-    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
-    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
-</code>
-</pre>
-<ol type="1">
-<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
-<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
-<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
-<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
-3)，它处理的是 IP
-数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
-<li><strong>用户态处理</strong>：Clash 读取 TUN
-设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
-</ol>
-<blockquote>
-<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
-VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
-</blockquote>
-<blockquote>
-<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
-<p>这是一个核心问题：<strong>TUN
-模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
-<ul>
-<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
-Clash
-能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
-Clash 核心。</li>
-<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
-</ul>
-<p><strong>结论</strong>：开启 TUN
-模式并选择<strong>规则模式</strong>，意味着
-“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
-</blockquote>
-<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
-<p>在 Windows/macOS 上开启 TUN
-模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
-<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
-<strong>Service Mode</strong>。</p>
-<ul>
-<li><strong>守护进程</strong>：Service Mode
-会安装一个后台系统服务（Daemon）。</li>
-<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
-劫持、TUN 路由）。</li>
-<li><strong>UI 分离</strong>：Clash
-的图形界面（UI）只需要以普通权限运行，通过 IPC
-接口指挥后台服务干活。</li>
-<li><strong>主要作用</strong>：
-<ol type="1">
-<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
-<li><strong>系统级抗杀</strong>：UI
-关闭了，后台代理服务依然可以在线。</li>
-<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
-</ol></li>
-</ul>
-<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
-<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
-<h4 id="核心结构">核心结构</h4>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
-<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
-<p>很多时候我们使用机场提供的订阅链接，这个 URL
-下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
-TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
-<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
-<ul>
-<li><strong>原理</strong>：Clash
-启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
-配置，将两者<strong>合并</strong>。</li>
-<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
-<li><strong>用途</strong>：
-<ul>
-<li>强制开启 TUN 模式。</li>
-<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
-<li>添加个人的局域网 IP 直连规则。</li>
-</ul></li>
-</ul>
-<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
-模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
-IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
-浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
-的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
-</blockquote>
-<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
-<ol type="1">
-<li><strong>“开了全局模式就是最安全的”</strong>
-<ul>
-<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
-HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
-</ul></li>
-<li><strong>“Ping 值低网速就快”</strong>
-<ul>
-<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
-<code>TCP Handshake</code>
-时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
-等）。</li>
-</ul></li>
-<li><strong>“TUN 模式会影响打游戏吗？”</strong>
-<ul>
-<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
-协议，普通代理模式无法代理 UDP，必须开启 TUN
-模式才能让游戏流量走代理加速。</li>
-</ul></li>
-<li><strong>Clash 是 VPN 吗？</strong>
-<ul>
-<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
-<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
-VPN 几乎一致（接管全系统流量）。</li>
-</ul></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>Network</tag>
-        <tag>VPN</tag>
-        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -13570,389 +13570,6 @@ with LLVM</a></li>
       </tags>
   </entry>
   <entry>
-    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
-    <url>/posts/48c29df2/</url>
-    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
-<span id="more"></span></p>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Port（端口）</strong></td>
-<td>操作系统给网络程序分配的逻辑入口编号。</td>
-<td>一台机器里不同网络服务的门牌号</td>
-</tr>
-<tr>
-<td><strong>SSH</strong></td>
-<td>Secure Shell，远程登录与加密隧道工具。</td>
-<td>远程终端 + 隧道</td>
-</tr>
-<tr>
-<td><strong>RemoteForward</strong></td>
-<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
-<td>让服务器“借用”你本机端口</td>
-</tr>
-<tr>
-<td><strong>LocalForward</strong></td>
-<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
-<td>让本机访问远端服务</td>
-</tr>
-<tr>
-<td><strong>Proxy（代理）</strong></td>
-<td>代理服务，代替客户端向目标站点发请求。</td>
-<td>中间人转发流量</td>
-</tr>
-<tr>
-<td><strong>VS Code Port Forwarding</strong></td>
-<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
-<td>帮你转发，但有时会帮倒忙</td>
-</tr>
-</tbody>
-</table>
-<p>如果用更白话的话说：</p>
-<ul>
-<li><code>SSH</code>
-不只是远程登录工具，本质上还能顺手带一条加密管道</li>
-<li><code>RemoteForward</code>
-是让远端机器“借用”当前客户端上的某个端口</li>
-<li><code>LocalForward</code>
-是让本地机器“借道”去访问远端的某个端口</li>
-<li><code>Proxy</code>
-不是目标服务本身，而是一个代你转发请求的中间层</li>
-<li><code>VS Code 自动端口转发</code>
-则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
-</ul>
-<h3 id="程序program端口port套接字socket到底是什么关系">🧱
-程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
-<ul>
-<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
-<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
-<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
-<code>7897</code>，可以理解成网络入口的门牌号</li>
-<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
-IP:端口”之后形成的那个网络端点</li>
-</ul>
-<p>放到这次问题里看，会更容易理解：</p>
-<ul>
-<li>不是“端口自己在工作”，而是某个程序（program /
-process）创建了套接字（socket）并监听（listen）这个端口</li>
-<li>更准确地说，通常是同一个 <code>IP:端口</code>
-组合的监听套接字，只能被一个程序成功持有，比如
-<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
-<li>所以看到 <code>7897</code>
-在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
-<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
-这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
-</ul>
-<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
-<ul>
-<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
-<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
-<code>VS Code</code> 或 <code>ssh</code> helper</li>
-</ul>
-<p>一旦监听者变了，流量路径就会跟着变。</p>
-<p>这也是为什么这次故障排查不能只看“<code>7897</code>
-通不通”，还得看：</p>
-<ul>
-<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
-<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
-<code>7897</code></li>
-<li>或者两边是否在不同阶段都试图接管这个端口</li>
-</ul>
-<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
-自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
-<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
-<p>我使用的设备如下：</p>
-<ul>
-<li>macbook pro 2020</li>
-<li>win xiaoxin 14pro 2021</li>
-<li>linux 实验室的高性能服务器 atlanta</li>
-</ul>
-<p>当时的 SSH 配置如下：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<ul>
-<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
-<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
-<code>7897</code></li>
-<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
-隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
-<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
-的代理入口</li>
-</ul>
-<p>也就是说，<code>atlanta</code>
-并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
-<p>可以看这张链路拓扑图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
-<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
-<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
-<p>这意味着：</p>
-<ul>
-<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
-<li><code>atlanta</code> 也可以有一个自己的
-<code>127.0.0.1:7897</code></li>
-<li>SSH 的
-<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
-</ul>
-<p>问题在于，<strong>VS Code Remote SSH
-还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
-<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
-在监听，它可能会再做一层类似这样的映射：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>不过这里要注意一件事：<strong>这不是 VS Code
-的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>而 <code>atlanta 7897</code> 本来又是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
-<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
-<p>按当时的现象，最合理的解释是：</p>
-<ol type="1">
-<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
-<li>SSH 按配置建立了 <code>RemoteForward</code>，使
-<code>atlanta:7897 -&gt; Win本地:7897</code></li>
-<li>VS Code 又检测到远端 <code>7897</code>
-正在监听，于是自动做了端口转发</li>
-<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
-占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
-<li>因此，真正危险的情况更像是：VS Code
-因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
-本地 <code>7897</code></strong></li>
-<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
-的入口，还会被 VS Code 的转发链路卷进去</li>
-<li>最终结果就是：本地代理流量绕回
-SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
-</ol>
-<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
-<p>当时观察到的两个现象正好支持这个推断：</p>
-<ul>
-<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
-<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
-</ul>
-<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
-端口转发到底是怎么工作的</h3>
-<h4 id="remoteforward">RemoteForward</h4>
-<p><code>RemoteForward A B:C</code></p>
-<p>意思是：</p>
-<ul>
-<li>在远端机器监听 <code>A</code></li>
-<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
-</ul>
-<p>这里的配置：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>等价于：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这里很容易混淆的一点是：</p>
-<ul>
-<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
-<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
-</ul>
-<p>它真正表达的是：</p>
-<ul>
-<li>由远端程序去连接 <code>atlanta:7897</code></li>
-<li>SSH 再把这条连接转交给当前客户端本机的
-<code>127.0.0.1:7897</code></li>
-</ul>
-<p>所以更准确的理解应该是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
-连接里双向流动。也就是说：</p>
-<ul>
-<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
-的请求，会被送到当前客户端的 <code>7897</code></li>
-<li>当前客户端上的代理再去访问外网</li>
-<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
-</ul>
-<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
-<code>atlanta:7897</code>”。<code>RemoteForward</code>
-解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
-<p>因此，只要在 <code>atlanta</code> 上配置：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
-<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
-<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
-<p>VS Code Remote SSH 会做另一件事：</p>
-<ul>
-<li>发现远端某个端口在监听</li>
-<li>自动把它映射到本机</li>
-<li>让你本机直接访问远端服务</li>
-</ul>
-<p>这个功能本来是给
-<code>3000</code>、<code>8080</code>、<code>8888</code>
-这类开发服务准备的，比如远端起了 Web
-服务，你本机浏览器可以直接打开。</p>
-<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
-SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
-<p>典型应用场景一般有这些：</p>
-<ul>
-<li>远端跑了前端开发服务器，比如
-Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
-<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
-面板，本机可以直接点开预览</li>
-<li>远端临时起了一个调试
-API、管理后台或文档站，不想专门手敲隧道命令</li>
-<li>容器、跳板机或云主机里的服务只监听
-<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
-</ul>
-<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
-<ul>
-<li>端口是给人看的</li>
-<li>访问方向通常是“本机去看远端”</li>
-<li>即使换一个本地端口也无所谓，只要能打开就行</li>
-</ul>
-<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
-<ul>
-<li><code>process</code>：轮询远端
-<code>/proc</code>，找哪些进程正在监听端口</li>
-<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
-</ul>
-<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
-Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
-<code>4123</code>。</p>
-<p>所以对这次故障，更严谨的表述应该是：</p>
-<ul>
-<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
-<code>7897</code>”</li>
-<li>而是“VS Code 会自动转发远端
-<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
-<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
-</ul>
-<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
-隧道的代理口，确实属于“不该自动转发的端口”。</p>
-<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
-<ul>
-<li>开发端口通常是“给你打开页面用的”</li>
-<li>代理端口则是“给别的流量继续转发用的”</li>
-</ul>
-<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
-接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
-<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
-<p>因为它会同时制造两种错觉：</p>
-<table>
-<colgroup>
-<col style="width: 15%" />
-<col style="width: 40%" />
-<col style="width: 45%" />
-</colgroup>
-<thead>
-<tr>
-<th>现象</th>
-<th>容易误判成什么</th>
-<th>实际更可能是什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>atlanta curl</code> 无响应</td>
-<td>远端没网、机场挂了</td>
-<td>远端代理口被错误转发</td>
-</tr>
-<tr>
-<td>Win 本地机场节点看起来正常</td>
-<td>机场没问题</td>
-<td>但本地代理出口发生环路</td>
-</tr>
-<tr>
-<td>断开 VS Code SSH 后马上恢复</td>
-<td>偶发网络波动</td>
-<td>SSH/VS Code 转发链路有问题</td>
-</tr>
-<tr>
-<td>删除自动转发 <code>7897</code> 后恢复</td>
-<td>临时玄学</td>
-<td>端口冲突被解除</td>
-</tr>
-</tbody>
-</table>
-<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
-<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
-<p>下次再遇到类似问题，可以按这个顺序排查。</p>
-<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
-到底谁在监听</h4>
-<p>Windows 可以看：</p>
-<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
-<p>macOS / Linux 可以看：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>重点不是只看“有没有监听”，而是看：</p>
-<ul>
-<li>是 Clash 在监听</li>
-<li>还是 VS Code helper / SSH client 在监听</li>
-<li>还是两边都试图占这个端口</li>
-</ul>
-<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
-的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
-<h3 id="常见误区">🚫 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
-<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
-会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
-</tr>
-<tr>
-<td>看到节点正常，就说明代理没问题</td>
-<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
-</tr>
-<tr>
-<td><code>curl</code> 没输出一定是目标网站挂了</td>
-<td>不对。端口回环、代理黑洞、DNS
-被错误接管都可能表现成“卡死没输出”。</td>
-</tr>
-<tr>
-<td>VS Code 自动转发一定是好事</td>
-<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
-SSH 的 <code>RemoteForward</code>，又被 VS Code
-自动纳入端口转发候选；一旦 VS Code
-因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
-</blockquote>
-<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
-Clash，最稳的策略就三条：</p>
-<ul>
-<li>禁掉 VS Code 对代理端口的自动转发</li>
-<li>让远端端口和本地代理端口不要同号</li>
-<li>把不同设备的远端代理端口编号分开</li>
-</ul>
-<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>SSH</tag>
-        <tag>VS Code</tag>
-        <tag>端口转发</tag>
-        <tag>Proxy</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>从 ipconfig 出发，彻底搞懂 Windows 网络栈、网卡、路由、DNS 和 Tailscale</title>
     <url>/posts/7b5d2e9a/</url>
     <content><![CDATA[<p>一台电脑可能同时有多个网卡，不同网络的连接状态也各不相同。本文从
@@ -14344,6 +13961,389 @@ DHCP 服务器</h4>
         <tag>Tailscale</tag>
         <tag>路由</tag>
         <tag>DNS</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
+    <url>/posts/48c29df2/</url>
+    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
+<span id="more"></span></p>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Port（端口）</strong></td>
+<td>操作系统给网络程序分配的逻辑入口编号。</td>
+<td>一台机器里不同网络服务的门牌号</td>
+</tr>
+<tr>
+<td><strong>SSH</strong></td>
+<td>Secure Shell，远程登录与加密隧道工具。</td>
+<td>远程终端 + 隧道</td>
+</tr>
+<tr>
+<td><strong>RemoteForward</strong></td>
+<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
+<td>让服务器“借用”你本机端口</td>
+</tr>
+<tr>
+<td><strong>LocalForward</strong></td>
+<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
+<td>让本机访问远端服务</td>
+</tr>
+<tr>
+<td><strong>Proxy（代理）</strong></td>
+<td>代理服务，代替客户端向目标站点发请求。</td>
+<td>中间人转发流量</td>
+</tr>
+<tr>
+<td><strong>VS Code Port Forwarding</strong></td>
+<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
+<td>帮你转发，但有时会帮倒忙</td>
+</tr>
+</tbody>
+</table>
+<p>如果用更白话的话说：</p>
+<ul>
+<li><code>SSH</code>
+不只是远程登录工具，本质上还能顺手带一条加密管道</li>
+<li><code>RemoteForward</code>
+是让远端机器“借用”当前客户端上的某个端口</li>
+<li><code>LocalForward</code>
+是让本地机器“借道”去访问远端的某个端口</li>
+<li><code>Proxy</code>
+不是目标服务本身，而是一个代你转发请求的中间层</li>
+<li><code>VS Code 自动端口转发</code>
+则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
+</ul>
+<h3 id="程序program端口port套接字socket到底是什么关系">🧱
+程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
+<ul>
+<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
+<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
+<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
+<code>7897</code>，可以理解成网络入口的门牌号</li>
+<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
+IP:端口”之后形成的那个网络端点</li>
+</ul>
+<p>放到这次问题里看，会更容易理解：</p>
+<ul>
+<li>不是“端口自己在工作”，而是某个程序（program /
+process）创建了套接字（socket）并监听（listen）这个端口</li>
+<li>更准确地说，通常是同一个 <code>IP:端口</code>
+组合的监听套接字，只能被一个程序成功持有，比如
+<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
+<li>所以看到 <code>7897</code>
+在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
+<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
+这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
+</ul>
+<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
+<ul>
+<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
+<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
+<code>VS Code</code> 或 <code>ssh</code> helper</li>
+</ul>
+<p>一旦监听者变了，流量路径就会跟着变。</p>
+<p>这也是为什么这次故障排查不能只看“<code>7897</code>
+通不通”，还得看：</p>
+<ul>
+<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
+<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
+<code>7897</code></li>
+<li>或者两边是否在不同阶段都试图接管这个端口</li>
+</ul>
+<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
+自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
+<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
+<p>我使用的设备如下：</p>
+<ul>
+<li>macbook pro 2020</li>
+<li>win xiaoxin 14pro 2021</li>
+<li>linux 实验室的高性能服务器 atlanta</li>
+</ul>
+<p>当时的 SSH 配置如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<ul>
+<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
+<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
+<code>7897</code></li>
+<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
+隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
+<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
+的代理入口</li>
+</ul>
+<p>也就是说，<code>atlanta</code>
+并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
+<p>可以看这张链路拓扑图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
+<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
+<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
+<p>这意味着：</p>
+<ul>
+<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
+<li><code>atlanta</code> 也可以有一个自己的
+<code>127.0.0.1:7897</code></li>
+<li>SSH 的
+<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
+</ul>
+<p>问题在于，<strong>VS Code Remote SSH
+还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
+<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
+在监听，它可能会再做一层类似这样的映射：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>不过这里要注意一件事：<strong>这不是 VS Code
+的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>而 <code>atlanta 7897</code> 本来又是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
+<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
+<p>按当时的现象，最合理的解释是：</p>
+<ol type="1">
+<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
+<li>SSH 按配置建立了 <code>RemoteForward</code>，使
+<code>atlanta:7897 -&gt; Win本地:7897</code></li>
+<li>VS Code 又检测到远端 <code>7897</code>
+正在监听，于是自动做了端口转发</li>
+<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
+占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
+<li>因此，真正危险的情况更像是：VS Code
+因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
+本地 <code>7897</code></strong></li>
+<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
+的入口，还会被 VS Code 的转发链路卷进去</li>
+<li>最终结果就是：本地代理流量绕回
+SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
+</ol>
+<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
+<p>当时观察到的两个现象正好支持这个推断：</p>
+<ul>
+<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
+<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
+</ul>
+<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
+端口转发到底是怎么工作的</h3>
+<h4 id="remoteforward">RemoteForward</h4>
+<p><code>RemoteForward A B:C</code></p>
+<p>意思是：</p>
+<ul>
+<li>在远端机器监听 <code>A</code></li>
+<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
+</ul>
+<p>这里的配置：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>等价于：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这里很容易混淆的一点是：</p>
+<ul>
+<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
+<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
+</ul>
+<p>它真正表达的是：</p>
+<ul>
+<li>由远端程序去连接 <code>atlanta:7897</code></li>
+<li>SSH 再把这条连接转交给当前客户端本机的
+<code>127.0.0.1:7897</code></li>
+</ul>
+<p>所以更准确的理解应该是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
+连接里双向流动。也就是说：</p>
+<ul>
+<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
+的请求，会被送到当前客户端的 <code>7897</code></li>
+<li>当前客户端上的代理再去访问外网</li>
+<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
+</ul>
+<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
+<code>atlanta:7897</code>”。<code>RemoteForward</code>
+解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
+<p>因此，只要在 <code>atlanta</code> 上配置：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
+<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
+<p>VS Code Remote SSH 会做另一件事：</p>
+<ul>
+<li>发现远端某个端口在监听</li>
+<li>自动把它映射到本机</li>
+<li>让你本机直接访问远端服务</li>
+</ul>
+<p>这个功能本来是给
+<code>3000</code>、<code>8080</code>、<code>8888</code>
+这类开发服务准备的，比如远端起了 Web
+服务，你本机浏览器可以直接打开。</p>
+<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
+SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
+<p>典型应用场景一般有这些：</p>
+<ul>
+<li>远端跑了前端开发服务器，比如
+Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
+<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
+面板，本机可以直接点开预览</li>
+<li>远端临时起了一个调试
+API、管理后台或文档站，不想专门手敲隧道命令</li>
+<li>容器、跳板机或云主机里的服务只监听
+<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
+</ul>
+<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
+<ul>
+<li>端口是给人看的</li>
+<li>访问方向通常是“本机去看远端”</li>
+<li>即使换一个本地端口也无所谓，只要能打开就行</li>
+</ul>
+<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
+<ul>
+<li><code>process</code>：轮询远端
+<code>/proc</code>，找哪些进程正在监听端口</li>
+<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
+</ul>
+<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
+Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
+<code>4123</code>。</p>
+<p>所以对这次故障，更严谨的表述应该是：</p>
+<ul>
+<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
+<code>7897</code>”</li>
+<li>而是“VS Code 会自动转发远端
+<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
+<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
+</ul>
+<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
+隧道的代理口，确实属于“不该自动转发的端口”。</p>
+<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
+<ul>
+<li>开发端口通常是“给你打开页面用的”</li>
+<li>代理端口则是“给别的流量继续转发用的”</li>
+</ul>
+<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
+接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
+<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
+<p>因为它会同时制造两种错觉：</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 40%" />
+<col style="width: 45%" />
+</colgroup>
+<thead>
+<tr>
+<th>现象</th>
+<th>容易误判成什么</th>
+<th>实际更可能是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>atlanta curl</code> 无响应</td>
+<td>远端没网、机场挂了</td>
+<td>远端代理口被错误转发</td>
+</tr>
+<tr>
+<td>Win 本地机场节点看起来正常</td>
+<td>机场没问题</td>
+<td>但本地代理出口发生环路</td>
+</tr>
+<tr>
+<td>断开 VS Code SSH 后马上恢复</td>
+<td>偶发网络波动</td>
+<td>SSH/VS Code 转发链路有问题</td>
+</tr>
+<tr>
+<td>删除自动转发 <code>7897</code> 后恢复</td>
+<td>临时玄学</td>
+<td>端口冲突被解除</td>
+</tr>
+</tbody>
+</table>
+<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
+<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
+<p>下次再遇到类似问题，可以按这个顺序排查。</p>
+<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
+到底谁在监听</h4>
+<p>Windows 可以看：</p>
+<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
+<p>macOS / Linux 可以看：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>重点不是只看“有没有监听”，而是看：</p>
+<ul>
+<li>是 Clash 在监听</li>
+<li>还是 VS Code helper / SSH client 在监听</li>
+<li>还是两边都试图占这个端口</li>
+</ul>
+<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
+的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
+<h3 id="常见误区">🚫 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
+<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
+会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
+</tr>
+<tr>
+<td>看到节点正常，就说明代理没问题</td>
+<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
+</tr>
+<tr>
+<td><code>curl</code> 没输出一定是目标网站挂了</td>
+<td>不对。端口回环、代理黑洞、DNS
+被错误接管都可能表现成“卡死没输出”。</td>
+</tr>
+<tr>
+<td>VS Code 自动转发一定是好事</td>
+<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
+SSH 的 <code>RemoteForward</code>，又被 VS Code
+自动纳入端口转发候选；一旦 VS Code
+因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
+</blockquote>
+<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
+Clash，最稳的策略就三条：</p>
+<ul>
+<li>禁掉 VS Code 对代理端口的自动转发</li>
+<li>让远端端口和本地代理端口不要同号</li>
+<li>把不同设备的远端代理端口编号分开</li>
+</ul>
+<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>SSH</tag>
+        <tag>VS Code</tag>
+        <tag>端口转发</tag>
+        <tag>Proxy</tag>
       </tags>
   </entry>
   <entry>
@@ -18991,6 +18991,338 @@ flowchart LR
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：多文件工程</title>
+    <url>/posts/b8d3f6a1/</url>
+    <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
+里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>声明（declaration）</td>
+<td>告诉编译器”存在某个函数/变量”，不给出实现</td>
+<td>说存在</td>
+</tr>
+<tr>
+<td>定义（definition）</td>
+<td>给出函数体或变量本体</td>
+<td>说怎么做</td>
+</tr>
+<tr>
+<td>头文件</td>
+<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
+<td>接口</td>
+</tr>
+<tr>
+<td>源文件</td>
+<td>放实现的 <code>.cpp</code> 文件</td>
+<td>实现</td>
+</tr>
+<tr>
+<td>include guard</td>
+<td>防止头文件被重复包含的宏保护</td>
+<td>只包含一次</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>另一种防止重复包含的写法</td>
+<td>简化版守卫</td>
+</tr>
+<tr>
+<td>编译单元</td>
+<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
+<td>独立编译的单位</td>
+</tr>
+<tr>
+<td>符号（symbol）</td>
+<td>函数/变量的名字标识</td>
+<td>链接的钥匙</td>
+</tr>
+<tr>
+<td>未定义引用</td>
+<td>声明了但找不到实现的符号</td>
+<td><code>undefined reference</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
+<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
+可执行程序。多文件工程就是把”源码”这一步拆成多个文件，每个
+<code>.cpp</code> 单独编译成
+<code>.o</code>，最后由链接器拼成可执行程序。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp] --&gt; A1[main.o]
+    B[math.cpp] --&gt; B1[math.o]
+    C[utils.cpp] --&gt; C1[utils.o]
+    A1 --&gt; D[链接]
+    B1 --&gt; D
+    C1 --&gt; D
+    D --&gt; E[可执行程序]
+</code>
+</pre>
+<p>拆文件的收益：</p>
+<table>
+<thead>
+<tr>
+<th>好处</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>可读性</td>
+<td>每个文件只负责一块功能</td>
+</tr>
+<tr>
+<td>复用</td>
+<td>编译好的 <code>.o</code> 或库可以给别人用</td>
+</tr>
+<tr>
+<td>编译速度</td>
+<td>只改一个文件时，只需重编那一个</td>
+</tr>
+<tr>
+<td>协作</td>
+<td>多人各改各的文件，冲突少</td>
+</tr>
+</tbody>
+</table>
+<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
+<h4 id="标准模式">标准模式</h4>
+<p>一个模块通常拆成”头文件（声明）+ 源文件（实现）“两个文件。</p>
+<p>以一个小工具 <code>add</code> 为例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译时把多个源文件一起交给编译器：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<p>也可以分步编译，先各自生成目标文件再链接：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
+<h4 id="声明与定义的区别">声明与定义的区别</h4>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>类型</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int add(int a, int b);</code></td>
+<td>声明</td>
+<td>告诉编译器”有这个函数”</td>
+</tr>
+<tr>
+<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
+<td>定义</td>
+<td>给出函数体</td>
+</tr>
+</tbody>
+</table>
+<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
+<code>#include "math.h"</code> 就能调用
+<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
+章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
+<h3 id="头文件规范">🛡️ 头文件规范</h3>
+<h4 id="include-guard">include guard</h4>
+<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
+<p>原理：第一次包含时定义 <code>MATH_H</code>
+并展开内容；之后再次包含时，<code>MATH_H</code>
+已存在，整个内容被跳过。</p>
+<h4 id="pragma-once">#pragma once</h4>
+<p>另一种写法更简洁：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>优点</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#ifndef</code> 守卫</td>
+<td>标准 C++，所有编译器都支持</td>
+<td>宏名要唯一，别重名</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>简单、不易写错</td>
+<td>非标准，但主流编译器都支持</td>
+</tr>
+</tbody>
+</table>
+<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
+<h4 id="最小包含">最小包含</h4>
+<p>头文件里尽量只 <code>#include</code>
+真正需要的内容，能不放就不放：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
+<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
+<h3 id="编译单元">🧊 编译单元</h3>
+<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
+<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
+    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
+</code>
+</pre>
+<p>理解”编译单元”是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
+<code>.cpp</code>
+都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
+<blockquote>
+<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
+<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
+</blockquote>
+<h3 id="链接基础">🔗 链接基础</h3>
+<p>编译阶段每个 <code>.cpp</code>
+独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
+<table>
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>链接错误</th>
+<th>原因</th>
+<th>解决</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>undefined reference</code>（未定义引用）</td>
+<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
+<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
+</tr>
+<tr>
+<td><code>multiple definition</code>（重复定义）</td>
+<td>同一个函数/全局变量被定义了两份</td>
+<td>定义只留一处，或把定义移出头文件</td>
+</tr>
+<tr>
+<td>找不到库</td>
+<td><code>-l</code> 参数写错或库未安装</td>
+<td>检查库名和链接参数</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
+<h4 id="循环包含">循环包含</h4>
+<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
+<code>a.h</code>，会形成死循环展开。include guard
+能挡住重复展开，但解决不了”互相依赖”本身。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
+<h4 id="头文件写实现">头文件写实现</h4>
+<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
+包含它，链接时就是重复定义：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
+<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
+<code>inline</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>inline</code>
+的字面意思是”内联”：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
+C++ 里，<code>inline</code>
+对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
+<code>.cpp</code>
+包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
+<blockquote>
+<p>现代编译器对”是否真的内联展开”有自己的判断，<code>inline</code>
+更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
+getter/setter）可以加 <code>inline</code>
+放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
+</blockquote>
+<h4 id="全局变量重复定义">全局变量重复定义</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
+<p>正解是头文件里只声明，源文件里定义：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>头文件里可以随便写实现</td>
+<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
+包含会重复定义</td>
+</tr>
+<tr>
+<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
+<td>两种都可以，保持一种习惯即可</td>
+</tr>
+<tr>
+<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
+<td>最小包含，只用需要的</td>
+</tr>
+<tr>
+<td>链接错误也是编译器错误</td>
+<td>编译已通过，链接失败是符号重复或找不到</td>
+</tr>
+<tr>
+<td>全局变量定义放头文件没问题</td>
+<td>每个编译单元各有一份，链接报重复定义</td>
+</tr>
+<tr>
+<td><code>#include</code> 越多越好，反正不会错</td>
+<td>增加编译依赖和冲突面，保持最小包含</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>多文件工程的骨架是”头文件放声明、源文件放实现”；每个
+<code>.cpp</code> 独立编译成目标文件，链接器负责把符号拼起来；头文件要加
+include guard、保持最小包含，警惕重复定义和循环包含。</p>
+</blockquote>
+<p>到这一章，从第 1 章的”编译流程”到现在的”多文件工程”，已经把 C/C++
+工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
+管理这些编译命令。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>头文件</tag>
+        <tag>编译单元</tag>
+        <tag>链接</tag>
+        <tag>工程结构</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：面向对象进阶</title>
     <url>/posts/f5a1c8d3/</url>
     <content><![CDATA[<p>类解决了”数据和操作放一起”，但真实世界里的对象常常有”共同点 +
@@ -19354,338 +19686,6 @@ flowchart TD
         <tag>虚函数</tag>
         <tag>多态</tag>
         <tag>面向对象</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：多文件工程</title>
-    <url>/posts/b8d3f6a1/</url>
-    <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
-里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>声明（declaration）</td>
-<td>告诉编译器”存在某个函数/变量”，不给出实现</td>
-<td>说存在</td>
-</tr>
-<tr>
-<td>定义（definition）</td>
-<td>给出函数体或变量本体</td>
-<td>说怎么做</td>
-</tr>
-<tr>
-<td>头文件</td>
-<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
-<td>接口</td>
-</tr>
-<tr>
-<td>源文件</td>
-<td>放实现的 <code>.cpp</code> 文件</td>
-<td>实现</td>
-</tr>
-<tr>
-<td>include guard</td>
-<td>防止头文件被重复包含的宏保护</td>
-<td>只包含一次</td>
-</tr>
-<tr>
-<td><code>#pragma once</code></td>
-<td>另一种防止重复包含的写法</td>
-<td>简化版守卫</td>
-</tr>
-<tr>
-<td>编译单元</td>
-<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
-<td>独立编译的单位</td>
-</tr>
-<tr>
-<td>符号（symbol）</td>
-<td>函数/变量的名字标识</td>
-<td>链接的钥匙</td>
-</tr>
-<tr>
-<td>未定义引用</td>
-<td>声明了但找不到实现的符号</td>
-<td><code>undefined reference</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
-<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
-可执行程序。多文件工程就是把”源码”这一步拆成多个文件，每个
-<code>.cpp</code> 单独编译成
-<code>.o</code>，最后由链接器拼成可执行程序。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[main.cpp] --&gt; A1[main.o]
-    B[math.cpp] --&gt; B1[math.o]
-    C[utils.cpp] --&gt; C1[utils.o]
-    A1 --&gt; D[链接]
-    B1 --&gt; D
-    C1 --&gt; D
-    D --&gt; E[可执行程序]
-</code>
-</pre>
-<p>拆文件的收益：</p>
-<table>
-<thead>
-<tr>
-<th>好处</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>可读性</td>
-<td>每个文件只负责一块功能</td>
-</tr>
-<tr>
-<td>复用</td>
-<td>编译好的 <code>.o</code> 或库可以给别人用</td>
-</tr>
-<tr>
-<td>编译速度</td>
-<td>只改一个文件时，只需重编那一个</td>
-</tr>
-<tr>
-<td>协作</td>
-<td>多人各改各的文件，冲突少</td>
-</tr>
-</tbody>
-</table>
-<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
-<h4 id="标准模式">标准模式</h4>
-<p>一个模块通常拆成”头文件（声明）+ 源文件（实现）“两个文件。</p>
-<p>以一个小工具 <code>add</code> 为例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译时把多个源文件一起交给编译器：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
-<p>也可以分步编译，先各自生成目标文件再链接：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
-<h4 id="声明与定义的区别">声明与定义的区别</h4>
-<table>
-<thead>
-<tr>
-<th>代码</th>
-<th>类型</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int add(int a, int b);</code></td>
-<td>声明</td>
-<td>告诉编译器”有这个函数”</td>
-</tr>
-<tr>
-<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
-<td>定义</td>
-<td>给出函数体</td>
-</tr>
-</tbody>
-</table>
-<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
-<code>#include "math.h"</code> 就能调用
-<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
-章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
-<h3 id="头文件规范">🛡️ 头文件规范</h3>
-<h4 id="include-guard">include guard</h4>
-<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
-<p>原理：第一次包含时定义 <code>MATH_H</code>
-并展开内容；之后再次包含时，<code>MATH_H</code>
-已存在，整个内容被跳过。</p>
-<h4 id="pragma-once">#pragma once</h4>
-<p>另一种写法更简洁：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>优点</th>
-<th>注意</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#ifndef</code> 守卫</td>
-<td>标准 C++，所有编译器都支持</td>
-<td>宏名要唯一，别重名</td>
-</tr>
-<tr>
-<td><code>#pragma once</code></td>
-<td>简单、不易写错</td>
-<td>非标准，但主流编译器都支持</td>
-</tr>
-</tbody>
-</table>
-<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
-<h4 id="最小包含">最小包含</h4>
-<p>头文件里尽量只 <code>#include</code>
-真正需要的内容，能不放就不放：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
-<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
-<h3 id="编译单元">🧊 编译单元</h3>
-<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
-<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
-    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
-</code>
-</pre>
-<p>理解”编译单元”是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
-<code>.cpp</code>
-都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
-<blockquote>
-<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
-<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
-</blockquote>
-<h3 id="链接基础">🔗 链接基础</h3>
-<p>编译阶段每个 <code>.cpp</code>
-独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
-<table>
-<colgroup>
-<col style="width: 45%" />
-<col style="width: 27%" />
-<col style="width: 27%" />
-</colgroup>
-<thead>
-<tr>
-<th>链接错误</th>
-<th>原因</th>
-<th>解决</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>undefined reference</code>（未定义引用）</td>
-<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
-<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
-</tr>
-<tr>
-<td><code>multiple definition</code>（重复定义）</td>
-<td>同一个函数/全局变量被定义了两份</td>
-<td>定义只留一处，或把定义移出头文件</td>
-</tr>
-<tr>
-<td>找不到库</td>
-<td><code>-l</code> 参数写错或库未安装</td>
-<td>检查库名和链接参数</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
-<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
-<h4 id="循环包含">循环包含</h4>
-<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
-<code>a.h</code>，会形成死循环展开。include guard
-能挡住重复展开，但解决不了”互相依赖”本身。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
-<h4 id="头文件写实现">头文件写实现</h4>
-<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
-包含它，链接时就是重复定义：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
-<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
-<code>inline</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>inline</code>
-的字面意思是”内联”：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
-C++ 里，<code>inline</code>
-对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
-<code>.cpp</code>
-包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
-<blockquote>
-<p>现代编译器对”是否真的内联展开”有自己的判断，<code>inline</code>
-更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
-getter/setter）可以加 <code>inline</code>
-放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
-</blockquote>
-<h4 id="全局变量重复定义">全局变量重复定义</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
-<p>正解是头文件里只声明，源文件里定义：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>头文件里可以随便写实现</td>
-<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
-包含会重复定义</td>
-</tr>
-<tr>
-<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
-<td>两种都可以，保持一种习惯即可</td>
-</tr>
-<tr>
-<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
-<td>最小包含，只用需要的</td>
-</tr>
-<tr>
-<td>链接错误也是编译器错误</td>
-<td>编译已通过，链接失败是符号重复或找不到</td>
-</tr>
-<tr>
-<td>全局变量定义放头文件没问题</td>
-<td>每个编译单元各有一份，链接报重复定义</td>
-</tr>
-<tr>
-<td><code>#include</code> 越多越好，反正不会错</td>
-<td>增加编译依赖和冲突面，保持最小包含</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>多文件工程的骨架是”头文件放声明、源文件放实现”；每个
-<code>.cpp</code> 独立编译成目标文件，链接器负责把符号拼起来；头文件要加
-include guard、保持最小包含，警惕重复定义和循环包含。</p>
-</blockquote>
-<p>到这一章，从第 1 章的”编译流程”到现在的”多文件工程”，已经把 C/C++
-工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
-管理这些编译命令。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>头文件</tag>
-        <tag>编译单元</tag>
-        <tag>链接</tag>
-        <tag>工程结构</tag>
       </tags>
   </entry>
   <entry>
@@ -20843,7 +20843,23 @@ hypervisor 可以”把读的对象换掉”。这就是 SNP 要补的洞。</p>
 RMP：反向映射表，硬件管的”所有权事实”</h3>
 <p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
 的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP：每 4KB 物理页一行，硬件强制记录：</span><br><span class="line">┌──────────┬───────────┬──────────┐</span><br><span class="line">│ 物理页地址 │ 属于哪个VM │ 权限/状态  │</span><br><span class="line">│ (SPA)    │ (ASID)    │          │</span><br><span class="line">└──────────┴───────────┴──────────┘</span><br></pre></td></tr></table></figure>
+<p>RMP：每 4KB 物理页一行，硬件强制记录：</p>
+<table>
+<thead>
+<tr>
+<th>物理页地址 (SPA)</th>
+<th>属于哪个 VM (ASID)</th>
+<th>权限/状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>哪一页物理内存</td>
+<td>归哪个虚拟机所有</td>
+<td>谁能读/写、是否加密</td>
+</tr>
+</tbody>
+</table>
 <p>“反向”的含义：NPT 是 hypervisor 往前翻译”地址去哪”，RMP
 是硬件反过来锁”这页是谁的、谁才能动”。</p>
 <p>一句话对比：</p>
@@ -21090,7 +21106,7 @@ BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的
 是一颗独立的<strong>密码协处理器芯片</strong>，焊在主板上（PCIe/SPI
 总线连接）。它干的事：给你提供<strong>基于硬件的密钥存储和加密运算</strong>，密钥永远锁在芯片里，谁也拷不走。</p>
 <p>把 TPM 想象成一台<strong>迷你专用电脑</strong>，它有两个门：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────┐</span><br><span class="line">│  TPM（迷你电脑）              │</span><br><span class="line">│                             │</span><br><span class="line">│  ① 输入口（命令接口）          │</span><br><span class="line">│     · 给它数据算哈希           │</span><br><span class="line">│     · 让它签名/加密/解密        │</span><br><span class="line">│     · 让它生成密钥             │</span><br><span class="line">│     · 让它扩展 PCR            │</span><br><span class="line">│                             │</span><br><span class="line">│  ② 保险柜（内部存储）          │</span><br><span class="line">│     · PCR 值（系统指纹）       │</span><br><span class="line">│     · 密钥（永远不出来）        │</span><br><span class="line">│     · NVRAM 数据             │</span><br><span class="line">│                             │</span><br><span class="line">│  它没有显示器、没有键盘        │</span><br><span class="line">│  你不能&quot;登录进去看&quot;，只能       │</span><br><span class="line">│  通过命令指挥它干活            │</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">TPM（迷你电脑）</span><br><span class="line">│</span><br><span class="line">├── ① 输入口（命令接口）</span><br><span class="line">│      · 给它数据算哈希</span><br><span class="line">│      · 让它签名/加密/解密</span><br><span class="line">│      · 让它生成密钥</span><br><span class="line">│      · 让它扩展 PCR</span><br><span class="line">│</span><br><span class="line">└── ② 保险柜（内部存储）</span><br><span class="line">       · PCR 值（系统指纹）</span><br><span class="line">       · 密钥（永远不出来）</span><br><span class="line">       · NVRAM 数据</span><br><span class="line"></span><br><span class="line">它没有显示器、没有键盘——你不能&quot;登录进去看&quot;，</span><br><span class="line">只能通过命令指挥它干活</span><br></pre></td></tr></table></figure>
 <p><strong>最重要的一条规矩：密钥一旦生成就锁在保险柜里，任何软件都拿不到密钥本身</strong>。你只能让它”用这把钥匙帮我签名”——它签完把结果给你，钥匙还在柜子里。</p>
 <p>TPM 是<strong>行业标准</strong>（TCG 定义，ISO/IEC 11889），Windows
 11 强制要求，几乎所有新主板都带。</p>
@@ -21249,7 +21265,8 @@ PCR？它没有权限写 PCR。</p>
 <h3 id="blob-与两层加密">🔑 blob 与两层加密</h3>
 <p><strong>blob = Binary Large Object（二进制大对象）</strong>，在 TPM
 语境里特指”被父密钥加密后的密钥对象文件”：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">磁盘上的一个密钥文件（比如 keyA.bin）：</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ 头部（元数据：密钥类型、属性）   │</span><br><span class="line">│ 密钥材料（用父密钥加密后的密文） │</span><br><span class="line">│ 认证信息、策略等               │</span><br><span class="line">└──────────────────────────────┘</span><br><span class="line">        ↑</span><br><span class="line">    这整个文件就叫&quot;密钥 blob&quot;</span><br></pre></td></tr></table></figure>
+<p>磁盘上的一个密钥文件（比如 keyA.bin）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· 头部（元数据：密钥类型、属性）</span><br><span class="line">· 密钥材料（用父密钥加密后的密文）</span><br><span class="line">· 认证信息、策略等</span><br><span class="line">        ↑</span><br><span class="line">  这整个文件就叫&quot;密钥 blob&quot;</span><br></pre></td></tr></table></figure>
 <p><strong>blob 是密文</strong>，没有芯片里父密钥的参与，磁盘上的 blob
 什么都干不了。blob
 可以放任何地方：磁盘、NVRAM、网络传输——都安全。使用时：<code>加载 blob → TPM 内部用父密钥解开 → 密钥在芯片内就位 → 干活</code>。</p>
@@ -21539,7 +21556,37 @@ blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sea
 </blockquote>
 <h3 id="黑盒-tee-白盒-tpm各有所长">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</h3>
 <p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          TEE（SEV-SNP）                 TPM</span><br><span class="line">       ┌──────────────────┐        ┌──────────────────┐</span><br><span class="line">信任模式│  black-box        │        │  white-box        │</span><br><span class="line">       │  信任根归厂商       │        │  用户可直接访问     │</span><br><span class="line">可访问性│  用户够不着（API 受限）│        │  用户可配置可验证     │</span><br><span class="line">强项   │  强隔离的执行环境    │        │  用户侧密钥/存储/认证 │</span><br><span class="line">短板   │  信任是黑箱         │        │  没有执行环境       │</span><br><span class="line">       └──────────────────┘        └──────────────────┘</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>TEE（SEV-SNP）</th>
+<th>TPM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>信任模式</td>
+<td>black-box：信任根归厂商</td>
+<td>white-box：用户可直接访问</td>
+</tr>
+<tr>
+<td>可访问性</td>
+<td>用户够不着（API 受限）</td>
+<td>用户可配置、可验证</td>
+</tr>
+<tr>
+<td>强项</td>
+<td>强隔离的执行环境</td>
+<td>用户侧密钥/存储/认证</td>
+</tr>
+<tr>
+<td>短板</td>
+<td>信任是黑箱</td>
+<td>没有执行环境</td>
+</tr>
+</tbody>
+</table>
 <p>关键差异：<strong>CPU-TEE
 信任根是黑盒的</strong>，只能给系统底层（固件、hypervisor、内核）用，用户够不着、验不了；<strong>TPM
 是白盒的</strong>，用户可以直接访问、配置、验证，能补上 TEE
@@ -21605,7 +21652,7 @@ blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sea
 </table>
 <h3 id="三阶段测量rtm-的具体落地">📏 三阶段测量：RTM 的具体落地</h3>
 <p>CVM 的信任链从启动到运行分成三个阶段：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────────────────┐</span><br><span class="line">│ Stage 1：Host 静态测量（CVM 启动前）                          │</span><br><span class="line">│   测 hypervisor、host 内核、虚拟化服务                        │</span><br><span class="line">│   → 保证&quot;我住的房子是干净的&quot;                                 │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 2：CVM 启动测量                                        │</span><br><span class="line">│   测 guest 固件、内核、initrd、根文件系统、镜像签名            │</span><br><span class="line">│   → 保证&quot;住进来的这个租客是预期的&quot;                            │</span><br><span class="line">├─────────────────────────────────────────────────────────────┤</span><br><span class="line">│ Stage 3：运行时测量（动态）                                   │</span><br><span class="line">│   TEE 对 CVM 内工作负载做完整性校验                           │</span><br><span class="line">│   → 保证&quot;运行过程中没被篡改&quot;                                 │</span><br><span class="line">└─────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Stage 1：Host 静态测量（CVM 启动前）</span><br><span class="line">   · 测 hypervisor、host 内核、虚拟化服务</span><br><span class="line">   · → 保证&quot;我住的房子是干净的&quot;</span><br><span class="line"></span><br><span class="line">Stage 2：CVM 启动测量</span><br><span class="line">   · 测 guest 固件、内核、initrd、根文件系统、镜像签名</span><br><span class="line">   · → 保证&quot;住进来的这个租客是预期的&quot;</span><br><span class="line"></span><br><span class="line">Stage 3：运行时测量（动态）</span><br><span class="line">   · TEE 对 CVM 内工作负载做完整性校验</span><br><span class="line">   · → 保证&quot;运行过程中没被篡改&quot;</span><br></pre></td></tr></table></figure>
 <p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。也就是”静态
 + 动态信任链结合”。</p>
 <blockquote>
@@ -21659,7 +21706,7 @@ ROM。<strong>信任链不是无限的，它终止于一个”物理可信”的
 <p><strong>PSP（Platform Security Processor，平台安全处理器）</strong>
 是 AMD CPU 里的<strong>独立 ARM 安全协处理器</strong>，相当于”CPU
 里的一个小电脑”：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────┐</span><br><span class="line">│ AMD CPU 芯片                 │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ x86 主核（跑你的系统）     │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">│  ┌─────────────────────────┐ │</span><br><span class="line">│  │ PSP（独立 ARM 核）        │ │</span><br><span class="line">│  │ · 芯片上电先于 x86 主核   │ │</span><br><span class="line">│  │ · 跑在隔离的安全环境里    │ │</span><br><span class="line">│  │ · 管理：SEV 内存加密密钥、 │ │</span><br><span class="line">│  │   RMP 表、固件签名校验、  │ │</span><br><span class="line">│  │   fTPM、DMA 保护          │ │</span><br><span class="line">│  └─────────────────────────┘ │</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">AMD CPU 芯片</span><br><span class="line">├── x86 主核（跑你的系统）</span><br><span class="line">│</span><br><span class="line">└── PSP（独立 ARM 核）</span><br><span class="line">      · 芯片上电先于 x86 主核</span><br><span class="line">      · 跑在隔离的安全环境里</span><br><span class="line">      · 管理：SEV 内存加密密钥、RMP 表、</span><br><span class="line">        固件签名校验、fTPM、DMA 保护</span><br></pre></td></tr></table></figure>
 <p>PSP 的核心角色：</p>
 <table>
 <thead>
@@ -21847,7 +21894,7 @@ Computing）解决的就是这个问题，本文介绍它与 TEE 的基本概念
 <h3 id="数据三态为什么内存里的数据最难保护">🧩
 数据三态：为什么内存里的数据最难保护</h3>
 <p>任何数据在生命周期里都有三种状态：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────┐</span><br><span class="line">│  ① 静态数据 (Data at Rest)   → 存在硬盘/磁盘里     │</span><br><span class="line">│  ② 传输中数据 (Data in Transit) → 网络上传输       │</span><br><span class="line">│  ③ 使用中数据 (Data in Use)  → 在内存里被 CPU 计算  │</span><br><span class="line">└─────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 静态数据 (Data at Rest)      → 存在硬盘/磁盘里</span><br><span class="line">② 传输中数据 (Data in Transit) → 网络上传输</span><br><span class="line">③ 使用中数据 (Data in Use)     → 在内存里被 CPU 计算</span><br></pre></td></tr></table></figure>
 <p>传统加密方案只保护前两种：</p>
 <table>
 <thead>
@@ -21886,7 +21933,38 @@ Computing）解决的就是这个问题，本文介绍它与 TEE 的基本概念
 <p><strong>TEE（Trusted Execution Environment，可信执行环境）</strong>
 的思路：在 CPU
 硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">普通虚拟机 vs 机密虚拟机（CVM）</span><br><span class="line">┌─────────────────────┐   ┌─────────────────────┐</span><br><span class="line">│   普通 VM            │   │  CVM（机密虚拟机）    │</span><br><span class="line">│  内存 = 明文         │   │  内存 = 硬件加密      │</span><br><span class="line">│  hypervisor 能读     │   │  hypervisor 读不了    │</span><br><span class="line">│  管理员能读          │   │  物理攻击也读不了     │</span><br><span class="line">└─────────────────────┘   └─────────────────────┘</span><br></pre></td></tr></table></figure>
+<p><strong>普通虚拟机 vs 机密虚拟机（CVM）：</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>普通 VM</th>
+<th>CVM（机密虚拟机）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内存</td>
+<td>明文</td>
+<td>硬件加密</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>能读</td>
+<td>读不了</td>
+</tr>
+<tr>
+<td>云管理员</td>
+<td>能读</td>
+<td>读不了</td>
+</tr>
+<tr>
+<td>物理攻击</td>
+<td>可读内存</td>
+<td>也读不了</td>
+</tr>
+</tbody>
+</table>
 <p>主流的 CVM 技术：</p>
 <table>
 <thead>
