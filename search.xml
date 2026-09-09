@@ -13953,335 +13953,6 @@ Clash，最稳的策略就三条：</p>
       </tags>
   </entry>
   <entry>
-    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
-    <url>/posts/18f02423/</url>
-    <content><![CDATA[<p>CUDA
-报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Host</td>
-<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
-<td>下命令的人</td>
-</tr>
-<tr>
-<td>Device</td>
-<td>GPU 端代码，真正执行 kernel 的一侧。</td>
-<td>干活的人</td>
-</tr>
-<tr>
-<td>Kernel</td>
-<td>在 GPU 上并行执行的函数。</td>
-<td>GPU 任务</td>
-</tr>
-<tr>
-<td>Stream</td>
-<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
-<td>GPU 队列</td>
-</tr>
-<tr>
-<td>Synchronize</td>
-<td>CPU 停下来等 GPU 做完前面的任务。</td>
-<td>等结果</td>
-</tr>
-<tr>
-<td>CUDA error code</td>
-<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
-<td>一句错误摘要</td>
-</tr>
-</tbody>
-</table>
-<p>一句话省流：</p>
-<blockquote>
-<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
-真正在哪里出错”。</strong></p>
-</blockquote>
-<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
-<p>CUDA 程序里通常有两条时间线：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
-<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
-队列，然后自己继续往下跑。</p>
-<p>也就是说：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
-<p>这行代码返回成功，通常只能说明：</p>
-<blockquote>
-<p>kernel launch 请求成功提交了。</p>
-</blockquote>
-<p>它不等价于：</p>
-<blockquote>
-<p>kernel 已经在 GPU 上执行成功了。</p>
-</blockquote>
-<p>这就是 CUDA 异步报错的根源。</p>
-<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
-<p>一个简化版流程如下：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
-<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
-<p>普通 CPU 函数调用更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
-<p>CUDA kernel launch 更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
-<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
-kernel。</p>
-<h3 id="stream-是什么">🧩 Stream 是什么</h3>
-<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
-<p>同一个 stream 里的任务通常按顺序执行。但 CPU
-提交任务时不一定等待每个任务结束：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
-<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
-done。</p>
-<p>这在 PyTorch 里很常见：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
-<p>前面几行可能只是不断向 GPU 提交算子。到了
-<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
-GPU，于是错误可能在这里才爆出来。</p>
-<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
-<p>假设某个 kernel 里有越界写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>CPU 端这样调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
-<p>可能的结果是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>报错位置看起来在：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
-<p>但真正的事故现场可能是前面的：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
-<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
-工作完成，CPU 到这里才第一次认真问 GPU：</p>
-<blockquote>
-<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
-</blockquote>
-<p>GPU/driver 这时返回：</p>
-<blockquote>
-<p>前面那个 kernel 已经出错了。</p>
-</blockquote>
-<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
-<p>默认情况下，GPU 端错误通常不是像 CPU
-异常一样立刻带着完整调用栈抛回来。</p>
-<p>更接近下面这个过程：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
-<p>所以你看到的经常是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
-<p>例如：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
-<ul>
-<li>哪个 kernel 的哪一行出错；</li>
-<li>哪个 block/thread 出错；</li>
-<li>GPU 上完整的调用链是什么；</li>
-<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
-</ul>
-<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
-<p>当 PyTorch 报错栈指向：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>它通常表示：</p>
-<blockquote>
-<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
-</blockquote>
-<p>它不必然表示：</p>
-<blockquote>
-<p>这个 API 自己就是根因。</p>
-</blockquote>
-<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
-<p>常见通知点包括：</p>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 75%" />
-</colgroup>
-<thead>
-<tr>
-<th>操作</th>
-<th>为什么会暴露错误</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>明确等待 GPU 之前的任务完成。</td>
-</tr>
-<tr>
-<td><code>cudaStreamSynchronize(stream)</code></td>
-<td>等某个 stream 完成。</td>
-</tr>
-<tr>
-<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
-<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
-</tr>
-<tr>
-<td><code>tensor.cpu()</code></td>
-<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
-</tr>
-<tr>
-<td><code>loss.item()</code></td>
-<td>需要把 GPU 标量读到 Python 数值。</td>
-</tr>
-<tr>
-<td>后续 CUDA API</td>
-<td>发现当前 CUDA context 已经有错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么-gpu-错误默认只有一句话">🔍 为什么 GPU
-错误默认只有一句话</h3>
-<p>CPU 异常容易打印调用栈，是因为 CPU
-线程有清晰的栈帧和同步执行路径。</p>
-<p>GPU kernel 不一样：</p>
-<ul>
-<li>一个 kernel 可能有成千上万个线程同时执行；</li>
-<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
-<li>错误可能只发生在某个 thread；</li>
-<li>kernel launch 和 kernel 执行在时间线上分离；</li>
-<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
-调试模式。</li>
-</ul>
-<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
-<p>这些描述很有用，但它们不是完整定位结果。</p>
-<h3 id="cuda_launch_blocking1-做了什么">🛠️
-<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
-<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
-<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
-<p>默认情况：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>开启后：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
-的位置。</p>
-<p>代价是程序会明显变慢，因为 CPU/GPU
-原本可以重叠执行的部分被压平了。</p>
-<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
-<p>分类任务里，<code>target</code> 必须在
-<code>[0, num_classes - 1]</code> 范围内。</p>
-<p>例如模型输出 10 类：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
-<p>但 <code>target</code> 里出现了非法类别：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
-<p>这时：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
-<p>GPU kernel 可能触发 device-side
-assert。你看到的报错位置却可能在：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
-<p>真正要查的是：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
-<p>如果是 <code>cross_entropy</code>，优先确认：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
-<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
-<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>区别是：</p>
-<table>
-<colgroup>
-<col style="width: 26%" />
-<col style="width: 73%" />
-</colgroup>
-<thead>
-<tr>
-<th>API</th>
-<th>主要检查什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaGetLastError()</code></td>
-<td>kernel launch 是否成功，比如配置、参数、符号等 launch
-阶段错误。</td>
-</tr>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
-</tr>
-</tbody>
-</table>
-<p>如果要进一步定位到源码行，可以用更重的工具：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
-<p>典型报告可能会给出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
-<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
-事故现场。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
-写错了。</td>
-<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
-</tr>
-<tr>
-<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
-<td>launch 成功只代表提交成功，不代表执行成功。</td>
-</tr>
-<tr>
-<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
-<td>它只是让报错更同步、更容易定位。</td>
-</tr>
-<tr>
-<td>GPU 报错只有一句话，所以没法查。</td>
-<td>默认信息少，但可以用同步、断言、Compute
-Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
-</tr>
-<tr>
-<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
-<td>一个早期 GPU 错误可能污染后续 CUDA
-context，后面只是连续发现错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
-<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
-<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
-<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
-错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
-往往在更早提交的任务里。</p>
-</blockquote>
-<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
-和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
-Sanitizer。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>PyTorch</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>从 ipconfig 出发，彻底搞懂 Windows 网络栈、网卡、路由、DNS 和 Tailscale</title>
     <url>/posts/7b5d2e9a/</url>
     <content><![CDATA[<p>一台电脑可能同时有多个网卡，不同网络的连接状态也各不相同。本文从
@@ -14673,6 +14344,335 @@ DHCP 服务器</h4>
         <tag>Tailscale</tag>
         <tag>路由</tag>
         <tag>DNS</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
+    <url>/posts/18f02423/</url>
+    <content><![CDATA[<p>CUDA
+报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
+<td>下命令的人</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU 端代码，真正执行 kernel 的一侧。</td>
+<td>干活的人</td>
+</tr>
+<tr>
+<td>Kernel</td>
+<td>在 GPU 上并行执行的函数。</td>
+<td>GPU 任务</td>
+</tr>
+<tr>
+<td>Stream</td>
+<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
+<td>GPU 队列</td>
+</tr>
+<tr>
+<td>Synchronize</td>
+<td>CPU 停下来等 GPU 做完前面的任务。</td>
+<td>等结果</td>
+</tr>
+<tr>
+<td>CUDA error code</td>
+<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
+<td>一句错误摘要</td>
+</tr>
+</tbody>
+</table>
+<p>一句话省流：</p>
+<blockquote>
+<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
+真正在哪里出错”。</strong></p>
+</blockquote>
+<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
+<p>CUDA 程序里通常有两条时间线：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
+<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
+队列，然后自己继续往下跑。</p>
+<p>也就是说：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
+<p>这行代码返回成功，通常只能说明：</p>
+<blockquote>
+<p>kernel launch 请求成功提交了。</p>
+</blockquote>
+<p>它不等价于：</p>
+<blockquote>
+<p>kernel 已经在 GPU 上执行成功了。</p>
+</blockquote>
+<p>这就是 CUDA 异步报错的根源。</p>
+<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
+<p>一个简化版流程如下：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
+<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
+<p>普通 CPU 函数调用更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
+<p>CUDA kernel launch 更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
+<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
+kernel。</p>
+<h3 id="stream-是什么">🧩 Stream 是什么</h3>
+<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
+<p>同一个 stream 里的任务通常按顺序执行。但 CPU
+提交任务时不一定等待每个任务结束：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
+<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
+done。</p>
+<p>这在 PyTorch 里很常见：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
+<p>前面几行可能只是不断向 GPU 提交算子。到了
+<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
+GPU，于是错误可能在这里才爆出来。</p>
+<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
+<p>假设某个 kernel 里有越界写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>CPU 端这样调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
+<p>可能的结果是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>报错位置看起来在：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
+<p>但真正的事故现场可能是前面的：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
+<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
+工作完成，CPU 到这里才第一次认真问 GPU：</p>
+<blockquote>
+<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
+</blockquote>
+<p>GPU/driver 这时返回：</p>
+<blockquote>
+<p>前面那个 kernel 已经出错了。</p>
+</blockquote>
+<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
+<p>默认情况下，GPU 端错误通常不是像 CPU
+异常一样立刻带着完整调用栈抛回来。</p>
+<p>更接近下面这个过程：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
+<p>所以你看到的经常是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
+<ul>
+<li>哪个 kernel 的哪一行出错；</li>
+<li>哪个 block/thread 出错；</li>
+<li>GPU 上完整的调用链是什么；</li>
+<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
+</ul>
+<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
+<p>当 PyTorch 报错栈指向：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>它通常表示：</p>
+<blockquote>
+<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
+</blockquote>
+<p>它不必然表示：</p>
+<blockquote>
+<p>这个 API 自己就是根因。</p>
+</blockquote>
+<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
+<p>常见通知点包括：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 75%" />
+</colgroup>
+<thead>
+<tr>
+<th>操作</th>
+<th>为什么会暴露错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>明确等待 GPU 之前的任务完成。</td>
+</tr>
+<tr>
+<td><code>cudaStreamSynchronize(stream)</code></td>
+<td>等某个 stream 完成。</td>
+</tr>
+<tr>
+<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
+<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
+</tr>
+<tr>
+<td><code>tensor.cpu()</code></td>
+<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
+</tr>
+<tr>
+<td><code>loss.item()</code></td>
+<td>需要把 GPU 标量读到 Python 数值。</td>
+</tr>
+<tr>
+<td>后续 CUDA API</td>
+<td>发现当前 CUDA context 已经有错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么-gpu-错误默认只有一句话">🔍 为什么 GPU
+错误默认只有一句话</h3>
+<p>CPU 异常容易打印调用栈，是因为 CPU
+线程有清晰的栈帧和同步执行路径。</p>
+<p>GPU kernel 不一样：</p>
+<ul>
+<li>一个 kernel 可能有成千上万个线程同时执行；</li>
+<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
+<li>错误可能只发生在某个 thread；</li>
+<li>kernel launch 和 kernel 执行在时间线上分离；</li>
+<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
+调试模式。</li>
+</ul>
+<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
+<p>这些描述很有用，但它们不是完整定位结果。</p>
+<h3 id="cuda_launch_blocking1-做了什么">🛠️
+<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
+<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
+<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
+<p>默认情况：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>开启后：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
+的位置。</p>
+<p>代价是程序会明显变慢，因为 CPU/GPU
+原本可以重叠执行的部分被压平了。</p>
+<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
+<p>分类任务里，<code>target</code> 必须在
+<code>[0, num_classes - 1]</code> 范围内。</p>
+<p>例如模型输出 10 类：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
+<p>但 <code>target</code> 里出现了非法类别：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
+<p>这时：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
+<p>GPU kernel 可能触发 device-side
+assert。你看到的报错位置却可能在：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
+<p>真正要查的是：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
+<p>如果是 <code>cross_entropy</code>，优先确认：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
+<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
+<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>区别是：</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 73%" />
+</colgroup>
+<thead>
+<tr>
+<th>API</th>
+<th>主要检查什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaGetLastError()</code></td>
+<td>kernel launch 是否成功，比如配置、参数、符号等 launch
+阶段错误。</td>
+</tr>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
+</tr>
+</tbody>
+</table>
+<p>如果要进一步定位到源码行，可以用更重的工具：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
+<p>典型报告可能会给出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
+<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
+事故现场。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
+写错了。</td>
+<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
+</tr>
+<tr>
+<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
+<td>launch 成功只代表提交成功，不代表执行成功。</td>
+</tr>
+<tr>
+<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
+<td>它只是让报错更同步、更容易定位。</td>
+</tr>
+<tr>
+<td>GPU 报错只有一句话，所以没法查。</td>
+<td>默认信息少，但可以用同步、断言、Compute
+Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
+</tr>
+<tr>
+<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
+<td>一个早期 GPU 错误可能污染后续 CUDA
+context，后面只是连续发现错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
+<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
+<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
+<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
+错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
+往往在更早提交的任务里。</p>
+</blockquote>
+<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
+和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
+Sanitizer。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>PyTorch</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
@@ -16895,6 +16895,203 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：数组</title>
+    <url>/posts/d9e4b7a3/</url>
+    <content><![CDATA[<p>变量一次只能保存一个值，要存”一组同类型的数据”，最简单的办法就是数组（array）。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数组</td>
+<td>一段连续内存里存放的多个同类型元素</td>
+<td>同类型数据排队</td>
+</tr>
+<tr>
+<td>元素（element）</td>
+<td>数组里的每一个数据</td>
+<td>队伍中的一员</td>
+</tr>
+<tr>
+<td>下标（index）</td>
+<td>元素在数组里的位置编号，从 0 开始</td>
+<td>第几个</td>
+</tr>
+<tr>
+<td>数组长度</td>
+<td>数组能容纳的元素个数</td>
+<td>队伍长度</td>
+</tr>
+<tr>
+<td>多维数组</td>
+<td>数组的元素还是数组，比如二维数组</td>
+<td>表格</td>
+</tr>
+<tr>
+<td>数组名</td>
+<td>数组的名字，使用时通常退化为首元素地址</td>
+<td>队伍的队首</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
+<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[数组 scores] --&gt; B[下标 0]
+    A --&gt; C[下标 1]
+    A --&gt; D[下标 2]
+    A --&gt; E[...]
+    A --&gt; F[下标 n-1]
+</code>
+</pre>
+<p>数组的两个基本事实：</p>
+<ol type="1">
+<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
+<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
+的，非常快。</li>
+</ol>
+<h3 id="一维数组">🧮 一维数组</h3>
+<h4 id="定义与初始化">定义与初始化</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>需要”运行时才知道大小”的数组，用第 9 章的 <code>new[]</code> 或
+<code>vector</code>，不要用变长数组写法。</p>
+</blockquote>
+<h4 id="下标访问">下标访问</h4>
+<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以结合数组长度求法：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
+<h3 id="数组与函数">📦 数组与函数</h3>
+<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="多维数组">🗺️ 多维数组</h3>
+<p>二维数组可以理解成”数组的数组”，适合表示表格、矩阵：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
+<p>双重循环遍历：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
+    A --&gt; C[第 2 行: 5 6 7 8]
+    A --&gt; D[第 3 行: 9 10 11 12]
+</code>
+</pre>
+<p>三维及以上同理，只是现实中用得较少。</p>
+<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>错误</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arr[5]</code>（长度 5 的数组）</td>
+<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
+</tr>
+<tr>
+<td>忘记初始化就用</td>
+<td>读到不确定的值</td>
+</tr>
+<tr>
+<td>数组长度用运行时变量</td>
+<td>变长数组写法不可移植</td>
+</tr>
+<tr>
+<td>函数里只传数组名不传长度</td>
+<td>函数不知道数组多大，容易越界</td>
+</tr>
+</tbody>
+</table>
+<p>C/C++
+<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
+<code>vector</code> 最大的差别之一——<code>vector</code> 有
+<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
+<blockquote>
+<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
+章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
+代码打交道时。</p>
+</blockquote>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>下标从 1 开始</td>
+<td>C/C++ 下标从 0 开始</td>
+</tr>
+<tr>
+<td>数组越界会报错</td>
+<td>不检查越界，是未定义行为</td>
+</tr>
+<tr>
+<td>传数组给函数是拷贝</td>
+<td>传的是首元素地址，函数内修改影响原数组</td>
+</tr>
+<tr>
+<td>数组名可以随便赋值</td>
+<td>数组名是常量地址，不能整体赋值</td>
+</tr>
+<tr>
+<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
+<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
+得到的是指针大小</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
+开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
+</blockquote>
+<p>学完数组，下一步的指针、字符串会大量建立在”数组名是首元素地址”这个事实上；而需要动态大小、自动管理内存时，记得有
+<code>vector</code> 这个更省心的选择。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>数组</tag>
+        <tag>多维数组</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：STL 容器</title>
     <url>/posts/e9f3b7c2/</url>
     <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
@@ -17760,203 +17957,6 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：数组</title>
-    <url>/posts/d9e4b7a3/</url>
-    <content><![CDATA[<p>变量一次只能保存一个值，要存”一组同类型的数据”，最简单的办法就是数组（array）。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>数组</td>
-<td>一段连续内存里存放的多个同类型元素</td>
-<td>同类型数据排队</td>
-</tr>
-<tr>
-<td>元素（element）</td>
-<td>数组里的每一个数据</td>
-<td>队伍中的一员</td>
-</tr>
-<tr>
-<td>下标（index）</td>
-<td>元素在数组里的位置编号，从 0 开始</td>
-<td>第几个</td>
-</tr>
-<tr>
-<td>数组长度</td>
-<td>数组能容纳的元素个数</td>
-<td>队伍长度</td>
-</tr>
-<tr>
-<td>多维数组</td>
-<td>数组的元素还是数组，比如二维数组</td>
-<td>表格</td>
-</tr>
-<tr>
-<td>数组名</td>
-<td>数组的名字，使用时通常退化为首元素地址</td>
-<td>队伍的队首</td>
-</tr>
-</tbody>
-</table>
-<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
-<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[数组 scores] --&gt; B[下标 0]
-    A --&gt; C[下标 1]
-    A --&gt; D[下标 2]
-    A --&gt; E[...]
-    A --&gt; F[下标 n-1]
-</code>
-</pre>
-<p>数组的两个基本事实：</p>
-<ol type="1">
-<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
-<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
-的，非常快。</li>
-</ol>
-<h3 id="一维数组">🧮 一维数组</h3>
-<h4 id="定义与初始化">定义与初始化</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>需要”运行时才知道大小”的数组，用第 9 章的 <code>new[]</code> 或
-<code>vector</code>，不要用变长数组写法。</p>
-</blockquote>
-<h4 id="下标访问">下标访问</h4>
-<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以结合数组长度求法：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
-<h3 id="数组与函数">📦 数组与函数</h3>
-<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="多维数组">🗺️ 多维数组</h3>
-<p>二维数组可以理解成”数组的数组”，适合表示表格、矩阵：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
-<p>双重循环遍历：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
-    A --&gt; C[第 2 行: 5 6 7 8]
-    A --&gt; D[第 3 行: 9 10 11 12]
-</code>
-</pre>
-<p>三维及以上同理，只是现实中用得较少。</p>
-<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>错误</th>
-<th>后果</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>arr[5]</code>（长度 5 的数组）</td>
-<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
-</tr>
-<tr>
-<td>忘记初始化就用</td>
-<td>读到不确定的值</td>
-</tr>
-<tr>
-<td>数组长度用运行时变量</td>
-<td>变长数组写法不可移植</td>
-</tr>
-<tr>
-<td>函数里只传数组名不传长度</td>
-<td>函数不知道数组多大，容易越界</td>
-</tr>
-</tbody>
-</table>
-<p>C/C++
-<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
-<code>vector</code> 最大的差别之一——<code>vector</code> 有
-<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
-<blockquote>
-<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
-章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
-代码打交道时。</p>
-</blockquote>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>下标从 1 开始</td>
-<td>C/C++ 下标从 0 开始</td>
-</tr>
-<tr>
-<td>数组越界会报错</td>
-<td>不检查越界，是未定义行为</td>
-</tr>
-<tr>
-<td>传数组给函数是拷贝</td>
-<td>传的是首元素地址，函数内修改影响原数组</td>
-</tr>
-<tr>
-<td>数组名可以随便赋值</td>
-<td>数组名是常量地址，不能整体赋值</td>
-</tr>
-<tr>
-<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
-<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
-得到的是指针大小</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
-开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
-</blockquote>
-<p>学完数组，下一步的指针、字符串会大量建立在”数组名是首元素地址”这个事实上；而需要动态大小、自动管理内存时，记得有
-<code>vector</code> 这个更省心的选择。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>数组</tag>
-        <tag>多维数组</tag>
       </tags>
   </entry>
   <entry>
@@ -22690,7 +22690,7 @@ Sector）</strong>：</p>
 启动时，读取的是磁盘的<strong>第一个扇区（sector）</strong>，而传统磁盘扇区大小是
 <strong>512 bytes</strong>。所以 Bootloader 的起点只有 512
 字节的舞台：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">磁盘第一个扇区</span><br><span class="line"></span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│                              │</span><br><span class="line">│      Bootloader              │</span><br><span class="line">│                              │</span><br><span class="line">│      最多 512 bytes           │</span><br><span class="line">│                              │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">磁盘第一个扇区</span><br><span class="line"></span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│                              │</span><br><span class="line">│      Bootloader              │  ← 只有 512 bytes 的舞台</span><br><span class="line">│                              │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>512 字节写一个像样的 Bootloader
 都很勉强，更别说写操作系统了。于是才有了两阶段设计。</p>
 <hr />
@@ -23312,7 +23312,7 @@ sections</h3>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">ELF header</span><br><span class="line">├── 魔数 0x7F &#x27;E&#x27; &#x27;L&#x27; &#x27;F&#x27;      ← 让 loader 认出这是 ELF</span><br><span class="line">├── class（32/64 位）</span><br><span class="line">├── e_type（ET_REL/ET_EXEC/ET_DYN）</span><br><span class="line">├── e_machine（x86_64 / aarch64 ...）</span><br><span class="line">├── e_entry                    ← 入口点地址，_start 在这</span><br><span class="line">├── e_phoff                    ← Program Header Table 的位置</span><br><span class="line">└── e_shoff                    ← Section Header Table 的位置</span><br></pre></td></tr></table></figure>
 <p>文件主体是一系列
 <strong>sections（节）</strong>，按内容分类存放：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">可执行 ELF（文件视角）</span><br><span class="line">┌─────────────────────────────┐</span><br><span class="line">│ ELF header                  │</span><br><span class="line">├─────────────────────────────┤</span><br><span class="line">│ .text     ← 机器码          │</span><br><span class="line">├─────────────────────────────┤</span><br><span class="line">│ .rodata   ← 只读常量        │</span><br><span class="line">├─────────────────────────────┤</span><br><span class="line">│ .data     ← 已初始化变量     │</span><br><span class="line">├─────────────────────────────┤</span><br><span class="line">│ .bss      ← 未初始化变量     │</span><br><span class="line">├─────────────────────────────┤</span><br><span class="line">│ .symtab / .strtab / .debug  │  符号表、字符串表、调试信息</span><br><span class="line">├─────────────────────────────┤</span><br><span class="line">│ Section Header Table        │  各 section 的名字/地址/大小</span><br><span class="line">└─────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">可执行 ELF（文件视角）</span><br><span class="line">┌────────────────────────────────┐</span><br><span class="line">│ ELF header                     │  ← 魔数/架构/入口点/段表位置</span><br><span class="line">├────────────────────────────────┤</span><br><span class="line">│ .text                          │  ← 机器码</span><br><span class="line">├────────────────────────────────┤</span><br><span class="line">│ .rodata                        │  ← 只读常量</span><br><span class="line">├────────────────────────────────┤</span><br><span class="line">│ .data                          │  ← 已初始化变量</span><br><span class="line">├────────────────────────────────┤</span><br><span class="line">│ .bss                           │  ← 未初始化变量</span><br><span class="line">├────────────────────────────────┤</span><br><span class="line">│ .symtab / .strtab / .debug     │  ← 符号表、字符串表、调试信息</span><br><span class="line">├────────────────────────────────┤</span><br><span class="line">│ Section Header Table           │  ← 各 section 的名字/地址/大小</span><br><span class="line">└────────────────────────────────┘</span><br></pre></td></tr></table></figure>
 <table>
 <colgroup>
 <col style="width: 28%" />
@@ -23597,7 +23597,7 @@ A”：0xB8000</h3>
 <h3 id="为什么一个字符占两个字节">🔤 为什么一个字符占两个字节</h3>
 <p>因为除了保存”显示什么字符”，还要保存”用什么颜色显示”。所以一个字符单元是
 2 字节：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌────────────┬────────────┐</span><br><span class="line">│ 字符 ASCII  │ 属性 Attribute │</span><br><span class="line">└────────────┴────────────┘</span><br><span class="line">    1 byte        1 byte</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌──────────────┬──────────────┐</span><br><span class="line">│  char ASCII  │  attribute   │</span><br><span class="line">└──────────────┴──────────────┘</span><br><span class="line">  ASCII 字符（1 byte）  颜色属性（1 byte）</span><br></pre></td></tr></table></figure>
 <p>例如 <code>0x41 0x0F</code> = 字符 <code>'A'</code> + 颜色属性
 <code>0x0F</code>（白字黑底）。于是整块显存的排布是：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0xB8000 ─ 字符 &#x27;A&#x27; │ 颜色      ← 第 0 个字符</span><br><span class="line">0xB8002 ─ 字符 &#x27;B&#x27; │ 颜色      ← 第 1 个字符</span><br><span class="line">0xB8004 ─ 字符 &#x27;C&#x27; │ 颜色      ← 第 2 个字符</span><br></pre></td></tr></table></figure>
