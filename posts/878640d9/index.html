@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：ccAI: A Compatible and Confidential System for AI Computing（MICRO 2025） 作者想让普通的、老的 GPU&#x2F;NPU（统称 xPU）也能安全地跑 AI，同时尽量不改原来的软件和硬件。  这是 ccAI 论文精读系列 的第一篇，只回答两个问题：为什么 AI 计算需要保密？为什么 GPU 是其中的短板？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T07:49:20.000Z">
-<meta property="article:modified_time" content="2026-09-08T08:32:02.060Z">
+<meta property="article:modified_time" content="2026-09-09T04:10:47.230Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -266,9 +266,15 @@ Packet：高速公路上的一辆辆货车</span></a></li></ol></li><li class="n
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-09-08 15:49:20 / Modified: 16:32:02" itemprop="dateCreated datePublished" datetime="2026-09-08T15:49:20+08:00">2026-09-08</time>
+      <time title="Created: 2026-09-08 15:49:20" itemprop="dateCreated datePublished" datetime="2026-09-08T15:49:20+08:00">2026-09-08</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-09-09 12:10:47" itemprop="dateModified" datetime="2026-09-09T12:10:47+08:00">2026-09-09</time>
     </span>
 
   
@@ -315,7 +321,7 @@ AI，同时尽量不改原来的软件和硬件。</p>
 <h2 id="一个场景模型上云gpu-是云厂商的">🏢 一个场景：模型上云，GPU
 是云厂商的</h2>
 <p>假设你是公司，把自己训练的大模型放到云服务器上跑推理。数据链路长这样：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">你的 AI 模型 + 用户数据</span><br><span class="line">          ↓</span><br><span class="line">      云服务器</span><br><span class="line">          ├── CPU</span><br><span class="line">          └── GPU  ← 云厂商的 GPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">你的 AI 模型 + 用户数据</span><br><span class="line">              ↓</span><br><span class="line">          云服务器</span><br><span class="line">              ├── CPU</span><br><span class="line">              └── GPU    ← 云厂商的 GPU</span><br></pre></td></tr></table></figure>
 <p>模型参数、用户输入、中间计算结果、最终输出——都要经过云厂商的
 GPU。如果云服务器里存在<strong>恶意的特权软件</strong>（云厂商的运维人员、被攻破的管理程序，都属于威胁模型的一部分），理论上它可能尝试读取这些数据。而模型参数和用户数据，都是商业机密。</p>
 <p>我们希望的是：</p>
@@ -334,7 +340,7 @@ computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机�
 <p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
 Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
 Machine（受保护的虚拟机）</strong>。</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">        Host OS</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│        TVM          │</span><br><span class="line">│  AI Application     │</span><br><span class="line">│  模型 / 用户数据      │  🔒 别人看不了</span><br><span class="line">│  GPU Driver         │</span><br><span class="line">└─────────┬───────────┘</span><br><span class="line">          ↓</span><br><span class="line">         GPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">          Host OS</span><br><span class="line">             ↓</span><br><span class="line">┌──────────────────────┐</span><br><span class="line">│         TVM          │  ← 受保护虚拟机（TEE）</span><br><span class="line">│                      │</span><br><span class="line">│ 1. AI Application    │  ← 明文：AI 应用</span><br><span class="line">│ 2. Model &amp; User Data │  ← 明文：模型 / 用户数据（别人看不了）</span><br><span class="line">│ 3. GPU Driver        │  ← xPU 驱动</span><br><span class="line">└────────────┬─────────┘</span><br><span class="line">             ↓</span><br><span class="line">            GPU</span><br></pre></td></tr></table></figure>
 <p>TVM 把 CPU 侧的软件栈（AI
 应用、驱动、库）保护起来了。但问题马上出现：</p>
 <blockquote>
@@ -390,7 +396,7 @@ Access）</strong>：设备自己去内存里拿数据，CPU
 <p>类比：搬家。没有 DMA 是你自己一箱一箱搬；有 DMA
 是叫搬家公司，你报个地址就行。🚚</p>
 </blockquote>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">CPU 内存  ──(DMA Read)──  GPU</span><br><span class="line"> AI Model 1.2GB             │</span><br><span class="line">                            ↓</span><br><span class="line">                         计算</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">CPU 内存 ── DMA Read ──→ GPU    ← 模型/输入（1.2GB）被读走</span><br><span class="line">                          │</span><br><span class="line">                          ↓</span><br><span class="line">                        计算</span><br></pre></td></tr></table></figure>
 <p>所以论文说：<strong>DMA 用于 data/code
 exchange（搬数据/代码）</strong>。</p>
 <h3 id="mmio控制设备的">MMIO：控制设备的</h3>
@@ -440,7 +446,7 @@ Driver……）。想设计一个统一的 DMA/MMIO 安全机制，几乎不可�
 Packet：高速公路上的一辆辆货车</h3>
 <p>把 PCIe 想成 CPU↔︎xPU 之间的高速公路，<strong>Packet
 就是路上的货车</strong>。每辆货车两部分：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">┌────────────────────────────────┐</span><br><span class="line">│            PCIe Packet         │</span><br><span class="line">├────────────────┬───────────────┤</span><br><span class="line">│    Header      │    Payload    │</span><br><span class="line">│   （物流单）     │   （真正的货）  │</span><br><span class="line">└────────────────┴───────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">┌────────────┬─────────────┐</span><br><span class="line">│ Header     │ Payload     │</span><br><span class="line">└────────────┴─────────────┘</span><br><span class="line">       ↑             ↑</span><br><span class="line">      物流单          真正的货</span><br></pre></td></tr></table></figure>
 <ul>
 <li><strong>Header =
 物流单</strong>：这是什么包、谁发的、发给谁、访问哪块地址、多大。具体包括
