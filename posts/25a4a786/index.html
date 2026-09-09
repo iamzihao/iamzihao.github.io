@@ -30,7 +30,7 @@
 <meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个门卫，再在软件侧配一个翻译员，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执行）、HR">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T02:15:11.787Z">
+<meta property="article:modified_time" content="2026-09-09T02:42:57.308Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -276,7 +276,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 10:15:11" itemprop="dateModified" datetime="2026-09-09T10:15:11+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-09 10:42:57" itemprop="dateModified" datetime="2026-09-09T10:42:57+08:00">2026-09-09</time>
     </span>
 
   
@@ -422,7 +422,7 @@ A3；未知设备发来的，A1 直接丢。</p>
 <h3 id="l1-l2-两级表先挡坏人再给好人分类">L1 / L2
 两级表：先挡坏人，再给好人分类</h3>
 <p>一个包进来，先过两道门：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">   PCIe Packet</span><br><span class="line">        ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L1 Table  │  ← 你有资格进来吗？（查 requester 是否授权）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">  合法？↙    ↘否</span><br><span class="line">     ↓       ↓</span><br><span class="line">┌────────────┐ A1 🚫 DROP</span><br><span class="line">│  L2 Table  │  ← 该享受什么待遇？（查 type + 地址是否敏感）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">   ┌──┴───────┐</span><br><span class="line">   ↓          ↓</span><br><span class="line">  A2 🔐      A3 🛡️ / A4 ➡️</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">  PCIe Packet</span><br><span class="line">       ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L1 Table  │  ← 你有资格进来吗？（查 requester 是否授权）</span><br><span class="line">└──────┬─────┘</span><br><span class="line">       ├──────→ A1 DROP  ← 未授权：禁止，直接丢</span><br><span class="line">       ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L2 Table  │  ← 该享受什么待遇？（查 type + 地址是否敏感）</span><br><span class="line">└──────┬─────┘</span><br><span class="line">       ├──────→ A3 / A4  ← 非敏感：A3 安全校验 / A4 直接放行</span><br><span class="line">       ↓</span><br><span class="line">       A2  ← 敏感：加密 + 完整性</span><br></pre></td></tr></table></figure>
 <blockquote>
 <p><strong>L1 负责挡坏人（不授权 → A1），L2 负责给好人分类（按敏感度给
 A2/A3/A4）。</strong></p>

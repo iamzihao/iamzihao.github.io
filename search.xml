@@ -24648,7 +24648,7 @@ A3；未知设备发来的，A1 直接丢。</p>
 <h3 id="l1-l2-两级表先挡坏人再给好人分类">L1 / L2
 两级表：先挡坏人，再给好人分类</h3>
 <p>一个包进来，先过两道门：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">   PCIe Packet</span><br><span class="line">        ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L1 Table  │  ← 你有资格进来吗？（查 requester 是否授权）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">  合法？↙    ↘否</span><br><span class="line">     ↓       ↓</span><br><span class="line">┌────────────┐ A1 🚫 DROP</span><br><span class="line">│  L2 Table  │  ← 该享受什么待遇？（查 type + 地址是否敏感）</span><br><span class="line">└─────┬──────┘</span><br><span class="line">   ┌──┴───────┐</span><br><span class="line">   ↓          ↓</span><br><span class="line">  A2 🔐      A3 🛡️ / A4 ➡️</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  PCIe Packet</span><br><span class="line">       ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L1 Table  │  ← 你有资格进来吗？（查 requester 是否授权）</span><br><span class="line">└──────┬─────┘</span><br><span class="line">       ├──────→ A1 DROP  ← 未授权：禁止，直接丢</span><br><span class="line">       ↓</span><br><span class="line">┌────────────┐</span><br><span class="line">│  L2 Table  │  ← 该享受什么待遇？（查 type + 地址是否敏感）</span><br><span class="line">└──────┬─────┘</span><br><span class="line">       ├──────→ A3 / A4  ← 非敏感：A3 安全校验 / A4 直接放行</span><br><span class="line">       ↓</span><br><span class="line">       A2  ← 敏感：加密 + 完整性</span><br></pre></td></tr></table></figure>
 <blockquote>
 <p><strong>L1 负责挡坏人（不授权 → A1），L2 负责给好人分类（按敏感度给
 A2/A3/A4）。</strong></p>
