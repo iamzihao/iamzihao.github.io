@@ -24549,28 +24549,7 @@ Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后�
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
 <h2 id="总架构">🗺️ 总架构</h2>
-<pre>
-<code class="mermaid">
-
-flowchart TB
-    U[&quot;Remote User&quot;] --&gt;|加密的 workload| TVM
-    subgraph TVM[&quot;TVM（软件侧，受保护虚拟机）&quot;]
-        direction LR
-        SW[&quot;① xPU 原生软件栈&lt;br&#x2F;&gt;App &#x2F; Driver &#x2F; Libs（不改）&quot;]
-        AD[&quot;② Adaptor（新增）&lt;br&#x2F;&gt;与 PCIe-SC 交互；识别并加密数据&quot;]
-        TM[&quot;③ TVM Trust Modules（ccAI 部署）&lt;br&#x2F;&gt;密钥管理、远程证明&quot;]
-    end
-    TVM --&gt;|PCIe| SC
-    subgraph SC[&quot;PCIe-SC（硬件）← 插在服务器 PCIe 端口&quot;]
-        direction TB
-        F[&quot;Packet Filter（L1&#x2F;L2 → A1~A4）&quot;]
-        H[&quot;Packet Handlers（AES 加密 &#x2F; 完整性）&quot;]
-        HR[&quot;HRoT-Blade&lt;br&#x2F;&gt;信任控制面，不处理数据包&lt;br&#x2F;&gt;（Secure Boot &#x2F; 远程证明 &#x2F; 密钥）&quot;]
-        F --&gt; H
-    end
-    SC --&gt;|Internal PCIe&lt;br&#x2F;&gt;xPU 插在 PCIe-SC 上| X[&quot;GPU &#x2F; NPU&quot;]
-</code>
-</pre>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    | 加密的 workload</span><br><span class="line">    v</span><br><span class="line">+-----------------------------------------+</span><br><span class="line">| TVM（软件侧，受保护虚拟机）             |</span><br><span class="line">|                                         |</span><br><span class="line">| 并列装了三样组件：                      |</span><br><span class="line">| 1. xPU 原生软件栈                       |</span><br><span class="line">|    App / Driver / Libs（不改）          |</span><br><span class="line">| 2. Adaptor（新增）                      |</span><br><span class="line">|    与 PCIe-SC 交互，识别并加密数据      |</span><br><span class="line">| 3. TVM Trust Modules（ccAI 部署）       |</span><br><span class="line">|    密钥管理、远程证明                   |</span><br><span class="line">+-----------------------------------------+</span><br><span class="line">    | PCIe</span><br><span class="line">    v</span><br><span class="line">+-----------------------------------------+</span><br><span class="line">| PCIe-SC（硬件，插在服务器 PCIe 端口）   |</span><br><span class="line">|                                         |</span><br><span class="line">| Packet Filter（L1/L2 决策，A1~A4）      |</span><br><span class="line">|    |                                    |</span><br><span class="line">|    v                                    |</span><br><span class="line">| Packet Handlers（AES 加密与完整性）     |</span><br><span class="line">|                                         |</span><br><span class="line">| HRoT-Blade：信任控制面，不处理数据包    |</span><br><span class="line">|    Secure Boot / 远程证明 / 密钥        |</span><br><span class="line">+-----------------------------------------+</span><br><span class="line">    | Internal PCIe（xPU 连到 PCIe-SC 上）</span><br><span class="line">    v</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
 <table>
 <thead>
 <tr>
@@ -24780,21 +24759,7 @@ Report 大概是：</p>
 <h3 id="key-exchange">Key Exchange</h3>
 <p>环境可信了，最后一步是把 workload
 加密密钥安全交给平台（不能明文走网络）。之后，从用户把任务送进来到结果取回，数据全程的明文/密文状态是这样流转的：</p>
-<pre>
-<code class="mermaid">
-
-flowchart TB
-    classDef cipher fill:#fdecea,stroke:#d64541;
-    classDef plain fill:#e8f5e9,stroke:#388e3c;
-    RU[&quot;Remote User&lt;br&#x2F;&gt;（明文：模型 + 输入）&quot;]:::plain --&gt;|① 用户用协商的密钥加密| NW[&quot;网络 &#x2F; 云主机&lt;br&#x2F;&gt;（密文传输）&quot;]:::cipher
-    NW --&gt;|② TVM 解密 ①| TVM2[&quot;任务变回明文&lt;br&#x2F;&gt;（模型 &#x2F; 输入暂存 TVM 内存）&quot;]:::plain
-    TVM2 --&gt;|③ Adaptor encrypt_data()（AES-128）| BB[&quot;密文写入 bounce buffer&quot;]:::cipher
-    BB --&gt;|④ PCIe 上跑的是密文| SC2[&quot;PCIe-SC：Filter 决策（A2）→&lt;br&#x2F;&gt;⑤ Handler 解密 payload + 完整性校验&quot;]:::plain
-    SC2 --&gt;|⑥ 明文| XPU[&quot;xPU 计算&lt;br&#x2F;&gt;（模型 &#x2F; 中间结果 &#x2F; 结果 明文）&quot;]:::plain
-    XPU --&gt;|⑦ 明文结果 → PCIe-SC 加密（D2H）| RET[&quot;PCIe 返回密文&quot;]:::cipher
-    RET --&gt;|⑧ Adaptor 解密| TVM3[&quot;TVM：明文结果&lt;br&#x2F;&gt;（等待远程用户取回）&quot;]:::plain
-</code>
-</pre>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User（明文：模型与输入）</span><br><span class="line">    | 1. 用户用协商好的密钥加密 workload</span><br><span class="line">    v</span><br><span class="line">  网络与云主机（密文传输）</span><br><span class="line">    | 2. TVM 收到后解密</span><br><span class="line">    v</span><br><span class="line">+-----------------------------------------------+</span><br><span class="line">| TVM                                           |</span><br><span class="line">| 解密后任务变回明文（暂存在 TVM 内存）         |</span><br><span class="line">|                                               |</span><br><span class="line">| 3. Adaptor encrypt_data()（AES-128）          |</span><br><span class="line">|    把密文写入 bounce buffer                   |</span><br><span class="line">+-----------------------------------------------+</span><br><span class="line">    | 4. PCIe 上跑的是密文</span><br><span class="line">    v</span><br><span class="line">+-----------------------------------------------+</span><br><span class="line">| PCIe-SC                                       |</span><br><span class="line">| Packet Filter 决策（A2）                      |</span><br><span class="line">| 5. Packet Handler 解密 payload                |</span><br><span class="line">|    并校验完整性                               |</span><br><span class="line">+-----------------------------------------------+</span><br><span class="line">    | 6. 明文交给 xPU</span><br><span class="line">    v</span><br><span class="line">  xPU 计算（模型、中间结果、结果为明文）</span><br><span class="line">    | 7. 明文结果经 PCIe-SC 加密（D2H）</span><br><span class="line">    v</span><br><span class="line">+-----------------------------------------------+</span><br><span class="line">| TVM                                           |</span><br><span class="line">| 8. Adaptor 解密，得到明文结果                 |</span><br><span class="line">|    等待远程用户取回                           |</span><br><span class="line">+-----------------------------------------------+</span><br></pre></td></tr></table></figure>
 <p>这里出现了两道加密，不是重复劳动：<strong>①
 的密钥</strong>是远程证明后用户与平台协商的（SessionKey），保护网络和云主机这一段；<strong>②
 的密钥</strong>（Adaptor 加密用的）是 TVM 与 PCIe-SC
