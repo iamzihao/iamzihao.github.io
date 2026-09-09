@@ -307,6 +307,53 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1222,53 +1269,6 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>前端浏览器缓存机制</title>
     <url>/posts/50ac740b/</url>
     <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
@@ -2101,6 +2101,41 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
       </tags>
   </entry>
   <entry>
+    <title>DeepSeek本地部署</title>
+    <url>/posts/4f6ed32b/</url>
+    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
+<span id="more"></span>
+<h2 id="下载ollama">下载Ollama</h2>
+<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
+<p>下载地址：https://ollama.com/download/windows</p>
+<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
+<p>如下图所示</p>
+<p><img src="/assets/deepseek部署01.png" /></p>
+<blockquote>
+<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
+</blockquote>
+<p>上述步骤完成后，我们可以打开CMD，输入ollama
+-v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
+<p><img src="/assets/deepseek部署02.png" /></p>
+<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
+<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
+<h2 id="下载deepseek">下载DeepSeek</h2>
+<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
+<p><img src="/assets/deepseek部署03.png" /></p>
+<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
+<p>如下图所示：</p>
+<p><img src="/assets/deepseek部署04.png" /></p>
+<p>最终效果如下图所示：</p>
+<p><img src="/assets/deepseek部署05.png" /></p>
+]]></content>
+      <tags>
+        <tag>大语言模型</tag>
+        <tag>人工智能</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Understanding the Linux Kernel Lecture 1 Note</title>
     <url>/posts/b1b647fa/</url>
     <content><![CDATA[<h2 id="引言">引言</h2>
@@ -2823,41 +2858,6 @@ write()系统调用的参数与read()类似</p>
         <tag>Linux</tag>
         <tag>操作系统</tag>
         <tag>内核</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>DeepSeek本地部署</title>
-    <url>/posts/4f6ed32b/</url>
-    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
-<span id="more"></span>
-<h2 id="下载ollama">下载Ollama</h2>
-<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
-<p>下载地址：https://ollama.com/download/windows</p>
-<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
-<p>如下图所示</p>
-<p><img src="/assets/deepseek部署01.png" /></p>
-<blockquote>
-<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
-</blockquote>
-<p>上述步骤完成后，我们可以打开CMD，输入ollama
--v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
-<p><img src="/assets/deepseek部署02.png" /></p>
-<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
-<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
-<h2 id="下载deepseek">下载DeepSeek</h2>
-<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
-<p><img src="/assets/deepseek部署03.png" /></p>
-<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
-<p>如下图所示：</p>
-<p><img src="/assets/deepseek部署04.png" /></p>
-<p>最终效果如下图所示：</p>
-<p><img src="/assets/deepseek部署05.png" /></p>
-]]></content>
-      <tags>
-        <tag>大语言模型</tag>
-        <tag>人工智能</tag>
       </tags>
   </entry>
   <entry>
@@ -8676,6 +8676,214 @@ href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.swi
       </tags>
   </entry>
   <entry>
+    <title>大模型百词</title>
+    <url>/posts/8c9ab17b/</url>
+    <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
+的惊艳亮相到各类 AIGC
+应用的层出不穷，我们每天都会接触到海量的新名词和新概念。为了帮助大家更好地理解这个日新月异的领域，本文梳理了一系列核心术语，希望能为你构建一个清晰的知识地图。</p>
+<span id="more"></span>
+<h2 id="基本概念">基本概念</h2>
+<ol type="1">
+<li><strong>函数
+(Function)</strong>：通过一个或多个输入得到对应输出的关系，万物皆函数</li>
+<li><strong>符号主义
+(Symbolism)</strong>：找出精确函数以试图解释一切原理，但存在瓶颈</li>
+<li><strong>联结主义
+(Connectionism)</strong>：不进行预设，通过复杂函数计算出的预测值与真实值的误差，对函数中的未知参数进行不断调整</li>
+<li><strong>模型 (Model)</strong>：联结主义思想所使用的复杂函数</li>
+<li><strong>权重 (Weights)</strong>：模型中需要调整的参数</li>
+<li><strong>大模型 (Large Model)</strong>：需要调整参数较多的模型</li>
+<li><strong>大语言模型 (Large Language Model,
+LLM)</strong>：用于自然语言处理的模型</li>
+<li><strong>生成式AI (Generative
+AI)</strong>：根据输入内容持续计算并自动生成新内容的人工智能系统</li>
+<li><strong>通用人工智能 (Artificial General Intelligence,
+AGI)</strong>：是指能够在各种领域执行复杂认知任务的人工智能系统</li>
+<li><strong>Token</strong>：将文字、图像、声音、视频分割成的最小粒度</li>
+<li><strong>上下文 (Context)</strong>：对话时给到大模型的所有信息</li>
+<li><strong>提示词
+(Prompt)</strong>：用于指导模型的回答流程与风格，与上下文含义类似</li>
+<li><strong>提示词工程师 (Prompt
+Engineer)</strong>：研究如何与大模型对话以达到更优反馈的职位</li>
+</ol>
+<h2 id="训练与推理">训练与推理</h2>
+<ol type="1">
+<li><strong>训练 (Training)</strong>：对模型中的参数进行调整</li>
+<li><strong>预训练
+(Pre-training)</strong>：在大量数据上训练基础模型以学习通用特征</li>
+<li><strong>微调
+(Fine-tuning)</strong>：在预训练模型基础上对特定方向任务进行训练</li>
+<li><strong>推理
+(Inference)</strong>：参数调整完成后，根据函数的输入计算输出结果的过程</li>
+<li><strong>涌现
+(Emergence)</strong>：模型参数量显著增长后，推理能力得到大幅提升的现象</li>
+<li><strong>随机性
+(Randomness)</strong>：对大模型固定输出的内容进行调整，使其并不是总取概率最高</li>
+<li><strong>温度 (Temperature)</strong>：控制随机性的参数</li>
+<li><strong>Top-K</strong>：控制输出中选择出前K个最大或最小的元素的操作</li>
+<li><strong>幻觉
+(Hallucination)</strong>：随机性过高或过低导致输出结果存在事实性错误或虚假信息的情况</li>
+<li><strong>联网 (Web
+Browsing)</strong>：通过互联网获取相关信息，结合相关信息进行输出，以减少幻觉的方法</li>
+</ol>
+<h2 id="模型与产品">模型与产品</h2>
+<ol type="1">
+<li><strong>ChatGPT</strong>：2023年爆火的用于聊天的产品</li>
+<li><strong>GPT (Generative Pre-trained Transformer,
+生成式预训练变换器)</strong>：为大语言模型的一种系列</li>
+<li><strong>OpenAI</strong>：开发ChatGPT的公司，产品为闭源</li>
+<li><strong>Claude</strong>：Anthropic发布的大语言模型</li>
+<li><strong>Gemini</strong>：Google DeepMind发布的AI</li>
+<li><strong>DeepSeek</strong>：深度求索公司发布的AI</li>
+<li><strong>豆包
+(Doubao)</strong>：字节跳动公司基于云雀模型开发的AI</li>
+<li><strong>通义千问 (Qwen)</strong>：阿里云发布的AI</li>
+<li><strong>腾讯元宝 (Tencent
+Yuanbao)</strong>：腾讯发布的基于自研混元大模型开发的C端AI</li>
+<li><strong>Midjourney</strong>：闭源的AI图像生成器（中国实验室版名为悠船）</li>
+<li><strong>Stable Diffusion</strong>：Stability
+AI推出的开源AI图像生成器</li>
+<li><strong>Sora</strong>：OpenAI发布的人工智能文生视频大模型</li>
+<li><strong>可灵 (Kling)</strong>：快手AI团队发布的视频生成大模型</li>
+<li><strong>即梦
+(Jmeng)</strong>：字节跳动旗下剪映团队研发的AI创作平台</li>
+</ol>
+<h2 id="模型分类与部署">模型分类与部署</h2>
+<ol type="1">
+<li><strong>闭源模型 (Closed-source
+Model)</strong>：不开放源代码与权重，只提供最终服务的模型（如ChatGPT、Claude、Gemini）</li>
+<li><strong>开放权重模型 (Open-weight
+Model)</strong>：可本地部署的，开放权重以供调整的模型（不开放训练代码与数据，如DeepSeek、LLaMA）</li>
+<li><strong>完全开源模型 (Fully Open-source
+Model)</strong>：开放训练代码、数据、权重的模型（如‌Mistral）</li>
+<li><strong>私有化部署 (Private
+Deployment)</strong>：不依托其他服务，将模型下载到本地进行使用的过程</li>
+<li><strong>云桌面 (Cloud
+Desktop)</strong>：搭载好了所需环境的，高性能的，可远程网络控制的一种服务</li>
+<li><strong>镜像
+(Image)</strong>：用于特定开发所需的打包好的环境和软件</li>
+</ol>
+<h2 id="技术与应用">技术与应用</h2>
+<ol type="1">
+<li><strong>多模态
+(Multimodality)</strong>：能处理图像、声音、视频多种内容的能力</li>
+<li><strong>检索增强生成 (Retrieval-Augmented Generation,
+RAG)</strong>：在私有数据库中进行搜索以获取信息的方法</li>
+<li><strong>知识库 (Knowledge
+Base)</strong>：用于大模型查询所用的私有数据库</li>
+<li><strong>向量数据库 (Vector
+Database)</strong>：特化模型与知识库语义匹配，以向量形式存储的数据库</li>
+<li><strong>词嵌入 (Word
+Embedding)</strong>：把文字转换为词向量的方式，用于捕捉词间语义关系</li>
+<li><strong>向量检索 (Vector
+Retrieval)</strong>：对比词向量相似度，以在知识库中找到相关问题答案的方式</li>
+<li><strong>数字人 (Digital
+Human)</strong>：运用数字技术创造出来的、与人类形象接近的数字化人物形象</li>
+<li><strong>工作流
+(Workflow)</strong>：多次使用大模型能力，将工作内容分为多个步骤分别处理并整合为一个流程的能力</li>
+<li><strong>智能体
+(Agent)</strong>：按工作流封装大模型与工具集以实现自动完成复杂任务的程序</li>
+<li><strong>多智能体
+(Multi-Agent)</strong>：多个智能体协作完成更复杂任务的程序</li>
+<li><strong>插件 (Plugins)</strong>：ChatGPT
+的附加组件系统（智能体）</li>
+<li><strong>AutoGPT</strong>：GPT模型驱动的智能体系统</li>
+<li><strong>Manus</strong>：具备从规划到执行全流程自主完成任务能力的智能体</li>
+<li><strong>MCP (Model-graded Controllable
+Preference)</strong>：Anthropic提出的，用于AI操作外部世界的协议</li>
+<li><strong>A2A
+(Agent-to-Agent)</strong>：Google提出的用于智能体与智能体间通信的协议</li>
+</ol>
+<h2 id="优化与进阶">优化与进阶</h2>
+<ol type="1">
+<li><strong>模型压缩 (Model
+Compression)</strong>：由于模型大小与能力出现边际收益递减，以减少成本与方便个人的减小模型大小的方法</li>
+<li><strong>量化
+(Quantization)</strong>：把模型中的浮点数用更低精度表示以减少显存与计算的方法</li>
+<li><strong>蒸馏
+(Distillation)</strong>：用参数量较大的大模型指导参数量较小的小模型的方法</li>
+<li><strong>剪枝
+(Pruning)</strong>：删除模型中不重要神经元，让模型更稀疏以提升速度的方法</li>
+<li><strong>低秩适应 (Low-Rank Adaptation,
+LoRA)</strong>：用更低成本改善微调方式的方法</li>
+<li><strong>思维链 (Chain-of-Thought,
+CoT)</strong>：从推理能力方向增强模型能力的方法</li>
+<li><strong>人类反馈强化学习 (Reinforcement Learning from Human
+Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
+</ol>
+<h2 id="生态与行业">生态与行业</h2>
+<ol type="1">
+<li><strong>专业生产内容 (Professional Generated Content,
+PGC)</strong></li>
+<li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
+<li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
+<li><strong>炸裂体 (“Explosive”
+Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
+<li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
+<li><strong>卖铲子 (Selling
+Shovels)</strong>：提供工具或服务、教程等帮助他人在AI中淘金的赚钱方式</li>
+<li><strong>Hugging Face</strong>：AI开源平台及社区</li>
+</ol>
+<h2 id="硬件与框架">硬件与框架</h2>
+<ol type="1">
+<li><strong>GPU (Graphics Processing Unit,
+图形处理单元)</strong>:NVIDIA公司的产品</li>
+<li><strong>CUDA (Compute Unified Device
+Architecture)</strong>：NVIDIA推出的AI开发框架</li>
+<li><strong>TPU (Tensor Processing Unit,
+张量处理单元)</strong>：专用与大规模神经网络训练与推理的处理器</li>
+<li><strong>NPU (Neural Processing Unit,
+神经网络处理单元)</strong>：专用于终端设备加速推理的处理器</li>
+<li><strong>Python</strong>：适合AI开发的编程语言</li>
+<li><strong>PyTorch</strong>：Python提供的针对AI编程的库</li>
+<li><strong>TensorFlow</strong>：由 Google Brain
+团队开发的深度学习框架</li>
+<li><strong>Ollama</strong>：大模型本地运行工具</li>
+<li><strong>vLLM</strong>：提升大语言模型推理速度的推理引擎</li>
+<li><strong>ComfyUI</strong>：构建在 Stable Diffusion
+之上的基于节点的绘画工作流软件（B站:秋葉aaaki
+大佬制作了很多相关整合包）</li>
+<li><strong>扣子 (Coze)</strong>：在网页端编排工作流的一款工具</li>
+<li><strong>LangChain</strong>：以代码方式编排工具流的方式</li>
+<li><strong>Cursor</strong>：Anysphere开发的人工智能编程助手</li>
+<li><strong>GitHub
+Copilot</strong>：微软与OpenAI共同推出的AI编程工具</li>
+</ol>
+<h2 id="神经网络基础">神经网络基础</h2>
+<ol type="1">
+<li><strong>数学
+(Mathematics)</strong>：AI基石，包括线性代数、微积分、概率论等</li>
+<li><strong>自然语言处理 (Natural Language Processing,
+NLP)</strong>：人工智能的一大分支领域，其主要目的是让机器理解人类的语言文字，从而执行一系列任务</li>
+<li><strong>计算机视觉 (Computer Vision,
+CV)</strong>：与图片高度相关</li>
+<li><strong>神经网络 (Neural
+Network)</strong>：模仿生物神经系统结构和功能的计算模型</li>
+<li><strong>损失函数 (Loss
+Function)</strong>：估量模型的预测值f(x)与真实值Y的不一致程度的函数</li>
+<li><strong>反向传播
+(Backpropagation)</strong>：计算损失函数关于网络参数的梯度来更新参数</li>
+<li><strong>多层感知机 (Multilayer Perceptron,
+MLP)</strong>：将输入的多个数据集映射到单一的输出的数据集，是一种人工神经网络模型</li>
+<li><strong>卷积神经网络 (Convolutional Neural Network,
+CNN)</strong>：包含卷积计算且具有深度结构的神经网络</li>
+<li><strong>循环神经网络 (Recurrent Neural Network,
+RNN)</strong>：适合于处理序列数据的神经网络</li>
+<li><strong>注意力机制 (Attention
+Mechanism)</strong>：模拟人类选择性注意机制，提升信息处理效率</li>
+<li><strong>Transformer</strong>：一种基于注意力机制的神经网络结构</li>
+<li><strong>文本转语音 (Text To Speech, TTS)</strong></li>
+<li><strong>语音转文字 (Automatic Speech Recognition, ASR)</strong></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>AI</tag>
+        <tag>LLM</tag>
+        <tag>术语</tag>
+        <tag>大模型</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>内网穿透与远程桌面：用 Tailscale 随时随地访问你的 Windows</title>
     <url>/posts/8a7b3c2d/</url>
     <content><![CDATA[<p>在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网
@@ -8979,218 +9187,10 @@ Diffusion</strong>
 ]]></content>
       <tags>
         <tag>AI</tag>
-        <tag>Diffusion</tag>
         <tag>LLM</tag>
+        <tag>Diffusion</tag>
         <tag>生成模型</tag>
         <tag>扩散模型</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>大模型百词</title>
-    <url>/posts/8c9ab17b/</url>
-    <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
-的惊艳亮相到各类 AIGC
-应用的层出不穷，我们每天都会接触到海量的新名词和新概念。为了帮助大家更好地理解这个日新月异的领域，本文梳理了一系列核心术语，希望能为你构建一个清晰的知识地图。</p>
-<span id="more"></span>
-<h2 id="基本概念">基本概念</h2>
-<ol type="1">
-<li><strong>函数
-(Function)</strong>：通过一个或多个输入得到对应输出的关系，万物皆函数</li>
-<li><strong>符号主义
-(Symbolism)</strong>：找出精确函数以试图解释一切原理，但存在瓶颈</li>
-<li><strong>联结主义
-(Connectionism)</strong>：不进行预设，通过复杂函数计算出的预测值与真实值的误差，对函数中的未知参数进行不断调整</li>
-<li><strong>模型 (Model)</strong>：联结主义思想所使用的复杂函数</li>
-<li><strong>权重 (Weights)</strong>：模型中需要调整的参数</li>
-<li><strong>大模型 (Large Model)</strong>：需要调整参数较多的模型</li>
-<li><strong>大语言模型 (Large Language Model,
-LLM)</strong>：用于自然语言处理的模型</li>
-<li><strong>生成式AI (Generative
-AI)</strong>：根据输入内容持续计算并自动生成新内容的人工智能系统</li>
-<li><strong>通用人工智能 (Artificial General Intelligence,
-AGI)</strong>：是指能够在各种领域执行复杂认知任务的人工智能系统</li>
-<li><strong>Token</strong>：将文字、图像、声音、视频分割成的最小粒度</li>
-<li><strong>上下文 (Context)</strong>：对话时给到大模型的所有信息</li>
-<li><strong>提示词
-(Prompt)</strong>：用于指导模型的回答流程与风格，与上下文含义类似</li>
-<li><strong>提示词工程师 (Prompt
-Engineer)</strong>：研究如何与大模型对话以达到更优反馈的职位</li>
-</ol>
-<h2 id="训练与推理">训练与推理</h2>
-<ol type="1">
-<li><strong>训练 (Training)</strong>：对模型中的参数进行调整</li>
-<li><strong>预训练
-(Pre-training)</strong>：在大量数据上训练基础模型以学习通用特征</li>
-<li><strong>微调
-(Fine-tuning)</strong>：在预训练模型基础上对特定方向任务进行训练</li>
-<li><strong>推理
-(Inference)</strong>：参数调整完成后，根据函数的输入计算输出结果的过程</li>
-<li><strong>涌现
-(Emergence)</strong>：模型参数量显著增长后，推理能力得到大幅提升的现象</li>
-<li><strong>随机性
-(Randomness)</strong>：对大模型固定输出的内容进行调整，使其并不是总取概率最高</li>
-<li><strong>温度 (Temperature)</strong>：控制随机性的参数</li>
-<li><strong>Top-K</strong>：控制输出中选择出前K个最大或最小的元素的操作</li>
-<li><strong>幻觉
-(Hallucination)</strong>：随机性过高或过低导致输出结果存在事实性错误或虚假信息的情况</li>
-<li><strong>联网 (Web
-Browsing)</strong>：通过互联网获取相关信息，结合相关信息进行输出，以减少幻觉的方法</li>
-</ol>
-<h2 id="模型与产品">模型与产品</h2>
-<ol type="1">
-<li><strong>ChatGPT</strong>：2023年爆火的用于聊天的产品</li>
-<li><strong>GPT (Generative Pre-trained Transformer,
-生成式预训练变换器)</strong>：为大语言模型的一种系列</li>
-<li><strong>OpenAI</strong>：开发ChatGPT的公司，产品为闭源</li>
-<li><strong>Claude</strong>：Anthropic发布的大语言模型</li>
-<li><strong>Gemini</strong>：Google DeepMind发布的AI</li>
-<li><strong>DeepSeek</strong>：深度求索公司发布的AI</li>
-<li><strong>豆包
-(Doubao)</strong>：字节跳动公司基于云雀模型开发的AI</li>
-<li><strong>通义千问 (Qwen)</strong>：阿里云发布的AI</li>
-<li><strong>腾讯元宝 (Tencent
-Yuanbao)</strong>：腾讯发布的基于自研混元大模型开发的C端AI</li>
-<li><strong>Midjourney</strong>：闭源的AI图像生成器（中国实验室版名为悠船）</li>
-<li><strong>Stable Diffusion</strong>：Stability
-AI推出的开源AI图像生成器</li>
-<li><strong>Sora</strong>：OpenAI发布的人工智能文生视频大模型</li>
-<li><strong>可灵 (Kling)</strong>：快手AI团队发布的视频生成大模型</li>
-<li><strong>即梦
-(Jmeng)</strong>：字节跳动旗下剪映团队研发的AI创作平台</li>
-</ol>
-<h2 id="模型分类与部署">模型分类与部署</h2>
-<ol type="1">
-<li><strong>闭源模型 (Closed-source
-Model)</strong>：不开放源代码与权重，只提供最终服务的模型（如ChatGPT、Claude、Gemini）</li>
-<li><strong>开放权重模型 (Open-weight
-Model)</strong>：可本地部署的，开放权重以供调整的模型（不开放训练代码与数据，如DeepSeek、LLaMA）</li>
-<li><strong>完全开源模型 (Fully Open-source
-Model)</strong>：开放训练代码、数据、权重的模型（如‌Mistral）</li>
-<li><strong>私有化部署 (Private
-Deployment)</strong>：不依托其他服务，将模型下载到本地进行使用的过程</li>
-<li><strong>云桌面 (Cloud
-Desktop)</strong>：搭载好了所需环境的，高性能的，可远程网络控制的一种服务</li>
-<li><strong>镜像
-(Image)</strong>：用于特定开发所需的打包好的环境和软件</li>
-</ol>
-<h2 id="技术与应用">技术与应用</h2>
-<ol type="1">
-<li><strong>多模态
-(Multimodality)</strong>：能处理图像、声音、视频多种内容的能力</li>
-<li><strong>检索增强生成 (Retrieval-Augmented Generation,
-RAG)</strong>：在私有数据库中进行搜索以获取信息的方法</li>
-<li><strong>知识库 (Knowledge
-Base)</strong>：用于大模型查询所用的私有数据库</li>
-<li><strong>向量数据库 (Vector
-Database)</strong>：特化模型与知识库语义匹配，以向量形式存储的数据库</li>
-<li><strong>词嵌入 (Word
-Embedding)</strong>：把文字转换为词向量的方式，用于捕捉词间语义关系</li>
-<li><strong>向量检索 (Vector
-Retrieval)</strong>：对比词向量相似度，以在知识库中找到相关问题答案的方式</li>
-<li><strong>数字人 (Digital
-Human)</strong>：运用数字技术创造出来的、与人类形象接近的数字化人物形象</li>
-<li><strong>工作流
-(Workflow)</strong>：多次使用大模型能力，将工作内容分为多个步骤分别处理并整合为一个流程的能力</li>
-<li><strong>智能体
-(Agent)</strong>：按工作流封装大模型与工具集以实现自动完成复杂任务的程序</li>
-<li><strong>多智能体
-(Multi-Agent)</strong>：多个智能体协作完成更复杂任务的程序</li>
-<li><strong>插件 (Plugins)</strong>：ChatGPT
-的附加组件系统（智能体）</li>
-<li><strong>AutoGPT</strong>：GPT模型驱动的智能体系统</li>
-<li><strong>Manus</strong>：具备从规划到执行全流程自主完成任务能力的智能体</li>
-<li><strong>MCP (Model-graded Controllable
-Preference)</strong>：Anthropic提出的，用于AI操作外部世界的协议</li>
-<li><strong>A2A
-(Agent-to-Agent)</strong>：Google提出的用于智能体与智能体间通信的协议</li>
-</ol>
-<h2 id="优化与进阶">优化与进阶</h2>
-<ol type="1">
-<li><strong>模型压缩 (Model
-Compression)</strong>：由于模型大小与能力出现边际收益递减，以减少成本与方便个人的减小模型大小的方法</li>
-<li><strong>量化
-(Quantization)</strong>：把模型中的浮点数用更低精度表示以减少显存与计算的方法</li>
-<li><strong>蒸馏
-(Distillation)</strong>：用参数量较大的大模型指导参数量较小的小模型的方法</li>
-<li><strong>剪枝
-(Pruning)</strong>：删除模型中不重要神经元，让模型更稀疏以提升速度的方法</li>
-<li><strong>低秩适应 (Low-Rank Adaptation,
-LoRA)</strong>：用更低成本改善微调方式的方法</li>
-<li><strong>思维链 (Chain-of-Thought,
-CoT)</strong>：从推理能力方向增强模型能力的方法</li>
-<li><strong>人类反馈强化学习 (Reinforcement Learning from Human
-Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
-</ol>
-<h2 id="生态与行业">生态与行业</h2>
-<ol type="1">
-<li><strong>专业生产内容 (Professional Generated Content,
-PGC)</strong></li>
-<li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
-<li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
-<li><strong>炸裂体 (“Explosive”
-Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
-<li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
-<li><strong>卖铲子 (Selling
-Shovels)</strong>：提供工具或服务、教程等帮助他人在AI中淘金的赚钱方式</li>
-<li><strong>Hugging Face</strong>：AI开源平台及社区</li>
-</ol>
-<h2 id="硬件与框架">硬件与框架</h2>
-<ol type="1">
-<li><strong>GPU (Graphics Processing Unit,
-图形处理单元)</strong>:NVIDIA公司的产品</li>
-<li><strong>CUDA (Compute Unified Device
-Architecture)</strong>：NVIDIA推出的AI开发框架</li>
-<li><strong>TPU (Tensor Processing Unit,
-张量处理单元)</strong>：专用与大规模神经网络训练与推理的处理器</li>
-<li><strong>NPU (Neural Processing Unit,
-神经网络处理单元)</strong>：专用于终端设备加速推理的处理器</li>
-<li><strong>Python</strong>：适合AI开发的编程语言</li>
-<li><strong>PyTorch</strong>：Python提供的针对AI编程的库</li>
-<li><strong>TensorFlow</strong>：由 Google Brain
-团队开发的深度学习框架</li>
-<li><strong>Ollama</strong>：大模型本地运行工具</li>
-<li><strong>vLLM</strong>：提升大语言模型推理速度的推理引擎</li>
-<li><strong>ComfyUI</strong>：构建在 Stable Diffusion
-之上的基于节点的绘画工作流软件（B站:秋葉aaaki
-大佬制作了很多相关整合包）</li>
-<li><strong>扣子 (Coze)</strong>：在网页端编排工作流的一款工具</li>
-<li><strong>LangChain</strong>：以代码方式编排工具流的方式</li>
-<li><strong>Cursor</strong>：Anysphere开发的人工智能编程助手</li>
-<li><strong>GitHub
-Copilot</strong>：微软与OpenAI共同推出的AI编程工具</li>
-</ol>
-<h2 id="神经网络基础">神经网络基础</h2>
-<ol type="1">
-<li><strong>数学
-(Mathematics)</strong>：AI基石，包括线性代数、微积分、概率论等</li>
-<li><strong>自然语言处理 (Natural Language Processing,
-NLP)</strong>：人工智能的一大分支领域，其主要目的是让机器理解人类的语言文字，从而执行一系列任务</li>
-<li><strong>计算机视觉 (Computer Vision,
-CV)</strong>：与图片高度相关</li>
-<li><strong>神经网络 (Neural
-Network)</strong>：模仿生物神经系统结构和功能的计算模型</li>
-<li><strong>损失函数 (Loss
-Function)</strong>：估量模型的预测值f(x)与真实值Y的不一致程度的函数</li>
-<li><strong>反向传播
-(Backpropagation)</strong>：计算损失函数关于网络参数的梯度来更新参数</li>
-<li><strong>多层感知机 (Multilayer Perceptron,
-MLP)</strong>：将输入的多个数据集映射到单一的输出的数据集，是一种人工神经网络模型</li>
-<li><strong>卷积神经网络 (Convolutional Neural Network,
-CNN)</strong>：包含卷积计算且具有深度结构的神经网络</li>
-<li><strong>循环神经网络 (Recurrent Neural Network,
-RNN)</strong>：适合于处理序列数据的神经网络</li>
-<li><strong>注意力机制 (Attention
-Mechanism)</strong>：模拟人类选择性注意机制，提升信息处理效率</li>
-<li><strong>Transformer</strong>：一种基于注意力机制的神经网络结构</li>
-<li><strong>文本转语音 (Text To Speech, TTS)</strong></li>
-<li><strong>语音转文字 (Automatic Speech Recognition, ASR)</strong></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>AI</tag>
-        <tag>LLM</tag>
-        <tag>术语</tag>
-        <tag>大模型</tag>
       </tags>
   </entry>
   <entry>
@@ -24691,7 +24691,7 @@ tag，不一致就说明被动过手脚。</p>
 发模型参数为例；图里画的是安全引擎加解密的通用处理——真实 H2D 方向
 payload 在 TVM 侧已被 Adaptor 加密，这里 Handler
 做的是解密与完整性校验；D2H 返回方向才真正加密上 PCIe）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① Packet 到达   ┌────────┬──────────────┐</span><br><span class="line">                │ Header │ Model Data   │</span><br><span class="line">                └────────┴──────────────┘</span><br><span class="line">② Filter 判断   授权 TVM + 敏感地址 → A2</span><br><span class="line">③ 拆包          Header → Header Queue，Payload → Payload Queue</span><br><span class="line">④ 处理 Payload  AES 加密 → Encrypted Data</span><br><span class="line">                Integrity 计算 → Authentication Tag</span><br><span class="line">⑤ 重组发出      ┌────────┬────────────────┬────────────┐</span><br><span class="line">                │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">                └────────┴────────────────┴────────────┘</span><br><span class="line">                          ↓ PCIe</span><br><span class="line">                        xPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. Packet 到达</span><br><span class="line">      ┌────────┬──────────────┐</span><br><span class="line">      │ Header │ Model Data   │</span><br><span class="line">      └────────┴──────────────┘</span><br><span class="line">                   ↓</span><br><span class="line">2. Filter 判断：授权 TVM + 敏感地址 → A2</span><br><span class="line">                   ↓</span><br><span class="line">3. 拆包：Header → Header Queue（原样走）；Payload → Payload Queue</span><br><span class="line">                   ↓</span><br><span class="line">4. 处理 Payload：AES 加密 → Encrypted Data</span><br><span class="line">      Integrity 计算 → Authentication Tag</span><br><span class="line">                   ↓</span><br><span class="line">5. 重组发出</span><br><span class="line">      ┌────────┬────────────────┬────────────┐</span><br><span class="line">      │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">      └────────┴────────────────┴────────────┘</span><br><span class="line">                          ↓ PCIe</span><br><span class="line">                        xPU</span><br></pre></td></tr></table></figure>
 <p>xPU → TVM 的返回数据（D2H）走同样的流程反向处理：结果经 PCIe-SC
 加密返回，TVM 解密后使用。</p>
 <h3 id="为什么这套能兼容各种-xpu">为什么这套能兼容各种 xPU？</h3>
@@ -24759,7 +24759,7 @@ Report 大概是：</p>
 <h3 id="key-exchange">Key Exchange</h3>
 <p>环境可信了，最后一步是把 workload
 加密密钥安全交给平台（不能明文走网络）。之后，从用户把任务送进来到结果取回，数据全程的明文/密文状态是这样流转的：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User（明文：模型与输入）</span><br><span class="line">    │ 1. 用户用协商好的密钥加密 workload</span><br><span class="line">    ↓</span><br><span class="line">  网络与云主机（密文传输）</span><br><span class="line">    │ 2. TVM 收到后解密</span><br><span class="line">    ↓</span><br><span class="line">┌───────────────────────────────────────────────┐</span><br><span class="line">│ TVM                                           │</span><br><span class="line">│ 解密后任务变回明文（暂存在 TVM 内存）         │</span><br><span class="line">│                                               │</span><br><span class="line">│ 3. Adaptor encrypt_data()（AES-128）          │</span><br><span class="line">│    把密文写入 bounce buffer                   │</span><br><span class="line">└───────────────────────────────────────────────┘</span><br><span class="line">    │ 4. PCIe 上跑的是密文</span><br><span class="line">    ↓</span><br><span class="line">┌───────────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC                                       │</span><br><span class="line">│ Packet Filter 决策（A2）                      │</span><br><span class="line">│ 5. Packet Handler 解密 payload                │</span><br><span class="line">│    并校验完整性                               │</span><br><span class="line">└───────────────────────────────────────────────┘</span><br><span class="line">    │ 6. 明文交给 xPU</span><br><span class="line">    ↓</span><br><span class="line">  xPU 计算（模型、中间结果、结果为明文）</span><br><span class="line">    │ 7. 明文结果经 PCIe-SC 加密（D2H）</span><br><span class="line">    ↓</span><br><span class="line">┌───────────────────────────────────────────────┐</span><br><span class="line">│ TVM                                           │</span><br><span class="line">│ 8. Adaptor 解密，得到明文结果                 │</span><br><span class="line">│    等待远程用户取回                           │</span><br><span class="line">└───────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User（明文：模型与输入）</span><br><span class="line">    │ 1. 用户用协商好的密钥加密 workload</span><br><span class="line">    ↓</span><br><span class="line">  网络与云主机（密文传输）</span><br><span class="line">    │ 2. TVM 收到后解密</span><br><span class="line">    ↓</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│ TVM                       │  ← 任务解密后变回明文（暂存在 TVM 内存）</span><br><span class="line">│                           │</span><br><span class="line">│ 3. Adaptor encrypt_data() │  ← AES-128；把密文写入 bounce buffer</span><br><span class="line">└───────────────────────────┘</span><br><span class="line">    │ 4. PCIe 上跑的是密文</span><br><span class="line">    ↓</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│ PCIe-SC                   │  ← Packet Filter 决策（A2）</span><br><span class="line">│                           │</span><br><span class="line">│ 5. Packet Handler         │  ← 解密 payload 并校验完整性</span><br><span class="line">└───────────────────────────┘</span><br><span class="line">    │ 6. 明文交给 xPU</span><br><span class="line">    ↓</span><br><span class="line">  xPU 计算（明文：模型、中间结果、结果为明文）</span><br><span class="line">    │ 7. 明文结果经 PCIe-SC 加密（D2H）</span><br><span class="line">    ↓</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│ TVM                       │  ← 等待远程用户取回</span><br><span class="line">│                           │</span><br><span class="line">│ 8. Adaptor decrypt_data() │  ← 解密，得到明文结果</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>这里出现了两道加密，不是重复劳动：<strong>①
 的密钥</strong>是远程证明后用户与平台协商的（SessionKey），保护网络和云主机这一段；<strong>②
 的密钥</strong>（Adaptor 加密用的）是 TVM 与 PCIe-SC
