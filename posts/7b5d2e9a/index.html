@@ -30,7 +30,7 @@
 <meta property="og:description" content="一台电脑可能同时有多个网卡，不同网络的连接状态也各不相同。本文从 ipconfig 出发，梳理 Windows 网络栈、网卡、路由、DNS 与 Tailscale 的工作原理。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-03-25T03:45:32.000Z">
-<meta property="article:modified_time" content="2026-09-07T03:18:00.025Z">
+<meta property="article:modified_time" content="2026-09-09T05:00:39.518Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="Windows">
 <meta property="article:tag" content="计算机网络">
@@ -276,7 +276,7 @@ DHCP 服务器</span></a></li><li class="nav-item nav-level-4"><a class="nav-lin
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-07 11:18:00" itemprop="dateModified" datetime="2026-09-07T11:18:00+08:00">2026-09-07</time>
+      <time title="Modified: 2026-09-09 13:00:39" itemprop="dateModified" datetime="2026-09-09T13:00:39+08:00">2026-09-09</time>
     </span>
 
   
@@ -300,7 +300,7 @@ DHCP 服务器</span></a></li><li class="nav-item nav-level-4"><a class="nav-lin
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>12 mins.</span>
+      <span>11 mins.</span>
     </span>
 </div>
 
@@ -381,7 +381,7 @@ Windows 网络栈、多网卡、路由、DNS 和 Tailscale 重新梳理了一遍
 <p>很多网络问题，最后都能收敛到这三件事上。</p>
 <h3 id="windows-网络栈到底在做什么">🧱 Windows 网络栈到底在做什么</h3>
 <p>在 Windows 里，一个请求从应用发出去，大致会经过下面这条链路：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────┐</span><br><span class="line">│   应用程序    │  浏览器 / curl / App</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │ Winsock</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│   TCP / UDP  │</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│      IP      │</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│ NDIS/网卡驱动 │</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│     网卡      │</span><br><span class="line">└──────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────┐</span><br><span class="line">│     App      │  ← 浏览器 / curl / App</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │ Winsock</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│   TCP / UDP  │</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│      IP      │</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│     NDIS     │  ← 网卡驱动标准接口层</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       │</span><br><span class="line">┌──────▼───────┐</span><br><span class="line">│      NIC     │  ← 网卡</span><br><span class="line">└──────────────┘</span><br></pre></td></tr></table></figure>
 <p>这里的 <code>NDIS</code> 可以先理解成 Windows
 网络栈和网卡驱动之间的标准接口层。</p>
 <h3 id="网卡是什么为什么会有这么多">🔌 网卡是什么，为什么会有这么多</h3>
@@ -597,7 +597,7 @@ DNS：域名不是网络的起点，只是翻译过程</h3>
 <p>而 <code>169.254.x.x</code>
 往往意味着这条链路中间断掉了，系统只能退回 APIPA 自分配地址。</p>
 <h4 id="先用一个最小判断树切责任域">先用一个最小判断树切责任域</h4>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">以太网 = 169.254.x.x</span><br><span class="line">        ↓</span><br><span class="line">DHCP 没成功</span><br><span class="line">        ↓</span><br><span class="line">┌───────────────────────────────┐</span><br><span class="line">│ 1. 物理链路没通？              │</span><br><span class="line">│ 2. Discover 没到 DHCP 服务器？ │</span><br><span class="line">│ 3. DHCP 回包没回来？           │</span><br><span class="line">│ 4. 本机没正确接收或应用配置？   │</span><br><span class="line">└───────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">以太网 = 169.254.x.x</span><br><span class="line">        ↓</span><br><span class="line">DHCP 没成功</span><br><span class="line">        ↓</span><br><span class="line">1. 物理链路没通？</span><br><span class="line">2. Discover 没到 DHCP 服务器？</span><br><span class="line">3. DHCP 回包没回来？</span><br><span class="line">4. 本机没正确接收或应用配置？</span><br></pre></td></tr></table></figure>
 <p>这四类问题基本就覆盖了大多数排障场景。</p>
 <h4
 id="第一层先看是不是链路本身有问题">第一层：先看是不是链路本身有问题</h4>
@@ -666,7 +666,7 @@ DHCP 服务器</h4>
 <p>这样做的原因很简单：越靠前的步骤成本越低，而且最能快速切分“问题在机器上，还是在网络环境里”。</p>
 <h3 id="总结">✅ 总结</h3>
 <p>把整件事压到最核心，就是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">       ┌──────────┐</span><br><span class="line">       │   应用    │</span><br><span class="line">       └────┬─────┘</span><br><span class="line">            │</span><br><span class="line">       ┌────▼─────┐</span><br><span class="line">       │  路由表   │  ← 决定流量走哪</span><br><span class="line">       └────┬─────┘</span><br><span class="line">  ┌─────────┼─────────┐</span><br><span class="line">  │         │         │</span><br><span class="line">Wi-Fi   Ethernet   Tailscale</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">      ┌────────────┐</span><br><span class="line">      │    App     │  ← 应用</span><br><span class="line">      └──────┬─────┘</span><br><span class="line">             │</span><br><span class="line">      ┌──────▼──────┐</span><br><span class="line">      │Routing Table│  ← 决定流量走哪</span><br><span class="line">      └──────┬──────┘</span><br><span class="line">             │</span><br><span class="line">   ┌─────────┼─────────┐</span><br><span class="line">   │         │         │</span><br><span class="line">Wi-Fi   Ethernet  Tailscale</span><br></pre></td></tr></table></figure>
 <p>网络不是“连上 Wi-Fi 就结束了”。</p>
 <p>真正决定数据能不能走通的，是下面这些因素共同作用的结果：</p>
 <ul>
