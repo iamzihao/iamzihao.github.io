@@ -307,6 +307,53 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1219,53 +1266,6 @@ TDX 的体系结构、内存保护机制、I/O
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -4979,6 +4979,270 @@ IB/RoCE；拓扑差异决定带宽与延迟</li>
       </tags>
   </entry>
   <entry>
+    <title>H100 服务器 CUDA + PyTorch 环境速配指南</title>
+    <url>/posts/e5b1c8d2/</url>
+    <content><![CDATA[<p>本文记录在 Ubuntu 24.04 + H100 上从零跑通 CUDA
+代码的过程，包括环境配置和常见问题。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CUDA</td>
+<td>NVIDIA 的并行计算平台 + 运行时/驱动 + C/C++ 扩展（带
+<code>__global__</code>/<code>__device__</code> 等关键字）。</td>
+<td>GPU 编程底座</td>
+</tr>
+<tr>
+<td>PyTorch</td>
+<td>流行的深度学习框架，支持动态图，<code>torch.Tensor</code> 可在 GPU
+上做张量运算。</td>
+<td>DL 里最火的“积木”</td>
+</tr>
+<tr>
+<td>Wheel (<code>.whl</code>)</td>
+<td>Python 的二进制打包格式，包含编译好的扩展。带 <code>+cu124</code>
+表示内置 CUDA‐12.4。</td>
+<td>“pip 装包”的快递盒</td>
+</tr>
+<tr>
+<td><code>nvcc</code></td>
+<td>CUDA C/C++ 编译器前端，.cu → PTX/SASS，可指定
+<code>-arch=sm_xx</code>。</td>
+<td>编译 .cu</td>
+</tr>
+<tr>
+<td><code>nvdisasm</code></td>
+<td>PTX/SASS 反汇编工具，用来看编译后指令。</td>
+<td>拆快递看指令</td>
+</tr>
+<tr>
+<td>Compute Sanitizer</td>
+<td>GPU 版 “Valgrind”，检测越界、数据竞争等。</td>
+<td>GPU 内存查错</td>
+</tr>
+<tr>
+<td><code>conda</code> / <code>mamba</code></td>
+<td>包/环境管理器，用独立前缀隔离 Python &amp; 依赖，避免系统污染。</td>
+<td>独立小房间</td>
+</tr>
+<tr>
+<td><code>pip</code></td>
+<td>Python 官方包管理器，配 <code>--index-url</code> 拉特定
+wheel；需在虚拟环境或 conda env 下用。</td>
+<td>安装 Python 包</td>
+</tr>
+</tbody>
+</table>
+<p>省流：CUDA = GPU 底座；PyTorch = AI 积木；wheel =
+打好车的包；<code>nvcc/nvdisasm/sanitizer</code> =
+编译/查看/查错工具；conda/pip = 装包管家。</p>
+<h3 id="cu-文件到底是什么">📄 .cu 文件到底是什么？</h3>
+<p><code>.cu</code> 是 NVIDIA CUDA
+源文件默认扩展名，可<strong>同时</strong>放 CPU 端 C/C++ 代码和 GPU 端
+kernel：</p>
+<ol type="1">
+<li><strong>CPU 端（Host）代码</strong>：普通 C/C++ 语句，由主机 CPU
+执行。</li>
+<li><strong>GPU 端（Device）代码</strong>：用 <code>__global__</code> /
+<code>__device__</code> / <code>__host__</code> 关键字标注的函数或
+<code>&lt;&lt;&lt;grid,block&gt;&gt;&gt;</code> 启动的
+kernel，将被编译为 PTX/SASS 在 GPU 上跑。</li>
+</ol>
+<p>为什么单独用 <code>.cu</code>？ - 让 <code>nvcc</code>
+识别文件需要“双重编译”：CPU 端交给主机编译器，GPU 端生成
+PTX/SASS。<br />
+- 一个文件里即可 <code>cudaMalloc/cudaMemcpy</code> 及定义
+kernel，方便小项目/快速实验。</p>
+<p>常见编译方式： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 直接生成可执行</span></span><br><span class="line">nvcc vec_add.cu -o vec_add</span><br><span class="line"></span><br><span class="line"><span class="comment"># 先生成对象，再由 g++ 链接</span></span><br><span class="line">nvcc -c my_kernel.cu -o my_kernel.o</span><br><span class="line">g++ host_main.cpp my_kernel.o -lcudart -L/usr/local/cuda/lib64</span><br></pre></td></tr></table></figure></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>.c/.cpp</th>
+<th>.cu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>写 CPU 代码</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>写 GPU kernel</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>编译器</td>
+<td>gcc/clang</td>
+<td>nvcc（内部仍调 gcc/clang 处理 Host 部分）</td>
+</tr>
+<tr>
+<td>关键字</td>
+<td>无</td>
+<td><code>__global__</code> <code>__device__</code> 等</td>
+</tr>
+<tr>
+<td>启动 kernel</td>
+<td>❌</td>
+<td><code>kernel&lt;&lt;&lt;grid,block&gt;&gt;&gt;(...)</code></td>
+</tr>
+</tbody>
+</table>
+<p>省流：<code>.cu = 普通 C/C++ + GPU kernel</code>，只要用
+<code>nvcc</code> 就能编译运行。</p>
+<h3 id="系统信息">🖥️ 系统信息</h3>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>版本</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OS</td>
+<td>Ubuntu 24.04.2 LTS (x86-64)</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>NVIDIA H100 PCIe</td>
+</tr>
+<tr>
+<td>驱动</td>
+<td>570.133.20</td>
+</tr>
+<tr>
+<td>目标 CUDA</td>
+<td>12.6 (系统 Runtime)<br/>12.4 (PyTorch wheel 内置)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="安装-cuda-工具链">🔧 安装 CUDA 工具链</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1) 添加官方仓库</span></span><br><span class="line">wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb</span><br><span class="line"><span class="built_in">sudo</span> dpkg -i cuda-keyring_1.1-1_all.deb</span><br><span class="line"><span class="built_in">sudo</span> apt update</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2) 安装核心工具</span></span><br><span class="line"><span class="built_in">sudo</span> apt install -y cuda-toolkit-12-6          <span class="comment"># nvcc / nvdisasm</span></span><br><span class="line"><span class="built_in">sudo</span> apt install -y nvidia-compute-sanitizer   <span class="comment"># Compute Sanitizer</span></span><br></pre></td></tr></table></figure>
+<p><strong>验证版本</strong> <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc --version &amp;&amp; nvdisasm --version &amp;&amp; compute-sanitizer --version</span><br><span class="line">nvidia-smi | <span class="built_in">head</span> -5</span><br></pre></td></tr></table></figure></p>
+<h3 id="conda-环境隔离">📦 Conda 环境隔离</h3>
+<ol type="1">
+<li>安装 Miniforge <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">wget -O Miniforge3.sh https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</span><br><span class="line">bash Miniforge3.sh -b -p <span class="variable">$HOME</span>/miniforge</span><br><span class="line"><span class="built_in">eval</span> <span class="string">&quot;<span class="subst">$($HOME/miniforge/bin/conda shell.zsh hook)</span>&quot;</span></span><br></pre></td></tr></table></figure></li>
+<li>把缓存/临时目录挪到大分区（假设 <code>/opt/ext</code> 空间充足）
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sudo</span> <span class="built_in">mkdir</span> -p /opt/ext/conda_pkgs /opt/ext/tmp &amp;&amp; \</span><br><span class="line">  <span class="built_in">sudo</span> <span class="built_in">chown</span> -R <span class="variable">$USER</span>:<span class="variable">$USER</span> /opt/ext/conda_pkgs /opt/ext/tmp</span><br><span class="line"></span><br><span class="line"><span class="comment"># ~/.condarc</span></span><br><span class="line"><span class="built_in">printf</span> <span class="string">&quot;pkgs_dirs:\n  - /opt/ext/conda_pkgs\n&quot;</span> &gt; ~/.condarc</span><br><span class="line"><span class="comment"># ~/.zshrc</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;export TMPDIR=/opt/ext/tmp&#x27;</span> &gt;&gt; ~/.zshrc &amp;&amp; <span class="built_in">source</span> ~/.zshrc</span><br></pre></td></tr></table></figure></li>
+<li>创建 GPU 环境 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">conda create -n gpu python=3.11 -y</span><br><span class="line">conda activate gpu</span><br></pre></td></tr></table></figure></li>
+</ol>
+<h3 id="安装-gpu-版-pytorchcuda-12.4-wheel">🔥 安装 GPU 版
+PyTorch（CUDA-12.4 wheel）</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python -m pip install --upgrade pip</span><br><span class="line">pip install --no-cache-dir torch torchvision torchaudio \</span><br><span class="line">     --index-url https://download.pytorch.org/whl/cu124</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>注意</strong><br />
+• 轮子名必须带 <code>+cu124</code>，否则是 CPU 版。<br />
+• <code>--no-cache-dir</code> 省磁盘。</p>
+</blockquote>
+<p><strong>快速验证</strong> <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python - &lt;&lt;<span class="string">&#x27;PY&#x27;</span></span><br><span class="line">import torch, torchvision</span><br><span class="line"><span class="built_in">print</span>(torch.__version__, torch.version.cuda, torch.cuda.is_available())</span><br><span class="line"><span class="built_in">print</span>(torchvision.__version__)</span><br><span class="line">PY</span><br><span class="line"><span class="comment"># ➜ 2.6.0+cu124 12.4 True</span></span><br></pre></td></tr></table></figure></p>
+<h3 id="生成环境日志">📝 生成环境日志</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python projects/gpu_fuzz/gen/collect_env.py \</span><br><span class="line">       &gt; projects/gpu_learn/log/env.txt 2&gt;&amp;1</span><br><span class="line"><span class="built_in">head</span> -n 24 projects/gpu_learn/log/env.txt</span><br></pre></td></tr></table></figure>
+<p>重点确认： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">PyTorch version: 2.6.0+cu124</span><br><span class="line">CUDA runtime version: 12.6.85</span><br><span class="line">Is CUDA available: True</span><br></pre></td></tr></table></figure></p>
+<blockquote>
+<p>详细解读（常见疑问都在这里）： -
+<code>PyTorch version: 2.6.0+cu124</code> —— <strong>2.6.0</strong>
+是框架版本；<code>+cu124</code> 表示它自带 CUDA-12.4
+编译产物（cuDNN/cuBLAS 等)。 - <code>Is debug build: False</code> ——
+官方 Release 版（True 时为带断言的调试版，速度慢）。 -
+<code>CUDA used to build PyTorch: 12.4</code> —— wheel 内置的编译 CUDA
+版本；与系统 <code>runtime 12.6</code> 向下兼容即可。 -
+<code>OS / GCC / Clang / CMake</code> —— 编译本地 C++/CUDA
+扩展时要用到的工具链版本，记录可复现性。 -
+<code>Python version: 3.11.x (conda-forge)</code> ——
+确认与你的虚拟环境一致，便于后续 <code>pip install</code> ABI 兼容。 -
+<code>Is CUDA available: True</code> ——
+<code>torch.cuda.is_available()</code> 结果，若 False 请先查驱动 /
+环境变量。 - <code>CUDA runtime version: 12.6.85</code> —— 驱动自带的
+<code>libcuda.so</code> runtime 版本，只要 ≥ wheel 内的 12.4 即 OK。 -
+<code>CUDA_MODULE_LOADING: LAZY</code> —— 默认懒加载
+PTX，可减少启动时延；如需即时插桩可设 <code>EAGER</code>。 -
+<code>GPU 0: NVIDIA H100 PCIe</code> —— 检测到的物理
+GPU，与预期硬件相符。 - <code>cuDNN/cuBLAS/cuFFT/…</code> —— 列表展示
+wheel 自带的具体子库版本，用于排查 “库不匹配” 问题。 -
+<code>CPU:</code>及后续 ——
+主机硬件与漏洞缓解信息，可忽略；仅在编译器优化或虚拟化环境排错时有用。</p>
+<p>省流：<strong>三行打勾 + 驱动≥CUDA + GPU 型号正确 =
+环境健康。</strong></p>
+</blockquote>
+<h3 id="最小-cuda-样例验证">🛠️ 最小 CUDA 样例验证</h3>
+<ol type="1">
+<li>编译 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cd</span> projects/gpu_learn</span><br><span class="line">nvcc vec_add.cu -o vec_add -O2</span><br></pre></td></tr></table></figure></li>
+<li>运行 &amp; Sanitizer <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">./vec_add                                    <span class="comment"># → [vec_add] PASS</span></span><br><span class="line">compute-sanitizer --tool memcheck ./vec_add  <span class="comment"># → ERROR SUMMARY: 0 errors</span></span><br></pre></td></tr></table></figure></li>
+</ol>
+<h3 id="版本自检截图清单">📸 版本自检截图清单</h3>
+<ol type="1">
+<li><code>nvcc --version</code><br />
+</li>
+<li><code>nvidia-smi</code>（前 5 行）<br />
+</li>
+<li><code>nvdisasm --version</code> (可选)<br />
+</li>
+<li><code>compute-sanitizer --version</code><br />
+</li>
+<li><code>projects/gpu_learn/log/env.txt</code>（前 24 行）</li>
+</ol>
+<p>全部放入 <code>gpu_learn/log/</code> 即完成 Day-1 验收。</p>
+<h3 id="关键注意事项速览">⚠️ 关键注意事项速览</h3>
+<table>
+<thead>
+<tr>
+<th>事项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPU 轮子</td>
+<td><code>torch …+cuXXX</code> 必须与目标 CUDA 一致；纯版本号 = CPU
+轮子</td>
+</tr>
+<tr>
+<td>驱动 ≥ CUDA</td>
+<td>驱动 570 支持 CUDA 12.x，无需额外系统级 Runtime</td>
+</tr>
+<tr>
+<td>独立包目录</td>
+<td><code>pkgs_dirs</code> &amp; <code>TMPDIR</code> 指向大分区，避免
+<code>/</code> 爆盘</td>
+</tr>
+<tr>
+<td>PEP 668</td>
+<td>系统 Python 禁止 pip，务必用 Conda/venv</td>
+</tr>
+<tr>
+<td>Sanitizer 延迟加载</td>
+<td><code>CUDA_MODULE_LOADING=LAZY</code> 已在 env.txt 中展示</td>
+</tr>
+</tbody>
+</table>
+<p>至此，阶段 0 / Day-1 环境就绪，接下来可愉快开发 CUDA/PyTorch 应用
+🚀</p>
+]]></content>
+      <tags>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>PyTorch</tag>
+        <tag>H100</tag>
+        <tag>深度学习</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>CUDA核心概念与内存层次</title>
     <url>/posts/d4b8f045/</url>
     <content><![CDATA[<p>GPU 的线程组织与内存层次是理解 CUDA 性能的基础。本文用表格、Mermaid
@@ -5360,270 +5624,6 @@ Warp”藏延迟，性能归根结底是访存模式与并行度的艺术 ✨</s
         <tag>内存</tag>
         <tag>Kernel</tag>
         <tag>Warp</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>H100 服务器 CUDA + PyTorch 环境速配指南</title>
-    <url>/posts/e5b1c8d2/</url>
-    <content><![CDATA[<p>本文记录在 Ubuntu 24.04 + H100 上从零跑通 CUDA
-代码的过程，包括环境配置和常见问题。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>CUDA</td>
-<td>NVIDIA 的并行计算平台 + 运行时/驱动 + C/C++ 扩展（带
-<code>__global__</code>/<code>__device__</code> 等关键字）。</td>
-<td>GPU 编程底座</td>
-</tr>
-<tr>
-<td>PyTorch</td>
-<td>流行的深度学习框架，支持动态图，<code>torch.Tensor</code> 可在 GPU
-上做张量运算。</td>
-<td>DL 里最火的“积木”</td>
-</tr>
-<tr>
-<td>Wheel (<code>.whl</code>)</td>
-<td>Python 的二进制打包格式，包含编译好的扩展。带 <code>+cu124</code>
-表示内置 CUDA‐12.4。</td>
-<td>“pip 装包”的快递盒</td>
-</tr>
-<tr>
-<td><code>nvcc</code></td>
-<td>CUDA C/C++ 编译器前端，.cu → PTX/SASS，可指定
-<code>-arch=sm_xx</code>。</td>
-<td>编译 .cu</td>
-</tr>
-<tr>
-<td><code>nvdisasm</code></td>
-<td>PTX/SASS 反汇编工具，用来看编译后指令。</td>
-<td>拆快递看指令</td>
-</tr>
-<tr>
-<td>Compute Sanitizer</td>
-<td>GPU 版 “Valgrind”，检测越界、数据竞争等。</td>
-<td>GPU 内存查错</td>
-</tr>
-<tr>
-<td><code>conda</code> / <code>mamba</code></td>
-<td>包/环境管理器，用独立前缀隔离 Python &amp; 依赖，避免系统污染。</td>
-<td>独立小房间</td>
-</tr>
-<tr>
-<td><code>pip</code></td>
-<td>Python 官方包管理器，配 <code>--index-url</code> 拉特定
-wheel；需在虚拟环境或 conda env 下用。</td>
-<td>安装 Python 包</td>
-</tr>
-</tbody>
-</table>
-<p>省流：CUDA = GPU 底座；PyTorch = AI 积木；wheel =
-打好车的包；<code>nvcc/nvdisasm/sanitizer</code> =
-编译/查看/查错工具；conda/pip = 装包管家。</p>
-<h3 id="cu-文件到底是什么">📄 .cu 文件到底是什么？</h3>
-<p><code>.cu</code> 是 NVIDIA CUDA
-源文件默认扩展名，可<strong>同时</strong>放 CPU 端 C/C++ 代码和 GPU 端
-kernel：</p>
-<ol type="1">
-<li><strong>CPU 端（Host）代码</strong>：普通 C/C++ 语句，由主机 CPU
-执行。</li>
-<li><strong>GPU 端（Device）代码</strong>：用 <code>__global__</code> /
-<code>__device__</code> / <code>__host__</code> 关键字标注的函数或
-<code>&lt;&lt;&lt;grid,block&gt;&gt;&gt;</code> 启动的
-kernel，将被编译为 PTX/SASS 在 GPU 上跑。</li>
-</ol>
-<p>为什么单独用 <code>.cu</code>？ - 让 <code>nvcc</code>
-识别文件需要“双重编译”：CPU 端交给主机编译器，GPU 端生成
-PTX/SASS。<br />
-- 一个文件里即可 <code>cudaMalloc/cudaMemcpy</code> 及定义
-kernel，方便小项目/快速实验。</p>
-<p>常见编译方式： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 直接生成可执行</span></span><br><span class="line">nvcc vec_add.cu -o vec_add</span><br><span class="line"></span><br><span class="line"><span class="comment"># 先生成对象，再由 g++ 链接</span></span><br><span class="line">nvcc -c my_kernel.cu -o my_kernel.o</span><br><span class="line">g++ host_main.cpp my_kernel.o -lcudart -L/usr/local/cuda/lib64</span><br></pre></td></tr></table></figure></p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>.c/.cpp</th>
-<th>.cu</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>写 CPU 代码</td>
-<td>✅</td>
-<td>✅</td>
-</tr>
-<tr>
-<td>写 GPU kernel</td>
-<td>❌</td>
-<td>✅</td>
-</tr>
-<tr>
-<td>编译器</td>
-<td>gcc/clang</td>
-<td>nvcc（内部仍调 gcc/clang 处理 Host 部分）</td>
-</tr>
-<tr>
-<td>关键字</td>
-<td>无</td>
-<td><code>__global__</code> <code>__device__</code> 等</td>
-</tr>
-<tr>
-<td>启动 kernel</td>
-<td>❌</td>
-<td><code>kernel&lt;&lt;&lt;grid,block&gt;&gt;&gt;(...)</code></td>
-</tr>
-</tbody>
-</table>
-<p>省流：<code>.cu = 普通 C/C++ + GPU kernel</code>，只要用
-<code>nvcc</code> 就能编译运行。</p>
-<h3 id="系统信息">🖥️ 系统信息</h3>
-<table>
-<thead>
-<tr>
-<th>组件</th>
-<th>版本</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>OS</td>
-<td>Ubuntu 24.04.2 LTS (x86-64)</td>
-</tr>
-<tr>
-<td>GPU</td>
-<td>NVIDIA H100 PCIe</td>
-</tr>
-<tr>
-<td>驱动</td>
-<td>570.133.20</td>
-</tr>
-<tr>
-<td>目标 CUDA</td>
-<td>12.6 (系统 Runtime)<br/>12.4 (PyTorch wheel 内置)</td>
-</tr>
-</tbody>
-</table>
-<h3 id="安装-cuda-工具链">🔧 安装 CUDA 工具链</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1) 添加官方仓库</span></span><br><span class="line">wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb</span><br><span class="line"><span class="built_in">sudo</span> dpkg -i cuda-keyring_1.1-1_all.deb</span><br><span class="line"><span class="built_in">sudo</span> apt update</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2) 安装核心工具</span></span><br><span class="line"><span class="built_in">sudo</span> apt install -y cuda-toolkit-12-6          <span class="comment"># nvcc / nvdisasm</span></span><br><span class="line"><span class="built_in">sudo</span> apt install -y nvidia-compute-sanitizer   <span class="comment"># Compute Sanitizer</span></span><br></pre></td></tr></table></figure>
-<p><strong>验证版本</strong> <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc --version &amp;&amp; nvdisasm --version &amp;&amp; compute-sanitizer --version</span><br><span class="line">nvidia-smi | <span class="built_in">head</span> -5</span><br></pre></td></tr></table></figure></p>
-<h3 id="conda-环境隔离">📦 Conda 环境隔离</h3>
-<ol type="1">
-<li>安装 Miniforge <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">wget -O Miniforge3.sh https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</span><br><span class="line">bash Miniforge3.sh -b -p <span class="variable">$HOME</span>/miniforge</span><br><span class="line"><span class="built_in">eval</span> <span class="string">&quot;<span class="subst">$($HOME/miniforge/bin/conda shell.zsh hook)</span>&quot;</span></span><br></pre></td></tr></table></figure></li>
-<li>把缓存/临时目录挪到大分区（假设 <code>/opt/ext</code> 空间充足）
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sudo</span> <span class="built_in">mkdir</span> -p /opt/ext/conda_pkgs /opt/ext/tmp &amp;&amp; \</span><br><span class="line">  <span class="built_in">sudo</span> <span class="built_in">chown</span> -R <span class="variable">$USER</span>:<span class="variable">$USER</span> /opt/ext/conda_pkgs /opt/ext/tmp</span><br><span class="line"></span><br><span class="line"><span class="comment"># ~/.condarc</span></span><br><span class="line"><span class="built_in">printf</span> <span class="string">&quot;pkgs_dirs:\n  - /opt/ext/conda_pkgs\n&quot;</span> &gt; ~/.condarc</span><br><span class="line"><span class="comment"># ~/.zshrc</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;export TMPDIR=/opt/ext/tmp&#x27;</span> &gt;&gt; ~/.zshrc &amp;&amp; <span class="built_in">source</span> ~/.zshrc</span><br></pre></td></tr></table></figure></li>
-<li>创建 GPU 环境 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">conda create -n gpu python=3.11 -y</span><br><span class="line">conda activate gpu</span><br></pre></td></tr></table></figure></li>
-</ol>
-<h3 id="安装-gpu-版-pytorchcuda-12.4-wheel">🔥 安装 GPU 版
-PyTorch（CUDA-12.4 wheel）</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python -m pip install --upgrade pip</span><br><span class="line">pip install --no-cache-dir torch torchvision torchaudio \</span><br><span class="line">     --index-url https://download.pytorch.org/whl/cu124</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>注意</strong><br />
-• 轮子名必须带 <code>+cu124</code>，否则是 CPU 版。<br />
-• <code>--no-cache-dir</code> 省磁盘。</p>
-</blockquote>
-<p><strong>快速验证</strong> <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python - &lt;&lt;<span class="string">&#x27;PY&#x27;</span></span><br><span class="line">import torch, torchvision</span><br><span class="line"><span class="built_in">print</span>(torch.__version__, torch.version.cuda, torch.cuda.is_available())</span><br><span class="line"><span class="built_in">print</span>(torchvision.__version__)</span><br><span class="line">PY</span><br><span class="line"><span class="comment"># ➜ 2.6.0+cu124 12.4 True</span></span><br></pre></td></tr></table></figure></p>
-<h3 id="生成环境日志">📝 生成环境日志</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python projects/gpu_fuzz/gen/collect_env.py \</span><br><span class="line">       &gt; projects/gpu_learn/log/env.txt 2&gt;&amp;1</span><br><span class="line"><span class="built_in">head</span> -n 24 projects/gpu_learn/log/env.txt</span><br></pre></td></tr></table></figure>
-<p>重点确认： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">PyTorch version: 2.6.0+cu124</span><br><span class="line">CUDA runtime version: 12.6.85</span><br><span class="line">Is CUDA available: True</span><br></pre></td></tr></table></figure></p>
-<blockquote>
-<p>详细解读（常见疑问都在这里）： -
-<code>PyTorch version: 2.6.0+cu124</code> —— <strong>2.6.0</strong>
-是框架版本；<code>+cu124</code> 表示它自带 CUDA-12.4
-编译产物（cuDNN/cuBLAS 等)。 - <code>Is debug build: False</code> ——
-官方 Release 版（True 时为带断言的调试版，速度慢）。 -
-<code>CUDA used to build PyTorch: 12.4</code> —— wheel 内置的编译 CUDA
-版本；与系统 <code>runtime 12.6</code> 向下兼容即可。 -
-<code>OS / GCC / Clang / CMake</code> —— 编译本地 C++/CUDA
-扩展时要用到的工具链版本，记录可复现性。 -
-<code>Python version: 3.11.x (conda-forge)</code> ——
-确认与你的虚拟环境一致，便于后续 <code>pip install</code> ABI 兼容。 -
-<code>Is CUDA available: True</code> ——
-<code>torch.cuda.is_available()</code> 结果，若 False 请先查驱动 /
-环境变量。 - <code>CUDA runtime version: 12.6.85</code> —— 驱动自带的
-<code>libcuda.so</code> runtime 版本，只要 ≥ wheel 内的 12.4 即 OK。 -
-<code>CUDA_MODULE_LOADING: LAZY</code> —— 默认懒加载
-PTX，可减少启动时延；如需即时插桩可设 <code>EAGER</code>。 -
-<code>GPU 0: NVIDIA H100 PCIe</code> —— 检测到的物理
-GPU，与预期硬件相符。 - <code>cuDNN/cuBLAS/cuFFT/…</code> —— 列表展示
-wheel 自带的具体子库版本，用于排查 “库不匹配” 问题。 -
-<code>CPU:</code>及后续 ——
-主机硬件与漏洞缓解信息，可忽略；仅在编译器优化或虚拟化环境排错时有用。</p>
-<p>省流：<strong>三行打勾 + 驱动≥CUDA + GPU 型号正确 =
-环境健康。</strong></p>
-</blockquote>
-<h3 id="最小-cuda-样例验证">🛠️ 最小 CUDA 样例验证</h3>
-<ol type="1">
-<li>编译 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cd</span> projects/gpu_learn</span><br><span class="line">nvcc vec_add.cu -o vec_add -O2</span><br></pre></td></tr></table></figure></li>
-<li>运行 &amp; Sanitizer <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">./vec_add                                    <span class="comment"># → [vec_add] PASS</span></span><br><span class="line">compute-sanitizer --tool memcheck ./vec_add  <span class="comment"># → ERROR SUMMARY: 0 errors</span></span><br></pre></td></tr></table></figure></li>
-</ol>
-<h3 id="版本自检截图清单">📸 版本自检截图清单</h3>
-<ol type="1">
-<li><code>nvcc --version</code><br />
-</li>
-<li><code>nvidia-smi</code>（前 5 行）<br />
-</li>
-<li><code>nvdisasm --version</code> (可选)<br />
-</li>
-<li><code>compute-sanitizer --version</code><br />
-</li>
-<li><code>projects/gpu_learn/log/env.txt</code>（前 24 行）</li>
-</ol>
-<p>全部放入 <code>gpu_learn/log/</code> 即完成 Day-1 验收。</p>
-<h3 id="关键注意事项速览">⚠️ 关键注意事项速览</h3>
-<table>
-<thead>
-<tr>
-<th>事项</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>GPU 轮子</td>
-<td><code>torch …+cuXXX</code> 必须与目标 CUDA 一致；纯版本号 = CPU
-轮子</td>
-</tr>
-<tr>
-<td>驱动 ≥ CUDA</td>
-<td>驱动 570 支持 CUDA 12.x，无需额外系统级 Runtime</td>
-</tr>
-<tr>
-<td>独立包目录</td>
-<td><code>pkgs_dirs</code> &amp; <code>TMPDIR</code> 指向大分区，避免
-<code>/</code> 爆盘</td>
-</tr>
-<tr>
-<td>PEP 668</td>
-<td>系统 Python 禁止 pip，务必用 Conda/venv</td>
-</tr>
-<tr>
-<td>Sanitizer 延迟加载</td>
-<td><code>CUDA_MODULE_LOADING=LAZY</code> 已在 env.txt 中展示</td>
-</tr>
-</tbody>
-</table>
-<p>至此，阶段 0 / Day-1 环境就绪，接下来可愉快开发 CUDA/PyTorch 应用
-🚀</p>
-]]></content>
-      <tags>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>PyTorch</tag>
-        <tag>H100</tag>
-        <tag>深度学习</tag>
       </tags>
   </entry>
   <entry>
@@ -13102,389 +13102,6 @@ Code，它可能会给你带来不一样的体验。</p>
       </tags>
   </entry>
   <entry>
-    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
-    <url>/posts/48c29df2/</url>
-    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
-<span id="more"></span></p>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Port（端口）</strong></td>
-<td>操作系统给网络程序分配的逻辑入口编号。</td>
-<td>一台机器里不同网络服务的门牌号</td>
-</tr>
-<tr>
-<td><strong>SSH</strong></td>
-<td>Secure Shell，远程登录与加密隧道工具。</td>
-<td>远程终端 + 隧道</td>
-</tr>
-<tr>
-<td><strong>RemoteForward</strong></td>
-<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
-<td>让服务器“借用”你本机端口</td>
-</tr>
-<tr>
-<td><strong>LocalForward</strong></td>
-<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
-<td>让本机访问远端服务</td>
-</tr>
-<tr>
-<td><strong>Proxy（代理）</strong></td>
-<td>代理服务，代替客户端向目标站点发请求。</td>
-<td>中间人转发流量</td>
-</tr>
-<tr>
-<td><strong>VS Code Port Forwarding</strong></td>
-<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
-<td>帮你转发，但有时会帮倒忙</td>
-</tr>
-</tbody>
-</table>
-<p>如果用更白话的话说：</p>
-<ul>
-<li><code>SSH</code>
-不只是远程登录工具，本质上还能顺手带一条加密管道</li>
-<li><code>RemoteForward</code>
-是让远端机器“借用”当前客户端上的某个端口</li>
-<li><code>LocalForward</code>
-是让本地机器“借道”去访问远端的某个端口</li>
-<li><code>Proxy</code>
-不是目标服务本身，而是一个代你转发请求的中间层</li>
-<li><code>VS Code 自动端口转发</code>
-则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
-</ul>
-<h3 id="程序program端口port套接字socket到底是什么关系">🧱
-程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
-<ul>
-<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
-<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
-<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
-<code>7897</code>，可以理解成网络入口的门牌号</li>
-<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
-IP:端口”之后形成的那个网络端点</li>
-</ul>
-<p>放到这次问题里看，会更容易理解：</p>
-<ul>
-<li>不是“端口自己在工作”，而是某个程序（program /
-process）创建了套接字（socket）并监听（listen）这个端口</li>
-<li>更准确地说，通常是同一个 <code>IP:端口</code>
-组合的监听套接字，只能被一个程序成功持有，比如
-<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
-<li>所以看到 <code>7897</code>
-在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
-<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
-这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
-</ul>
-<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
-<ul>
-<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
-<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
-<code>VS Code</code> 或 <code>ssh</code> helper</li>
-</ul>
-<p>一旦监听者变了，流量路径就会跟着变。</p>
-<p>这也是为什么这次故障排查不能只看“<code>7897</code>
-通不通”，还得看：</p>
-<ul>
-<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
-<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
-<code>7897</code></li>
-<li>或者两边是否在不同阶段都试图接管这个端口</li>
-</ul>
-<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
-自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
-<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
-<p>我使用的设备如下：</p>
-<ul>
-<li>macbook pro 2020</li>
-<li>win xiaoxin 14pro 2021</li>
-<li>linux 实验室的高性能服务器 atlanta</li>
-</ul>
-<p>当时的 SSH 配置如下：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<ul>
-<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
-<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
-<code>7897</code></li>
-<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
-隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
-<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
-的代理入口</li>
-</ul>
-<p>也就是说，<code>atlanta</code>
-并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
-<p>可以看这张链路拓扑图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
-<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
-<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
-<p>这意味着：</p>
-<ul>
-<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
-<li><code>atlanta</code> 也可以有一个自己的
-<code>127.0.0.1:7897</code></li>
-<li>SSH 的
-<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
-</ul>
-<p>问题在于，<strong>VS Code Remote SSH
-还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
-<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
-在监听，它可能会再做一层类似这样的映射：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>不过这里要注意一件事：<strong>这不是 VS Code
-的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>而 <code>atlanta 7897</code> 本来又是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
-<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
-<p>按当时的现象，最合理的解释是：</p>
-<ol type="1">
-<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
-<li>SSH 按配置建立了 <code>RemoteForward</code>，使
-<code>atlanta:7897 -&gt; Win本地:7897</code></li>
-<li>VS Code 又检测到远端 <code>7897</code>
-正在监听，于是自动做了端口转发</li>
-<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
-占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
-<li>因此，真正危险的情况更像是：VS Code
-因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
-本地 <code>7897</code></strong></li>
-<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
-的入口，还会被 VS Code 的转发链路卷进去</li>
-<li>最终结果就是：本地代理流量绕回
-SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
-</ol>
-<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
-<p>当时观察到的两个现象正好支持这个推断：</p>
-<ul>
-<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
-<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
-</ul>
-<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
-端口转发到底是怎么工作的</h3>
-<h4 id="remoteforward">RemoteForward</h4>
-<p><code>RemoteForward A B:C</code></p>
-<p>意思是：</p>
-<ul>
-<li>在远端机器监听 <code>A</code></li>
-<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
-</ul>
-<p>这里的配置：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>等价于：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这里很容易混淆的一点是：</p>
-<ul>
-<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
-<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
-</ul>
-<p>它真正表达的是：</p>
-<ul>
-<li>由远端程序去连接 <code>atlanta:7897</code></li>
-<li>SSH 再把这条连接转交给当前客户端本机的
-<code>127.0.0.1:7897</code></li>
-</ul>
-<p>所以更准确的理解应该是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
-连接里双向流动。也就是说：</p>
-<ul>
-<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
-的请求，会被送到当前客户端的 <code>7897</code></li>
-<li>当前客户端上的代理再去访问外网</li>
-<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
-</ul>
-<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
-<code>atlanta:7897</code>”。<code>RemoteForward</code>
-解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
-<p>因此，只要在 <code>atlanta</code> 上配置：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
-<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
-<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
-<p>VS Code Remote SSH 会做另一件事：</p>
-<ul>
-<li>发现远端某个端口在监听</li>
-<li>自动把它映射到本机</li>
-<li>让你本机直接访问远端服务</li>
-</ul>
-<p>这个功能本来是给
-<code>3000</code>、<code>8080</code>、<code>8888</code>
-这类开发服务准备的，比如远端起了 Web
-服务，你本机浏览器可以直接打开。</p>
-<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
-SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
-<p>典型应用场景一般有这些：</p>
-<ul>
-<li>远端跑了前端开发服务器，比如
-Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
-<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
-面板，本机可以直接点开预览</li>
-<li>远端临时起了一个调试
-API、管理后台或文档站，不想专门手敲隧道命令</li>
-<li>容器、跳板机或云主机里的服务只监听
-<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
-</ul>
-<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
-<ul>
-<li>端口是给人看的</li>
-<li>访问方向通常是“本机去看远端”</li>
-<li>即使换一个本地端口也无所谓，只要能打开就行</li>
-</ul>
-<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
-<ul>
-<li><code>process</code>：轮询远端
-<code>/proc</code>，找哪些进程正在监听端口</li>
-<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
-</ul>
-<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
-Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
-<code>4123</code>。</p>
-<p>所以对这次故障，更严谨的表述应该是：</p>
-<ul>
-<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
-<code>7897</code>”</li>
-<li>而是“VS Code 会自动转发远端
-<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
-<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
-</ul>
-<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
-隧道的代理口，确实属于“不该自动转发的端口”。</p>
-<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
-<ul>
-<li>开发端口通常是“给你打开页面用的”</li>
-<li>代理端口则是“给别的流量继续转发用的”</li>
-</ul>
-<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
-接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
-<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
-<p>因为它会同时制造两种错觉：</p>
-<table>
-<colgroup>
-<col style="width: 15%" />
-<col style="width: 40%" />
-<col style="width: 45%" />
-</colgroup>
-<thead>
-<tr>
-<th>现象</th>
-<th>容易误判成什么</th>
-<th>实际更可能是什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>atlanta curl</code> 无响应</td>
-<td>远端没网、机场挂了</td>
-<td>远端代理口被错误转发</td>
-</tr>
-<tr>
-<td>Win 本地机场节点看起来正常</td>
-<td>机场没问题</td>
-<td>但本地代理出口发生环路</td>
-</tr>
-<tr>
-<td>断开 VS Code SSH 后马上恢复</td>
-<td>偶发网络波动</td>
-<td>SSH/VS Code 转发链路有问题</td>
-</tr>
-<tr>
-<td>删除自动转发 <code>7897</code> 后恢复</td>
-<td>临时玄学</td>
-<td>端口冲突被解除</td>
-</tr>
-</tbody>
-</table>
-<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
-<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
-<p>下次再遇到类似问题，可以按这个顺序排查。</p>
-<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
-到底谁在监听</h4>
-<p>Windows 可以看：</p>
-<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
-<p>macOS / Linux 可以看：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>重点不是只看“有没有监听”，而是看：</p>
-<ul>
-<li>是 Clash 在监听</li>
-<li>还是 VS Code helper / SSH client 在监听</li>
-<li>还是两边都试图占这个端口</li>
-</ul>
-<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
-的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
-<h3 id="常见误区">🚫 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
-<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
-会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
-</tr>
-<tr>
-<td>看到节点正常，就说明代理没问题</td>
-<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
-</tr>
-<tr>
-<td><code>curl</code> 没输出一定是目标网站挂了</td>
-<td>不对。端口回环、代理黑洞、DNS
-被错误接管都可能表现成“卡死没输出”。</td>
-</tr>
-<tr>
-<td>VS Code 自动转发一定是好事</td>
-<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
-SSH 的 <code>RemoteForward</code>，又被 VS Code
-自动纳入端口转发候选；一旦 VS Code
-因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
-</blockquote>
-<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
-Clash，最稳的策略就三条：</p>
-<ul>
-<li>禁掉 VS Code 对代理端口的自动转发</li>
-<li>让远端端口和本地代理端口不要同号</li>
-<li>把不同设备的远端代理端口编号分开</li>
-</ul>
-<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>SSH</tag>
-        <tag>VS Code</tag>
-        <tag>端口转发</tag>
-        <tag>Proxy</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>LLVM 入门：从编译流程到 IR 结构</title>
     <url>/posts/18482fd9/</url>
     <content><![CDATA[<p>编译器的职责是把高级语言翻译成机器指令，LLVM
@@ -13953,11 +13570,10 @@ with LLVM</a></li>
       </tags>
   </entry>
   <entry>
-    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
-    <url>/posts/18f02423/</url>
-    <content><![CDATA[<p>CUDA
-报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
-<span id="more"></span>
+    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
+    <url>/posts/48c29df2/</url>
+    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
+<span id="more"></span></p>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
 <colgroup>
@@ -13974,251 +13590,312 @@ with LLVM</a></li>
 </thead>
 <tbody>
 <tr>
-<td>Host</td>
-<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
-<td>下命令的人</td>
+<td><strong>Port（端口）</strong></td>
+<td>操作系统给网络程序分配的逻辑入口编号。</td>
+<td>一台机器里不同网络服务的门牌号</td>
 </tr>
 <tr>
-<td>Device</td>
-<td>GPU 端代码，真正执行 kernel 的一侧。</td>
-<td>干活的人</td>
+<td><strong>SSH</strong></td>
+<td>Secure Shell，远程登录与加密隧道工具。</td>
+<td>远程终端 + 隧道</td>
 </tr>
 <tr>
-<td>Kernel</td>
-<td>在 GPU 上并行执行的函数。</td>
-<td>GPU 任务</td>
+<td><strong>RemoteForward</strong></td>
+<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
+<td>让服务器“借用”你本机端口</td>
 </tr>
 <tr>
-<td>Stream</td>
-<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
-<td>GPU 队列</td>
+<td><strong>LocalForward</strong></td>
+<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
+<td>让本机访问远端服务</td>
 </tr>
 <tr>
-<td>Synchronize</td>
-<td>CPU 停下来等 GPU 做完前面的任务。</td>
-<td>等结果</td>
+<td><strong>Proxy（代理）</strong></td>
+<td>代理服务，代替客户端向目标站点发请求。</td>
+<td>中间人转发流量</td>
 </tr>
 <tr>
-<td>CUDA error code</td>
-<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
-<td>一句错误摘要</td>
+<td><strong>VS Code Port Forwarding</strong></td>
+<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
+<td>帮你转发，但有时会帮倒忙</td>
 </tr>
 </tbody>
 </table>
-<p>一句话省流：</p>
-<blockquote>
-<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
-真正在哪里出错”。</strong></p>
-</blockquote>
-<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
-<p>CUDA 程序里通常有两条时间线：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
-<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
-队列，然后自己继续往下跑。</p>
-<p>也就是说：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
-<p>这行代码返回成功，通常只能说明：</p>
-<blockquote>
-<p>kernel launch 请求成功提交了。</p>
-</blockquote>
-<p>它不等价于：</p>
-<blockquote>
-<p>kernel 已经在 GPU 上执行成功了。</p>
-</blockquote>
-<p>这就是 CUDA 异步报错的根源。</p>
-<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
-<p>一个简化版流程如下：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
-<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
-<p>普通 CPU 函数调用更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
-<p>CUDA kernel launch 更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
-<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
-kernel。</p>
-<h3 id="stream-是什么">🧩 Stream 是什么</h3>
-<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
-<p>同一个 stream 里的任务通常按顺序执行。但 CPU
-提交任务时不一定等待每个任务结束：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
-<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
-done。</p>
-<p>这在 PyTorch 里很常见：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
-<p>前面几行可能只是不断向 GPU 提交算子。到了
-<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
-GPU，于是错误可能在这里才爆出来。</p>
-<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
-<p>假设某个 kernel 里有越界写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>CPU 端这样调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
-<p>可能的结果是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>报错位置看起来在：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
-<p>但真正的事故现场可能是前面的：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
-<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
-工作完成，CPU 到这里才第一次认真问 GPU：</p>
-<blockquote>
-<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
-</blockquote>
-<p>GPU/driver 这时返回：</p>
-<blockquote>
-<p>前面那个 kernel 已经出错了。</p>
-</blockquote>
-<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
-<p>默认情况下，GPU 端错误通常不是像 CPU
-异常一样立刻带着完整调用栈抛回来。</p>
-<p>更接近下面这个过程：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
-<p>所以你看到的经常是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
-<p>例如：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
+<p>如果用更白话的话说：</p>
 <ul>
-<li>哪个 kernel 的哪一行出错；</li>
-<li>哪个 block/thread 出错；</li>
-<li>GPU 上完整的调用链是什么；</li>
-<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
+<li><code>SSH</code>
+不只是远程登录工具，本质上还能顺手带一条加密管道</li>
+<li><code>RemoteForward</code>
+是让远端机器“借用”当前客户端上的某个端口</li>
+<li><code>LocalForward</code>
+是让本地机器“借道”去访问远端的某个端口</li>
+<li><code>Proxy</code>
+不是目标服务本身，而是一个代你转发请求的中间层</li>
+<li><code>VS Code 自动端口转发</code>
+则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
 </ul>
-<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
-<p>当 PyTorch 报错栈指向：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>它通常表示：</p>
-<blockquote>
-<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
-</blockquote>
-<p>它不必然表示：</p>
-<blockquote>
-<p>这个 API 自己就是根因。</p>
-</blockquote>
-<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
-<p>常见通知点包括：</p>
+<h3 id="程序program端口port套接字socket到底是什么关系">🧱
+程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
+<ul>
+<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
+<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
+<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
+<code>7897</code>，可以理解成网络入口的门牌号</li>
+<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
+IP:端口”之后形成的那个网络端点</li>
+</ul>
+<p>放到这次问题里看，会更容易理解：</p>
+<ul>
+<li>不是“端口自己在工作”，而是某个程序（program /
+process）创建了套接字（socket）并监听（listen）这个端口</li>
+<li>更准确地说，通常是同一个 <code>IP:端口</code>
+组合的监听套接字，只能被一个程序成功持有，比如
+<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
+<li>所以看到 <code>7897</code>
+在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
+<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
+这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
+</ul>
+<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
+<ul>
+<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
+<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
+<code>VS Code</code> 或 <code>ssh</code> helper</li>
+</ul>
+<p>一旦监听者变了，流量路径就会跟着变。</p>
+<p>这也是为什么这次故障排查不能只看“<code>7897</code>
+通不通”，还得看：</p>
+<ul>
+<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
+<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
+<code>7897</code></li>
+<li>或者两边是否在不同阶段都试图接管这个端口</li>
+</ul>
+<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
+自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
+<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
+<p>我使用的设备如下：</p>
+<ul>
+<li>macbook pro 2020</li>
+<li>win xiaoxin 14pro 2021</li>
+<li>linux 实验室的高性能服务器 atlanta</li>
+</ul>
+<p>当时的 SSH 配置如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<ul>
+<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
+<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
+<code>7897</code></li>
+<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
+隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
+<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
+的代理入口</li>
+</ul>
+<p>也就是说，<code>atlanta</code>
+并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
+<p>可以看这张链路拓扑图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
+<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
+<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
+<p>这意味着：</p>
+<ul>
+<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
+<li><code>atlanta</code> 也可以有一个自己的
+<code>127.0.0.1:7897</code></li>
+<li>SSH 的
+<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
+</ul>
+<p>问题在于，<strong>VS Code Remote SSH
+还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
+<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
+在监听，它可能会再做一层类似这样的映射：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>不过这里要注意一件事：<strong>这不是 VS Code
+的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>而 <code>atlanta 7897</code> 本来又是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
+<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
+<p>按当时的现象，最合理的解释是：</p>
+<ol type="1">
+<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
+<li>SSH 按配置建立了 <code>RemoteForward</code>，使
+<code>atlanta:7897 -&gt; Win本地:7897</code></li>
+<li>VS Code 又检测到远端 <code>7897</code>
+正在监听，于是自动做了端口转发</li>
+<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
+占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
+<li>因此，真正危险的情况更像是：VS Code
+因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
+本地 <code>7897</code></strong></li>
+<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
+的入口，还会被 VS Code 的转发链路卷进去</li>
+<li>最终结果就是：本地代理流量绕回
+SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
+</ol>
+<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
+<p>当时观察到的两个现象正好支持这个推断：</p>
+<ul>
+<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
+<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
+</ul>
+<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
+端口转发到底是怎么工作的</h3>
+<h4 id="remoteforward">RemoteForward</h4>
+<p><code>RemoteForward A B:C</code></p>
+<p>意思是：</p>
+<ul>
+<li>在远端机器监听 <code>A</code></li>
+<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
+</ul>
+<p>这里的配置：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>等价于：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这里很容易混淆的一点是：</p>
+<ul>
+<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
+<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
+</ul>
+<p>它真正表达的是：</p>
+<ul>
+<li>由远端程序去连接 <code>atlanta:7897</code></li>
+<li>SSH 再把这条连接转交给当前客户端本机的
+<code>127.0.0.1:7897</code></li>
+</ul>
+<p>所以更准确的理解应该是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
+连接里双向流动。也就是说：</p>
+<ul>
+<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
+的请求，会被送到当前客户端的 <code>7897</code></li>
+<li>当前客户端上的代理再去访问外网</li>
+<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
+</ul>
+<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
+<code>atlanta:7897</code>”。<code>RemoteForward</code>
+解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
+<p>因此，只要在 <code>atlanta</code> 上配置：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
+<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
+<p>VS Code Remote SSH 会做另一件事：</p>
+<ul>
+<li>发现远端某个端口在监听</li>
+<li>自动把它映射到本机</li>
+<li>让你本机直接访问远端服务</li>
+</ul>
+<p>这个功能本来是给
+<code>3000</code>、<code>8080</code>、<code>8888</code>
+这类开发服务准备的，比如远端起了 Web
+服务，你本机浏览器可以直接打开。</p>
+<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
+SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
+<p>典型应用场景一般有这些：</p>
+<ul>
+<li>远端跑了前端开发服务器，比如
+Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
+<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
+面板，本机可以直接点开预览</li>
+<li>远端临时起了一个调试
+API、管理后台或文档站，不想专门手敲隧道命令</li>
+<li>容器、跳板机或云主机里的服务只监听
+<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
+</ul>
+<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
+<ul>
+<li>端口是给人看的</li>
+<li>访问方向通常是“本机去看远端”</li>
+<li>即使换一个本地端口也无所谓，只要能打开就行</li>
+</ul>
+<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
+<ul>
+<li><code>process</code>：轮询远端
+<code>/proc</code>，找哪些进程正在监听端口</li>
+<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
+</ul>
+<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
+Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
+<code>4123</code>。</p>
+<p>所以对这次故障，更严谨的表述应该是：</p>
+<ul>
+<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
+<code>7897</code>”</li>
+<li>而是“VS Code 会自动转发远端
+<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
+<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
+</ul>
+<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
+隧道的代理口，确实属于“不该自动转发的端口”。</p>
+<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
+<ul>
+<li>开发端口通常是“给你打开页面用的”</li>
+<li>代理端口则是“给别的流量继续转发用的”</li>
+</ul>
+<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
+接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
+<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
+<p>因为它会同时制造两种错觉：</p>
 <table>
 <colgroup>
-<col style="width: 25%" />
-<col style="width: 75%" />
+<col style="width: 15%" />
+<col style="width: 40%" />
+<col style="width: 45%" />
 </colgroup>
 <thead>
 <tr>
-<th>操作</th>
-<th>为什么会暴露错误</th>
+<th>现象</th>
+<th>容易误判成什么</th>
+<th>实际更可能是什么</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>明确等待 GPU 之前的任务完成。</td>
+<td><code>atlanta curl</code> 无响应</td>
+<td>远端没网、机场挂了</td>
+<td>远端代理口被错误转发</td>
 </tr>
 <tr>
-<td><code>cudaStreamSynchronize(stream)</code></td>
-<td>等某个 stream 完成。</td>
+<td>Win 本地机场节点看起来正常</td>
+<td>机场没问题</td>
+<td>但本地代理出口发生环路</td>
 </tr>
 <tr>
-<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
-<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
+<td>断开 VS Code SSH 后马上恢复</td>
+<td>偶发网络波动</td>
+<td>SSH/VS Code 转发链路有问题</td>
 </tr>
 <tr>
-<td><code>tensor.cpu()</code></td>
-<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
-</tr>
-<tr>
-<td><code>loss.item()</code></td>
-<td>需要把 GPU 标量读到 Python 数值。</td>
-</tr>
-<tr>
-<td>后续 CUDA API</td>
-<td>发现当前 CUDA context 已经有错误状态。</td>
+<td>删除自动转发 <code>7897</code> 后恢复</td>
+<td>临时玄学</td>
+<td>端口冲突被解除</td>
 </tr>
 </tbody>
 </table>
-<h3 id="为什么-gpu-错误默认只有一句话">🔍 为什么 GPU
-错误默认只有一句话</h3>
-<p>CPU 异常容易打印调用栈，是因为 CPU
-线程有清晰的栈帧和同步执行路径。</p>
-<p>GPU kernel 不一样：</p>
+<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
+<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
+<p>下次再遇到类似问题，可以按这个顺序排查。</p>
+<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
+到底谁在监听</h4>
+<p>Windows 可以看：</p>
+<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
+<p>macOS / Linux 可以看：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>重点不是只看“有没有监听”，而是看：</p>
 <ul>
-<li>一个 kernel 可能有成千上万个线程同时执行；</li>
-<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
-<li>错误可能只发生在某个 thread；</li>
-<li>kernel launch 和 kernel 执行在时间线上分离；</li>
-<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
-调试模式。</li>
+<li>是 Clash 在监听</li>
+<li>还是 VS Code helper / SSH client 在监听</li>
+<li>还是两边都试图占这个端口</li>
 </ul>
-<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
-<p>这些描述很有用，但它们不是完整定位结果。</p>
-<h3 id="cuda_launch_blocking1-做了什么">🛠️
-<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
-<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
-<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
-<p>默认情况：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>开启后：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
-的位置。</p>
-<p>代价是程序会明显变慢，因为 CPU/GPU
-原本可以重叠执行的部分被压平了。</p>
-<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
-<p>分类任务里，<code>target</code> 必须在
-<code>[0, num_classes - 1]</code> 范围内。</p>
-<p>例如模型输出 10 类：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
-<p>但 <code>target</code> 里出现了非法类别：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
-<p>这时：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
-<p>GPU kernel 可能触发 device-side
-assert。你看到的报错位置却可能在：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
-<p>真正要查的是：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
-<p>如果是 <code>cross_entropy</code>，优先确认：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
-<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
-<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>区别是：</p>
-<table>
-<colgroup>
-<col style="width: 26%" />
-<col style="width: 73%" />
-</colgroup>
-<thead>
-<tr>
-<th>API</th>
-<th>主要检查什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaGetLastError()</code></td>
-<td>kernel launch 是否成功，比如配置、参数、符号等 launch
-阶段错误。</td>
-</tr>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
-</tr>
-</tbody>
-</table>
-<p>如果要进一步定位到源码行，可以用更重的工具：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
-<p>典型报告可能会给出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
-<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
-事故现场。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
+<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
+的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
+<h3 id="常见误区">🚫 常见误区</h3>
 <table>
 <colgroup>
 <col style="width: 50%" />
@@ -14232,53 +13909,47 @@ assert。你看到的报错位置却可能在：</p>
 </thead>
 <tbody>
 <tr>
-<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
-写错了。</td>
-<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
+<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
+<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
+会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
 </tr>
 <tr>
-<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
-<td>launch 成功只代表提交成功，不代表执行成功。</td>
+<td>看到节点正常，就说明代理没问题</td>
+<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
 </tr>
 <tr>
-<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
-<td>它只是让报错更同步、更容易定位。</td>
+<td><code>curl</code> 没输出一定是目标网站挂了</td>
+<td>不对。端口回环、代理黑洞、DNS
+被错误接管都可能表现成“卡死没输出”。</td>
 </tr>
 <tr>
-<td>GPU 报错只有一句话，所以没法查。</td>
-<td>默认信息少，但可以用同步、断言、Compute
-Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
-</tr>
-<tr>
-<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
-<td>一个早期 GPU 错误可能污染后续 CUDA
-context，后面只是连续发现错误状态。</td>
+<td>VS Code 自动转发一定是好事</td>
+<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
 </tr>
 </tbody>
 </table>
-<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
-<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
-<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
-<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
-<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
-错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
-往往在更早提交的任务里。</p>
+<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
+SSH 的 <code>RemoteForward</code>，又被 VS Code
+自动纳入端口转发候选；一旦 VS Code
+因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
 </blockquote>
-<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
-和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
-Sanitizer。</p>
-<p>Happy Hacking! 🎉</p>
+<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
+Clash，最稳的策略就三条：</p>
+<ul>
+<li>禁掉 VS Code 对代理端口的自动转发</li>
+<li>让远端端口和本地代理端口不要同号</li>
+<li>把不同设备的远端代理端口编号分开</li>
+</ul>
+<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
 ]]></content>
       <tags>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>PyTorch</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
+        <tag>Clash</tag>
+        <tag>SSH</tag>
+        <tag>VS Code</tag>
+        <tag>端口转发</tag>
+        <tag>Proxy</tag>
       </tags>
   </entry>
   <entry>
@@ -14673,6 +14344,335 @@ DHCP 服务器</h4>
         <tag>Tailscale</tag>
         <tag>路由</tag>
         <tag>DNS</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
+    <url>/posts/18f02423/</url>
+    <content><![CDATA[<p>CUDA
+报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
+<td>下命令的人</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU 端代码，真正执行 kernel 的一侧。</td>
+<td>干活的人</td>
+</tr>
+<tr>
+<td>Kernel</td>
+<td>在 GPU 上并行执行的函数。</td>
+<td>GPU 任务</td>
+</tr>
+<tr>
+<td>Stream</td>
+<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
+<td>GPU 队列</td>
+</tr>
+<tr>
+<td>Synchronize</td>
+<td>CPU 停下来等 GPU 做完前面的任务。</td>
+<td>等结果</td>
+</tr>
+<tr>
+<td>CUDA error code</td>
+<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
+<td>一句错误摘要</td>
+</tr>
+</tbody>
+</table>
+<p>一句话省流：</p>
+<blockquote>
+<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
+真正在哪里出错”。</strong></p>
+</blockquote>
+<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
+<p>CUDA 程序里通常有两条时间线：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
+<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
+队列，然后自己继续往下跑。</p>
+<p>也就是说：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
+<p>这行代码返回成功，通常只能说明：</p>
+<blockquote>
+<p>kernel launch 请求成功提交了。</p>
+</blockquote>
+<p>它不等价于：</p>
+<blockquote>
+<p>kernel 已经在 GPU 上执行成功了。</p>
+</blockquote>
+<p>这就是 CUDA 异步报错的根源。</p>
+<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
+<p>一个简化版流程如下：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
+<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
+<p>普通 CPU 函数调用更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
+<p>CUDA kernel launch 更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
+<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
+kernel。</p>
+<h3 id="stream-是什么">🧩 Stream 是什么</h3>
+<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
+<p>同一个 stream 里的任务通常按顺序执行。但 CPU
+提交任务时不一定等待每个任务结束：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
+<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
+done。</p>
+<p>这在 PyTorch 里很常见：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
+<p>前面几行可能只是不断向 GPU 提交算子。到了
+<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
+GPU，于是错误可能在这里才爆出来。</p>
+<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
+<p>假设某个 kernel 里有越界写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>CPU 端这样调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
+<p>可能的结果是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>报错位置看起来在：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
+<p>但真正的事故现场可能是前面的：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
+<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
+工作完成，CPU 到这里才第一次认真问 GPU：</p>
+<blockquote>
+<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
+</blockquote>
+<p>GPU/driver 这时返回：</p>
+<blockquote>
+<p>前面那个 kernel 已经出错了。</p>
+</blockquote>
+<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
+<p>默认情况下，GPU 端错误通常不是像 CPU
+异常一样立刻带着完整调用栈抛回来。</p>
+<p>更接近下面这个过程：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
+<p>所以你看到的经常是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
+<ul>
+<li>哪个 kernel 的哪一行出错；</li>
+<li>哪个 block/thread 出错；</li>
+<li>GPU 上完整的调用链是什么；</li>
+<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
+</ul>
+<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
+<p>当 PyTorch 报错栈指向：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>它通常表示：</p>
+<blockquote>
+<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
+</blockquote>
+<p>它不必然表示：</p>
+<blockquote>
+<p>这个 API 自己就是根因。</p>
+</blockquote>
+<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
+<p>常见通知点包括：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 75%" />
+</colgroup>
+<thead>
+<tr>
+<th>操作</th>
+<th>为什么会暴露错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>明确等待 GPU 之前的任务完成。</td>
+</tr>
+<tr>
+<td><code>cudaStreamSynchronize(stream)</code></td>
+<td>等某个 stream 完成。</td>
+</tr>
+<tr>
+<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
+<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
+</tr>
+<tr>
+<td><code>tensor.cpu()</code></td>
+<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
+</tr>
+<tr>
+<td><code>loss.item()</code></td>
+<td>需要把 GPU 标量读到 Python 数值。</td>
+</tr>
+<tr>
+<td>后续 CUDA API</td>
+<td>发现当前 CUDA context 已经有错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么-gpu-错误默认只有一句话">🔍 为什么 GPU
+错误默认只有一句话</h3>
+<p>CPU 异常容易打印调用栈，是因为 CPU
+线程有清晰的栈帧和同步执行路径。</p>
+<p>GPU kernel 不一样：</p>
+<ul>
+<li>一个 kernel 可能有成千上万个线程同时执行；</li>
+<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
+<li>错误可能只发生在某个 thread；</li>
+<li>kernel launch 和 kernel 执行在时间线上分离；</li>
+<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
+调试模式。</li>
+</ul>
+<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
+<p>这些描述很有用，但它们不是完整定位结果。</p>
+<h3 id="cuda_launch_blocking1-做了什么">🛠️
+<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
+<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
+<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
+<p>默认情况：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>开启后：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
+的位置。</p>
+<p>代价是程序会明显变慢，因为 CPU/GPU
+原本可以重叠执行的部分被压平了。</p>
+<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
+<p>分类任务里，<code>target</code> 必须在
+<code>[0, num_classes - 1]</code> 范围内。</p>
+<p>例如模型输出 10 类：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
+<p>但 <code>target</code> 里出现了非法类别：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
+<p>这时：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
+<p>GPU kernel 可能触发 device-side
+assert。你看到的报错位置却可能在：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
+<p>真正要查的是：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
+<p>如果是 <code>cross_entropy</code>，优先确认：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
+<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
+<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>区别是：</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 73%" />
+</colgroup>
+<thead>
+<tr>
+<th>API</th>
+<th>主要检查什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaGetLastError()</code></td>
+<td>kernel launch 是否成功，比如配置、参数、符号等 launch
+阶段错误。</td>
+</tr>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
+</tr>
+</tbody>
+</table>
+<p>如果要进一步定位到源码行，可以用更重的工具：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
+<p>典型报告可能会给出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
+<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
+事故现场。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
+写错了。</td>
+<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
+</tr>
+<tr>
+<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
+<td>launch 成功只代表提交成功，不代表执行成功。</td>
+</tr>
+<tr>
+<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
+<td>它只是让报错更同步、更容易定位。</td>
+</tr>
+<tr>
+<td>GPU 报错只有一句话，所以没法查。</td>
+<td>默认信息少，但可以用同步、断言、Compute
+Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
+</tr>
+<tr>
+<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
+<td>一个早期 GPU 错误可能污染后续 CUDA
+context，后面只是连续发现错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
+<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
+<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
+<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
+错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
+往往在更早提交的任务里。</p>
+</blockquote>
+<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
+和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
+Sanitizer。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>PyTorch</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
@@ -20721,6 +20721,291 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
       </tags>
   </entry>
   <entry>
+    <title>SEV-SNP隔离原理：NPT、RMP与硬件强制</title>
+    <url>/posts/d2278960/</url>
+    <content><![CDATA[<p>地址翻译由 hypervisor 负责，而 hypervisor 本身并不可信。SEV-SNP 用
+NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原理。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor</td>
+<td>虚拟机监控器（VMM）</td>
+<td>云上管虚拟机的软件层</td>
+</tr>
+<tr>
+<td>嵌套分页</td>
+<td>Nested Paging，两层地址翻译</td>
+<td>虚拟机地址翻译机制</td>
+</tr>
+<tr>
+<td>NPT</td>
+<td>Nested Page Table，嵌套页表</td>
+<td>hypervisor 建的翻译规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>Reverse Map Table，反向映射表</td>
+<td>硬件记录的”物理页归谁”事实</td>
+</tr>
+<tr>
+<td>RMPE</td>
+<td>RMP Entry，RMP 条目</td>
+<td>每 4KB 物理页一条记录</td>
+</tr>
+<tr>
+<td>ASID</td>
+<td>Address Space Identifier，地址空间标识符</td>
+<td>每个 CVM 的唯一身份编号</td>
+</tr>
+<tr>
+<td>VMCB</td>
+<td>Virtual Machine Control Block，虚拟机控制块</td>
+<td>存 VM 状态和 ASID 的控制块</td>
+</tr>
+<tr>
+<td>VMRUN/VMEXIT</td>
+<td>进出虚拟机的特权指令</td>
+<td>硬件切换”当前身份”的开关</td>
+</tr>
+<tr>
+<td>VMPL</td>
+<td>Virtual Machine Privilege Level，虚拟机特权级</td>
+<td>VM 内部的 4 级权限</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全小电脑</td>
+</tr>
+<tr>
+<td>#PF</td>
+<td>Page Fault，缺页异常</td>
+<td>硬件拒绝访问时的信号</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要-snp第一代-sev-的漏洞">🧩 为什么需要 SNP：第一代 SEV
+的漏洞</h3>
+<p>先看虚拟机地址翻译。虚拟机里的地址要翻译两次才能到真实物理地址：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Guest 认为的地址(GVA) → Guest 页表 → Guest 物理地址(GPA)</span><br><span class="line">                                         │</span><br><span class="line">                                         ▼</span><br><span class="line">                          hypervisor 的嵌套页表(NPT) → 真实物理地址(SPA)</span><br></pre></td></tr></table></figure>
+<p>这里的 <strong>NPT 由 hypervisor
+管理</strong>。问题来了：<strong>hypervisor
+不可信</strong>，它可以：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>攻击</th>
+<th>做法</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>偷换内容</td>
+<td>把 VM 的某个 GPA 悄悄重映射到别的物理页</td>
+<td>VM 读到被替换的假数据</td>
+</tr>
+<tr>
+<td>数据串扰</td>
+<td>把 VM 的页映射给另一个 VM</td>
+<td>两个租户数据互相泄露</td>
+</tr>
+<tr>
+<td>直接偷读</td>
+<td>把自己映射到 VM 的页</td>
+<td>读取 VM 内存</td>
+</tr>
+</tbody>
+</table>
+<p>第一代 SEV
+只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证”别人读不懂”，但
+hypervisor 可以”把读的对象换掉”。这就是 SNP 要补的洞。</p>
+<h3 id="rmp反向映射表硬件管的所有权事实">🔍
+RMP：反向映射表，硬件管的”所有权事实”</h3>
+<p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
+的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP：每 4KB 物理页一行，硬件强制记录：</span><br><span class="line">┌──────────┬───────────┬──────────┐</span><br><span class="line">│ 物理页地址 │ 属于哪个VM │ 权限/状态  │</span><br><span class="line">│ (SPA)    │ (ASID)    │          │</span><br><span class="line">└──────────┴───────────┴──────────┘</span><br></pre></td></tr></table></figure>
+<p>“反向”的含义：NPT 是 hypervisor 往前翻译”地址去哪”，RMP
+是硬件反过来锁”这页是谁的、谁才能动”。</p>
+<p>一句话对比：</p>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>谁维护</th>
+<th>管什么</th>
+<th>本质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NPT</td>
+<td>hypervisor（软件）</td>
+<td>地址往哪翻</td>
+<td>路由规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>CPU 硬件</td>
+<td>翻过去之后你有没有资格碰</td>
+<td>所有权事实</td>
+</tr>
+</tbody>
+</table>
+<p>hypervisor 能改路由规则，但改不了所有权事实——<strong>事实由 PSP
+固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
+都是白费力气，最终判定权在硬件手里。</p>
+<h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
+<p>“硬件强制执行，谁也绕不过”靠<strong>两把锁</strong>：</p>
+<p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
+<p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
+<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定”开多快”（建
+NPT
+规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
+<h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
+<p><strong>ASID（Address Space
+Identifier，地址空间标识符）</strong>——每个 CVM
+一个唯一编号。身份从哪来？怎么保证伪造不了？</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 每个 CVM 启动时分配一个 ASID（如 VM-A=16, VM-B=17）</span><br><span class="line">② ASID 记录在 VMCB（虚拟机控制块）里</span><br><span class="line">③ CPU 执行 VMRUN 进入该 VM 时，硬件把 ASID 装载为&quot;当前身份&quot;</span><br><span class="line">④ 之后该 VM 的所有内存访问，都自动携带这个身份</span><br></pre></td></tr></table></figure>
+<p><strong>判定流程（硬件完成，一次访存）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
+<p><strong>为什么软件伪造不了身份？</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
+<p>类比：VMRUN 就是”刷门禁卡进房间”，CPU
+是门禁系统本身。门禁系统自己知道”现在里面是谁”——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
+<h3 id="关键澄清hypervisor-只是提供规则不是执行翻译">💡
+关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</h3>
+<p>这是最容易混的点。<strong>页表是谁建的 ≠
+翻译是谁执行的</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
+<p>关键事实：<code>GPA→SPA</code>
+的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
+写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
+的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的”地图”，但走路的是
+CPU。</p>
+<p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
+<h3 id="典型场景对照">📋 典型场景对照</h3>
+<table>
+<thead>
+<tr>
+<th>访问者身份（当前 ASID）</th>
+<th>目标页归属（RMPE.ASID）</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VM-A (16)</td>
+<td>16（自己）</td>
+<td>✅ 允许</td>
+</tr>
+<tr>
+<td>VM-A (16)</td>
+<td>17（VM-B 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>16（CVM 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>未分配页</td>
+<td>✅ 允许（host 自己的内存）</td>
+</tr>
+</tbody>
+</table>
+<p>补充两个细节：</p>
+<ul>
+<li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
+还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
+里分别记录各级的读/写/执行权限。ASID 管”是不是这家的”，VMPL
+管”这家里面谁有权碰”。</li>
+<li><strong>设备 DMA 同样受限</strong>：设备要通过
+IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
+DMA 指向 CVM 的私有页。</li>
+</ul>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor 查 RMP</td>
+<td>查 RMP 的是 CPU 硬件，不是 hypervisor——它是裁判，不能当运动员</td>
+</tr>
+<tr>
+<td>hypervisor 执行地址翻译</td>
+<td>翻译由 CPU 的 MMU 硬件执行，hypervisor 只提供 NPT 规则表</td>
+</tr>
+<tr>
+<td>hypervisor 改 NPT 就能访问 CVM 内存</td>
+<td>NPT 是路由规则，RMP 是所有权事实，路由改了也过不了所有权检查</td>
+</tr>
+<tr>
+<td>内存加密就够防篡改</td>
+<td>加密只防”读不懂”，SNP/RMP 才是防”偷换、重映射”的关键</td>
+</tr>
+<tr>
+<td>ASID 是软件声明的身份</td>
+<td>ASID 是硬件通过 VMRUN/VMEXIT 自动维护的内部状态，软件伪造不了</td>
+</tr>
+<tr>
+<td>RMP 表软件可以随便改</td>
+<td>RMP 区域对软件保留，唯一入口 RMPUPDATE 由 PSP 固件把关</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>SEV-SNP 用 RMP
+把”物理页归谁”这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
+CPU 硬件执行，hypervisor 只提供页表规则；“当前访问者”是硬件通过
+VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管”地址往哪翻”，RMP
+管”翻过去之后你有没有资格碰”。</p>
+</blockquote>
+<p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>安全</tag>
+        <tag>机密计算</tag>
+        <tag>SEV-SNP</tag>
+        <tag>虚拟化</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TPM从零理解：保险箱里的密码世界</title>
     <url>/posts/fd7258a1/</url>
     <content><![CDATA[<p>TPM（Trusted Platform
@@ -21130,295 +21415,10 @@ blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sea
 ]]></content>
       <tags>
         <tag>安全</tag>
+        <tag>机密计算</tag>
         <tag>TPM</tag>
         <tag>可信计算</tag>
         <tag>密钥管理</tag>
-        <tag>机密计算</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>SEV-SNP隔离原理：NPT、RMP与硬件强制</title>
-    <url>/posts/d2278960/</url>
-    <content><![CDATA[<p>地址翻译由 hypervisor 负责，而 hypervisor 本身并不可信。SEV-SNP 用
-NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原理。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>hypervisor</td>
-<td>虚拟机监控器（VMM）</td>
-<td>云上管虚拟机的软件层</td>
-</tr>
-<tr>
-<td>嵌套分页</td>
-<td>Nested Paging，两层地址翻译</td>
-<td>虚拟机地址翻译机制</td>
-</tr>
-<tr>
-<td>NPT</td>
-<td>Nested Page Table，嵌套页表</td>
-<td>hypervisor 建的翻译规则</td>
-</tr>
-<tr>
-<td>RMP</td>
-<td>Reverse Map Table，反向映射表</td>
-<td>硬件记录的”物理页归谁”事实</td>
-</tr>
-<tr>
-<td>RMPE</td>
-<td>RMP Entry，RMP 条目</td>
-<td>每 4KB 物理页一条记录</td>
-</tr>
-<tr>
-<td>ASID</td>
-<td>Address Space Identifier，地址空间标识符</td>
-<td>每个 CVM 的唯一身份编号</td>
-</tr>
-<tr>
-<td>VMCB</td>
-<td>Virtual Machine Control Block，虚拟机控制块</td>
-<td>存 VM 状态和 ASID 的控制块</td>
-</tr>
-<tr>
-<td>VMRUN/VMEXIT</td>
-<td>进出虚拟机的特权指令</td>
-<td>硬件切换”当前身份”的开关</td>
-</tr>
-<tr>
-<td>VMPL</td>
-<td>Virtual Machine Privilege Level，虚拟机特权级</td>
-<td>VM 内部的 4 级权限</td>
-</tr>
-<tr>
-<td>PSP</td>
-<td>Platform Security Processor，平台安全处理器</td>
-<td>AMD CPU 里的独立安全小电脑</td>
-</tr>
-<tr>
-<td>#PF</td>
-<td>Page Fault，缺页异常</td>
-<td>硬件拒绝访问时的信号</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么需要-snp第一代-sev-的漏洞">🧩 为什么需要 SNP：第一代 SEV
-的漏洞</h3>
-<p>先看虚拟机地址翻译。虚拟机里的地址要翻译两次才能到真实物理地址：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Guest 认为的地址(GVA) → Guest 页表 → Guest 物理地址(GPA)</span><br><span class="line">                                         │</span><br><span class="line">                                         ▼</span><br><span class="line">                          hypervisor 的嵌套页表(NPT) → 真实物理地址(SPA)</span><br></pre></td></tr></table></figure>
-<p>这里的 <strong>NPT 由 hypervisor
-管理</strong>。问题来了：<strong>hypervisor
-不可信</strong>，它可以：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>攻击</th>
-<th>做法</th>
-<th>后果</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>偷换内容</td>
-<td>把 VM 的某个 GPA 悄悄重映射到别的物理页</td>
-<td>VM 读到被替换的假数据</td>
-</tr>
-<tr>
-<td>数据串扰</td>
-<td>把 VM 的页映射给另一个 VM</td>
-<td>两个租户数据互相泄露</td>
-</tr>
-<tr>
-<td>直接偷读</td>
-<td>把自己映射到 VM 的页</td>
-<td>读取 VM 内存</td>
-</tr>
-</tbody>
-</table>
-<p>第一代 SEV
-只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证”别人读不懂”，但
-hypervisor 可以”把读的对象换掉”。这就是 SNP 要补的洞。</p>
-<h3 id="rmp反向映射表硬件管的所有权事实">🔍
-RMP：反向映射表，硬件管的”所有权事实”</h3>
-<p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
-的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP：每 4KB 物理页一行，硬件强制记录：</span><br><span class="line">┌──────────┬───────────┬──────────┐</span><br><span class="line">│ 物理页地址 │ 属于哪个VM │ 权限/状态  │</span><br><span class="line">│ (SPA)    │ (ASID)    │          │</span><br><span class="line">└──────────┴───────────┴──────────┘</span><br></pre></td></tr></table></figure>
-<p>“反向”的含义：NPT 是 hypervisor 往前翻译”地址去哪”，RMP
-是硬件反过来锁”这页是谁的、谁才能动”。</p>
-<p>一句话对比：</p>
-<table>
-<thead>
-<tr>
-<th>表</th>
-<th>谁维护</th>
-<th>管什么</th>
-<th>本质</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>NPT</td>
-<td>hypervisor（软件）</td>
-<td>地址往哪翻</td>
-<td>路由规则</td>
-</tr>
-<tr>
-<td>RMP</td>
-<td>CPU 硬件</td>
-<td>翻过去之后你有没有资格碰</td>
-<td>所有权事实</td>
-</tr>
-</tbody>
-</table>
-<p>hypervisor 能改路由规则，但改不了所有权事实——<strong>事实由 PSP
-固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
-都是白费力气，最终判定权在硬件手里。</p>
-<h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
-<p>“硬件强制执行，谁也绕不过”靠<strong>两把锁</strong>：</p>
-<p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
-<p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
-<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定”开多快”（建
-NPT
-规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
-<h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
-<p><strong>ASID（Address Space
-Identifier，地址空间标识符）</strong>——每个 CVM
-一个唯一编号。身份从哪来？怎么保证伪造不了？</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 每个 CVM 启动时分配一个 ASID（如 VM-A=16, VM-B=17）</span><br><span class="line">② ASID 记录在 VMCB（虚拟机控制块）里</span><br><span class="line">③ CPU 执行 VMRUN 进入该 VM 时，硬件把 ASID 装载为&quot;当前身份&quot;</span><br><span class="line">④ 之后该 VM 的所有内存访问，都自动携带这个身份</span><br></pre></td></tr></table></figure>
-<p><strong>判定流程（硬件完成，一次访存）</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
-<p><strong>为什么软件伪造不了身份？</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
-<p>类比：VMRUN 就是”刷门禁卡进房间”，CPU
-是门禁系统本身。门禁系统自己知道”现在里面是谁”——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
-<h3 id="关键澄清hypervisor-只是提供规则不是执行翻译">💡
-关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</h3>
-<p>这是最容易混的点。<strong>页表是谁建的 ≠
-翻译是谁执行的</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
-<p>关键事实：<code>GPA→SPA</code>
-的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
-写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
-的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的”地图”，但走路的是
-CPU。</p>
-<p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
-<h3 id="典型场景对照">📋 典型场景对照</h3>
-<table>
-<thead>
-<tr>
-<th>访问者身份（当前 ASID）</th>
-<th>目标页归属（RMPE.ASID）</th>
-<th>判定</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>VM-A (16)</td>
-<td>16（自己）</td>
-<td>✅ 允许</td>
-</tr>
-<tr>
-<td>VM-A (16)</td>
-<td>17（VM-B 的页）</td>
-<td>❌ 拒绝</td>
-</tr>
-<tr>
-<td>hypervisor</td>
-<td>16（CVM 的页）</td>
-<td>❌ 拒绝</td>
-</tr>
-<tr>
-<td>hypervisor</td>
-<td>未分配页</td>
-<td>✅ 允许（host 自己的内存）</td>
-</tr>
-</tbody>
-</table>
-<p>补充两个细节：</p>
-<ul>
-<li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
-还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
-里分别记录各级的读/写/执行权限。ASID 管”是不是这家的”，VMPL
-管”这家里面谁有权碰”。</li>
-<li><strong>设备 DMA 同样受限</strong>：设备要通过
-IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
-DMA 指向 CVM 的私有页。</li>
-</ul>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>hypervisor 查 RMP</td>
-<td>查 RMP 的是 CPU 硬件，不是 hypervisor——它是裁判，不能当运动员</td>
-</tr>
-<tr>
-<td>hypervisor 执行地址翻译</td>
-<td>翻译由 CPU 的 MMU 硬件执行，hypervisor 只提供 NPT 规则表</td>
-</tr>
-<tr>
-<td>hypervisor 改 NPT 就能访问 CVM 内存</td>
-<td>NPT 是路由规则，RMP 是所有权事实，路由改了也过不了所有权检查</td>
-</tr>
-<tr>
-<td>内存加密就够防篡改</td>
-<td>加密只防”读不懂”，SNP/RMP 才是防”偷换、重映射”的关键</td>
-</tr>
-<tr>
-<td>ASID 是软件声明的身份</td>
-<td>ASID 是硬件通过 VMRUN/VMEXIT 自动维护的内部状态，软件伪造不了</td>
-</tr>
-<tr>
-<td>RMP 表软件可以随便改</td>
-<td>RMP 区域对软件保留，唯一入口 RMPUPDATE 由 PSP 固件把关</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>SEV-SNP 用 RMP
-把”物理页归谁”这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
-CPU 硬件执行，hypervisor 只提供页表规则；“当前访问者”是硬件通过
-VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管”地址往哪翻”，RMP
-管”翻过去之后你有没有资格碰”。</p>
-</blockquote>
-<p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>安全</tag>
-        <tag>机密计算</tag>
-        <tag>SEV-SNP</tag>
-        <tag>虚拟化</tag>
       </tags>
   </entry>
   <entry>
@@ -21755,8 +21755,8 @@ PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
       <tags>
         <tag>TEE</tag>
         <tag>安全</tag>
-        <tag>TPM</tag>
         <tag>机密计算</tag>
+        <tag>TPM</tag>
         <tag>信任根</tag>
         <tag>远程认证</tag>
       </tags>
@@ -24549,7 +24549,7 @@ Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后�
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
 <h2 id="总架构">🗺️ 总架构</h2>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    │  加密的 workload</span><br><span class="line">    ↓</span><br><span class="line">┌─────────────────────────────────────────┐</span><br><span class="line">│ TVM（软件侧，受保护虚拟机）             │</span><br><span class="line">│                                         │</span><br><span class="line">│ 并列装了三样组件：                      │</span><br><span class="line">│ 1. xPU 原生软件栈                       │</span><br><span class="line">│    App / Driver / Libs（不改）          │</span><br><span class="line">│ 2. Adaptor（新增）                      │</span><br><span class="line">│    与 PCIe-SC 交互，识别并加密数据      │</span><br><span class="line">│ 3. TVM Trust Modules（ccAI 部署）       │</span><br><span class="line">│    密钥管理、远程证明                   │</span><br><span class="line">└─────────────────────────────────────────┘</span><br><span class="line">    │ PCIe</span><br><span class="line">    ↓</span><br><span class="line">┌─────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC（硬件，插在服务器 PCIe 端口）   │</span><br><span class="line">│                                         │</span><br><span class="line">│ 1. Packet Filter：L1/L2 决策 A1~A4      │</span><br><span class="line">│ 2. Packet Handlers：AES 加密与完整性    │</span><br><span class="line">│ 3. HRoT-Blade：信任控制面               │</span><br><span class="line">│    不处理数据包                         │</span><br><span class="line">│    （Secure Boot / 远程证明 / 密钥）    │</span><br><span class="line">└─────────────────────────────────────────┘</span><br><span class="line">    │ Internal PCIe（xPU 连到 PCIe-SC 上）</span><br><span class="line">    ↓</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    │  encrypted workload</span><br><span class="line">    ↓</span><br><span class="line">┌────────────────────────────────────────────┐</span><br><span class="line">│ TVM (software side, protected VM)          │</span><br><span class="line">│                                            │</span><br><span class="line">│ three components co-installed:             │</span><br><span class="line">│ 1. xPU Native Software Stack               │</span><br><span class="line">│      App / Driver / Libs (unchanged)       │</span><br><span class="line">│ 2. Adaptor (added)                         │</span><br><span class="line">│      interacts with PCIe-SC,               │</span><br><span class="line">│      recognizes &amp; encrypts data            │</span><br><span class="line">│ 3. TVM Trust Modules (ccAI-deployed)       │</span><br><span class="line">│      key mgmt, remote attestation          │</span><br><span class="line">└────────────────────────────────────────────┘</span><br><span class="line">    │ PCIe</span><br><span class="line">    ↓</span><br><span class="line">┌────────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC (HW in a server PCIe slot)         │</span><br><span class="line">│                                            │</span><br><span class="line">│ 1. Packet Filter: L1/L2 policy A1~A4       │</span><br><span class="line">│ 2. Packet Handlers: AES enc. + integrity   │</span><br><span class="line">│ 3. HRoT-Blade: trust control plane         │</span><br><span class="line">│      not on data path,                     │</span><br><span class="line">│      (Secure Boot / remote attest. / keys) │</span><br><span class="line">└────────────────────────────────────────────┘</span><br><span class="line">    │ Internal PCIe (xPU plugs into PCIe-SC)</span><br><span class="line">    ↓</span><br><span class="line">  GPU / NPU</span><br><span class="line"></span><br><span class="line">框内英文对应中文：</span><br><span class="line">  TVM / xPU Native Software Stack  ← xPU 原生软件栈（App/Driver/Libs，不改）</span><br><span class="line">  Adaptor                          ← 新增，与 PCIe-SC 交互，识别并加密数据</span><br><span class="line">  TVM Trust Modules                ← ccAI 部署；密钥管理、远程证明</span><br><span class="line">  PCIe-SC                          ← 硬件，插在服务器 PCIe 端口</span><br><span class="line">  Packet Filter                    ← L1/L2 决策 A1~A4</span><br><span class="line">  Packet Handlers                  ← AES 加密与完整性</span><br><span class="line">  HRoT-Blade                       ← 信任控制面，不处理数据包</span><br><span class="line">                                     （Secure Boot / 远程证明 / 密钥）</span><br><span class="line">  Internal PCIe                    ← xPU 连到 PCIe-SC 上</span><br></pre></td></tr></table></figure>
 <table>
 <thead>
 <tr>

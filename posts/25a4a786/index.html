@@ -30,7 +30,7 @@
 <meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个门卫，再在软件侧配一个翻译员，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执行）、HR">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T01:39:52.910Z">
+<meta property="article:modified_time" content="2026-09-09T02:04:56.250Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -276,7 +276,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 09:39:52" itemprop="dateModified" datetime="2026-09-09T09:39:52+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-09 10:04:56" itemprop="dateModified" datetime="2026-09-09T10:04:56+08:00">2026-09-09</time>
     </span>
 
   
@@ -293,14 +293,14 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.8k</span>
+      <span>7.3k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>12 mins.</span>
+      <span>13 mins.</span>
     </span>
 </div>
 
@@ -323,7 +323,7 @@ Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后�
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
 <h2 id="总架构">🗺️ 总架构</h2>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    │  加密的 workload</span><br><span class="line">    ↓</span><br><span class="line">┌─────────────────────────────────────────┐</span><br><span class="line">│ TVM（软件侧，受保护虚拟机）             │</span><br><span class="line">│                                         │</span><br><span class="line">│ 并列装了三样组件：                      │</span><br><span class="line">│ 1. xPU 原生软件栈                       │</span><br><span class="line">│    App / Driver / Libs（不改）          │</span><br><span class="line">│ 2. Adaptor（新增）                      │</span><br><span class="line">│    与 PCIe-SC 交互，识别并加密数据      │</span><br><span class="line">│ 3. TVM Trust Modules（ccAI 部署）       │</span><br><span class="line">│    密钥管理、远程证明                   │</span><br><span class="line">└─────────────────────────────────────────┘</span><br><span class="line">    │ PCIe</span><br><span class="line">    ↓</span><br><span class="line">┌─────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC（硬件，插在服务器 PCIe 端口）   │</span><br><span class="line">│                                         │</span><br><span class="line">│ 1. Packet Filter：L1/L2 决策 A1~A4      │</span><br><span class="line">│ 2. Packet Handlers：AES 加密与完整性    │</span><br><span class="line">│ 3. HRoT-Blade：信任控制面               │</span><br><span class="line">│    不处理数据包                         │</span><br><span class="line">│    （Secure Boot / 远程证明 / 密钥）    │</span><br><span class="line">└─────────────────────────────────────────┘</span><br><span class="line">    │ Internal PCIe（xPU 连到 PCIe-SC 上）</span><br><span class="line">    ↓</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    │  encrypted workload</span><br><span class="line">    ↓</span><br><span class="line">┌────────────────────────────────────────────┐</span><br><span class="line">│ TVM (software side, protected VM)          │</span><br><span class="line">│                                            │</span><br><span class="line">│ three components co-installed:             │</span><br><span class="line">│ 1. xPU Native Software Stack               │</span><br><span class="line">│      App / Driver / Libs (unchanged)       │</span><br><span class="line">│ 2. Adaptor (added)                         │</span><br><span class="line">│      interacts with PCIe-SC,               │</span><br><span class="line">│      recognizes &amp; encrypts data            │</span><br><span class="line">│ 3. TVM Trust Modules (ccAI-deployed)       │</span><br><span class="line">│      key mgmt, remote attestation          │</span><br><span class="line">└────────────────────────────────────────────┘</span><br><span class="line">    │ PCIe</span><br><span class="line">    ↓</span><br><span class="line">┌────────────────────────────────────────────┐</span><br><span class="line">│ PCIe-SC (HW in a server PCIe slot)         │</span><br><span class="line">│                                            │</span><br><span class="line">│ 1. Packet Filter: L1/L2 policy A1~A4       │</span><br><span class="line">│ 2. Packet Handlers: AES enc. + integrity   │</span><br><span class="line">│ 3. HRoT-Blade: trust control plane         │</span><br><span class="line">│      not on data path,                     │</span><br><span class="line">│      (Secure Boot / remote attest. / keys) │</span><br><span class="line">└────────────────────────────────────────────┘</span><br><span class="line">    │ Internal PCIe (xPU plugs into PCIe-SC)</span><br><span class="line">    ↓</span><br><span class="line">  GPU / NPU</span><br><span class="line"></span><br><span class="line">框内英文对应中文：</span><br><span class="line">  TVM / xPU Native Software Stack  ← xPU 原生软件栈（App/Driver/Libs，不改）</span><br><span class="line">  Adaptor                          ← 新增，与 PCIe-SC 交互，识别并加密数据</span><br><span class="line">  TVM Trust Modules                ← ccAI 部署；密钥管理、远程证明</span><br><span class="line">  PCIe-SC                          ← 硬件，插在服务器 PCIe 端口</span><br><span class="line">  Packet Filter                    ← L1/L2 决策 A1~A4</span><br><span class="line">  Packet Handlers                  ← AES 加密与完整性</span><br><span class="line">  HRoT-Blade                       ← 信任控制面，不处理数据包</span><br><span class="line">                                     （Secure Boot / 远程证明 / 密钥）</span><br><span class="line">  Internal PCIe                    ← xPU 连到 PCIe-SC 上</span><br></pre></td></tr></table></figure>
 <table>
 <thead>
 <tr>
@@ -657,13 +657,13 @@ System for AI Computing</em> 的入门精读笔记。）</p>
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">415k</span>
+    <span title="Word count total">416k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:35</span>
+    <span title="Reading time total">12:36</span>
   </span>
 </div>
 <div class="busuanzi-count">
