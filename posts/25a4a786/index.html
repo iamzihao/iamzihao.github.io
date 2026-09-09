@@ -30,7 +30,7 @@
 <meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个门卫，再在软件侧配一个翻译员，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执行）、HR">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T07:55:33.263Z">
+<meta property="article:modified_time" content="2026-09-09T08:06:37.047Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -277,7 +277,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 15:55:33" itemprop="dateModified" datetime="2026-09-09T15:55:33+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-09 16:06:37" itemprop="dateModified" datetime="2026-09-09T16:06:37+08:00">2026-09-09</time>
     </span>
 
   
@@ -294,7 +294,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>7.5k</span>
+      <span>7.7k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -498,13 +498,14 @@ tag，不一致就说明被动过手脚。</p>
 <p>Handler 不会把整包囫囵处理，而是把 <strong>Header 和 Payload
 分开</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">   ├── Header ──────→ Header Queue（原样走，不动）</span><br><span class="line">   └── Payload ─────→ Payload Queue</span><br><span class="line">                          ↓</span><br><span class="line">                  Security Engine</span><br><span class="line">                    ┌─────┴─────┐</span><br><span class="line">                    ↓           ↓</span><br><span class="line">              AES-SHA      Authentication</span><br><span class="line">               Engine      Tag Manager</span><br><span class="line">                    └─────┬─────┘</span><br><span class="line">                          ↓</span><br><span class="line">                     重新组合 Packet</span><br></pre></td></tr></table></figure>
-<p>A2 的完整五步（以 TVM 向 GPU
-发模型参数为例；图里画的是安全引擎加解密的通用处理——真实 H2D 方向
-payload 在 TVM 侧已被 Adaptor 加密，这里 Handler
-做的是解密与完整性校验；D2H 返回方向才真正加密上 PCIe）：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">1. Packet 到达</span><br><span class="line">      ┌────────┬──────────────┐</span><br><span class="line">      │ Header │ Model Data   │</span><br><span class="line">      └────────┴──────────────┘</span><br><span class="line">                   ↓</span><br><span class="line">2. Filter 判断：授权 TVM + 敏感地址 → A2</span><br><span class="line">                   ↓</span><br><span class="line">3. 拆包：Header → Header Queue（原样走）；Payload → Payload Queue</span><br><span class="line">                   ↓</span><br><span class="line">4. 处理 Payload：AES 加密 → Encrypted Data</span><br><span class="line">      Integrity 计算 → Authentication Tag</span><br><span class="line">                   ↓</span><br><span class="line">5. 重组发出</span><br><span class="line">      ┌────────┬────────────────┬────────────┐</span><br><span class="line">      │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">      └────────┴────────────────┴────────────┘</span><br><span class="line">                   ↓ PCIe</span><br><span class="line">                  xPU</span><br></pre></td></tr></table></figure>
-<p>xPU → TVM 的返回数据（D2H）走同样的流程反向处理：结果经 PCIe-SC
-加密返回，TVM 解密后使用。</p>
+<p>A2 的完整五步——下面以 <strong>D2H 方向</strong>（xPU 算完、把结果返回
+TVM）为例：此时数据在 PCIe-SC 的 Handler 里”真正被加密”（AES
+引擎双向工作，H2D 任务下发方向则由 TVM 侧 Adaptor 加密，见下一站）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">1. xPU 结果包到达 PCIe-SC</span><br><span class="line">      ┌────────┬──────────────┐</span><br><span class="line">      │ Header │ Result Data  │</span><br><span class="line">      └────────┴──────────────┘</span><br><span class="line">                   ↓</span><br><span class="line">2. Filter 判断：敏感结果数据 → A2</span><br><span class="line">                   ↓</span><br><span class="line">3. 拆包：Header → Header Queue（原样走）；Payload → Payload Queue</span><br><span class="line">                   ↓</span><br><span class="line">4. 处理 Payload：AES 加密 → Encrypted Data</span><br><span class="line">      Integrity 计算 → Authentication Tag</span><br><span class="line">                   ↓</span><br><span class="line">5. 重组发出</span><br><span class="line">      ┌────────┬────────────────┬────────────┐</span><br><span class="line">      │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">      └────────┴────────────────┴────────────┘</span><br><span class="line">                   ↓ PCIe</span><br><span class="line">                  TVM</span><br></pre></td></tr></table></figure>
+<p>任务下发（H2D）方向是镜像流程：payload 在 TVM 侧已被 Adaptor
+加密后才上 PCIe，PCIe-SC 的 Handler
+收到后负责解密和完整性校验，再以明文交给 xPU——Adaptor
+这端留到下一站讲。</p>
 <h3 id="为什么这套能兼容各种-xpu">为什么这套能兼容各种 xPU？</h3>
 <p>不同 xPU 的 DMA/MMIO
 实现各不相同，但<strong>它们的流量最终都是标准格式的 PCIe
@@ -523,7 +524,8 @@ buffer。而 <strong>Adaptor 住在 TVM
 <p>Adaptor 干两件事：</p>
 <ol type="1">
 <li><strong>通过 MMIO 与 PCIe-SC 交互</strong>：查询任务
-metadata（数据地址、大小），下发安全规则。</li>
+metadata（数据地址、大小）；装载安全规则——注意规则<strong>内容由用户授权</strong>（见上文
+Q1），Adaptor 只负责把它们写进 PCIe-SC 的 L1/L2 表。</li>
 <li><strong>处理 xPU task</strong>：找到敏感数据 → 加密 → 放进
 <strong>bounce buffer</strong> → 传给 xPU。</li>
 </ol>
@@ -549,8 +551,9 @@ Establishment——凭什么信这台机器？</h2>
 <p>如果门卫本身不可信，加密就是给贼上锁。§6 用三步建立信任：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Secure Boot（先确认机器没被换）</span><br><span class="line">     ↓</span><br><span class="line">Remote Attestation（再向远程用户证明）</span><br><span class="line">     ↓</span><br><span class="line">Key Exchange（最后才把密钥交给它）</span><br></pre></td></tr></table></figure>
 <h3 id="secure-boot-hrot-blade">Secure Boot + HRoT-Blade</h3>
-<p>CPU 侧有硬件信任根（HRoT，如 TDX module）保护 TVM，但 <strong>PCIe-SC
-是另一块独立硬件</strong>，CPU 的启动信任链管不到它，所以论文给 PCIe-SC
+<p>CPU 侧靠 <strong>TDX module 这类 TEE</strong> 隔离保护 TVM（并有 CPU
+平台自带的硬件信任根 HRoT 支撑启动量测），但 <strong>PCIe-SC
+是另一块独立硬件</strong>，CPU 的信任链管不到它，所以论文给 PCIe-SC
 配了自己的信任根：<strong>HRoT-Blade</strong>（一个 TPM-compatible
 的信任模块）。注意这里有两类信任组件要分清：平台自带的 CPU HRoT 是 ccAI
 借来给 TVM / Adaptor 做安全启动量测的；而前面总架构图里 TVM 中的
@@ -576,10 +579,12 @@ Report 大概是：</p>
 的密钥</strong>（Adaptor 加密用的）是 TVM 与 PCIe-SC
 在各自信任模块里协商的对称密钥，保护 TVM → xPU 之间的 PCIe
 总线（论文威胁模型里攻击者可以 snoop
-PCIe），任务结束双方销毁。明文只在两个可信边界内出现：TVM 内部、xPU
-内部。方向要记清：H2D（任务下去）是 Adaptor 加密、PCIe-SC
-解密；D2H（结果上来）反过来，PCIe-SC 加密、Adaptor 解密——同一个 AES
-引擎双向工作。</p>
+PCIe），任务结束双方销毁。明文只出现在两个可信域：TVM
+内部，以及被机箱密封保护的 xPU 侧（PCIe-SC ↔︎ xPU 的内部总线与 xPU
+内部，论文 §6 用 chassis sealing +
+物理传感器守护这段）。方向要记清：H2D（任务下去）是 Adaptor
+加密、PCIe-SC 解密；D2H（结果上来）反过来，PCIe-SC 加密、Adaptor
+解密——同一个 AES 引擎双向工作。</p>
 <h2 id="第五站implementation作者真做出来了">🛠️
 第五站：Implementation——作者真做出来了</h2>
 <p>论文用 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
@@ -588,7 +593,7 @@ PCIe），任务结束双方销毁。明文只在两个可信边界内出现：T
 kernel module（不改 CUDA / GPU Driver / AI Application） - 提供
 <code>encrypt_data()</code> / <code>decrypt_data()</code>，用
 <strong>AES-128</strong> + Intel <strong>AES-NI</strong> 加速 - 分到
-<strong>64 KB MMIO 区域</strong> 控制 PCIe-SC（下发规则到 L1/L2、启停
+<strong>64 KB MMIO 区域</strong> 控制 PCIe-SC（装载规则到 L1/L2、启停
 H2D/D2H 传输、查状态）</p>
 <p><strong>② PCIe-SC（FPGA 硬件）</strong> - 分配 <strong>4 KB BAR
 空间</strong>存放 L1/L2 规则表 - Packet Filter 从 header
@@ -700,7 +705,7 @@ System for AI Computing</em> 的入门精读笔记。）</p>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:34</span>
+    <span title="Reading time total">12:35</span>
   </span>
 </div>
 <div class="busuanzi-count">
