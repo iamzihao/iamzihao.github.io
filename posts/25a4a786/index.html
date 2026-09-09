@@ -30,7 +30,7 @@
 <meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个门卫，再在软件侧配一个翻译员，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执行）、HR">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T08:09:02.889Z">
+<meta property="article:modified_time" content="2026-09-09T08:16:35.156Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -277,7 +277,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 16:09:02" itemprop="dateModified" datetime="2026-09-09T16:09:02+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-09 16:16:35" itemprop="dateModified" datetime="2026-09-09T16:16:35+08:00">2026-09-09</time>
     </span>
 
   
@@ -294,7 +294,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>7.6k</span>
+      <span>8k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -445,6 +445,42 @@ A2 加密），那段只是普通 buffer（A3 就够）。Adaptor
 ccAI 兼容新 xPU 的底气：厂商想给私有管理包加规则，直接通过 MMIO
 寄存器加一条就行，不用重写固件。</p>
 </blockquote>
+<p>一句话理清三个角色：<strong>用户定规则、Adaptor 搬运规则、Packet
+Filter 按规则分级</strong>——Filter 不发明规则，只是查表执法：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>角色</th>
+<th>职责</th>
+<th>类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>用户</strong>（负载所有者）</td>
+<td>制定规则内容：哪些包/地址敏感、该怎么处理</td>
+<td>🏛️ 立法者</td>
+</tr>
+<tr>
+<td><strong>Adaptor</strong></td>
+<td>把用户给好的规则装载进 PCIe-SC 的 L1/L2 表</td>
+<td>📋 录入员</td>
+</tr>
+<tr>
+<td><strong>Packet Filter</strong></td>
+<td>每个包查 L1/L2 表，命中哪条就给哪个动作（A1~A4）</td>
+<td>👮 执法者</td>
+</tr>
+</tbody>
+</table>
+<p>所以前文说的”Filter 分级
+A1<sub>A4”是<strong>执行视角</strong>（查表贴标签），这里的”用户下发”是<strong>制定视角</strong>（规则从哪来）——两句话不矛盾：分级的依据，正是用户预先放进表里的那些规则。另外注意，A1</sub>A4
+这四档动作是论文设计好的固定分类，用户能定的是”每个包落哪一档”，不能发明第五档。</p>
 <h3 id="q2adaptor-是云厂商的闭源模块用户凭什么信它">Q2：Adaptor
 是云厂商的闭源模块，用户凭什么信它？</h3>
 <blockquote>
