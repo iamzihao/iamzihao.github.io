@@ -30,7 +30,7 @@
 <meta property="og:description" content="接上一篇《ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？》：CPU 侧用 TVM 保护好了，但数据一上 PCIe 就是明文。ccAI 的答案是——在 CPU 和 xPU 之间的 PCIe 上插一个门卫，再在软件侧配一个翻译员，让老 GPU 也能机密计算。  本篇讲清四个组件怎么配合：Adaptor（兼容）、Packet Filter（决策）、Packet Handler（执行）、HR">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-08T08:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T08:16:35.156Z">
+<meta property="article:modified_time" content="2026-09-10T02:53:51.729Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="TEE">
 <meta property="article:tag" content="安全">
@@ -179,7 +179,7 @@
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E6%9E%B6%E6%9E%84"><span class="nav-number">1.</span> <span class="nav-text">🗺️ 总架构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E7%AB%99packet-filter%E8%BF%99%E4%B8%AA%E5%8C%85%E8%AF%A5%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">🚧 第一站：Packet
-Filter——这个包该怎么处理？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E5%85%A8%E9%83%BD%E5%8A%A0%E5%AF%86"><span class="nav-number">2.1.</span> <span class="nav-text">为什么不能全都加密？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9B%9B%E7%A7%8D%E5%AE%89%E5%85%A8%E5%8A%A8%E4%BD%9C-a1a4"><span class="nav-number">2.2.</span> <span class="nav-text">四种安全动作 A1~A4 ⭐</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#filter-%E7%9C%8B%E4%B8%89%E4%B8%AA%E5%B1%9E%E6%80%A7"><span class="nav-number">2.3.</span> <span class="nav-text">Filter 看三个属性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#l1-l2-%E4%B8%A4%E7%BA%A7%E8%A1%A8%E5%85%88%E6%8C%A1%E5%9D%8F%E4%BA%BA%E5%86%8D%E7%BB%99%E5%A5%BD%E4%BA%BA%E5%88%86%E7%B1%BB"><span class="nav-number">2.4.</span> <span class="nav-text">L1 &#x2F; L2
+Filter——这个包该怎么处理？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E5%85%A8%E9%83%BD%E5%8A%A0%E5%AF%86"><span class="nav-number">2.1.</span> <span class="nav-text">为什么不能全都加密？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9B%9B%E7%A7%8D%E5%AE%89%E5%85%A8%E5%8A%A8%E4%BD%9C-a1a4"><span class="nav-number">2.2.</span> <span class="nav-text">四种安全动作 A1～A4 ⭐</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#filter-%E7%9C%8B%E4%B8%89%E4%B8%AA%E5%B1%9E%E6%80%A7"><span class="nav-number">2.3.</span> <span class="nav-text">Filter 看三个属性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#l1-l2-%E4%B8%A4%E7%BA%A7%E8%A1%A8%E5%85%88%E6%8C%A1%E5%9D%8F%E4%BA%BA%E5%86%8D%E7%BB%99%E5%A5%BD%E4%BA%BA%E5%88%86%E7%B1%BB"><span class="nav-number">2.4.</span> <span class="nav-text">L1 &#x2F; L2
 两级表：先挡坏人，再给好人分类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%A7%84%E5%88%99%E6%9C%AC%E8%BA%AB%E4%B9%9F%E8%A6%81%E4%BF%9D%E6%8A%A4"><span class="nav-number">2.5.</span> <span class="nav-text">规则本身也要保护</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#q1%E7%AD%96%E7%95%A5%E6%98%AF%E5%86%99%E6%AD%BB%E5%9C%A8%E4%BB%A3%E7%A0%81%E9%87%8C%E7%9A%84%E5%90%97%E4%B8%BA%E4%BB%80%E4%B9%88%E8%83%BD%E8%AE%A9%E7%94%A8%E6%88%B7%E4%B8%8B%E5%8F%91"><span class="nav-number">2.6.</span> <span class="nav-text">Q1：策略是写死在代码里的吗？为什么能让”用户”下发？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#q2adaptor-%E6%98%AF%E4%BA%91%E5%8E%82%E5%95%86%E7%9A%84%E9%97%AD%E6%BA%90%E6%A8%A1%E5%9D%97%E7%94%A8%E6%88%B7%E5%87%AD%E4%BB%80%E4%B9%88%E4%BF%A1%E5%AE%83"><span class="nav-number">2.7.</span> <span class="nav-text">Q2：Adaptor
 是云厂商的闭源模块，用户凭什么信它？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#q3%E8%A7%84%E5%88%99%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%8A%A0%E5%AF%86%E4%BF%9D%E5%AD%98%E7%94%A8%E7%9A%84%E6%97%B6%E5%80%99%E6%89%8D%E8%A7%A3%E5%AF%86"><span class="nav-number">2.8.</span> <span class="nav-text">Q3：规则为什么要加密保存、用的时候才解密？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E4%BE%8B%E5%AD%90"><span class="nav-number">2.9.</span> <span class="nav-text">完整例子</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E7%AB%99packet-handler%E7%9C%9F%E6%AD%A3%E6%8A%8A%E5%AE%89%E5%85%A8%E5%81%9A%E5%87%BA%E6%9D%A5"><span class="nav-number">3.</span> <span class="nav-text">🔐 第二站：Packet
 Handler——真正把安全做出来</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%85%89%E5%8A%A0%E5%AF%86%E4%B8%8D%E5%A4%9F"><span class="nav-number">3.1.</span> <span class="nav-text">为什么光加密不够？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA-packet-%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E5%A4%84%E7%90%86%E7%9A%84"><span class="nav-number">3.2.</span> <span class="nav-text">一个 packet 是怎么被处理的？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%99%E5%A5%97%E8%83%BD%E5%85%BC%E5%AE%B9%E5%90%84%E7%A7%8D-xpu"><span class="nav-number">3.3.</span> <span class="nav-text">为什么这套能兼容各种 xPU？</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E7%AB%99adaptor%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E7%94%A8%E6%94%B9%E9%A9%B1%E5%8A%A8"><span class="nav-number">4.</span> <span class="nav-text">🧑‍💼
@@ -277,7 +277,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 16:16:35" itemprop="dateModified" datetime="2026-09-09T16:16:35+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-10 10:53:51" itemprop="dateModified" datetime="2026-09-10T10:53:51+08:00">2026-09-10</time>
     </span>
 
   
@@ -294,7 +294,7 @@ Establishment——凭什么信这台机器？</span></a><ol class="nav-child"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>8k</span>
+      <span>7.9k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -324,7 +324,7 @@ Handler</strong>（执行）、<strong>HRoT-Blade</strong>（信任），最后�
 §7 作者真做出来的原型。</p>
 <span id="more"></span>
 <h2 id="总架构">🗺️ 总架构</h2>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    │  encrypted workload</span><br><span class="line">    ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ TVM                          │  ← 软件侧、受保护虚拟机（并列装三样组件）</span><br><span class="line">│                              │</span><br><span class="line">│ 1. xPU Native Software Stack │  ← xPU 原生软件栈（App/Driver/Libs，不改）</span><br><span class="line">│ 2. Adaptor                   │  ← 新增层：与 PCIe-SC 交互、识别并加密数据</span><br><span class="line">│ 3. TVM Trust Modules         │  ← ccAI 部署：密钥管理、远程证明</span><br><span class="line">└──────────────────────────────┘</span><br><span class="line">    │ PCIe</span><br><span class="line">    ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ PCIe-SC                      │  ← 硬件，插在服务器 PCIe 端口</span><br><span class="line">│                              │</span><br><span class="line">│ 1. Packet Filter             │  ← L1/L2 决策 A1~A4</span><br><span class="line">│ 2. Packet Handlers           │  ← AES 加密与完整性</span><br><span class="line">│ 3. HRoT-Blade                │  ← 信任控制面（Secure Boot / 远程证明 / 密钥），不处理数据包</span><br><span class="line">└──────────────────────────────┘</span><br><span class="line">    │ Internal PCIe               ← xPU 连到 PCIe-SC 上</span><br><span class="line">    ↓</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">  Remote User</span><br><span class="line">    │  encrypted workload</span><br><span class="line">    ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ TVM                          │  ← 软件侧、受保护虚拟机（并列装三样组件）</span><br><span class="line">│                              │</span><br><span class="line">│ 1. xPU Native Software Stack │  ← xPU 原生软件栈（App/Driver/Libs，不改）</span><br><span class="line">│ 2. Adaptor                   │  ← 新增层：与 PCIe-SC 交互、识别并加密数据</span><br><span class="line">│ 3. TVM Trust Modules         │  ← ccAI 部署：密钥管理、远程证明</span><br><span class="line">└──────────────────────────────┘</span><br><span class="line">    │ PCIe</span><br><span class="line">    ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ PCIe-SC                      │  ← 硬件，插在服务器 PCIe 端口</span><br><span class="line">│                              │</span><br><span class="line">│ 1. Packet Filter             │  ← L1/L2 决策 A1～A4</span><br><span class="line">│ 2. Packet Handlers           │  ← AES 加密与完整性</span><br><span class="line">│ 3. HRoT-Blade                │  ← 信任控制面（Secure Boot / 远程证明 / 密钥），不处理数据包</span><br><span class="line">└──────────────────────────────┘</span><br><span class="line">    │ Internal PCIe               ← xPU 连到 PCIe-SC 上</span><br><span class="line">    ↓</span><br><span class="line">  GPU / NPU</span><br></pre></td></tr></table></figure>
 <table>
 <thead>
 <tr>
@@ -371,7 +371,7 @@ Filter——这个包该怎么处理？</h2>
 </ul>
 <p>全都加密既浪费性能，也管不住不该出现的包。所以论文走<strong>细粒度安全（fine-grained
 security）</strong>路线：按 packet 属性分类处置。</p>
-<h3 id="四种安全动作-a1a4">四种安全动作 A1~A4 ⭐</h3>
+<h3 id="四种安全动作-a1a4">四种安全动作 A1～A4 ⭐</h3>
 <table>
 <colgroup>
 <col style="width: 25%" />
@@ -445,8 +445,8 @@ A2 加密），那段只是普通 buffer（A3 就够）。Adaptor
 ccAI 兼容新 xPU 的底气：厂商想给私有管理包加规则，直接通过 MMIO
 寄存器加一条就行，不用重写固件。</p>
 </blockquote>
-<p>一句话理清三个角色：<strong>用户定规则、Adaptor 搬运规则、Packet
-Filter 按规则分级</strong>——Filter 不发明规则，只是查表执法：</p>
+<p><strong>用户定规则、Adaptor 搬运规则、Packet Filter
+按规则分级</strong></p>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -473,13 +473,13 @@ Filter 按规则分级</strong>——Filter 不发明规则，只是查表执法
 </tr>
 <tr>
 <td><strong>Packet Filter</strong></td>
-<td>每个包查 L1/L2 表，命中哪条就给哪个动作（A1~A4）</td>
+<td>每个包查 L1/L2 表，命中哪条就给哪个动作（A1～A4）</td>
 <td>👮 执法者</td>
 </tr>
 </tbody>
 </table>
 <p>所以前文说的”Filter 分级
-A1<sub>A4”是<strong>执行视角</strong>（查表贴标签），这里的”用户下发”是<strong>制定视角</strong>（规则从哪来）——两句话不矛盾：分级的依据，正是用户预先放进表里的那些规则。另外注意，A1</sub>A4
+A1～A4”是<strong>执行视角</strong>（查表贴标签），这里的”用户下发”是<strong>制定视角</strong>（规则从哪来）——两句话不矛盾：分级的依据，正是用户预先放进表里的那些规则。另外注意，A1～A4
 这四档动作是论文设计好的固定分类，用户能定的是”每个包落哪一档”，不能发明第五档。</p>
 <h3 id="q2adaptor-是云厂商的闭源模块用户凭什么信它">Q2：Adaptor
 是云厂商的闭源模块，用户凭什么信它？</h3>
@@ -679,7 +679,7 @@ Metadata</strong>（start/end address，访问哪段内存）</p>
 <tr>
 <td>Packet Filter</td>
 <td>决策</td>
-<td>L1 挡坏人 → L2 给好人分级 → A1~A4</td>
+<td>L1 挡坏人 → L2 给好人分级 → A1～A4</td>
 </tr>
 <tr>
 <td>Packet Handler</td>
@@ -700,7 +700,7 @@ Metadata</strong>（start/end address，访问哪段内存）</p>
 </table>
 <p>到这里，能不能做、怎么做都清楚了。剩下最后一个问题：<strong>加了这么多安全操作，GPU
 会不会慢成蜗牛？</strong> 论文实验里号称开销只有
-0.05%～5.67%——下一篇就看作者怎么用 RQ1~RQ6
+0.05%～5.67%——下一篇就看作者怎么用 RQ1～RQ6
 六个实验证明这套东西真的又快又兼容：<strong>ccAI
 精读（三）：实现与实验</strong>。</p>
 <p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
