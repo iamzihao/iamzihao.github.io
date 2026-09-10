@@ -307,157 +307,6 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>前端浏览器缓存机制</title>
-    <url>/posts/50ac740b/</url>
-    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
-<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
-<span id="more"></span>
-<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
-<h4 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h4>
-<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
-<ul>
-<li><p><strong>Expires</strong>:
-一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
-<li><p><strong>Cache-Control</strong>:
-这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
-<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
-<ul>
-<li><code>public</code>:
-资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
-<li><code>private</code>:
-资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
-<li><code>no-cache</code>:
-资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
-<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
-<code>200 (from cache)</code>。</p>
-<h4 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
-Caching）</h4>
-<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
-<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
-<ul>
-<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
-<ul>
-<li><strong>Last-Modified</strong>:
-服务器在响应头中返回资源的最后修改时间。</li>
-<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
-<code>Last-Modified</code>
-时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-<li><strong>ETag &amp; If-None-Match</strong>:
-<ul>
-<li><strong>ETag</strong>:
-服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
-<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
-值。服务器比较该值与当前资源的 ETag，如果匹配则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
-<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
-<h4 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h4>
-<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
-JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
-<p><strong>典型用法</strong>：</p>
-<ul>
-<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
-<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
-标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
-</ul>
-<p><strong>总结</strong>：</p>
-<ul>
-<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
-<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
-<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
-</ul>
-<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
-<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
-<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
-是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
-文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
-<h4 id="cdn的工作原理">CDN的工作原理</h4>
-<ol type="1">
-<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
-<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
-<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
-<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
-</ol>
-<h4 id="cdn的主要优势">CDN的主要优势</h4>
-<ol type="1">
-<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
-<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
-<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
-<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
-<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
-</ol>
-<h4 id="cdn的使用场景">CDN的使用场景</h4>
-<ul>
-<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
-<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
-<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
-文件等，通过CDN可以提升资源加载速度。</li>
-</ul>
-<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
-]]></content>
-      <tags>
-        <tag>前端</tag>
-        <tag>浏览器</tag>
-        <tag>缓存</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1370,6 +1219,157 @@ TDX 的体系结构、内存保护机制、I/O
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>前端浏览器缓存机制</title>
+    <url>/posts/50ac740b/</url>
+    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
+<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
+<span id="more"></span>
+<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
+<h4 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h4>
+<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
+<ul>
+<li><p><strong>Expires</strong>:
+一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
+<li><p><strong>Cache-Control</strong>:
+这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
+<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
+<ul>
+<li><code>public</code>:
+资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
+<li><code>private</code>:
+资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
+<li><code>no-cache</code>:
+资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
+<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
+<code>200 (from cache)</code>。</p>
+<h4 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
+Caching）</h4>
+<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
+<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
+<ul>
+<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
+<ul>
+<li><strong>Last-Modified</strong>:
+服务器在响应头中返回资源的最后修改时间。</li>
+<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
+<code>Last-Modified</code>
+时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+<li><strong>ETag &amp; If-None-Match</strong>:
+<ul>
+<li><strong>ETag</strong>:
+服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
+<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
+值。服务器比较该值与当前资源的 ETag，如果匹配则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
+<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
+<h4 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h4>
+<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
+JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
+<p><strong>典型用法</strong>：</p>
+<ul>
+<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
+<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
+标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
+</ul>
+<p><strong>总结</strong>：</p>
+<ul>
+<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
+<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
+<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
+</ul>
+<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
+<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
+<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
+是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
+文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
+<h4 id="cdn的工作原理">CDN的工作原理</h4>
+<ol type="1">
+<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
+<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
+<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
+<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
+</ol>
+<h4 id="cdn的主要优势">CDN的主要优势</h4>
+<ol type="1">
+<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
+<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
+<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
+<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
+<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
+</ol>
+<h4 id="cdn的使用场景">CDN的使用场景</h4>
+<ul>
+<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
+<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
+<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
+文件等，通过CDN可以提升资源加载速度。</li>
+</ul>
+<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
+]]></content>
+      <tags>
+        <tag>前端</tag>
+        <tag>浏览器</tag>
+        <tag>缓存</tag>
       </tags>
   </entry>
   <entry>
@@ -4169,120 +4169,6 @@ v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）�
       </tags>
   </entry>
   <entry>
-    <title>混合加密入门：集安全与效率于一身的艺术</title>
-    <url>/posts/8c9a7e4f/</url>
-    <content><![CDATA[<p>加密需要在安全与效率之间权衡。把数据加密比作锁门，会面临一个两难选择：</p>
-<ul>
-<li><strong>对称加密</strong>像一把普通的房门钥匙：开锁和上锁都用同一把，速度飞快，但把这把唯一的钥匙安全地交给远方的朋友却成了一个大难题。</li>
-<li><strong>非对称加密</strong>则像一个银行保险箱：对外提供一个只能存东西的“公钥”（存款口），而取东西的“私钥”（保险箱钥匙）则由自己牢牢保管。它完美解决了密钥分发问题，但操作起来却相对“笨重”，处理大量数据时效率不高。</li>
-</ul>
-<p>有没有一种方法，能让我们同时拥有对称加密的“快”和非对称加密的“稳”呢？答案是肯定的，这就是我们今天要探讨的主角——<strong>混合加密
-(Hybrid Encryption)</strong>。</p>
-<span id="more"></span>
-<h3 id="一加密世界的两大支柱">🏛️ 一、加密世界的两大支柱</h3>
-<p>要理解混合加密的精妙之处，我们首先要掌握它的两个核心构建模块：对称加密与非对称加密。</p>
-<h4 id="对称加密速度的王者">🔑 对称加密：速度的王者</h4>
-<p>对称加密（Symmetric
-Encryption）是最直观的加密形式。它的特点是<strong>加密和解密使用同一个密钥</strong>。</p>
-<ul>
-<li><strong>工作原理</strong>：<code>解密( 加密(数据, 密钥), 密钥) = 原始数据</code></li>
-<li><strong>优点</strong>：算法成熟，计算速度快，适合加密大体积的文件或数据流。</li>
-<li><strong>缺点</strong>：<strong>密钥分发困难</strong>。如何在不安全的网络上，将这把“万能钥匙”安全地送到接收者手中，是其最大的软肋。一旦密钥在传输过程中被窃取，整个加密体系便形同虚设。</li>
-<li><strong>常见算法</strong>：<code>AES (Advanced Encryption Standard)</code></li>
-</ul>
-<p>可以把它想象成你家的门锁，你和家人用同一把钥匙开门，非常方便。但如果你想给一个远方的朋友这把钥匙，你必须通过一个绝对可靠的方式（比如当面交付）送达，否则风险极高。</p>
-<h4 id="非对称加密安全的基石">👥 非对称加密：安全的基石</h4>
-<p>为了解决密钥分发的难题，非对称加密（Asymmetric
-Encryption）应运而生。它拥有一对数学上相关的密钥：<strong>公钥 (Public
-Key)</strong> 和 <strong>私钥 (Private Key)</strong>。</p>
-<ul>
-<li><strong>公钥</strong>：可以任意公开，任何人都可以获取。它用于<strong>加密数据</strong>和<strong>验证签名</strong>。</li>
-<li><strong>私钥</strong>：必须严格保密，只有持有者知道。它用于<strong>解密数据</strong>和<strong>生成签名</strong>。</li>
-</ul>
-<p>它的工作流分为两种： 1. <strong>加密/解密</strong>：<code>A</code>
-想给 <code>B</code> 发送机密消息。<code>A</code> 用 <code>B</code>
-的公钥加密消息，<code>B</code>
-收到后用自己的私钥解密。其他人即使截获了消息，没有 <code>B</code>
-的私钥也无法破解。 2. <strong>签名/验证</strong>：<code>A</code>
-想证明某条消息确实是自己发的。<code>A</code>
-用自己的私钥对消息“签名”，并将签名连同消息一起发给
-<code>B</code>。<code>B</code> 用 <code>A</code>
-的公”钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
-且未被篡改。</p>
-<ul>
-<li><strong>优点</strong>：完美解决了密钥分发问题，安全性高，且能实现数字签名。</li>
-<li><strong>缺点</strong>：计算复杂度高，加密速度远慢于对称加密，不适合直接加密大量数据。</li>
-<li><strong>常见算法</strong>：<code>RSA</code>, <code>ECC</code></li>
-</ul>
-<p>这就像一个公开的邮箱（公钥），任何人都可以往里投信，但只有持有唯一钥匙（私钥）的你才能打开邮箱取信。</p>
-<h3 id="二融合之道混合加密如何工作">🤝
-二、融合之道：混合加密如何工作</h3>
-<p>混合加密的核心思想是<strong>“取长补短”</strong>： &gt;
-用非对称加密的“安全”来弥补对称加密在“密钥分发”上的短板； &gt;
-用对称加密的“高效”来解决非对称加密在“处理大数据”上的性能瓶颈。</p>
-<p>它的执行流程如同一场精心编排的双人舞：</p>
-<ol type="1">
-<li><strong>生成会话密钥</strong>：发送方（比如，你的浏览器）针对本次通信，随机生成一个临时的、一次性的<strong>对称密钥</strong>（也称“会话密钥”）。</li>
-<li><strong>加密数据</strong>：发送方使用这个<strong>会话密钥</strong>，通过对称加密算法（如
-AES）加密要发送的全部<strong>正文数据</strong>。这一步速度很快。</li>
-<li><strong>加密会话密钥</strong>：为了安全地把会话密钥交给接收方（比如，网站服务器），发送方使用接收方的<strong>公钥</strong>，通过非对称加密算法（如
-RSA）只对这个短小的<strong>会话密钥</strong>进行加密。这一步虽然慢，但因为加密的数据量极小，所以几乎不影响整体效率。</li>
-<li><strong>发送</strong>：发送方将<strong>“第 2
-步加密后的正文”</strong>和<strong>“第 3
-步加密后的会话密钥”</strong>打包，一起发送给接收方。</li>
-<li><strong>解密会话密钥</strong>：接收方收到后，首先用自己的<strong>私钥</strong>解密出原始的<strong>会话密钥</strong>。</li>
-<li><strong>解密数据</strong>：接收方现在拥有了安全的会话密钥，于是用它通过对称解密算法，高效地解密出全部<strong>正文数据</strong>。</li>
-</ol>
-<p>至此，一次安全又高效的通信便完成了。</p>
-我们可以用下面这个流程图来清晰地展示这个过程：
-<pre class="mermaid">sequenceDiagram
-    participant Sender as 发送方
-    participant Receiver as 接收方
-
-    Note over Sender, Receiver: 混合加密流程
-
-    Sender->>Sender: 1. 生成临时对称密钥 (Session Key)
-    Sender->>Sender: 2. 用对称密钥加密<br/>大量数据 (AES)
-    
-    rect rgba(255, 220, 220, 0.4)
-        note right of Sender: 获取接收方的公钥
-        Sender->>Sender: 3. 用接收方的公钥加密<br/>对称密钥 (RSA)
-    end
-    
-    Sender->>Receiver: 4. 发送 [加密的数据] + [加密的对称密钥]
-    
-    rect rgba(220, 255, 220, 0.4)
-        Receiver->>Receiver: 5. 用自己的私钥解密<br/>对称密钥
-        note right of Receiver: 获得对称密钥
-        Receiver->>Receiver: 6. 用对称密钥解密<br/>大量数据
-    end
-    
-    Receiver->>Sender: 通信已安全建立</pre>
-<h3 id="三现实世界的应用">🌍 三、现实世界的应用</h3>
-<p>混合加密并非象牙塔里的理论，它早已深入我们日常数字生活的方方面面：</p>
-<ul>
-<li><strong>HTTPS/TLS</strong>：你访问的所有 <code>https://</code>
-网站，其安全基石都是 TLS 协议，而 TLS
-的核心就是混合加密。你的浏览器和服务器通过非对称加密协商出一个会话密钥，之后的所有应用数据都通过这个对称密钥进行加密传输。</li>
-<li><strong>PGP/GPG 邮件加密</strong>：当你使用 GPG 加密一封邮件时，GPG
-会随机生成一个对称密钥来加密你的邮件内容，然后用收件人的 GPG
-公钥来加密这个对称密钥。</li>
-<li><strong>SSH 连接</strong>：我们用 <code>ssh</code>
-登录服务器时，同样利用了混合加密来建立安全信道，保护我们输入的命令和服务器返回的数据不被窃听。</li>
-<li><strong>安全聊天应用 (Signal,
-Telegram)</strong>：这些端到端加密的聊天工具，同样采用类似的混合加密模型来保护每一条消息的安全。</li>
-</ul>
-<h3 id="四总结">✨ 四、总结</h3>
-<p>混合加密通过一种极为务实和优雅的方式，将对称加密与非对称加密的优势完美结合，构建了当今网络安全通信的骨架。它告诉我们，在工程领域，最优的解决方案往往不是单一技术的极致发挥，而是多种技术恰到好处的协同与融合。</p>
-<p>下一次，当你看到浏览器地址栏那把绿色的小锁时，希望你能想起背后这套安全与效率并存的“混合之舞”。</p>
-]]></content>
-      <tags>
-        <tag>安全</tag>
-        <tag>加密</tag>
-        <tag>密码学</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Linux 包管理：从入门到进阶的实战指南</title>
     <url>/posts/3b71e21f/</url>
     <content><![CDATA[<p>包管理器是操作系统里负责安装、删除、查询和管理软件包的工具，可以类比手机上的应用商店。本文从概念到实操、从单机到团队，整理一份跨发行版的包管理学习大纲与命令速查。</p>
@@ -4551,6 +4437,120 @@ APT 演示即可迁移。</p>
         <tag>Linux</tag>
         <tag>包管理</tag>
         <tag>Package</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>混合加密入门：集安全与效率于一身的艺术</title>
+    <url>/posts/8c9a7e4f/</url>
+    <content><![CDATA[<p>加密需要在安全与效率之间权衡。把数据加密比作锁门，会面临一个两难选择：</p>
+<ul>
+<li><strong>对称加密</strong>像一把普通的房门钥匙：开锁和上锁都用同一把，速度飞快，但把这把唯一的钥匙安全地交给远方的朋友却成了一个大难题。</li>
+<li><strong>非对称加密</strong>则像一个银行保险箱：对外提供一个只能存东西的“公钥”（存款口），而取东西的“私钥”（保险箱钥匙）则由自己牢牢保管。它完美解决了密钥分发问题，但操作起来却相对“笨重”，处理大量数据时效率不高。</li>
+</ul>
+<p>有没有一种方法，能让我们同时拥有对称加密的“快”和非对称加密的“稳”呢？答案是肯定的，这就是我们今天要探讨的主角——<strong>混合加密
+(Hybrid Encryption)</strong>。</p>
+<span id="more"></span>
+<h3 id="一加密世界的两大支柱">🏛️ 一、加密世界的两大支柱</h3>
+<p>要理解混合加密的精妙之处，我们首先要掌握它的两个核心构建模块：对称加密与非对称加密。</p>
+<h4 id="对称加密速度的王者">🔑 对称加密：速度的王者</h4>
+<p>对称加密（Symmetric
+Encryption）是最直观的加密形式。它的特点是<strong>加密和解密使用同一个密钥</strong>。</p>
+<ul>
+<li><strong>工作原理</strong>：<code>解密( 加密(数据, 密钥), 密钥) = 原始数据</code></li>
+<li><strong>优点</strong>：算法成熟，计算速度快，适合加密大体积的文件或数据流。</li>
+<li><strong>缺点</strong>：<strong>密钥分发困难</strong>。如何在不安全的网络上，将这把“万能钥匙”安全地送到接收者手中，是其最大的软肋。一旦密钥在传输过程中被窃取，整个加密体系便形同虚设。</li>
+<li><strong>常见算法</strong>：<code>AES (Advanced Encryption Standard)</code></li>
+</ul>
+<p>可以把它想象成你家的门锁，你和家人用同一把钥匙开门，非常方便。但如果你想给一个远方的朋友这把钥匙，你必须通过一个绝对可靠的方式（比如当面交付）送达，否则风险极高。</p>
+<h4 id="非对称加密安全的基石">👥 非对称加密：安全的基石</h4>
+<p>为了解决密钥分发的难题，非对称加密（Asymmetric
+Encryption）应运而生。它拥有一对数学上相关的密钥：<strong>公钥 (Public
+Key)</strong> 和 <strong>私钥 (Private Key)</strong>。</p>
+<ul>
+<li><strong>公钥</strong>：可以任意公开，任何人都可以获取。它用于<strong>加密数据</strong>和<strong>验证签名</strong>。</li>
+<li><strong>私钥</strong>：必须严格保密，只有持有者知道。它用于<strong>解密数据</strong>和<strong>生成签名</strong>。</li>
+</ul>
+<p>它的工作流分为两种： 1. <strong>加密/解密</strong>：<code>A</code>
+想给 <code>B</code> 发送机密消息。<code>A</code> 用 <code>B</code>
+的公钥加密消息，<code>B</code>
+收到后用自己的私钥解密。其他人即使截获了消息，没有 <code>B</code>
+的私钥也无法破解。 2. <strong>签名/验证</strong>：<code>A</code>
+想证明某条消息确实是自己发的。<code>A</code>
+用自己的私钥对消息“签名”，并将签名连同消息一起发给
+<code>B</code>。<code>B</code> 用 <code>A</code>
+的公”钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
+且未被篡改。</p>
+<ul>
+<li><strong>优点</strong>：完美解决了密钥分发问题，安全性高，且能实现数字签名。</li>
+<li><strong>缺点</strong>：计算复杂度高，加密速度远慢于对称加密，不适合直接加密大量数据。</li>
+<li><strong>常见算法</strong>：<code>RSA</code>, <code>ECC</code></li>
+</ul>
+<p>这就像一个公开的邮箱（公钥），任何人都可以往里投信，但只有持有唯一钥匙（私钥）的你才能打开邮箱取信。</p>
+<h3 id="二融合之道混合加密如何工作">🤝
+二、融合之道：混合加密如何工作</h3>
+<p>混合加密的核心思想是<strong>“取长补短”</strong>： &gt;
+用非对称加密的“安全”来弥补对称加密在“密钥分发”上的短板； &gt;
+用对称加密的“高效”来解决非对称加密在“处理大数据”上的性能瓶颈。</p>
+<p>它的执行流程如同一场精心编排的双人舞：</p>
+<ol type="1">
+<li><strong>生成会话密钥</strong>：发送方（比如，你的浏览器）针对本次通信，随机生成一个临时的、一次性的<strong>对称密钥</strong>（也称“会话密钥”）。</li>
+<li><strong>加密数据</strong>：发送方使用这个<strong>会话密钥</strong>，通过对称加密算法（如
+AES）加密要发送的全部<strong>正文数据</strong>。这一步速度很快。</li>
+<li><strong>加密会话密钥</strong>：为了安全地把会话密钥交给接收方（比如，网站服务器），发送方使用接收方的<strong>公钥</strong>，通过非对称加密算法（如
+RSA）只对这个短小的<strong>会话密钥</strong>进行加密。这一步虽然慢，但因为加密的数据量极小，所以几乎不影响整体效率。</li>
+<li><strong>发送</strong>：发送方将<strong>“第 2
+步加密后的正文”</strong>和<strong>“第 3
+步加密后的会话密钥”</strong>打包，一起发送给接收方。</li>
+<li><strong>解密会话密钥</strong>：接收方收到后，首先用自己的<strong>私钥</strong>解密出原始的<strong>会话密钥</strong>。</li>
+<li><strong>解密数据</strong>：接收方现在拥有了安全的会话密钥，于是用它通过对称解密算法，高效地解密出全部<strong>正文数据</strong>。</li>
+</ol>
+<p>至此，一次安全又高效的通信便完成了。</p>
+我们可以用下面这个流程图来清晰地展示这个过程：
+<pre class="mermaid">sequenceDiagram
+    participant Sender as 发送方
+    participant Receiver as 接收方
+
+    Note over Sender, Receiver: 混合加密流程
+
+    Sender->>Sender: 1. 生成临时对称密钥 (Session Key)
+    Sender->>Sender: 2. 用对称密钥加密<br/>大量数据 (AES)
+    
+    rect rgba(255, 220, 220, 0.4)
+        note right of Sender: 获取接收方的公钥
+        Sender->>Sender: 3. 用接收方的公钥加密<br/>对称密钥 (RSA)
+    end
+    
+    Sender->>Receiver: 4. 发送 [加密的数据] + [加密的对称密钥]
+    
+    rect rgba(220, 255, 220, 0.4)
+        Receiver->>Receiver: 5. 用自己的私钥解密<br/>对称密钥
+        note right of Receiver: 获得对称密钥
+        Receiver->>Receiver: 6. 用对称密钥解密<br/>大量数据
+    end
+    
+    Receiver->>Sender: 通信已安全建立</pre>
+<h3 id="三现实世界的应用">🌍 三、现实世界的应用</h3>
+<p>混合加密并非象牙塔里的理论，它早已深入我们日常数字生活的方方面面：</p>
+<ul>
+<li><strong>HTTPS/TLS</strong>：你访问的所有 <code>https://</code>
+网站，其安全基石都是 TLS 协议，而 TLS
+的核心就是混合加密。你的浏览器和服务器通过非对称加密协商出一个会话密钥，之后的所有应用数据都通过这个对称密钥进行加密传输。</li>
+<li><strong>PGP/GPG 邮件加密</strong>：当你使用 GPG 加密一封邮件时，GPG
+会随机生成一个对称密钥来加密你的邮件内容，然后用收件人的 GPG
+公钥来加密这个对称密钥。</li>
+<li><strong>SSH 连接</strong>：我们用 <code>ssh</code>
+登录服务器时，同样利用了混合加密来建立安全信道，保护我们输入的命令和服务器返回的数据不被窃听。</li>
+<li><strong>安全聊天应用 (Signal,
+Telegram)</strong>：这些端到端加密的聊天工具，同样采用类似的混合加密模型来保护每一条消息的安全。</li>
+</ul>
+<h3 id="四总结">✨ 四、总结</h3>
+<p>混合加密通过一种极为务实和优雅的方式，将对称加密与非对称加密的优势完美结合，构建了当今网络安全通信的骨架。它告诉我们，在工程领域，最优的解决方案往往不是单一技术的极致发挥，而是多种技术恰到好处的协同与融合。</p>
+<p>下一次，当你看到浏览器地址栏那把绿色的小锁时，希望你能想起背后这套安全与效率并存的“混合之舞”。</p>
+]]></content>
+      <tags>
+        <tag>安全</tag>
+        <tag>加密</tag>
+        <tag>密码学</tag>
       </tags>
   </entry>
   <entry>
@@ -14347,6 +14347,335 @@ DHCP 服务器</h4>
       </tags>
   </entry>
   <entry>
+    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
+    <url>/posts/18f02423/</url>
+    <content><![CDATA[<p>CUDA
+报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
+<td>下命令的人</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU 端代码，真正执行 kernel 的一侧。</td>
+<td>干活的人</td>
+</tr>
+<tr>
+<td>Kernel</td>
+<td>在 GPU 上并行执行的函数。</td>
+<td>GPU 任务</td>
+</tr>
+<tr>
+<td>Stream</td>
+<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
+<td>GPU 队列</td>
+</tr>
+<tr>
+<td>Synchronize</td>
+<td>CPU 停下来等 GPU 做完前面的任务。</td>
+<td>等结果</td>
+</tr>
+<tr>
+<td>CUDA error code</td>
+<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
+<td>一句错误摘要</td>
+</tr>
+</tbody>
+</table>
+<p>一句话省流：</p>
+<blockquote>
+<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
+真正在哪里出错”。</strong></p>
+</blockquote>
+<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
+<p>CUDA 程序里通常有两条时间线：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
+<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
+队列，然后自己继续往下跑。</p>
+<p>也就是说：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
+<p>这行代码返回成功，通常只能说明：</p>
+<blockquote>
+<p>kernel launch 请求成功提交了。</p>
+</blockquote>
+<p>它不等价于：</p>
+<blockquote>
+<p>kernel 已经在 GPU 上执行成功了。</p>
+</blockquote>
+<p>这就是 CUDA 异步报错的根源。</p>
+<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
+<p>一个简化版流程如下：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
+<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
+<p>普通 CPU 函数调用更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
+<p>CUDA kernel launch 更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
+<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
+kernel。</p>
+<h3 id="stream-是什么">🧩 Stream 是什么</h3>
+<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
+<p>同一个 stream 里的任务通常按顺序执行。但 CPU
+提交任务时不一定等待每个任务结束：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
+<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
+done。</p>
+<p>这在 PyTorch 里很常见：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
+<p>前面几行可能只是不断向 GPU 提交算子。到了
+<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
+GPU，于是错误可能在这里才爆出来。</p>
+<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
+<p>假设某个 kernel 里有越界写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>CPU 端这样调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
+<p>可能的结果是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>报错位置看起来在：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
+<p>但真正的事故现场可能是前面的：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
+<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
+工作完成，CPU 到这里才第一次认真问 GPU：</p>
+<blockquote>
+<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
+</blockquote>
+<p>GPU/driver 这时返回：</p>
+<blockquote>
+<p>前面那个 kernel 已经出错了。</p>
+</blockquote>
+<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
+<p>默认情况下，GPU 端错误通常不是像 CPU
+异常一样立刻带着完整调用栈抛回来。</p>
+<p>更接近下面这个过程：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
+<p>所以你看到的经常是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
+<ul>
+<li>哪个 kernel 的哪一行出错；</li>
+<li>哪个 block/thread 出错；</li>
+<li>GPU 上完整的调用链是什么；</li>
+<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
+</ul>
+<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
+<p>当 PyTorch 报错栈指向：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>它通常表示：</p>
+<blockquote>
+<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
+</blockquote>
+<p>它不必然表示：</p>
+<blockquote>
+<p>这个 API 自己就是根因。</p>
+</blockquote>
+<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
+<p>常见通知点包括：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 75%" />
+</colgroup>
+<thead>
+<tr>
+<th>操作</th>
+<th>为什么会暴露错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>明确等待 GPU 之前的任务完成。</td>
+</tr>
+<tr>
+<td><code>cudaStreamSynchronize(stream)</code></td>
+<td>等某个 stream 完成。</td>
+</tr>
+<tr>
+<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
+<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
+</tr>
+<tr>
+<td><code>tensor.cpu()</code></td>
+<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
+</tr>
+<tr>
+<td><code>loss.item()</code></td>
+<td>需要把 GPU 标量读到 Python 数值。</td>
+</tr>
+<tr>
+<td>后续 CUDA API</td>
+<td>发现当前 CUDA context 已经有错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么-gpu-错误默认只有一句话">🔍 为什么 GPU
+错误默认只有一句话</h3>
+<p>CPU 异常容易打印调用栈，是因为 CPU
+线程有清晰的栈帧和同步执行路径。</p>
+<p>GPU kernel 不一样：</p>
+<ul>
+<li>一个 kernel 可能有成千上万个线程同时执行；</li>
+<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
+<li>错误可能只发生在某个 thread；</li>
+<li>kernel launch 和 kernel 执行在时间线上分离；</li>
+<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
+调试模式。</li>
+</ul>
+<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
+<p>这些描述很有用，但它们不是完整定位结果。</p>
+<h3 id="cuda_launch_blocking1-做了什么">🛠️
+<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
+<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
+<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
+<p>默认情况：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>开启后：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
+的位置。</p>
+<p>代价是程序会明显变慢，因为 CPU/GPU
+原本可以重叠执行的部分被压平了。</p>
+<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
+<p>分类任务里，<code>target</code> 必须在
+<code>[0, num_classes - 1]</code> 范围内。</p>
+<p>例如模型输出 10 类：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
+<p>但 <code>target</code> 里出现了非法类别：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
+<p>这时：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
+<p>GPU kernel 可能触发 device-side
+assert。你看到的报错位置却可能在：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
+<p>真正要查的是：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
+<p>如果是 <code>cross_entropy</code>，优先确认：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
+<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
+<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>区别是：</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 73%" />
+</colgroup>
+<thead>
+<tr>
+<th>API</th>
+<th>主要检查什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaGetLastError()</code></td>
+<td>kernel launch 是否成功，比如配置、参数、符号等 launch
+阶段错误。</td>
+</tr>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
+</tr>
+</tbody>
+</table>
+<p>如果要进一步定位到源码行，可以用更重的工具：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
+<p>典型报告可能会给出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
+<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
+事故现场。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
+写错了。</td>
+<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
+</tr>
+<tr>
+<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
+<td>launch 成功只代表提交成功，不代表执行成功。</td>
+</tr>
+<tr>
+<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
+<td>它只是让报错更同步、更容易定位。</td>
+</tr>
+<tr>
+<td>GPU 报错只有一句话，所以没法查。</td>
+<td>默认信息少，但可以用同步、断言、Compute
+Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
+</tr>
+<tr>
+<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
+<td>一个早期 GPU 错误可能污染后续 CUDA
+context，后面只是连续发现错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
+<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
+<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
+<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
+错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
+往往在更早提交的任务里。</p>
+</blockquote>
+<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
+和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
+Sanitizer。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>PyTorch</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：从编译环境到 HelloWorld</title>
     <url>/posts/c4f8a2d1/</url>
     <content><![CDATA[<p>最近想系统补一下计算机基础，从 c/c++ 开始吧。</p>
@@ -15464,335 +15793,6 @@ flowchart LR
         <tag>C/C++</tag>
         <tag>函数</tag>
         <tag>编程入门</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
-    <url>/posts/18f02423/</url>
-    <content><![CDATA[<p>CUDA
-报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Host</td>
-<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
-<td>下命令的人</td>
-</tr>
-<tr>
-<td>Device</td>
-<td>GPU 端代码，真正执行 kernel 的一侧。</td>
-<td>干活的人</td>
-</tr>
-<tr>
-<td>Kernel</td>
-<td>在 GPU 上并行执行的函数。</td>
-<td>GPU 任务</td>
-</tr>
-<tr>
-<td>Stream</td>
-<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
-<td>GPU 队列</td>
-</tr>
-<tr>
-<td>Synchronize</td>
-<td>CPU 停下来等 GPU 做完前面的任务。</td>
-<td>等结果</td>
-</tr>
-<tr>
-<td>CUDA error code</td>
-<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
-<td>一句错误摘要</td>
-</tr>
-</tbody>
-</table>
-<p>一句话省流：</p>
-<blockquote>
-<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
-真正在哪里出错”。</strong></p>
-</blockquote>
-<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
-<p>CUDA 程序里通常有两条时间线：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
-<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
-队列，然后自己继续往下跑。</p>
-<p>也就是说：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
-<p>这行代码返回成功，通常只能说明：</p>
-<blockquote>
-<p>kernel launch 请求成功提交了。</p>
-</blockquote>
-<p>它不等价于：</p>
-<blockquote>
-<p>kernel 已经在 GPU 上执行成功了。</p>
-</blockquote>
-<p>这就是 CUDA 异步报错的根源。</p>
-<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
-<p>一个简化版流程如下：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
-<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
-<p>普通 CPU 函数调用更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
-<p>CUDA kernel launch 更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
-<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
-kernel。</p>
-<h3 id="stream-是什么">🧩 Stream 是什么</h3>
-<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
-<p>同一个 stream 里的任务通常按顺序执行。但 CPU
-提交任务时不一定等待每个任务结束：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
-<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
-done。</p>
-<p>这在 PyTorch 里很常见：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
-<p>前面几行可能只是不断向 GPU 提交算子。到了
-<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
-GPU，于是错误可能在这里才爆出来。</p>
-<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
-<p>假设某个 kernel 里有越界写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>CPU 端这样调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
-<p>可能的结果是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>报错位置看起来在：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
-<p>但真正的事故现场可能是前面的：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
-<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
-工作完成，CPU 到这里才第一次认真问 GPU：</p>
-<blockquote>
-<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
-</blockquote>
-<p>GPU/driver 这时返回：</p>
-<blockquote>
-<p>前面那个 kernel 已经出错了。</p>
-</blockquote>
-<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
-<p>默认情况下，GPU 端错误通常不是像 CPU
-异常一样立刻带着完整调用栈抛回来。</p>
-<p>更接近下面这个过程：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
-<p>所以你看到的经常是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
-<p>例如：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
-<ul>
-<li>哪个 kernel 的哪一行出错；</li>
-<li>哪个 block/thread 出错；</li>
-<li>GPU 上完整的调用链是什么；</li>
-<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
-</ul>
-<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
-<p>当 PyTorch 报错栈指向：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>它通常表示：</p>
-<blockquote>
-<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
-</blockquote>
-<p>它不必然表示：</p>
-<blockquote>
-<p>这个 API 自己就是根因。</p>
-</blockquote>
-<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
-<p>常见通知点包括：</p>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 75%" />
-</colgroup>
-<thead>
-<tr>
-<th>操作</th>
-<th>为什么会暴露错误</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>明确等待 GPU 之前的任务完成。</td>
-</tr>
-<tr>
-<td><code>cudaStreamSynchronize(stream)</code></td>
-<td>等某个 stream 完成。</td>
-</tr>
-<tr>
-<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
-<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
-</tr>
-<tr>
-<td><code>tensor.cpu()</code></td>
-<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
-</tr>
-<tr>
-<td><code>loss.item()</code></td>
-<td>需要把 GPU 标量读到 Python 数值。</td>
-</tr>
-<tr>
-<td>后续 CUDA API</td>
-<td>发现当前 CUDA context 已经有错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么-gpu-错误默认只有一句话">🔍 为什么 GPU
-错误默认只有一句话</h3>
-<p>CPU 异常容易打印调用栈，是因为 CPU
-线程有清晰的栈帧和同步执行路径。</p>
-<p>GPU kernel 不一样：</p>
-<ul>
-<li>一个 kernel 可能有成千上万个线程同时执行；</li>
-<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
-<li>错误可能只发生在某个 thread；</li>
-<li>kernel launch 和 kernel 执行在时间线上分离；</li>
-<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
-调试模式。</li>
-</ul>
-<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
-<p>这些描述很有用，但它们不是完整定位结果。</p>
-<h3 id="cuda_launch_blocking1-做了什么">🛠️
-<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
-<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
-<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
-<p>默认情况：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>开启后：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
-的位置。</p>
-<p>代价是程序会明显变慢，因为 CPU/GPU
-原本可以重叠执行的部分被压平了。</p>
-<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
-<p>分类任务里，<code>target</code> 必须在
-<code>[0, num_classes - 1]</code> 范围内。</p>
-<p>例如模型输出 10 类：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
-<p>但 <code>target</code> 里出现了非法类别：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
-<p>这时：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
-<p>GPU kernel 可能触发 device-side
-assert。你看到的报错位置却可能在：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
-<p>真正要查的是：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
-<p>如果是 <code>cross_entropy</code>，优先确认：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
-<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
-<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>区别是：</p>
-<table>
-<colgroup>
-<col style="width: 26%" />
-<col style="width: 73%" />
-</colgroup>
-<thead>
-<tr>
-<th>API</th>
-<th>主要检查什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaGetLastError()</code></td>
-<td>kernel launch 是否成功，比如配置、参数、符号等 launch
-阶段错误。</td>
-</tr>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
-</tr>
-</tbody>
-</table>
-<p>如果要进一步定位到源码行，可以用更重的工具：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
-<p>典型报告可能会给出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
-<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
-事故现场。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
-写错了。</td>
-<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
-</tr>
-<tr>
-<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
-<td>launch 成功只代表提交成功，不代表执行成功。</td>
-</tr>
-<tr>
-<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
-<td>它只是让报错更同步、更容易定位。</td>
-</tr>
-<tr>
-<td>GPU 报错只有一句话，所以没法查。</td>
-<td>默认信息少，但可以用同步、断言、Compute
-Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
-</tr>
-<tr>
-<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
-<td>一个早期 GPU 错误可能污染后续 CUDA
-context，后面只是连续发现错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
-<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
-<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
-<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
-错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
-往往在更早提交的任务里。</p>
-</blockquote>
-<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
-和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
-Sanitizer。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>PyTorch</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
@@ -23979,111 +23979,6 @@ Rust，变量、类型、<code>struct</code>、数组、函数这些”零件”
       </tags>
   </entry>
   <entry>
-    <title>Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive</title>
-    <url>/posts/7ddab86c/</url>
-    <content><![CDATA[<p>看 VGA 或驱动代码时会碰到
-<code>#[repr(C)]</code>、<code>#[repr(transparent)]</code>、<code>#[derive(...)]</code>
-这样的”方括号标签”。它们叫属性（attribute），作用是告诉编译器”下面这个东西按什么特殊规则处理”。其中
-<code>repr</code> 系列直接决定 struct
-在内存里的排布——这是和硬件打交道的关键。</p>
-<span id="more"></span>
-<blockquote>
-<p>接《<a href="/posts/5bfe3d1c/">Rust OS 前置：从 C 到 Rust</a>》与《<a
-href="/posts/4b7500f7/">借用与生命周期</a>》。示例继续用 VGA 的
-<code>ScreenChar</code> / <code>Buffer</code>。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>含义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#[...]</code></td>
-<td>属性（attribute）</td>
-<td>告诉编译器按特殊规则处理</td>
-</tr>
-<tr>
-<td><code>#[derive(...)]</code></td>
-<td>自动生成常用实现</td>
-<td>加功能，不是加数据</td>
-</tr>
-<tr>
-<td><code>#[repr(C)]</code></td>
-<td>按 C 的内存布局排布</td>
-<td>和硬件/FFI 对齐</td>
-</tr>
-<tr>
-<td><code>#[repr(transparent)]</code></td>
-<td>单字段类型与字段布局一致</td>
-<td>包装不额外占内存</td>
-</tr>
-</tbody>
-</table>
-<h3 id="属性-...-是什么">🏷️ 属性 <code>#[...]</code> 是什么</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123; ... &#125;</span><br></pre></td></tr></table></figure>
-<p><code>#[...]</code>
-不是函数调用，也不是注释，而是<strong>给编译器的指令</strong>：</p>
-<blockquote>
-<p>“下面这个东西，请按照某种特殊规则处理。”</p>
-</blockquote>
-<p>常见用途：<code>#[derive(...)]</code>（自动实现
-trait）、<code>#[repr(...)]</code>（规定内存布局）、<code>#[no_mangle]</code>（禁止符号名改写）、<code>#![no_std]</code>（crate
-级属性）——你在 Rust OS 项目里其实已经见过后面几个。</p>
-<h3 id="derive让编译器自动生成功能">🪄 derive：让编译器自动生成功能</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>derive</code> 的意思是”让编译器自动给这个类型实现这些
-trait”：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Debug      可以格式化打印</span><br><span class="line">Clone      可以复制一份</span><br><span class="line">Copy       赋值即复制（不移动）</span><br><span class="line">PartialEq  可以用 == 比较</span><br><span class="line">Eq         完整相等性</span><br></pre></td></tr></table></figure>
-<p>它给类型<strong>加功能</strong>，不改变数据本身。</p>
-<h3 id="reprc内存布局按-c-的规则">🧬 repr(C)：内存布局按 C 的规则</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,   <span class="comment">// 1 字节</span></span><br><span class="line">    color_code: ColorCode,  <span class="comment">// 1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>repr(C)</code> 规定这个 struct 按 C
-语言的内存布局规则排列（字段顺序、对齐方式都和 C 编译器一致）。</p>
-<p>为什么 VGA 需要它？因为<strong>硬件不认识
-Rust</strong>，只认内存里的一串字节。要让 Rust 的 struct
-和硬件的寄存器/显存布局一致，必须保证：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 眼中的 ScreenChar            VGA 眼中的一个字符单元</span><br><span class="line">┌──────────┬──────────┐        ┌──────────┬──────────┐</span><br><span class="line">│ ASCII    │ Color    │   ===  │ ASCII    │ Color    │</span><br><span class="line">│ 1 byte   │ 1 byte   │        │ 1 byte   │ 1 byte   │</span><br><span class="line">└──────────┴──────────┘        └──────────┴──────────┘</span><br></pre></td></tr></table></figure>
-<p>如果没有 <code>repr(C)</code>，Rust
-编译器<strong>有权重排字段或插入填充</strong>来优化布局——内存里长什么样是不保证的。对普通应用无所谓，但对映射到硬件的
-struct 是致命的。同理，跨语言 FFI（调用 C 库）也要 <code>repr(C)</code>
-保证两边看到同一份布局。</p>
-<h3 id="reprtransparent单字段包装零开销">🔍
-repr(transparent)：单字段包装零开销</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; <span class="number">80</span>]; <span class="number">25</span>],</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>Buffer</code> 只有一个字段
-<code>chars</code>。<code>repr(transparent)</code>
-保证：<code>Buffer</code>
-的内存布局和这个唯一字段完全一致，不会在外面套一层多余的包装。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Buffer ──► chars（25 × 80 个 ScreenChar）</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│ □ □ □ □ ... □           │</span><br><span class="line">│ ...                     │</span><br><span class="line">└─────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>用途：当你想给一个数组/基本类型”起个有语义的名字”（比如 VGA
-的屏幕缓冲），又不想引入任何布局开销时使用。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>属性是”写给编译器的规则”：<code>derive</code> 自动实现常用
-trait，<code>repr(C)</code> 让 struct 布局与
-C/硬件一致，<code>repr(transparent)</code> 保证单字段包装零开销。写 OS
-时凡是<strong>要和硬件寄存器、显存或外部 ABI 对齐</strong>的
-struct，基本都要用 <code>repr</code> 系列声明布局。</p>
-</blockquote>
-<p>下一篇把这些语法全部串起来：逐行拆解 VGA <code>Writer</code>
-的代码。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>Rust</tag>
-        <tag>内存布局</tag>
-        <tag>属性</tag>
-        <tag>repr</tag>
-        <tag>derive</tag>
-        <tag>FFI</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 前置：借用与生命周期——引用、裸指针与 unsafe</title>
     <url>/posts/4b7500f7/</url>
     <content><![CDATA[<p>Rust 与 C 的分水岭在”内存归谁管”：C 靠程序员自觉，Rust
@@ -24286,6 +24181,111 @@ struct 在内存里到底长什么样”。</p>
         <tag>裸指针</tag>
         <tag>unsafe</tag>
         <tag>生命周期</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive</title>
+    <url>/posts/7ddab86c/</url>
+    <content><![CDATA[<p>看 VGA 或驱动代码时会碰到
+<code>#[repr(C)]</code>、<code>#[repr(transparent)]</code>、<code>#[derive(...)]</code>
+这样的”方括号标签”。它们叫属性（attribute），作用是告诉编译器”下面这个东西按什么特殊规则处理”。其中
+<code>repr</code> 系列直接决定 struct
+在内存里的排布——这是和硬件打交道的关键。</p>
+<span id="more"></span>
+<blockquote>
+<p>接《<a href="/posts/5bfe3d1c/">Rust OS 前置：从 C 到 Rust</a>》与《<a
+href="/posts/4b7500f7/">借用与生命周期</a>》。示例继续用 VGA 的
+<code>ScreenChar</code> / <code>Buffer</code>。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>含义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#[...]</code></td>
+<td>属性（attribute）</td>
+<td>告诉编译器按特殊规则处理</td>
+</tr>
+<tr>
+<td><code>#[derive(...)]</code></td>
+<td>自动生成常用实现</td>
+<td>加功能，不是加数据</td>
+</tr>
+<tr>
+<td><code>#[repr(C)]</code></td>
+<td>按 C 的内存布局排布</td>
+<td>和硬件/FFI 对齐</td>
+</tr>
+<tr>
+<td><code>#[repr(transparent)]</code></td>
+<td>单字段类型与字段布局一致</td>
+<td>包装不额外占内存</td>
+</tr>
+</tbody>
+</table>
+<h3 id="属性-...-是什么">🏷️ 属性 <code>#[...]</code> 是什么</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123; ... &#125;</span><br></pre></td></tr></table></figure>
+<p><code>#[...]</code>
+不是函数调用，也不是注释，而是<strong>给编译器的指令</strong>：</p>
+<blockquote>
+<p>“下面这个东西，请按照某种特殊规则处理。”</p>
+</blockquote>
+<p>常见用途：<code>#[derive(...)]</code>（自动实现
+trait）、<code>#[repr(...)]</code>（规定内存布局）、<code>#[no_mangle]</code>（禁止符号名改写）、<code>#![no_std]</code>（crate
+级属性）——你在 Rust OS 项目里其实已经见过后面几个。</p>
+<h3 id="derive让编译器自动生成功能">🪄 derive：让编译器自动生成功能</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>derive</code> 的意思是”让编译器自动给这个类型实现这些
+trait”：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Debug      可以格式化打印</span><br><span class="line">Clone      可以复制一份</span><br><span class="line">Copy       赋值即复制（不移动）</span><br><span class="line">PartialEq  可以用 == 比较</span><br><span class="line">Eq         完整相等性</span><br></pre></td></tr></table></figure>
+<p>它给类型<strong>加功能</strong>，不改变数据本身。</p>
+<h3 id="reprc内存布局按-c-的规则">🧬 repr(C)：内存布局按 C 的规则</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,   <span class="comment">// 1 字节</span></span><br><span class="line">    color_code: ColorCode,  <span class="comment">// 1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>repr(C)</code> 规定这个 struct 按 C
+语言的内存布局规则排列（字段顺序、对齐方式都和 C 编译器一致）。</p>
+<p>为什么 VGA 需要它？因为<strong>硬件不认识
+Rust</strong>，只认内存里的一串字节。要让 Rust 的 struct
+和硬件的寄存器/显存布局一致，必须保证：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 眼中的 ScreenChar            VGA 眼中的一个字符单元</span><br><span class="line">┌──────────┬──────────┐        ┌──────────┬──────────┐</span><br><span class="line">│ ASCII    │ Color    │   ===  │ ASCII    │ Color    │</span><br><span class="line">│ 1 byte   │ 1 byte   │        │ 1 byte   │ 1 byte   │</span><br><span class="line">└──────────┴──────────┘        └──────────┴──────────┘</span><br></pre></td></tr></table></figure>
+<p>如果没有 <code>repr(C)</code>，Rust
+编译器<strong>有权重排字段或插入填充</strong>来优化布局——内存里长什么样是不保证的。对普通应用无所谓，但对映射到硬件的
+struct 是致命的。同理，跨语言 FFI（调用 C 库）也要 <code>repr(C)</code>
+保证两边看到同一份布局。</p>
+<h3 id="reprtransparent单字段包装零开销">🔍
+repr(transparent)：单字段包装零开销</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; <span class="number">80</span>]; <span class="number">25</span>],</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>Buffer</code> 只有一个字段
+<code>chars</code>。<code>repr(transparent)</code>
+保证：<code>Buffer</code>
+的内存布局和这个唯一字段完全一致，不会在外面套一层多余的包装。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Buffer ──► chars（25 × 80 个 ScreenChar）</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│ □ □ □ □ ... □           │</span><br><span class="line">│ ...                     │</span><br><span class="line">└─────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>用途：当你想给一个数组/基本类型”起个有语义的名字”（比如 VGA
+的屏幕缓冲），又不想引入任何布局开销时使用。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>属性是”写给编译器的规则”：<code>derive</code> 自动实现常用
+trait，<code>repr(C)</code> 让 struct 布局与
+C/硬件一致，<code>repr(transparent)</code> 保证单字段包装零开销。写 OS
+时凡是<strong>要和硬件寄存器、显存或外部 ABI 对齐</strong>的
+struct，基本都要用 <code>repr</code> 系列声明布局。</p>
+</blockquote>
+<p>下一篇把这些语法全部串起来：逐行拆解 VGA <code>Writer</code>
+的代码。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>Rust</tag>
+        <tag>内存布局</tag>
+        <tag>属性</tag>
+        <tag>repr</tag>
+        <tag>derive</tag>
+        <tag>FFI</tag>
       </tags>
   </entry>
   <entry>
@@ -24737,14 +24737,14 @@ A2/A3/A4）。</strong></p>
 <p>攻击者若把敏感地址的处理从 A2 改成
 A4，保护就全失效了——<strong>规则表本身也是攻击面</strong>。那么问题来了：规则由谁来定、怎么下发、以什么形式存放？这里藏着三个容易想岔的疑问：</p>
 <h3
-id="q1策略是写死在代码里的吗为什么能让用户下发">Q1：策略是写死在代码里的吗？为什么能让”用户”下发？</h3>
+id="q1策略是写死在代码里的吗为什么能让用户下发">Q1：策略是写死在代码里的吗？为什么能让<strong>用户</strong>下发？</h3>
 <blockquote>
 <p>不是。策略不是代码，而是<strong>数据</strong>——L1/L2
 表里的一条条规则（32
-字节一条），内容是”哪类包、该怎么处理”。就像防火墙规则可以热更新：管理员下发规则，根本不需要防火墙的源码。</p>
+字节一条），内容是每类包该怎么处理。就像防火墙规则可以热更新：管理员下发规则，根本不需要防火墙的源码。</p>
 <p>谁来定规则？<strong>负载的主人（用户）</strong>。因为只有他知道：这段内存装的是模型权重（要
 A2 加密），那段只是普通 buffer（A3 就够）。Adaptor
-里写死的是”下发规则的这个通道”（<code>pkt_filter_manage</code>），规则内容永远是动态的。这也正是
+里写死的只是下发规则的通道（<code>pkt_filter_manage</code>），规则内容永远是动态的。这也正是
 ccAI 兼容新 xPU 的底气：厂商想给私有管理包加规则，直接通过 MMIO
 寄存器加一条就行，不用重写固件。</p>
 </blockquote>
@@ -24781,17 +24781,17 @@ ccAI 兼容新 xPU 的底气：厂商想给私有管理包加规则，直接通�
 </tr>
 </tbody>
 </table>
-<p>所以前文说的”Filter 分级
-A1～A4”是<strong>执行视角</strong>（查表贴标签），这里的”用户下发”是<strong>制定视角</strong>（规则从哪来）——两句话不矛盾：分级的依据，正是用户预先放进表里的那些规则。另外注意，A1～A4
-这四档动作是论文设计好的固定分类，用户能定的是”每个包落哪一档”，不能发明第五档。</p>
+<p>所以前文说的 Filter 分级 A1～A4
+是<strong>执行视角</strong>（查表贴标签），这里的用户下发是<strong>制定视角</strong>（规则从哪来）——两句话不矛盾：分级的依据，正是用户预先放进表里的那些规则。另外注意，A1～A4
+这四档动作是论文设计好的固定分类，用户能定的是每个包落到哪一档，不能发明第五档。</p>
 <h3 id="q2adaptor-是云厂商的闭源模块用户凭什么信它">Q2：Adaptor
 是云厂商的闭源模块，用户凭什么信它？</h3>
 <blockquote>
 <p>凭<strong>度量</strong>，不凭源码。云里的 Adaptor（约 2.1K 行）和
 PCIe-SC
-固件本来就是云厂商的闭源二进制，用户拿不到、也不该拿到源码——机密计算里，平台代码可信不可信不靠”读过源码”，而靠”它被量测过、量测结果可远程证明”（机制见下文第四站）。</p>
-<p>所以真正要紧的不是”开源”，而是<strong>够小、可审计</strong>：论文把
-CPU 侧新增的 TCB 压到约 3.1K 行（Adaptor 2.1K + Trust Modules
+固件本来就是云厂商的闭源二进制，用户拿不到、也不该拿到源码——机密计算里，平台代码可信不可信不靠读过源码，而靠它被量测过、结果可远程证明（机制见下文第四站）。</p>
+<p>所以真正要紧的不是开源，而是<strong>够小、可审计</strong>：论文把 CPU
+侧新增的 TCB 压到约 3.1K 行（Adaptor 2.1K + Trust Modules
 1.0K），越小越容易审清楚。</p>
 </blockquote>
 <h3
@@ -24801,7 +24801,7 @@ id="q3规则为什么要加密保存用的时候才解密">Q3：规则为什么�
 上，是<strong>总线可达</strong>的区域，正落在威胁模型里（攻击者能 snoop
 / tamper PCIe）。明文放在那里有两个洞：</p>
 <ul>
-<li><strong>泄露</strong>：攻击者读到规则，等于拿到你工作负载的”资产地图”——哪些地址区间被当敏感数据处理；</li>
+<li><strong>泄露</strong>：攻击者读到规则，等于拿到你工作负载的资产地图——哪些地址区间被当敏感数据处理；</li>
 <li><strong>注入</strong>：攻击者把自己的包改成 A4 直通、把别人的包标成
 A1 丢弃，防护形同虚设。</li>
 </ul>
@@ -24838,7 +24838,7 @@ tag，不一致就说明被动过手脚。</p>
 分开</strong>：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">   ├── Header ──────→ Header Queue（原样走，不动）</span><br><span class="line">   └── Payload ─────→ Payload Queue</span><br><span class="line">                          ↓</span><br><span class="line">                  Security Engine</span><br><span class="line">                    ┌─────┴─────┐</span><br><span class="line">                    ↓           ↓</span><br><span class="line">              AES-SHA      Authentication</span><br><span class="line">               Engine      Tag Manager</span><br><span class="line">                    └─────┬─────┘</span><br><span class="line">                          ↓</span><br><span class="line">                     重新组合 Packet</span><br></pre></td></tr></table></figure>
 <p>A2 的完整五步——下面以 <strong>D2H 方向</strong>（xPU 算完、把结果返回
-TVM）为例：此时数据在 PCIe-SC 的 Handler 里”真正被加密”（AES
+TVM）为例：此时数据在 PCIe-SC 的 Handler 里才真正被加密（AES
 引擎双向工作，H2D 任务下发方向则由 TVM 侧 Adaptor 加密，见下一站）：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. xPU 结果包到达 PCIe-SC</span><br><span class="line">      ┌────────┬──────────────┐</span><br><span class="line">      │ Header │ Result Data  │</span><br><span class="line">      └────────┴──────────────┘</span><br><span class="line">                   ↓</span><br><span class="line">2. Filter 判断：敏感结果数据 → A2</span><br><span class="line">                   ↓</span><br><span class="line">3. 拆包：Header → Header Queue（原样走）；Payload → Payload Queue</span><br><span class="line">                   ↓</span><br><span class="line">4. 处理 Payload：AES 加密 → Encrypted Data</span><br><span class="line">      Integrity 计算 → Authentication Tag</span><br><span class="line">                   ↓</span><br><span class="line">5. 重组发出</span><br><span class="line">      ┌────────┬────────────────┬────────────┐</span><br><span class="line">      │ Header │ Encrypted Data │ Auth Tag   │</span><br><span class="line">      └────────┴────────────────┴────────────┘</span><br><span class="line">                   ↓ PCIe</span><br><span class="line">                  TVM</span><br></pre></td></tr></table></figure>
 <p>任务下发（H2D）方向是镜像流程：payload 在 TVM 侧已被 Adaptor
