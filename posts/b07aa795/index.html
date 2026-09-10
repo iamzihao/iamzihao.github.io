@@ -30,7 +30,7 @@
 <meta property="og:description" content="内核启动后，屏幕上出现了 Hello, World!——在还没有文件系统、设备驱动和 std 的情况下，这靠的是往一块特殊内存（0xB8000）里写字符，由 VGA 硬件读取并显示出来。这篇讲的就是这块内存和 VGA 的工作方式。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-07T03:12:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T04:49:57.522Z">
+<meta property="article:modified_time" content="2026-09-10T03:05:32.127Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -177,9 +177,9 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#vga-%E5%AD%97%E7%AC%A6%E6%A8%A1%E5%BC%8F%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">2.</span> <span class="nav-text">🖥️ VGA 字符模式是什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E6%80%8E%E4%B9%88%E5%91%8A%E8%AF%89-vga%E6%98%BE%E7%A4%BA-a0xb8000"><span class="nav-number">3.</span> <span class="nav-text">🎯 CPU 怎么告诉 VGA”显示
-A”：0xB8000</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%80%E4%B8%AA%E5%AD%97%E7%AC%A6%E5%8D%A0%E4%B8%A4%E4%B8%AA%E5%AD%97%E8%8A%82"><span class="nav-number">4.</span> <span class="nav-text">🔤 为什么一个字符占两个字节</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E5%AD%97%E7%AC%A6%E5%88%B0%E5%83%8F%E7%B4%A0vga-%E6%98%AF%E7%A1%AC%E4%BB%B6%E7%BA%A7%E5%AD%97%E7%AC%A6%E6%B8%B2%E6%9F%93%E5%99%A8"><span class="nav-number">5.</span> <span class="nav-text">🔢 从字符到像素：VGA
-是”硬件级字符渲染器”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%95%B4%E5%9D%97%E6%98%BE%E5%AD%98%E6%9C%89%E5%A4%9A%E5%A4%A7"><span class="nav-number">6.</span> <span class="nav-text">📐 整块显存有多大</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%88%9A%E5%90%AF%E5%8A%A8%E6%97%B6%E7%89%B9%E5%88%AB%E5%96%9C%E6%AC%A2%E5%AE%83"><span class="nav-number">7.</span> <span class="nav-text">🖨️
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#vga-%E5%AD%97%E7%AC%A6%E6%A8%A1%E5%BC%8F%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">2.</span> <span class="nav-text">🖥️ VGA 字符模式是什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-%E6%80%8E%E4%B9%88%E5%91%8A%E8%AF%89-vga-%E6%98%BE%E7%A4%BA-a0xb8000"><span class="nav-number">3.</span> <span class="nav-text">🎯 CPU 怎么告诉 VGA 显示
+A：0xB8000</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%80%E4%B8%AA%E5%AD%97%E7%AC%A6%E5%8D%A0%E4%B8%A4%E4%B8%AA%E5%AD%97%E8%8A%82"><span class="nav-number">4.</span> <span class="nav-text">🔤 为什么一个字符占两个字节</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E5%AD%97%E7%AC%A6%E5%88%B0%E5%83%8F%E7%B4%A0vga-%E6%98%AF%E7%A1%AC%E4%BB%B6%E7%BA%A7%E5%AD%97%E7%AC%A6%E6%B8%B2%E6%9F%93%E5%99%A8"><span class="nav-number">5.</span> <span class="nav-text">🔢 从字符到像素：VGA
+是硬件级字符渲染器</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%95%B4%E5%9D%97%E6%98%BE%E5%AD%98%E6%9C%89%E5%A4%9A%E5%A4%A7"><span class="nav-number">6.</span> <span class="nav-text">📐 整块显存有多大</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%88%9A%E5%90%AF%E5%8A%A8%E6%97%B6%E7%89%B9%E5%88%AB%E5%96%9C%E6%AC%A2%E5%AE%83"><span class="nav-number">7.</span> <span class="nav-text">🖨️
 为什么操作系统刚启动时特别喜欢它</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#rust-os-%E9%87%8C%E7%9A%84-writerprintln-%E8%83%8C%E5%90%8E%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">8.</span> <span class="nav-text">🧱 Rust OS 里的
 Writer：println! 背后是什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#vga-%E5%AD%97%E7%AC%A6%E6%A8%A1%E5%BC%8F-vs-framebuffer"><span class="nav-number">9.</span> <span class="nav-text">⚖️ VGA 字符模式 vs Framebuffer</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E7%8E%B0%E5%9C%A8%E5%9F%BA%E6%9C%AC%E4%B8%8D%E7%94%A8%E5%AE%83%E4%BA%86"><span class="nav-number">10.</span> <span class="nav-text">🕰️ 为什么现在基本不用它了</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E5%BC%A0%E5%9B%BE%E4%B8%B2%E8%B5%B7%E5%85%A8%E9%83%A8"><span class="nav-number">11.</span> <span class="nav-text">🎨 一张图串起全部</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
@@ -273,7 +273,7 @@ Writer：println! 背后是什么</span></a></li><li class="nav-item nav-level-3
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 12:49:57" itemprop="dateModified" datetime="2026-09-09T12:49:57+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-10 11:05:32" itemprop="dateModified" datetime="2026-09-10T11:05:32+08:00">2026-09-10</time>
     </span>
 
   
@@ -319,7 +319,7 @@ class="uri">https://os.phil-opp.com/</a>）入门系列的一篇，跟着你刚�
 <code>cargo bootimage</code> 往下走，解释教程里 <code>println!</code>
 的第一站——VGA 文本模式。它正好用上《<a href="/posts/a5117577/">Rust OS
 入门：物理地址 ≠ RAM 地址</a>》里讲的 MMIO：<code>0xB8000</code>
-就是”读写内存 = 操作硬件”最经典的实例。</p>
+就是读写内存 = 操作硬件最经典的实例。</p>
 </blockquote>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
@@ -338,7 +338,7 @@ class="uri">https://os.phil-opp.com/</a>）入门系列的一篇，跟着你刚�
 <tbody>
 <tr>
 <td>VGA 字符模式</td>
-<td>早期”文字版显示器”，屏幕是字符格不是像素</td>
+<td>早期文字版显示器，屏幕是字符格不是像素</td>
 <td>80×25 的字符画布</td>
 </tr>
 <tr>
@@ -358,7 +358,7 @@ class="uri">https://os.phil-opp.com/</a>）入门系列的一篇，跟着你刚�
 </tr>
 <tr>
 <td>字体表（font）</td>
-<td>VGA 内部”字符编号→像素图案”的查表</td>
+<td>VGA 内部字符编号→像素图案的查表</td>
 <td>硬件级字符渲染器</td>
 </tr>
 <tr>
@@ -374,7 +374,7 @@ class="uri">https://os.phil-opp.com/</a>）入门系列的一篇，跟着你刚�
 </tbody>
 </table>
 <h3 id="vga-字符模式是什么">🖥️ VGA 字符模式是什么</h3>
-<p>先把它想象成一个非常早期的”文字版显示器”：屏幕<strong>不是</strong>由你直接控制每一个像素，而是被划分成一个个<strong>字符格子</strong>：</p>
+<p>先把它想象成一个非常早期的文字版显示器：屏幕<strong>不是</strong>由你直接控制每一个像素，而是被划分成一个个<strong>字符格子</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">┌────┬────┬────┬────┬────┐</span><br><span class="line">│ H  │ e  │ l  │ l  │ o  │</span><br><span class="line">├────┼────┼────┼────┼────┤</span><br><span class="line">│ W  │ o  │ r  │ l  │ d  │</span><br><span class="line">└────┴────┴────┴────┴────┘</span><br></pre></td></tr></table></figure>
 <p>经典 VGA 文本模式是 <strong>80 列 × 25
 行</strong>。也就是说，你不需要告诉显卡”把 <code>(100, 50)</code>
@@ -383,8 +383,8 @@ class="uri">https://os.phil-opp.com/</a>）入门系列的一篇，跟着你刚�
 <p>“第 3 行第 10 列，显示字符 <code>A</code>，颜色白色。”</p>
 </blockquote>
 <p>这就是<strong>字符模式（text mode）</strong>。</p>
-<h3 id="cpu-怎么告诉-vga显示-a0xb8000">🎯 CPU 怎么告诉 VGA”显示
-A”：0xB8000</h3>
+<h3 id="cpu-怎么告诉-vga-显示-a0xb8000">🎯 CPU 怎么告诉 VGA 显示
+A：0xB8000</h3>
 <p>这就用到了<strong>显存（video memory）</strong>。经典 PC 上，VGA
 文本模式的显存起始地址是：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0xB8000</span><br></pre></td></tr></table></figure>
@@ -394,14 +394,14 @@ A”：0xB8000</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">CPU</span><br><span class="line"> │</span><br><span class="line"> │ 写入 0x41 (&#x27;A&#x27;)</span><br><span class="line"> ↓</span><br><span class="line">0xB8000（VGA 显存）</span><br><span class="line"> │</span><br><span class="line"> │ VGA 显卡读取这块内存</span><br><span class="line"> ↓</span><br><span class="line">屏幕显示 A</span><br></pre></td></tr></table></figure>
 <p>要注意的一点：</p>
 <blockquote>
-<p><strong>CPU 写的不是”屏幕”，而是一块会被 VGA
+<p><strong>CPU 写的不是屏幕，而是一块会被 VGA
 硬件特殊解释的内存。</strong></p>
 </blockquote>
 <p>这正是我们在《物理地址 ≠ RAM 地址》里讲的
 <strong>MMIO</strong>：<code>0xB8000</code> 不是普通 RAM，而是映射到 VGA
-硬件的显存区域。写它不像写普通内存那样”存个数据”，而是”给显卡下达显示指令”。</p>
+硬件的显存区域。写它不像写普通内存那样只是存数据，而是给显卡下达显示指令。</p>
 <h3 id="为什么一个字符占两个字节">🔤 为什么一个字符占两个字节</h3>
-<p>因为除了保存”显示什么字符”，还要保存”用什么颜色显示”。所以一个字符单元是
+<p>因为除了保存显示什么字符，还要保存用什么颜色显示。所以一个字符单元是
 2 字节：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────┬──────────────┐</span><br><span class="line">│  char ASCII  │  attribute   │</span><br><span class="line">└──────────────┴──────────────┘</span><br><span class="line">  ASCII 字符（1 byte）  颜色属性（1 byte）</span><br></pre></td></tr></table></figure>
 <p>例如 <code>0x41 0x0F</code> = 字符 <code>'A'</code> + 颜色属性
@@ -411,7 +411,7 @@ A”：0xB8000</h3>
 <code>0xB8000</code>、第 1 个在 <code>0xB8002</code>、第 2 个在
 <code>0xB8004</code>……</p>
 <h3 id="从字符到像素vga-是硬件级字符渲染器">🔢 从字符到像素：VGA
-是”硬件级字符渲染器”</h3>
+是硬件级字符渲染器</h3>
 <p>CPU 写进去的 <code>0x41</code> 只是一个数字，VGA
 并不会直接把它当成像素。VGA
 内部有一张<strong>字体表（font）</strong>，存着每个字符的位图：</p>
@@ -420,7 +420,7 @@ A”：0xB8000</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"> ███</span><br><span class="line">█   █</span><br><span class="line">█   █</span><br><span class="line">█████</span><br><span class="line">█   █</span><br><span class="line">█   █</span><br><span class="line">█   █</span><br></pre></td></tr></table></figure>
 <p>完整链路：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">CPU → 写入 &#x27;A&#x27; (0x41) → VGA 显存 → 字体表查 &#x27;A&#x27; 的像素图案</span><br><span class="line">    → VGA 硬件按前景/背景色上色 → 显示器</span><br></pre></td></tr></table></figure>
-<p>所以字符模式本质是<strong>一个硬件帮你做好的”字符渲染器”</strong>——你只管给字符编号和颜色，画像素是显卡的活。</p>
+<p>所以字符模式本质是<strong>一个硬件帮你做好的字符渲染器</strong>——你只管给字符编号和颜色，画像素是显卡的活。</p>
 <h3 id="整块显存有多大">📐 整块显存有多大</h3>
 <p>80 × 25 = <strong>2000 个字符</strong>，每个 2 字节 → 2000 × 2 =
 <strong>4000 bytes ≈ 4 KB</strong>。整屏内容就这么多。</p>
@@ -428,7 +428,7 @@ A”：0xB8000</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">offset = (row × 80 + col) × 2</span><br></pre></td></tr></table></figure>
 <p>举例：第 0 行第 0 列 → <code>0</code>；第 0 行第 1 列 →
 <code>2</code>；第 1 行第 0 列 → <code>160</code>（因为一行 80 字符 × 2
-字节）。所以”写屏”本质上就是按公式往 <code>0xB8000 + offset</code>
+字节）。所以写屏本质上就是按公式往 <code>0xB8000 + offset</code>
 写字节。</p>
 <h3 id="为什么操作系统刚启动时特别喜欢它">🖨️
 为什么操作系统刚启动时特别喜欢它</h3>
@@ -437,7 +437,7 @@ A”：0xB8000</h3>
 <p>VGA 字符模式只需要：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">写几个内存地址 → VGA → 屏幕</span><br></pre></td></tr></table></figure>
 <p>这比操作现代 GPU
-简单几个数量级，所以它是早期内核最实用的”调试打印屏”——<code>kernel started!</code>、<code>initializing memory...</code>、<code>initializing interrupts...</code>
+简单几个数量级，所以它是早期内核最实用的调试打印屏——<code>kernel started!</code>、<code>initializing memory...</code>、<code>initializing interrupts...</code>
 都是这么一行行写出来的。</p>
 <h3 id="rust-os-里的-writerprintln-背后是什么">🧱 Rust OS 里的
 Writer：println! 背后是什么</h3>
@@ -446,14 +446,14 @@ Writer：println! 背后是什么</h3>
 <p>以及：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">impl</span> <span class="title class_">fmt</span>::Write <span class="keyword">for</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    <span class="keyword">fn</span> <span class="title function_">write_str</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, s: &amp;<span class="type">str</span>) <span class="punctuation">-&gt;</span> fmt::<span class="type">Result</span> &#123;</span><br><span class="line">        <span class="keyword">for</span> <span class="variable">byte</span> <span class="keyword">in</span> s.<span class="title function_ invoke__">bytes</span>() &#123;</span><br><span class="line">            <span class="keyword">self</span>.<span class="title function_ invoke__">write_byte</span>(byte);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="title function_ invoke__">Ok</span>(())</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>这里的 <code>buffer</code> 本质上就指向
-<code>0xB8000</code>，<code>write_byte</code> 做的就是把”字符 +
-颜色”写进显存、必要时滚动屏幕：</p>
+<code>0xB8000</code>，<code>write_byte</code> 做的就是把字符 +
+颜色写进显存、必要时滚动屏幕：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">println!(&quot;Hello&quot;)</span><br><span class="line">    ↓ Rust 格式化（fmt）</span><br><span class="line">Writer::write_str</span><br><span class="line">    ↓ 逐个字符</span><br><span class="line">write_byte（把 char+颜色 写进 0xB8000）</span><br><span class="line">    ↓ store 指令（MMIO）</span><br><span class="line">VGA 硬件</span><br><span class="line">    ↓</span><br><span class="line">屏幕</span><br></pre></td></tr></table></figure>
 <p>所以：</p>
 <blockquote>
-<p><strong><code>println!</code> 能显示，不是
-Rust”会显示文字”，而是你实现了一个
-<code>Writer</code>，把字符串转换成了对 VGA 显存的写操作。</strong></p>
+<p><strong><code>println!</code> 能显示，不是 Rust
+会显示文字，而是你实现了一个 <code>Writer</code>，把字符串转换成了对 VGA
+显存的写操作。</strong></p>
 </blockquote>
 <p>（顺带一提，这正是 <code>#![no_std]</code> 下 <code>println!</code>
 用不了的直接原因——宏靠
@@ -489,7 +489,7 @@ Rust”会显示文字”，而是你实现了一个
 </table>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">VGA Text Mode:      CPU → 字符 → VGA（帮你渲染）→ 屏幕</span><br><span class="line">Framebuffer:        CPU → 像素 → Framebuffer → 屏幕（全自己控制）</span><br></pre></td></tr></table></figure>
 <p>要画一个 <code>A</code>：字符模式写一个字节就完事；framebuffer
-需要自己”<code>'A' → 字体库 → bitmap → 逐像素写入</code>“。</p>
+需要自己<code>'A' → 字体库 → bitmap → 逐像素写入</code>。</p>
 <h3 id="为什么现在基本不用它了">🕰️ 为什么现在基本不用它了</h3>
 <p>因为它能力太有限：<code>80×25</code>、纯字符、几种颜色。而现代桌面需要
 <code>1920×1080</code>（约 200 万像素）、窗口、图片、动画、视频、GPU
@@ -505,12 +505,11 @@ Rust”会显示文字”，而是你实现了一个
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
 <p><strong>VGA 字符模式 =
-把一块特殊内存（<code>0xB8000</code>）当成”屏幕上的字符表”：CPU
-往里面写”字符 + 颜色”，VGA
-硬件按字体把字符转成像素显示出来。</strong></p>
+把一块特殊内存（<code>0xB8000</code>）当成屏幕上的字符表：CPU
+往里面写字符 + 颜色，VGA 硬件按字体把字符转成像素显示出来。</strong></p>
 </blockquote>
 <p>对正在学 Rust OS 的你，VGA
-的真正意义不是”学会显示文字”，而是第一次亲眼看到：</p>
+的真正意义不是学会显示文字，而是第一次亲眼看到：</p>
 <blockquote>
 <p><strong>CPU 写内存 → 硬件观察这块内存 →
 硬件产生可见输出。</strong></p>
@@ -518,7 +517,7 @@ Rust”会显示文字”，而是你实现了一个
 <p>这是理解 <strong>MMIO、设备驱动、framebuffer、硬件抽象</strong>
 最好的入门例子——下一节开始，教程会把它封装成带 <code>unsafe</code>
 隔离、能处理换行滚动的完整 VGA
-模块，那就是”把硬件操作包成安全抽象”的第一课。</p>
+模块，那就是把硬件操作包成安全抽象的第一课。</p>
 <p>Happy Hacking! 🎉</p>
 
     </div>
