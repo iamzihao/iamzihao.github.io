@@ -30,7 +30,7 @@
 <meta property="og:description" content="最近购入了台17年12寸的 macbook，想着体验一下mac生态，但是熟悉之后感觉确实不错。尤其是 Command 键的位置和用法，但是切换回 Windows 的时候就不太顺畅了。于是就想写一个脚本，实现键位映射。但是用mac RDP win的时候发现这些映射又容易出问题，于是想办法搞成动态映射来解决这个问题。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-12-09T12:42:12.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.116Z">
+<meta property="article:modified_time" content="2026-09-10T03:14:51.484Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="Windows">
 <meta property="article:tag" content="MacOS">
@@ -175,7 +175,7 @@
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E7%97%9B%E7%82%B9%E6%9C%AC%E5%9C%B0%E4%B8%8E%E8%BF%9C%E7%A8%8B%E7%9A%84%E7%B2%BE%E7%A5%9E%E5%88%86%E8%A3%82"><span class="nav-number">1.</span> <span class="nav-text">💡
-核心痛点：本地与远程的”精神分裂”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88wtsapi-%E5%8A%A8%E6%80%81%E8%AF%86%E5%88%AB"><span class="nav-number">2.</span> <span class="nav-text">🔍 解决方案：WTSAPI 动态识别</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%84%9A%E6%9C%AC%E5%AE%9E%E7%8E%B0"><span class="nav-number">3.</span> <span class="nav-text">🛠️ 脚本实现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8"><span class="nav-number">4.</span> <span class="nav-text">🚀 如何使用</span></a></li></ol></div>
+核心痛点：本地与远程的精神分裂</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88wtsapi-%E5%8A%A8%E6%80%81%E8%AF%86%E5%88%AB"><span class="nav-number">2.</span> <span class="nav-text">🔍 解决方案：WTSAPI 动态识别</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%84%9A%E6%9C%AC%E5%AE%9E%E7%8E%B0"><span class="nav-number">3.</span> <span class="nav-text">🛠️ 脚本实现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8"><span class="nav-number">4.</span> <span class="nav-text">🚀 如何使用</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -267,7 +267,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-10 11:14:51" itemprop="dateModified" datetime="2026-09-10T11:14:51+08:00">2026-09-10</time>
     </span>
 
   
@@ -311,7 +311,7 @@ win的时候发现这些映射又容易出问题，于是想办法搞成动态�
 编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
 体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
 <h3 id="核心痛点本地与远程的精神分裂">💡
-核心痛点：本地与远程的”精神分裂”</h3>
+核心痛点：本地与远程的精神分裂</h3>
 <p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
 <code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
 键就在这个位置）。</p>
@@ -321,7 +321,7 @@ Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们
 远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
 的 <code>Win</code> 键。此时，我们在 Mac 上按
 <code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
-<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
+<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个智能的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
 <h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
 <p>Windows 提供了 WTSAPI (Windows Terminal Services
 API)，允许我们查询当前会话的信息。通过
@@ -401,7 +401,7 @@ target="_blank" rel="noopener" href="https://github.com/iamzihao/MacKeysMapping.
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">415k</span>
+    <span title="Word count total">414k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">

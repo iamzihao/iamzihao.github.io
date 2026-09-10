@@ -45,7 +45,7 @@ Windows 上。</li>
 Python 解释器本身。你可以用一条命令轻松创建包含特定 Python 版本（如 3.7,
 3.8, 3.9）的环境。</li>
 <li><strong>强大的依赖求解器</strong>：Conda
-在安装包时会进行严格的依赖关系检查，确保环境中所有包的版本都是相互兼容的，从而从根本上避免了”依赖地狱”。</li>
+在安装包时会进行严格的依赖关系检查，确保环境中所有包的版本都是相互兼容的，从而从根本上避免了依赖地狱。</li>
 </ul>
 <h3 id="anaconda-生态系统发行版与通道">Anaconda
 生态系统：发行版与通道</h3>
@@ -304,53 +304,6 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       <tags>
         <tag>CSS</tag>
         <tag>前端</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -1269,6 +1222,53 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>前端浏览器缓存机制</title>
     <url>/posts/50ac740b/</url>
     <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
@@ -1619,12 +1619,12 @@ Communication，近场通信）是一种短距离无线通信技术，工作频�
 <li><strong>为什么要调制？</strong>
 <ul>
 <li>原始数据（比如1和0）不能直接传输</li>
-<li>需要把数据”搭载”在13.56MHz的载波信号上</li>
+<li>需要把数据搭载在13.56MHz的载波信号上</li>
 <li>就像把信息写在纸飞机上才能传递给别人</li>
 </ul></li>
 <li><strong>解调是什么？</strong>
 <ul>
-<li>接收方需要从收到的信号中”提取”出原始数据</li>
+<li>接收方需要从收到的信号中提取出原始数据</li>
 <li>就像接收方要从纸飞机上读取信息</li>
 <li>或者从手电筒的闪烁中理解传递的含义</li>
 </ul></li>
@@ -1700,12 +1700,83 @@ Communication，近场通信）是一种短距离无线通信技术，工作频�
       </tags>
   </entry>
   <entry>
+    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
+    <url>/posts/f520f9c/</url>
+    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
+<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
+<span id="more"></span>
+<h3 id="网络分层模型">网络分层模型</h3>
+<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
+<ul>
+<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
+<li>传输层:TCP、UDP等传输控制协议</li>
+<li>网络层:IP、ICMP等网络协议</li>
+<li>网络接口层:以太网、WiFi等物理传输协议</li>
+</ul>
+<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
+<h2 id="协议栈的演进">协议栈的演进</h2>
+<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
+<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
+<p>TCP(传输控制协议): - 面向连接:通信前需要建立连接(三次握手) -
+可靠传输:使用确认机制和重传机制保证数据可靠到达 -
+流量控制:根据接收方处理能力调整发送速率 -
+拥塞控制:根据网络状况调整发送速率 -
+适用场景:文件传输、网页访问等对可靠性要求高的应用</p>
+<p>UDP(用户数据报协议): - 无连接:不需要建立连接即可传输数据 -
+不可靠:不保证数据一定送达 - 无流量控制和拥塞控制 - 开销小、延迟低 -
+适用场景:视频直播、游戏等对实时性要求高的应用</p>
+<h3 id="应用层的发展">应用层的发展</h3>
+<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
+<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
+<p>HTTP/1.1: - 持久连接:复用TCP连接 - 管道化请求:支持多个请求排队 -
+但存在队头阻塞问题</p>
+<p>HTTP/2: - 多路复用:在同一连接上并发处理多个请求 -
+头部压缩:减少传输开销 - 服务器推送:主动推送相关资源 -
+二进制分帧:更高效的数据传输</p>
+<h4 id="grpc---现代分布式系统的新选择">gRPC -
+现代分布式系统的新选择</h4>
+<p>gRPC是基于HTTP/2构建的高性能RPC框架: - 协议层次: * 应用层:gRPC API *
+中间层:HTTP/2 * 传输层:TCP * 安全层:TLS(可选)</p>
+<p>四种通信模式: 1. 一元RPC(Unary): - 类似HTTP/1.1的请求-响应模式 -
+适用于传统的客户端-服务器交互</p>
+<ol start="2" type="1">
+<li>服务器流式RPC(Server Streaming):
+<ul>
+<li>客户端发送一个请求,服务器返回数据流</li>
+<li>适用于服务器推送场景,如订阅更新</li>
+</ul></li>
+<li>客户端流式RPC(Client Streaming):
+<ul>
+<li>客户端发送数据流,服务器返回一个响应</li>
+<li>适用于数据上传场景</li>
+</ul></li>
+<li>双向流式RPC(Bidirectional Streaming):
+<ul>
+<li>客户端和服务器同时收发数据流</li>
+<li>适用于实时通信场景,如在线游戏</li>
+</ul></li>
+</ol>
+<p>gRPC的优势: - 基于HTTP/2的高性能 - Protocol Buffers的高效序列化 -
+强类型接口定义 - 跨语言支持 - 内置流控和安全机制</p>
+<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
+<p>TLS在传输层和应用层之间提供了安全保障: - 加密:保护数据不被窃听 -
+认证:验证通信双方身份 - 完整性:确保数据不被篡改</p>
+<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
+]]></content>
+      <tags>
+        <tag>网络协议</tag>
+        <tag>gRPC</tag>
+        <tag>TLS</tag>
+        <tag>HTTP</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>2.4G 无线通信笔记</title>
     <url>/posts/a25d78f8/</url>
     <content><![CDATA[<h2 id="什么是2.4g无线通信">什么是2.4G无线通信？</h2>
 <p>之前嵌入式project的通信中用到了2.4G模块，借此机会来了解一下这项技术。</p>
 <span id="more"></span>
-<p>2.4G无线通信是一种工作在2.4GHz频段的无线通信技术，具体频率范围是2.400GHz到2.4835GHz。这个频段属于ISM（工业、科学、医疗）频段，全球免授权使用，因此成为了各类无线通信技术的”必争之地”。</p>
+<p>2.4G无线通信是一种工作在2.4GHz频段的无线通信技术，具体频率范围是2.400GHz到2.4835GHz。这个频段属于ISM（工业、科学、医疗）频段，全球免授权使用，因此成为了各类无线通信技术的必争之地。</p>
 <figure>
 <img src="/assets/2.4G-image.png" alt="alt text" />
 <figcaption aria-hidden="true">alt text</figcaption>
@@ -2030,74 +2101,38 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
       </tags>
   </entry>
   <entry>
-    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
-    <url>/posts/f520f9c/</url>
-    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
-<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
+    <title>DeepSeek本地部署</title>
+    <url>/posts/4f6ed32b/</url>
+    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
 <span id="more"></span>
-<h3 id="网络分层模型">网络分层模型</h3>
-<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
-<ul>
-<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
-<li>传输层:TCP、UDP等传输控制协议</li>
-<li>网络层:IP、ICMP等网络协议</li>
-<li>网络接口层:以太网、WiFi等物理传输协议</li>
-</ul>
-<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
-<h2 id="协议栈的演进">协议栈的演进</h2>
-<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
-<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
-<p>TCP(传输控制协议): - 面向连接:通信前需要建立连接(三次握手) -
-可靠传输:使用确认机制和重传机制保证数据可靠到达 -
-流量控制:根据接收方处理能力调整发送速率 -
-拥塞控制:根据网络状况调整发送速率 -
-适用场景:文件传输、网页访问等对可靠性要求高的应用</p>
-<p>UDP(用户数据报协议): - 无连接:不需要建立连接即可传输数据 -
-不可靠:不保证数据一定送达 - 无流量控制和拥塞控制 - 开销小、延迟低 -
-适用场景:视频直播、游戏等对实时性要求高的应用</p>
-<h3 id="应用层的发展">应用层的发展</h3>
-<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
-<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
-<p>HTTP/1.1: - 持久连接:复用TCP连接 - 管道化请求:支持多个请求排队 -
-但存在队头阻塞问题</p>
-<p>HTTP/2: - 多路复用:在同一连接上并发处理多个请求 -
-头部压缩:减少传输开销 - 服务器推送:主动推送相关资源 -
-二进制分帧:更高效的数据传输</p>
-<h4 id="grpc---现代分布式系统的新选择">gRPC -
-现代分布式系统的新选择</h4>
-<p>gRPC是基于HTTP/2构建的高性能RPC框架: - 协议层次: * 应用层:gRPC API *
-中间层:HTTP/2 * 传输层:TCP * 安全层:TLS(可选)</p>
-<p>四种通信模式: 1. 一元RPC(Unary): - 类似HTTP/1.1的请求-响应模式 -
-适用于传统的客户端-服务器交互</p>
-<ol start="2" type="1">
-<li>服务器流式RPC(Server Streaming):
-<ul>
-<li>客户端发送一个请求,服务器返回数据流</li>
-<li>适用于服务器推送场景,如订阅更新</li>
-</ul></li>
-<li>客户端流式RPC(Client Streaming):
-<ul>
-<li>客户端发送数据流,服务器返回一个响应</li>
-<li>适用于数据上传场景</li>
-</ul></li>
-<li>双向流式RPC(Bidirectional Streaming):
-<ul>
-<li>客户端和服务器同时收发数据流</li>
-<li>适用于实时通信场景,如在线游戏</li>
-</ul></li>
-</ol>
-<p>gRPC的优势: - 基于HTTP/2的高性能 - Protocol Buffers的高效序列化 -
-强类型接口定义 - 跨语言支持 - 内置流控和安全机制</p>
-<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
-<p>TLS在传输层和应用层之间提供了安全保障: - 加密:保护数据不被窃听 -
-认证:验证通信双方身份 - 完整性:确保数据不被篡改</p>
-<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
+<h2 id="下载ollama">下载Ollama</h2>
+<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
+<p>下载地址：https://ollama.com/download/windows</p>
+<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
+<p>如下图所示</p>
+<p><img src="/assets/deepseek部署01.png" /></p>
+<blockquote>
+<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
+</blockquote>
+<p>上述步骤完成后，我们可以打开CMD，输入ollama
+-v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
+<p><img src="/assets/deepseek部署02.png" /></p>
+<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
+<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
+<h2 id="下载deepseek">下载DeepSeek</h2>
+<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
+<p><img src="/assets/deepseek部署03.png" /></p>
+<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
+<p>如下图所示：</p>
+<p><img src="/assets/deepseek部署04.png" /></p>
+<p>最终效果如下图所示：</p>
+<p><img src="/assets/deepseek部署05.png" /></p>
 ]]></content>
       <tags>
-        <tag>TLS</tag>
-        <tag>网络协议</tag>
-        <tag>gRPC</tag>
-        <tag>HTTP</tag>
+        <tag>大语言模型</tag>
+        <tag>人工智能</tag>
       </tags>
   </entry>
   <entry>
@@ -2827,38 +2862,79 @@ write()系统调用的参数与read()类似</p>
       </tags>
   </entry>
   <entry>
-    <title>DeepSeek本地部署</title>
-    <url>/posts/4f6ed32b/</url>
-    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
-<span id="more"></span>
-<h2 id="下载ollama">下载Ollama</h2>
-<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
-<p>下载地址：https://ollama.com/download/windows</p>
-<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
-<p>如下图所示</p>
-<p><img src="/assets/deepseek部署01.png" /></p>
-<blockquote>
-<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
-</blockquote>
-<p>上述步骤完成后，我们可以打开CMD，输入ollama
--v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
-<p><img src="/assets/deepseek部署02.png" /></p>
-<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
-<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
-<h2 id="下载deepseek">下载DeepSeek</h2>
-<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
-<p><img src="/assets/deepseek部署03.png" /></p>
-<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
-<p>如下图所示：</p>
-<p><img src="/assets/deepseek部署04.png" /></p>
-<p>最终效果如下图所示：</p>
-<p><img src="/assets/deepseek部署05.png" /></p>
+    <title>Dotfiles</title>
+    <url>/posts/e5afd7e1/</url>
+    <content><![CDATA[<p>在 Linux 或 macOS
+系统中，以点（<code>.</code>）开头的文件和文件夹统称
+<code>dotfiles</code>（如
+<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
+Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
+<span id="more"></span></p>
+<h3
+id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
+<p>我们通常会经历几个阶段： 1.
+<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
+2. <strong>自动化脚本的萌芽</strong>：编写 Shell
+脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
+3. <strong>Git 裸仓库的炫技</strong>：使用
+<code>git bare repository</code>
+是一个更高级的方案，它允许我们直接在主目录下用 Git
+进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
+Git 操作的直观性。</p>
+<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
+GNU Stow 的舞台。</p>
+<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
+的哲学：一个优雅的“符号链接农场”</h3>
+<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
+Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
+<p>想象一下： * 你的 <code>~/dotfiles</code>
+目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
+<code>nvim</code>, <code>git</code>,
+<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
+<code>~</code> 是需要播种的<strong>土地</strong>。</p>
+<p><code>stow</code>
+命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
+<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
+<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
+Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
+仓库是所有配置的唯一“真理之源”（Single Source of
+Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
+<strong>配置的部署</strong>：主目录 <code>~</code>
+下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
+<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
+<code>dotfiles</code>
+仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
+会负责实现它。</p>
+<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
+<ol type="1">
+<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
+最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
+下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
+目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
+<li><p><strong>高度模块化 (Modular)</strong>
+每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
+Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
+配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
+配置？只需选择性地 <code>stow</code>
+即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
+<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
+与 <code>git</code>
+结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
+几条命令，一个熟悉的环境便跃然屏上。</p></li>
+<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
+在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
+</ol>
+<h3 id="结论大道至简">结论：大道至简</h3>
+<p>在 dotfiles 管理的江湖里，<code>stow</code>
+并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
+<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
+值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
 ]]></content>
       <tags>
-        <tag>大语言模型</tag>
-        <tag>人工智能</tag>
+        <tag>Linux</tag>
+        <tag>Git</tag>
+        <tag>工具</tag>
+        <tag>Dotfiles</tag>
       </tags>
   </entry>
   <entry>
@@ -3034,82 +3110,6 @@ TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和�
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Dotfiles</title>
-    <url>/posts/e5afd7e1/</url>
-    <content><![CDATA[<p>在 Linux 或 macOS
-系统中，以点（<code>.</code>）开头的文件和文件夹统称
-<code>dotfiles</code>（如
-<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
-Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
-<span id="more"></span></p>
-<h3
-id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
-<p>我们通常会经历几个阶段： 1.
-<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
-2. <strong>自动化脚本的萌芽</strong>：编写 Shell
-脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
-3. <strong>Git 裸仓库的炫技</strong>：使用
-<code>git bare repository</code>
-是一个更高级的方案，它允许我们直接在主目录下用 Git
-进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
-Git 操作的直观性。</p>
-<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
-GNU Stow 的舞台。</p>
-<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
-的哲学：一个优雅的“符号链接农场”</h3>
-<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
-Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
-<p>想象一下： * 你的 <code>~/dotfiles</code>
-目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
-<code>nvim</code>, <code>git</code>,
-<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
-<code>~</code> 是需要播种的<strong>土地</strong>。</p>
-<p><code>stow</code>
-命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
-<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
-<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
-Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
-仓库是所有配置的唯一“真理之源”（Single Source of
-Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
-<strong>配置的部署</strong>：主目录 <code>~</code>
-下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
-<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
-<code>dotfiles</code>
-仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
-会负责实现它。</p>
-<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
-<ol type="1">
-<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
-最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
-下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
-目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
-<li><p><strong>高度模块化 (Modular)</strong>
-每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
-Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
-配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
-配置？只需选择性地 <code>stow</code>
-即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
-<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
-与 <code>git</code>
-结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
-几条命令，一个熟悉的环境便跃然屏上。</p></li>
-<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
-在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
-</ol>
-<h3 id="结论大道至简">结论：大道至简</h3>
-<p>在 dotfiles 管理的江湖里，<code>stow</code>
-并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
-<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
-值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
-]]></content>
-      <tags>
-        <tag>Linux</tag>
-        <tag>Git</tag>
-        <tag>工具</tag>
-        <tag>Dotfiles</tag>
       </tags>
   </entry>
   <entry>
@@ -3664,7 +3664,7 @@ shell（如别名和环境变量）都能理解的内容。</p>
 无关文件（<code>.shell/</code>）：</p>
 <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">.bash/</span><br><span class="line">    env</span><br><span class="line">    interactive</span><br><span class="line">    login</span><br><span class="line">    logout</span><br><span class="line">.sh/</span><br><span class="line">    env</span><br><span class="line">    interactive</span><br><span class="line">    login</span><br><span class="line">.shell/</span><br><span class="line">    env</span><br><span class="line">    interactive</span><br><span class="line">    login</span><br><span class="line">    logout</span><br><span class="line">.zsh/</span><br><span class="line">    env</span><br><span class="line">    interactive</span><br><span class="line">    login</span><br><span class="line">    logout</span><br></pre></td></tr></table></figure>
 <h2 id="不同类型的-shell">不同类型的 Shell</h2>
-<p>“But!” 你说，“这些不同的文件在这里做什么？”
+<p>But! 你说，这些不同的文件在这里做什么？
 啊，我很高兴你问了。有两种类型的 shell：</p>
 <ul>
 <li><strong>[非]交互式 shell</strong>（你向它们输入 / shell 脚本）</li>
@@ -4411,7 +4411,7 @@ GPG 签名，保证来源可信、未被篡改。</li>
 <h4 id="小技巧这个命令来自哪个包">9) 小技巧：这个命令来自哪个包？</h4>
 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sudo</span> apt install apt-file &amp;&amp; <span class="built_in">sudo</span> apt-file update</span><br><span class="line">apt-file search /usr/bin/&lt;命令&gt;</span><br></pre></td></tr></table></figure>
 <ul>
-<li>用于排查”缺哪个包”或确认二进制归属，定位问题很高效。</li>
+<li>用于排查缺哪个包或确认二进制归属，定位问题很高效。</li>
 </ul>
 <h3 id="概念与命令的映射只记这几个就够">📝
 概念与命令的映射（只记这几个就够）</h3>
@@ -4480,9 +4480,9 @@ Key)</strong> 和 <strong>私钥 (Private Key)</strong>。</p>
 收到后用自己的私钥解密。其他人即使截获了消息，没有 <code>B</code>
 的私钥也无法破解。 2. <strong>签名/验证</strong>：<code>A</code>
 想证明某条消息确实是自己发的。<code>A</code>
-用自己的私钥对消息“签名”，并将签名连同消息一起发给
+用自己的私钥对消息签名，并将签名连同消息一起发给
 <code>B</code>。<code>B</code> 用 <code>A</code>
-的公”钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
+的公钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
 且未被篡改。</p>
 <ul>
 <li><strong>优点</strong>：完美解决了密钥分发问题，安全性高，且能实现数字签名。</li>
@@ -4854,9 +4854,8 @@ flowchart TD
 </pre>
 <h3 id="小结">✅ 小结</h3>
 <ul>
-<li>一句话记忆：GPU 用”成群线程”换吞吐，用”切
-Warp”藏延迟；真正的性能来自”对齐访问 + 合理占用 + 少分歧 +
-数据重用”。</li>
+<li>一句话记忆：GPU 用成群线程换吞吐，用切 Warp
+藏延迟；真正的性能来自对齐访问 + 合理占用 + 少分歧 + 数据重用。</li>
 </ul>
 <h3 id="访存模式对比aos-vs-soa合并访存更友好">🧭 访存模式对比：AoS vs
 SoA（合并访存更友好）</h3>
@@ -7239,7 +7238,7 @@ Logs)</strong>：函数运行期间产生的日志（比如
 → 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
 </blockquote>
 <h4 id="开发到上线五步法">开发到上线：五步法</h4>
-<p>接下来，我们用一个经典的 “Hello World”
+<p>接下来，我们用一个经典的 Hello World
 示例，走完从开发到上线的完整流程。</p>
 <ol type="1">
 <li><p><strong>初始化工程</strong>
@@ -7258,8 +7257,8 @@ HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code">
 10% 的流量指向新版本，90%
 的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
 <li><p><strong>监控与告警</strong>
-函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如”当错误率连续
-5 分钟超过 1% 时，立即发短信通知我”。</p></li>
+函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
+5 分钟超过 1% 时，立即发短信通知我。</p></li>
 </ol>
 <h3
 id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h3>
@@ -8821,7 +8820,7 @@ Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
 PGC)</strong></li>
 <li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
 <li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
-<li><strong>炸裂体 (“Explosive”
+<li><strong>炸裂体 (Explosive
 Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
 <li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
 <li><strong>卖铲子 (Selling
@@ -11628,7 +11627,7 @@ win的时候发现这些映射又容易出问题，于是想办法搞成动态�
 编写脚本，实现<strong>动态键位映射</strong>：既能在本地完美复刻 Mac
 体验，又能智能识别远程桌面来源，自动适配 RDP 客户端的键位逻辑。</p>
 <h3 id="核心痛点本地与远程的精神分裂">💡
-核心痛点：本地与远程的”精神分裂”</h3>
+核心痛点：本地与远程的精神分裂</h3>
 <p>在 Windows 上复刻 Mac 键位，最直接的思路是将键盘左下角的
 <code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
 键就在这个位置）。</p>
@@ -11638,7 +11637,7 @@ Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们
 远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
 的 <code>Win</code> 键。此时，我们在 Mac 上按
 <code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
-<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个”智能”的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
+<p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个智能的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
 <h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
 <p>Windows 提供了 WTSAPI (Windows Terminal Services
 API)，允许我们查询当前会话的信息。通过
@@ -16084,7 +16083,7 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
 保留了这条规则，同时新增了 <code>bool</code> 让语义更清晰。</p>
 <blockquote>
 <p>逻辑上 bool 只有 true/false；和数字打交道时，它就是 0/1，且任何非 0
-值都会被”压缩”成 true。</p>
+值都会被压缩成 true。</p>
 </blockquote>
 <h4 id="类型转换">类型转换</h4>
 <p>类型转换就是把一种类型的值变成另一种类型的值。入门阶段先掌握三件事：<strong>隐式转换</strong>、<strong>显式转换</strong>、<strong>窄化转换</strong>。</p>
@@ -16139,7 +16138,7 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
 <tr>
 <td>本质</td>
 <td>万能转换器：几乎什么都能转</td>
-<td>只做”合理”的转换</td>
+<td>只做合理的转换</td>
 </tr>
 <tr>
 <td>编译期检查</td>
