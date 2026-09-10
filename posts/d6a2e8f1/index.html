@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="栈上的变量由编译器自动管理，但程序运行时常常需要”自己决定分配多少内存、什么时候释放”，这就是动态内存。">
+    <meta name="description" content="栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="C&#x2F;C++ 入门：动态内存管理">
 <meta property="og:url" content="https://iamzihao.github.io/posts/d6a2e8f1/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="栈上的变量由编译器自动管理，但程序运行时常常需要”自己决定分配多少内存、什么时候释放”，这就是动态内存。">
+<meta property="og:description" content="栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-07-01T07:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.120Z">
+<meta property="article:modified_time" content="2026-09-10T03:09:33.495Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="C&#x2F;C++">
 <meta property="article:tag" content="编程入门">
@@ -270,7 +270,7 @@ RAII：构造获取资源，析构释放资源</span></a></li><li class="nav-ite
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-10 11:09:33" itemprop="dateModified" datetime="2026-09-10T11:09:33+08:00">2026-09-10</time>
     </span>
 
   
@@ -304,7 +304,7 @@ RAII：构造获取资源，析构释放资源</span></a></li><li class="nav-ite
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>栈上的变量由编译器自动管理，但程序运行时常常需要”自己决定分配多少内存、什么时候释放”，这就是动态内存。</p>
+    <div class="post-body" itemprop="articleBody"><p>栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
@@ -344,12 +344,12 @@ RAII：构造获取资源，析构释放资源</span></a></li><li class="nav-ite
 <tr>
 <td>浅拷贝</td>
 <td>只复制指针的地址，多个对象共享同一块资源</td>
-<td>复制”地址”</td>
+<td>复制地址</td>
 </tr>
 <tr>
 <td>深拷贝</td>
 <td>复制资源本身，每个对象持有自己的副本</td>
-<td>复制”内容”</td>
+<td>复制内容</td>
 </tr>
 <tr>
 <td>RAII</td>
@@ -418,7 +418,7 @@ flowchart LR
 <li>把这块内存还给系统。</li>
 </ol>
 <h4 id="对象的-newdelete">对象的 new/delete</h4>
-<p>对自定义类同样适用，而且更能看出”构造/析构”的顺序：</p>
+<p>对自定义类同样适用，而且更能看出构造 / 析构的顺序：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Logger</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Logger</span>()  &#123; cout &lt;&lt; <span class="string">&quot;构造&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">    ~<span class="built_in">Logger</span>() &#123; cout &lt;&lt; <span class="string">&quot;析构&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Logger* log = <span class="keyword">new</span> <span class="built_in">Logger</span>();  <span class="comment">// 堆上构造</span></span><br><span class="line">    <span class="keyword">delete</span> log;                  <span class="comment">// 堆上析构并释放</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>输出：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">构造</span><br><span class="line">析构</span><br></pre></td></tr></table></figure>
@@ -495,7 +495,7 @@ new[]/delete[]：数组分配与释放匹配</h3>
 <blockquote>
 <p>对内置类型（如 <code>int</code>）来说，<code>new[]</code> 配
 <code>delete</code>
-有时”碰巧能跑”，但对自定义类型几乎必然出问题，因为释放机制不同。不要依赖碰巧，严格配对。</p>
+有时碰巧能跑，但对自定义类型几乎必然出问题，因为释放机制不同。不要依赖碰巧，严格配对。</p>
 </blockquote>
 <p>现代 C++ 里，动态数组优先用
 <code>std::vector</code>，它自己管理内存：</p>
@@ -503,7 +503,7 @@ new[]/delete[]：数组分配与释放匹配</h3>
 <h3 id="深拷贝与浅拷贝">🧬 深拷贝与浅拷贝</h3>
 <p>上一章的拷贝构造提到：类里有裸指针时，默认拷贝可能出问题。这里展开看。</p>
 <h4 id="浅拷贝只复制地址">浅拷贝：只复制地址</h4>
-<p>默认拷贝构造函数的行为是”逐成员复制”。对于指针成员，复制的是地址本身：</p>
+<p>默认拷贝构造函数的行为是逐成员复制。对于指针成员，复制的是地址本身：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>* data;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">Buffer</span>(<span class="type">int</span> size)</span><br><span class="line">    &#123;</span><br><span class="line">        data = <span class="keyword">new</span> <span class="type">int</span>[size];</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~<span class="built_in">Buffer</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">delete</span>[] data;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 <p>发生默认拷贝时：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Buffer <span class="title">a</span><span class="params">(<span class="number">10</span>)</span></span>;</span><br><span class="line">Buffer b = a;   <span class="comment">// 默认拷贝：只复制指针地址</span></span><br></pre></td></tr></table></figure>
@@ -530,7 +530,7 @@ new[]/delete[]：数组分配与释放匹配</h3>
 <tbody>
 <tr>
 <td>浅拷贝</td>
-<td>多个对象共享同一资源，各自都”以为”自己拥有</td>
+<td>多个对象共享同一资源，各自都以为自己拥有</td>
 <td>重复释放</td>
 </tr>
 <tr>
@@ -609,7 +609,7 @@ flowchart TD
 RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
 <h4 id="独占所有权">独占所有权</h4>
 <p><code>unique_ptr</code>
-表示”这块内存只属于这一个指针”：不能复制，只能转移（move）。它离开作用域时自动释放内存。</p>
+表示这块内存只属于这一个指针：不能复制，只能转移（move）。它离开作用域时自动释放内存。</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// make_unique 创建对象，返回 unique_ptr（C++14 起）</span></span><br><span class="line">    unique_ptr&lt;<span class="type">int</span>&gt; p = <span class="built_in">make_unique</span>&lt;<span class="type">int</span>&gt;(<span class="number">42</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;   <span class="comment">// 42，用法和普通指针类似</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 不需要手动 delete，离开作用域自动释放</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>make_unique</code> 比直接 <code>new</code>
 更安全：它保证在构造异常时也不会泄漏内存。</p>
@@ -698,11 +698,11 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
 <td>严格配对，否则是未定义行为</td>
 </tr>
 <tr>
-<td>浅拷贝只是”效率低一点”</td>
+<td>浅拷贝只是效率低一点</td>
 <td>含指针成员时浅拷贝会导致重复释放</td>
 </tr>
 <tr>
-<td>RAII 就是”在析构函数里 delete”</td>
+<td>RAII 就是在析构函数里 delete</td>
 <td>核心是资源与对象生命周期绑定，从而获得自动释放和异常安全</td>
 </tr>
 <tr>
@@ -720,7 +720,7 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
 </table>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
-<p>动态内存管理的核心是”谁分配、谁释放、何时释放”：手动
+<p>动态内存管理的核心是谁分配、谁释放、何时释放：手动
 <code>new</code>/<code>delete</code> 容易出错，RAII
 把资源生命周期绑定到对象上，<code>unique_ptr</code> 让释放自动化。</p>
 </blockquote>

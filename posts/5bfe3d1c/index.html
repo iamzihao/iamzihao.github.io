@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="学 Rust OS 时会密集碰到 struct、引用、裸指针、unsafe、生命周期这些概念。如果此前没有 Rust 基础，直接读 OS 代码会很吃力。这篇先用 C&#x2F;C++ 作对照，把”你已经会的东西在 Rust 里怎么写”过一遍，建立一张 Rust 地图。">
+    <meta name="description" content="学 Rust OS 时会密集碰到 struct、引用、裸指针、unsafe、生命周期这些概念。如果此前没有 Rust 基础，直接读 OS 代码会很吃力。这篇先用 C&#x2F;C++ 作对照，把你已经会的东西在 Rust 里怎么写过一遍，建立一张 Rust 地图。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Rust OS 前置：从 C 到 Rust——变量、类型与 struct">
 <meta property="og:url" content="https://iamzihao.github.io/posts/5bfe3d1c/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="学 Rust OS 时会密集碰到 struct、引用、裸指针、unsafe、生命周期这些概念。如果此前没有 Rust 基础，直接读 OS 代码会很吃力。这篇先用 C&#x2F;C++ 作对照，把”你已经会的东西在 Rust 里怎么写”过一遍，建立一张 Rust 地图。">
+<meta property="og:description" content="学 Rust OS 时会密集碰到 struct、引用、裸指针、unsafe、生命周期这些概念。如果此前没有 Rust 基础，直接读 OS 代码会很吃力。这篇先用 C&#x2F;C++ 作对照，把你已经会的东西在 Rust 里怎么写过一遍，建立一张 Rust 地图。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-07T03:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-07T07:43:09.189Z">
+<meta property="article:modified_time" content="2026-09-10T03:09:38.098Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -176,7 +176,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%BB%BA%E4%B8%80%E5%BC%A0-rust-%E5%9C%B0%E5%9B%BE"><span class="nav-number">2.</span> <span class="nav-text">🗺️ 先建一张 Rust 地图</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#let%E5%8F%98%E9%87%8F%E4%B8%8E%E4%B8%8D%E5%8F%AF%E5%8F%98%E6%80%A7"><span class="nav-number">3.</span> <span class="nav-text">📦 let：变量与不可变性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B1%BB%E5%9E%8B%E5%86%99%E5%9C%A8%E5%8F%98%E9%87%8F%E5%90%8D%E5%90%8E"><span class="nav-number">4.</span> <span class="nav-text">🏷️ 类型：写在变量名后</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#struct%E5%92%8C-c-%E5%BE%88%E5%83%8F"><span class="nav-number">5.</span> <span class="nav-text">🧱 struct：和 C 很像</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#pub%E8%B0%81%E8%83%BD%E7%9C%8B%E5%88%B0"><span class="nav-number">6.</span> <span class="nav-text">🚪 pub：谁能看到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#impl%E7%BB%99-struct-%E5%8A%A0%E6%96%B9%E6%B3%95"><span class="nav-number">7.</span> <span class="nav-text">🛠️ impl：给 struct 加方法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%95%B0%E7%BB%84%E4%B8%8E%E7%B4%A2%E5%BC%95"><span class="nav-number">8.</span> <span class="nav-text">📐 数组与索引</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#const"><span class="nav-number">9.</span> <span class="nav-text">🔒 const</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%87%BD%E6%95%B0%E4%B8%8E%E6%9C%80%E5%90%8E%E4%B8%80%E8%A1%8C%E6%98%AF%E8%BF%94%E5%9B%9E%E5%80%BC"><span class="nav-number">10.</span> <span class="nav-text">🧮 函数与”最后一行是返回值”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#match%E6%9B%B4%E5%BC%BA%E5%A4%A7%E7%9A%84-switch"><span class="nav-number">11.</span> <span class="nav-text">🔀 match：更强大的 switch</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#option-%E4%B8%8E-result%E4%B8%8D%E9%9D%A0-null-%E5%92%8C--1"><span class="nav-number">12.</span> <span class="nav-text">🟢 Option 与 Result：不靠 NULL
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%BB%BA%E4%B8%80%E5%BC%A0-rust-%E5%9C%B0%E5%9B%BE"><span class="nav-number">2.</span> <span class="nav-text">🗺️ 先建一张 Rust 地图</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#let%E5%8F%98%E9%87%8F%E4%B8%8E%E4%B8%8D%E5%8F%AF%E5%8F%98%E6%80%A7"><span class="nav-number">3.</span> <span class="nav-text">📦 let：变量与不可变性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B1%BB%E5%9E%8B%E5%86%99%E5%9C%A8%E5%8F%98%E9%87%8F%E5%90%8D%E5%90%8E"><span class="nav-number">4.</span> <span class="nav-text">🏷️ 类型：写在变量名后</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#struct%E5%92%8C-c-%E5%BE%88%E5%83%8F"><span class="nav-number">5.</span> <span class="nav-text">🧱 struct：和 C 很像</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#pub%E8%B0%81%E8%83%BD%E7%9C%8B%E5%88%B0"><span class="nav-number">6.</span> <span class="nav-text">🚪 pub：谁能看到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#impl%E7%BB%99-struct-%E5%8A%A0%E6%96%B9%E6%B3%95"><span class="nav-number">7.</span> <span class="nav-text">🛠️ impl：给 struct 加方法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%95%B0%E7%BB%84%E4%B8%8E%E7%B4%A2%E5%BC%95"><span class="nav-number">8.</span> <span class="nav-text">📐 数组与索引</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#const"><span class="nav-number">9.</span> <span class="nav-text">🔒 const</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%87%BD%E6%95%B0%E4%B8%8E%E6%9C%80%E5%90%8E%E4%B8%80%E8%A1%8C%E6%98%AF%E8%BF%94%E5%9B%9E%E5%80%BC"><span class="nav-number">10.</span> <span class="nav-text">🧮 函数与最后一行是返回值</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#match%E6%9B%B4%E5%BC%BA%E5%A4%A7%E7%9A%84-switch"><span class="nav-number">11.</span> <span class="nav-text">🔀 match：更强大的 switch</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#option-%E4%B8%8E-result%E4%B8%8D%E9%9D%A0-null-%E5%92%8C--1"><span class="nav-number">12.</span> <span class="nav-text">🟢 Option 与 Result：不靠 NULL
 和 -1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
@@ -261,9 +261,15 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-09-07 11:20:00 / Modified: 15:43:09" itemprop="dateCreated datePublished" datetime="2026-09-07T11:20:00+08:00">2026-09-07</time>
+      <time title="Created: 2026-09-07 11:20:00" itemprop="dateCreated datePublished" datetime="2026-09-07T11:20:00+08:00">2026-09-07</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-09-10 11:09:38" itemprop="dateModified" datetime="2026-09-10T11:09:38+08:00">2026-09-10</time>
     </span>
 
   
@@ -300,8 +306,7 @@
     <div class="post-body" itemprop="articleBody"><p>学 Rust OS 时会密集碰到
 <code>struct</code>、引用、裸指针、<code>unsafe</code>、生命周期这些概念。如果此前没有
 Rust 基础，直接读 OS 代码会很吃力。这篇先用 C/C++
-作对照，把”你已经会的东西在 Rust 里怎么写”过一遍，建立一张 Rust
-地图。</p>
+作对照，把你已经会的东西在 Rust 里怎么写过一遍，建立一张 Rust 地图。</p>
 <span id="more"></span>
 <blockquote>
 <p>本文是 Rust OS
@@ -377,8 +382,8 @@ href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》的
 <p>Rust
 也有这些东西，只是在它们之上加了一套<strong>所有权与借用</strong>的思想：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">                 Rust</span><br><span class="line">                   │</span><br><span class="line">    ┌──────────────┴──────────────┐</span><br><span class="line">    │                             │</span><br><span class="line">C/C++ 熟悉的东西              Rust 核心思想</span><br><span class="line">    │                             │</span><br><span class="line"> 变量                            所有权</span><br><span class="line"> struct                          借用 &amp;</span><br><span class="line"> 指针                            可变借用 &amp;mut</span><br><span class="line"> 数组                            生命周期 &#x27;a</span><br><span class="line"> 函数                            Option / Result</span><br><span class="line"> 类型                            unsafe</span><br></pre></td></tr></table></figure>
-<p>学习 OS 时的最大难点往往不是 Rust 语法本身，而是”所有权 + 借用 + 引用
-+ 生命周期”这套思想。本篇先讲 C 里也有、只是写法不同的部分。</p>
+<p>学习 OS 时的最大难点往往不是 Rust 语法本身，而是所有权 + 借用 + 引用
++ 生命周期这套思想。本篇先讲 C 里也有、只是写法不同的部分。</p>
 <h3 id="let变量与不可变性">📦 let：变量与不可变性</h3>
 <p>Rust 声明变量用 <code>let</code>：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;        <span class="comment">// 类型自动推断为 i32</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10u8</span>;      <span class="comment">// 显式字面量后缀：u8</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10usize</span>;   <span class="comment">// usize</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">u8</span> = <span class="number">10</span>;    <span class="comment">// 或写在冒号后</span></span><br></pre></td></tr></table></figure>
@@ -388,8 +393,8 @@ href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》的
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line">x = <span class="number">20</span>;        <span class="comment">// ❌ 编译错误：cannot assign to immutable variable</span></span><br></pre></td></tr></table></figure>
 <p>要修改必须显式声明可变：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line">x = <span class="number">20</span>;        <span class="comment">// ✅</span></span><br></pre></td></tr></table></figure>
-<p>简单记：<code>let</code> 是”创建不可变变量”，<code>let mut</code>
-是”创建可变变量”。VGA 的 <code>Writer</code> 里会看到：</p>
+<p>简单记：<code>let</code> 是创建不可变变量，<code>let mut</code>
+是创建可变变量。VGA 的 <code>Writer</code> 里会看到：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">column_position</span> = <span class="number">0</span>;</span><br><span class="line">column_position += <span class="number">1</span>;   <span class="comment">// 需要 mut</span></span><br></pre></td></tr></table></figure>
 <h3 id="类型写在变量名后">🏷️ 类型：写在变量名后</h3>
 <p>OS 开发里最常见的整数类型：</p>
@@ -413,8 +418,8 @@ MMIO 宽度。</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">impl</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    <span class="keyword">fn</span> <span class="title function_">write_byte</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, byte: <span class="type">u8</span>) &#123;</span><br><span class="line">        <span class="comment">// ...</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>调用：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">writer.<span class="title function_ invoke__">write_byte</span>(<span class="string">b&#x27;A&#x27;</span>);</span><br></pre></td></tr></table></figure>
-<p>可以理解为”struct + impl = 类型 + 它的方法”，类似 C++ 的
-class，只不过 Rust
+<p>可以理解为 struct + impl = 类型 + 它的方法，类似 C++ 的 class，只不过
+Rust
 把<strong>数据（struct）</strong>和<strong>方法（impl）</strong>分开声明。</p>
 <h3 id="数组与索引">📐 数组与索引</h3>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">a</span> = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>];   <span class="comment">// 类型 [i32; 4]</span></span><br></pre></td></tr></table></figure>
@@ -429,11 +434,11 @@ class，只不过 Rust
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;</span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;</span><br></pre></td></tr></table></figure>
 <p>类似 C 的 <code>#define</code>，但 Rust 的 <code>const</code>
 带类型、参与类型检查。</p>
-<h3 id="函数与最后一行是返回值">🧮 函数与”最后一行是返回值”</h3>
+<h3 id="函数与最后一行是返回值">🧮 函数与最后一行是返回值</h3>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">fn</span> <span class="title function_">add</span>(a: <span class="type">i32</span>, b: <span class="type">i32</span>) <span class="punctuation">-&gt;</span> <span class="type">i32</span> &#123;</span><br><span class="line">    a + b      <span class="comment">// 没有分号：这是返回值</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>Rust 函数体的<strong>最后一个表达式</strong>就是返回值。如果写成
 <code>a + b;</code>，加了分号就变成语句，返回 <code>()</code>。这引出了
-Rust 和 C 一个很大的思维差异——<strong>Rust 喜欢”表达式”</strong>：</p>
+Rust 和 C 一个很大的思维差异——<strong>Rust 喜欢表达式</strong>：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="keyword">if</span> condition &#123;</span><br><span class="line">    <span class="number">10</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="number">20</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 <p>这里的 <code>if</code> 本身产生一个值并赋给 <code>x</code>。这也是
 Rust 代码看起来和 C 不一样的原因之一。</p>
@@ -444,22 +449,22 @@ Rust 代码看起来和 C 不一样的原因之一。</p>
 <code>switch</code>。</p>
 <h3 id="option-与-result不靠-null-和--1">🟢 Option 与 Result：不靠 NULL
 和 -1</h3>
-<p>C 里常用 <code>NULL</code> 表示”没有值”、用 <code>return -1</code>
+<p>C 里常用 <code>NULL</code> 表示没有值、用 <code>return -1</code>
 表示失败。Rust 不喜欢这种方式，改用两个显式类型：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Option&lt;T&gt;  =  Some(T) 有值  |  None 没有值</span><br><span class="line">Result&lt;T,E&gt; =  Ok(T)  成功  |  Err(E) 失败</span><br></pre></td></tr></table></figure>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; = <span class="title function_ invoke__">Some</span>(<span class="number">10</span>);</span><br><span class="line"><span class="keyword">let</span> <span class="variable">y</span>: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; = <span class="literal">None</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">divide</span>(a: <span class="type">i32</span>, b: <span class="type">i32</span>) <span class="punctuation">-&gt;</span> <span class="type">Result</span>&lt;<span class="type">i32</span>, <span class="type">String</span>&gt; &#123;</span><br><span class="line">    <span class="keyword">if</span> b == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="title function_ invoke__">Err</span>(<span class="string">&quot;除数不能为 0&quot;</span>.<span class="title function_ invoke__">into</span>())</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="title function_ invoke__">Ok</span>(a / b)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>Some/None/Ok/Err</code> 加上
-<code>match</code>，就能强制调用方处理”可能没有值/可能失败”的情况——这是
+<code>match</code>，就能强制调用方处理可能没有值或可能失败的情况——这是
 Rust 错误处理的基本形态，OS 代码里读取 MMIO
 寄存器、解析结构时常会遇到。</p>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
 <p>从 C 到
-Rust，变量、类型、<code>struct</code>、数组、函数这些”零件”大多能一一对应，差异主要在三点：<strong>变量默认不可变（<code>mut</code>）</strong>、<strong>类型写在变量名后</strong>、<strong>最后一个表达式即返回值</strong>。真正的分水岭是下一篇要讲的引用与所有权。</p>
+Rust，变量、类型、<code>struct</code>、数组、函数这些零件大多能一一对应，差异主要在三点：<strong>变量默认不可变（<code>mut</code>）</strong>、<strong>类型写在变量名后</strong>、<strong>最后一个表达式即返回值</strong>。真正的分水岭是下一篇要讲的引用与所有权。</p>
 </blockquote>
 <p>下一篇接着讲这条核心主线：<code>&amp;</code>（借用）→
 <code>&amp;mut</code>（可变借用）→ 裸指针 → <code>unsafe</code> →
-生命周期，把”内存到底归谁管”讲清楚。</p>
+生命周期，把内存到底归谁管讲清楚。</p>
 <p>Happy Hacking! 🎉</p>
 
     </div>
