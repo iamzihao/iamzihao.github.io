@@ -307,6 +307,53 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1219,53 +1266,6 @@ TDX 的体系结构、内存保护机制、I/O
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -2862,82 +2862,6 @@ write()系统调用的参数与read()类似</p>
       </tags>
   </entry>
   <entry>
-    <title>Dotfiles</title>
-    <url>/posts/e5afd7e1/</url>
-    <content><![CDATA[<p>在 Linux 或 macOS
-系统中，以点（<code>.</code>）开头的文件和文件夹统称
-<code>dotfiles</code>（如
-<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
-Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
-<span id="more"></span></p>
-<h3
-id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
-<p>我们通常会经历几个阶段： 1.
-<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
-2. <strong>自动化脚本的萌芽</strong>：编写 Shell
-脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
-3. <strong>Git 裸仓库的炫技</strong>：使用
-<code>git bare repository</code>
-是一个更高级的方案，它允许我们直接在主目录下用 Git
-进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
-Git 操作的直观性。</p>
-<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
-GNU Stow 的舞台。</p>
-<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
-的哲学：一个优雅的“符号链接农场”</h3>
-<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
-Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
-<p>想象一下： * 你的 <code>~/dotfiles</code>
-目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
-<code>nvim</code>, <code>git</code>,
-<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
-<code>~</code> 是需要播种的<strong>土地</strong>。</p>
-<p><code>stow</code>
-命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
-<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
-<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
-Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
-仓库是所有配置的唯一“真理之源”（Single Source of
-Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
-<strong>配置的部署</strong>：主目录 <code>~</code>
-下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
-<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
-<code>dotfiles</code>
-仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
-会负责实现它。</p>
-<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
-<ol type="1">
-<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
-最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
-下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
-目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
-<li><p><strong>高度模块化 (Modular)</strong>
-每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
-Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
-配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
-配置？只需选择性地 <code>stow</code>
-即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
-<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
-与 <code>git</code>
-结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
-几条命令，一个熟悉的环境便跃然屏上。</p></li>
-<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
-在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
-</ol>
-<h3 id="结论大道至简">结论：大道至简</h3>
-<p>在 dotfiles 管理的江湖里，<code>stow</code>
-并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
-<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
-值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
-]]></content>
-      <tags>
-        <tag>Linux</tag>
-        <tag>Git</tag>
-        <tag>工具</tag>
-        <tag>Dotfiles</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>关于Intel TDX的深度思考与技术剖析</title>
     <url>/posts/b63e909c/</url>
     <content><![CDATA[<p>本文深入探讨了可信执行环境（TEE）的核心技术，特别是Intel的Trust
@@ -3110,6 +3034,82 @@ TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和�
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Dotfiles</title>
+    <url>/posts/e5afd7e1/</url>
+    <content><![CDATA[<p>在 Linux 或 macOS
+系统中，以点（<code>.</code>）开头的文件和文件夹统称
+<code>dotfiles</code>（如
+<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
+Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
+<span id="more"></span></p>
+<h3
+id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
+<p>我们通常会经历几个阶段： 1.
+<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
+2. <strong>自动化脚本的萌芽</strong>：编写 Shell
+脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
+3. <strong>Git 裸仓库的炫技</strong>：使用
+<code>git bare repository</code>
+是一个更高级的方案，它允许我们直接在主目录下用 Git
+进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
+Git 操作的直观性。</p>
+<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
+GNU Stow 的舞台。</p>
+<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
+的哲学：一个优雅的“符号链接农场”</h3>
+<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
+Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
+<p>想象一下： * 你的 <code>~/dotfiles</code>
+目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
+<code>nvim</code>, <code>git</code>,
+<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
+<code>~</code> 是需要播种的<strong>土地</strong>。</p>
+<p><code>stow</code>
+命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
+<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
+<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
+Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
+仓库是所有配置的唯一“真理之源”（Single Source of
+Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
+<strong>配置的部署</strong>：主目录 <code>~</code>
+下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
+<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
+<code>dotfiles</code>
+仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
+会负责实现它。</p>
+<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
+<ol type="1">
+<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
+最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
+下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
+目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
+<li><p><strong>高度模块化 (Modular)</strong>
+每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
+Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
+配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
+配置？只需选择性地 <code>stow</code>
+即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
+<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
+与 <code>git</code>
+结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
+几条命令，一个熟悉的环境便跃然屏上。</p></li>
+<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
+在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
+</ol>
+<h3 id="结论大道至简">结论：大道至简</h3>
+<p>在 dotfiles 管理的江湖里，<code>stow</code>
+并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
+<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
+值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
+]]></content>
+      <tags>
+        <tag>Linux</tag>
+        <tag>Git</tag>
+        <tag>工具</tag>
+        <tag>Dotfiles</tag>
       </tags>
   </entry>
   <entry>
@@ -3749,173 +3749,6 @@ startup scripts - flowblok’s blog</a></p>
       </tags>
   </entry>
   <entry>
-    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
-    <url>/posts/c3f2a1b9/</url>
-    <content><![CDATA[<p>选择开源许可证时，通常需要回答三个问题：能否商用、能否修改后闭源、是否附带许可声明。本文用一张速查表和几条决策准则，帮助快速选定合适的许可证。</p>
-<span id="more"></span>
-<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>MIT 许可证</th>
-<th>Apache 2.0 许可证</th>
-<th>GPL 许可证 (v3)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>类型</td>
-<td>宽松（Permissive）</td>
-<td>宽松（Permissive）</td>
-<td>传染共享（Copyleft）</td>
-</tr>
-<tr>
-<td>商业使用</td>
-<td>允许</td>
-<td>允许</td>
-<td>允许</td>
-</tr>
-<tr>
-<td>修改后闭源</td>
-<td>允许</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>需要包含原许可证</td>
-<td>是</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>需要说明修改</td>
-<td>否</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>专利授权</td>
-<td>无明确说明</td>
-<td>明确授权</td>
-<td>明确授权</td>
-</tr>
-<tr>
-<td>“传染性”</td>
-<td>无</td>
-<td>无</td>
-<td>强</td>
-</tr>
-</tbody>
-</table>
-<p>图表要点：如果你希望”随便用、闭源也行”，首选 MIT 或 Apache
-2.0；如果你希望”别人用到你的代码时必须开源”，选择 GPL v3。</p>
-<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
-<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
-<ul>
-<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
-<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
-<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
-</ul>
-<h3 id="apache-2.0工程团队的默认首选">✅ Apache
-2.0：工程团队的默认首选</h3>
-<ul>
-<li>核心义务：保留 <code>LICENSE</code> 与
-<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
-<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
-<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
-</ul>
-<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
-Copyleft，确保改动也开源</h3>
-<ul>
-<li>核心义务：凡分发衍生作品，必须以 GPL
-兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
-<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
-<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
-</ul>
-<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
-<ol type="1">
-<li>你是否希望别人基于你的代码做出的产品可以闭源？
-<ul>
-<li>是 → 选 MIT 或 Apache 2.0</li>
-<li>否 → 选 GPL
-v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
-AGPL）</li>
-</ul></li>
-<li>你是否担心专利纠纷？
-<ul>
-<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
-<li>否 → MIT 也可</li>
-</ul></li>
-<li>你的目标用户是谁？
-<ul>
-<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
-<li>个人/教学/社区 Demo → MIT 简洁好用</li>
-</ul></li>
-<li>你是否需要与其他许可证兼容？
-<ul>
-<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
-<li>想”强制开源传递” → GPL 系列</li>
-</ul></li>
-</ol>
-<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
-<ul>
-<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
-<code>NOTICE</code>（列出版权与声明）。</li>
-<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
-对“修改过的文件”做适当标注。</li>
-<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
-<code>LICENSE/NOTICE</code> 汇总。</li>
-<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
-<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
-</ul>
-<h2 id="常见误区">❓ 常见误区</h2>
-<ul>
-<li>“用了 GPL 的库就必须把我的 SaaS
-也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
-明确将“网络提供服务”纳入义务，注意区分。</li>
-<li>“MIT
-就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
-<li>“Apache 2.0
-一定要每个文件头都加版权声明吗？”——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
-</ul>
-<h2 id="模板与参考">📎 模板与参考</h2>
-<ul>
-<li>官方文本：
-<ul>
-<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
-Initiative</a></li>
-<li>Apache 2.0：<a
-href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
-2.0</a></li>
-<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
-GPLv3</a></li>
-</ul></li>
-<li>模板生成：<code>choosealicense.com</code>
-提供多语言示例与合规提示。</li>
-</ul>
-<h2 id="小结">✨ 小结</h2>
-<ul>
-<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
-<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
-<li>想确保改动继续开源并回馈社区：选 <strong>GPL
-v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
-</ul>
-<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
-]]></content>
-      <tags>
-        <tag>开源</tag>
-        <tag>License</tag>
-        <tag>许可证</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>git之路：rebase &amp; cherry-pick</title>
     <url>/posts/1566a5aa/</url>
     <content><![CDATA[<p>在团队协作和日常开发中，<code>rebase</code> 和
@@ -4107,12 +3940,13 @@ Commit），清晰地记录了“在某个时间点，我们将 <code>feature/a<
 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 当 main 分支有更新时</span></span><br><span class="line">git fetch origin main</span><br><span class="line">git rebase origin/main</span><br><span class="line"><span class="comment"># 如果有冲突，解决冲突后 git rebase --continue</span></span><br></pre></td></tr></table></figure></p></li>
 <li><p><strong>发起合并请求</strong>：</p>
 <ul>
-<li>将你”整理”好的分支推送到远程：<code>git push origin feature/new-login --force-with-lease</code>
+<li>将你整理好的分支推送到远程：<code>git push origin feature/new-login --force-with-lease</code>
 (<code>--force-with-lease</code> 是比 <code>--force</code>
 更安全的选择，因为它不会覆盖他人的工作)。</li>
 <li>在代码托管平台（如 GitHub）上创建 Pull Request，请求将
 <code>feature/new-login</code> 合并到 <code>main</code>。</li>
-<li>团队成员进行代码审查，最终由维护者点击”Merge”按钮，将你的功能安全地汇入主线。</li>
+<li>团队成员进行代码审查，最终由维护者点击 <code>Merge</code>
+按钮，将你的功能安全地汇入主线。</li>
 </ul></li>
 </ol>
 <h2 id="五实战小结">⚡ 五、实战小结</h2>
@@ -4169,6 +4003,173 @@ Git，写出更优雅、可维护的代码历史！</p>
         <tag>Git</tag>
         <tag>Rebase</tag>
         <tag>Cherry-pick</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
+    <url>/posts/c3f2a1b9/</url>
+    <content><![CDATA[<p>选择开源许可证时，通常需要回答三个问题：能否商用、能否修改后闭源、是否附带许可声明。本文用一张速查表和几条决策准则，帮助快速选定合适的许可证。</p>
+<span id="more"></span>
+<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>MIT 许可证</th>
+<th>Apache 2.0 许可证</th>
+<th>GPL 许可证 (v3)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>宽松（Permissive）</td>
+<td>宽松（Permissive）</td>
+<td>传染共享（Copyleft）</td>
+</tr>
+<tr>
+<td>商业使用</td>
+<td>允许</td>
+<td>允许</td>
+<td>允许</td>
+</tr>
+<tr>
+<td>修改后闭源</td>
+<td>允许</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>需要包含原许可证</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>需要说明修改</td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>专利授权</td>
+<td>无明确说明</td>
+<td>明确授权</td>
+<td>明确授权</td>
+</tr>
+<tr>
+<td>“传染性”</td>
+<td>无</td>
+<td>无</td>
+<td>强</td>
+</tr>
+</tbody>
+</table>
+<p>图表要点：如果你希望随便用、闭源也行，首选 MIT 或 Apache
+2.0；如果你希望别人用到你的代码时必须开源，选择 GPL v3。</p>
+<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
+<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
+<ul>
+<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
+<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
+<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
+</ul>
+<h3 id="apache-2.0工程团队的默认首选">✅ Apache
+2.0：工程团队的默认首选</h3>
+<ul>
+<li>核心义务：保留 <code>LICENSE</code> 与
+<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
+<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
+<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
+</ul>
+<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
+Copyleft，确保改动也开源</h3>
+<ul>
+<li>核心义务：凡分发衍生作品，必须以 GPL
+兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
+<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
+<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
+</ul>
+<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
+<ol type="1">
+<li>你是否希望别人基于你的代码做出的产品可以闭源？
+<ul>
+<li>是 → 选 MIT 或 Apache 2.0</li>
+<li>否 → 选 GPL
+v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
+AGPL）</li>
+</ul></li>
+<li>你是否担心专利纠纷？
+<ul>
+<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
+<li>否 → MIT 也可</li>
+</ul></li>
+<li>你的目标用户是谁？
+<ul>
+<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
+<li>个人/教学/社区 Demo → MIT 简洁好用</li>
+</ul></li>
+<li>你是否需要与其他许可证兼容？
+<ul>
+<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
+<li>想强制开源传递 → GPL 系列</li>
+</ul></li>
+</ol>
+<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
+<ul>
+<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
+<code>NOTICE</code>（列出版权与声明）。</li>
+<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
+对“修改过的文件”做适当标注。</li>
+<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
+<code>LICENSE/NOTICE</code> 汇总。</li>
+<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
+<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
+</ul>
+<h2 id="常见误区">❓ 常见误区</h2>
+<ul>
+<li>“用了 GPL 的库就必须把我的 SaaS
+也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
+明确将“网络提供服务”纳入义务，注意区分。</li>
+<li>“MIT
+就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
+<li>Apache 2.0
+一定要每个文件头都加版权声明吗？——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
+</ul>
+<h2 id="模板与参考">📎 模板与参考</h2>
+<ul>
+<li>官方文本：
+<ul>
+<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
+Initiative</a></li>
+<li>Apache 2.0：<a
+href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
+2.0</a></li>
+<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
+GPLv3</a></li>
+</ul></li>
+<li>模板生成：<code>choosealicense.com</code>
+提供多语言示例与合规提示。</li>
+</ul>
+<h2 id="小结">✨ 小结</h2>
+<ul>
+<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
+<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
+<li>想确保改动继续开源并回馈社区：选 <strong>GPL
+v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
+</ul>
+<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
+]]></content>
+      <tags>
+        <tag>开源</tag>
+        <tag>License</tag>
+        <tag>许可证</tag>
       </tags>
   </entry>
   <entry>
@@ -6428,8 +6429,8 @@ Texture 的用途、可见性、对齐与带宽差异。</li>
 <li><strong>与其他工具协同</strong>：<code>nsys</code> 找热点 →
 Sanitizer 精查；结合 <code>cuda-gdb</code> / Nsight
 工具链提升效率。</li>
-<li><strong>驱动/CUDA 版本兼容</strong>：避免”工具新版 +
-驱动旧版”导致的报错或缺失功能。</li>
+<li><strong>驱动/CUDA 版本兼容</strong>：避免工具新版 +
+驱动旧版导致的报错或缺失功能。</li>
 </ul>
 <h2 id="cuda-基础语法最小可运行示例">CUDA
 基础语法（最小可运行示例）</h2>
@@ -6474,7 +6475,7 @@ Memory</strong>：线程私有，寄存器溢出或大对象会落在这里，�
 <li><strong>Constant/Texture</strong>：只读、缓存友好（广播/2D
 局部性场景）。</li>
 </ul>
-<p>理解这些有助于你判断”这个地址是否可见/越界”，从而更快看懂 Sanitizer
+<p>理解这些有助于你判断这个地址是否可见或越界，从而更快看懂 Sanitizer
 的报错。</p>
 <h2 id="常见-gpu-bug-类型sanitizer-重点覆盖">常见 GPU Bug
 类型（Sanitizer 重点覆盖）</h2>
@@ -6532,7 +6533,7 @@ Divergence）</h3>
 <p>如何修：确保同一 Block
 内所有线程对屏障的到达一致（要么都到，要么都不到），或将屏障搬出分支，或重写算法避免需要屏障。</p>
 <h2 id="nvcc-编译选项给报告喂足信息"><code>nvcc</code>
-编译选项：给报告”喂”足信息</h2>
+编译选项：给报告喂足信息</h2>
 <ul>
 <li><strong><code>-g -G</code></strong>：生成设备端调试符号（注意：会显著降低性能，调试用；性能测试请移除
 <code>-G</code>）。</li>
@@ -6632,7 +6633,7 @@ kernel 名称；</li>
 <li><code>nvidia-smi</code> 查看驱动版本；</li>
 <li><code>nvcc --version</code> /
 <code>compute-sanitizer --version</code> 查看工具链版本；</li>
-<li>优先使用”同一套 Toolkit 内的工具 + 匹配的驱动”。</li>
+<li>优先使用同一套 Toolkit 内的工具 + 匹配的驱动。</li>
 </ul></li>
 </ul>
 <h2 id="实战清单拿来就用">✅ 实战清单（拿来就用）</h2>
@@ -6812,8 +6813,8 @@ SASS”的映射</h3>
 </ul>
 <h3 id="三步拿到汇编实操">3.5 三步拿到汇编（实操）</h3>
 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1) 生成 PTX，快速理解语义</span></span><br><span class="line">nvcc -O2 -<span class="built_in">ptx</span> app.cu -o app.ptx</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2) 生成 cubin 并反汇编 SASS，观察真实发射的指令</span></span><br><span class="line">nvcc -O2 -cubin -<span class="built_in">arch</span>=sm_80 app.cu -o app.cubin</span><br><span class="line">nvdisasm -g app.cubin | sed -n <span class="string">&#x27;1,120p&#x27;</span> | <span class="built_in">cat</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3) 若 app 已链接成可执行文件/动态库，从成品中抽取</span></span><br><span class="line">cuobjdump --dump-ptx --dump-sass ./app | <span class="built_in">head</span> -n 200 | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>看懂这层关系后，你就能把”源代码的语义”和”GPU
-上真实执行的代价”链接起来：这对插桩点选择、性能评估与采样策略都至关重要。</p>
+<p>看懂这层关系后，你就能把源代码的语义和 GPU
+上真实执行的代价链接起来：这对插桩点选择、性能评估与采样策略都至关重要。</p>
 <h2 id="linux-动态链接与环境变量">Linux 动态链接与环境变量</h2>
 <p>动态链接器（<code>ld-linux.so</code>）在程序启动时负责把用到的共享库（<code>.so</code>）装进进程，并把函数地址“接上去”。理解这套机制，有助于你知道“NVBit/LD_PRELOAD
 是怎么把工具注入进去的”。</p>
@@ -6926,8 +6927,8 @@ Interposition)</strong>：链接器“抢先”绑定了你的假
 <code>malloc()</code>，否则会无限递归调用自己。</li>
 <li>此时需要用
 <code>dlsym(RTLD_NEXT, "malloc")</code>。<code>RTLD_NEXT</code>
-这个特殊句柄告诉动态链接器：“请从<strong>下一个</strong>加载的库（也就是
-<code>libc.so.6</code>）开始，帮我查找 <code>malloc</code>”。</li>
+这个特殊句柄告诉动态链接器：请从<strong>下一个</strong>加载的库（也就是
+<code>libc.so.6</code>）开始，帮我查找 <code>malloc</code>。</li>
 <li><code>dlsym</code> 会返回真正的 <code>malloc</code>
 地址，你存下来就可以调用了。</li>
 </ul></li>
@@ -13267,7 +13268,7 @@ flowchart LR
 </ul>
 <blockquote>
 <p><strong>比喻</strong>：SSA
-就像”一次性的便签纸”，写完一张就换新的，不用擦掉重写。</p>
+就像一次性的便签纸，写完一张就换新的，不用擦掉重写。</p>
 </blockquote>
 <p>那循环怎么办？</p>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// C 代码</span></span><br><span class="line"><span class="type">int</span> sum = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">10</span>; i++) &#123;</span><br><span class="line">    sum = sum + i;  <span class="comment">// sum 被多次赋值！</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -13283,7 +13284,7 @@ flowchart LR
 <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────┐</span><br><span class="line">│  entry  │</span><br><span class="line">└────┬────┘</span><br><span class="line">     ↓</span><br><span class="line">┌─────────────────────────────────────┐</span><br><span class="line">│  loop                               │</span><br><span class="line">│  %i = phi [0, entry], [%i.next, loop]   │</span><br><span class="line">│  %sum = phi [0, entry], [%sum.next, loop] │</span><br><span class="line">│  ...计算...                          │</span><br><span class="line">│  br %cond, loop, exit               │</span><br><span class="line">└────┬────────────────────────────────┘</span><br><span class="line">     ↓ (cond=false)</span><br><span class="line">┌─────────┐</span><br><span class="line">│  exit   │</span><br><span class="line">└─────────┘</span><br></pre></td></tr></table></figure>
 <blockquote>
 <p><strong>省流</strong>：phi
-就是个”多路选择器”，根据你是从哪个块跳过来的，决定用哪个值。</p>
+就是个多路选择器，根据你是从哪个块跳过来的，决定用哪个值。</p>
 </blockquote>
 <h2 id="控制流图-cfg">📊 控制流图 CFG</h2>
 <p>CFG（Control Flow Graph）描述程序可能的执行路径。</p>
@@ -13551,7 +13552,7 @@ flowchart LR
 </table>
 <p>LLVM IR
 看起来繁琐，但它为编译器提供了<strong>统一的表达</strong>。理解
-IR，就拿到了编译器世界的”通用护照”。</p>
+IR，就拿到了编译器世界的通用护照。</p>
 <p>下一步？试试写一个 LLVM Pass，或者用 LLVM IR
 实现一个简单的语言解释器！</p>
 <p><strong>参考资源</strong>：</p>
@@ -24179,86 +24180,6 @@ struct 在内存里到底长什么样。</p>
       </tags>
   </entry>
   <entry>
-    <title>Rust OS 前置：逐行拆解 VGA 的 Writer</title>
-    <url>/posts/0e69cce8/</url>
-    <content><![CDATA[<p>前三篇的语法与思想，最终都落在一段真实的 VGA 代码上。这篇把教程里的
-<code>ScreenChar</code>、<code>Buffer</code>、<code>Writer</code> 和那句
-<code>unsafe &#123; &amp;mut *buffer &#125;</code> 逐行翻译成人话，并演示一种拆解
-Rust 代码的方法。</p>
-<span id="more"></span>
-<blockquote>
-<p>前置阅读：《<a href="/posts/5bfe3d1c/">从 C 到 Rust</a>》《<a
-href="/posts/4b7500f7/">借用与生命周期</a>》《<a
-href="/posts/7ddab86c/">属性与内存布局</a>》，以及《<a
-href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
-</blockquote>
-<h3 id="素材速读">📚 素材速读</h3>
-<p>下面是接下来要拆的完整代码（来自 VGA 文本模式模块的核心结构）：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;</span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    column_position: <span class="type">usize</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="第一层screenchar一个屏幕格子">🧱
-第一层：ScreenChar——一个屏幕格子</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span>                          <span class="comment">// 布局对齐 C/硬件（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,            <span class="comment">// 字符 ASCII 码，1 字节</span></span><br><span class="line">    color_code: ColorCode,          <span class="comment">// 颜色属性，1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>人话版：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">ScreenChar = 一个屏幕格子</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ ASCII │ Color│</span><br><span class="line">└──────────────┘</span><br></pre></td></tr></table></figure>
-<h3 id="第二层buffer整块屏幕">📐 第二层：Buffer——整块屏幕</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;    <span class="comment">// 行数（篇一：const）</span></span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;     <span class="comment">// 列数</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#[repr(transparent)]</span>                <span class="comment">// 单字段包装，零开销（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; <span class="number">80</span>]; <span class="number">25</span>],  <span class="comment">// 25 行 × 80 列（篇一：二维数组）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>人话版：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Buffer = 25 × 80 个屏幕格子</span><br><span class="line">┌──────────────────────┐</span><br><span class="line">│ □ □ □ □ ... □        │  第 0 行</span><br><span class="line">│ □ □ □ □ ... □        │  第 1 行</span><br><span class="line">│ ...                  │</span><br><span class="line">│ □ □ □ □ ... □        │  第 24 行</span><br><span class="line">└──────────────────────┘</span><br></pre></td></tr></table></figure>
-<h3 id="第三层writer写字的人">🖋️ 第三层：Writer——写字的人</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;                  <span class="comment">// pub：模块外可见（篇一）</span></span><br><span class="line">    column_position: <span class="type">usize</span>,          <span class="comment">// 当前写到第几列</span></span><br><span class="line">    color_code: ColorCode,           <span class="comment">// 用什么颜色</span></span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,     <span class="comment">// VGA 屏幕在哪（篇二：&#x27;static）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>人话版：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Writer = 一个&quot;写字的人&quot;，它记录：</span><br><span class="line">  - 当前写到第几列（column_position）</span><br><span class="line">  - 用什么颜色（color_code）</span><br><span class="line">  - VGA 屏幕在哪（buffer：&#x27;static 可变引用，因为显存始终存在）</span><br></pre></td></tr></table></figure>
-<h3 id="第四层把地址变成引用">🔀 第四层：把地址变成引用</h3>
-<p>看这两个步骤，每一步都在前一篇出现过：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;   <span class="comment">// ① 整数地址 → 裸指针（篇二：as、*mut）</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">writer</span> = <span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *buffer &#125;;  <span class="comment">// ② 裸指针 → 可变引用（篇二：unsafe、*、&amp;mut）</span></span><br></pre></td></tr></table></figure>
-<p>① 人话：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0xb8000            硬件内存地址（VGA 显存起点）</span><br><span class="line">   ↓ as</span><br><span class="line">*mut Buffer        解释成&quot;指向 Buffer 的裸指针&quot;——只是一个地址</span><br></pre></td></tr></table></figure>
-<p>② 人话：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">*mut Buffer</span><br><span class="line">   ↓ *（解引用）</span><br><span class="line">Buffer</span><br><span class="line">   ↓ &amp;mut（可变借用）</span><br><span class="line">&amp;&#x27;static mut Buffer</span><br><span class="line">   ↓</span><br><span class="line">交给 Writer</span><br></pre></td></tr></table></figure>
-<p>组合起来，<code>unsafe &#123; &amp;mut *buffer &#125;</code> 的意思是：</p>
-<blockquote>
-<p><strong>通过裸指针找到那块显存，把它借成一个可修改的 Rust 引用，交给
-Writer 使用。</strong></p>
-</blockquote>
-<p>外面套 <code>unsafe</code> 是因为 Rust 无法证明 <code>0xb8000</code>
-真的有 <code>Buffer</code>——这是硬件规定的事实，由程序员负责声明。</p>
-<h3 id="第五层完整链路">🧭 第五层：完整链路</h3>
-<p>把整条链画出来：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">硬件地址 0xb8000</span><br><span class="line">   │ as</span><br><span class="line">   ▼</span><br><span class="line">*mut Buffer</span><br><span class="line">   │ unsafe + *（解引用）</span><br><span class="line">   ▼</span><br><span class="line">Buffer（显存内容）</span><br><span class="line">   │ &amp;mut</span><br><span class="line">   ▼</span><br><span class="line">&amp;&#x27;static mut Buffer</span><br><span class="line">   │</span><br><span class="line">   ▼</span><br><span class="line">Writer</span><br><span class="line">   ├── column_position   当前列</span><br><span class="line">   ├── color_code        颜色</span><br><span class="line">   └── buffer            显存引用</span><br><span class="line">          │ write_byte(b&#x27;A&#x27;)</span><br><span class="line">          ▼</span><br><span class="line">   buffer.chars[row][col] = ScreenChar &#123; ... &#125;   ← 写内存</span><br><span class="line">          │ VGA 硬件读取这块内存</span><br><span class="line">          ▼</span><br><span class="line">          屏幕显示</span><br></pre></td></tr></table></figure>
-<h3 id="学习方法rust-代码可以剥洋葱">🧅 学习方法：Rust
-代码可以剥洋葱</h3>
-<p>看到类似的表达式不要当成一整坨语法，而是<strong>从右往左一层层拆</strong>：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *(<span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer) &#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">unsafe            这里有 Rust 无法自动证明安全的操作</span><br><span class="line">0xb8000           一个整数地址</span><br><span class="line">as *mut Buffer    把地址解释成 Buffer 的裸指针</span><br><span class="line">*                 解引用，找到 Buffer</span><br><span class="line">&amp;mut              把 Buffer 借成可修改引用</span><br></pre></td></tr></table></figure>
-<p>Rust 代码几乎都可以这样拆开读。学 Rust OS
-时，最值得先打通的主线就一条：</p>
-<blockquote>
-<p><strong>对象 → 所有权 → 引用 → 借用 → <code>&amp;mut</code> → 裸指针
-→ <code>unsafe</code> → 生命周期</strong></p>
-</blockquote>
-<p>这条线弄明白后，后面
-<code>Writer</code>、<code>Volatile</code>、<code>lazy_static!</code>、<code>spin::Mutex</code>、中断处理这些模块，基本都围绕同一套思想展开——只是包装越来越厚。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>VGA 的 <code>Writer</code>
-把前三篇的语法串成了一条完整链路：<code>struct</code>
-描述硬件结构（<code>repr</code> 保证布局）→ 整数地址经 <code>as</code>
-变裸指针 → <code>unsafe</code> + 解引用变成
-<code>&amp;'static mut</code> 引用 → 封装成 <code>Writer</code>
-提供安全的写屏接口。读这类代码的关键是剥洋葱：一层层拆开看每一步做了什么。</p>
-</blockquote>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>Rust</tag>
-        <tag>VGA</tag>
-        <tag>裸指针</tag>
-        <tag>unsafe</tag>
-        <tag>Writer</tag>
-        <tag>综合实践</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive</title>
     <url>/posts/7ddab86c/</url>
     <content><![CDATA[<p>看 VGA 或驱动代码时会碰到
@@ -24361,6 +24282,86 @@ struct，基本都要用 <code>repr</code> 系列声明布局。</p>
         <tag>repr</tag>
         <tag>derive</tag>
         <tag>FFI</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Rust OS 前置：逐行拆解 VGA 的 Writer</title>
+    <url>/posts/0e69cce8/</url>
+    <content><![CDATA[<p>前三篇的语法与思想，最终都落在一段真实的 VGA 代码上。这篇把教程里的
+<code>ScreenChar</code>、<code>Buffer</code>、<code>Writer</code> 和那句
+<code>unsafe &#123; &amp;mut *buffer &#125;</code> 逐行翻译成人话，并演示一种拆解
+Rust 代码的方法。</p>
+<span id="more"></span>
+<blockquote>
+<p>前置阅读：《<a href="/posts/5bfe3d1c/">从 C 到 Rust</a>》《<a
+href="/posts/4b7500f7/">借用与生命周期</a>》《<a
+href="/posts/7ddab86c/">属性与内存布局</a>》，以及《<a
+href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
+</blockquote>
+<h3 id="素材速读">📚 素材速读</h3>
+<p>下面是接下来要拆的完整代码（来自 VGA 文本模式模块的核心结构）：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;</span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    column_position: <span class="type">usize</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="第一层screenchar一个屏幕格子">🧱
+第一层：ScreenChar——一个屏幕格子</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span>                          <span class="comment">// 布局对齐 C/硬件（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,            <span class="comment">// 字符 ASCII 码，1 字节</span></span><br><span class="line">    color_code: ColorCode,          <span class="comment">// 颜色属性，1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>人话版：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">ScreenChar = 一个屏幕格子</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ ASCII │ Color│</span><br><span class="line">└──────────────┘</span><br></pre></td></tr></table></figure>
+<h3 id="第二层buffer整块屏幕">📐 第二层：Buffer——整块屏幕</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;    <span class="comment">// 行数（篇一：const）</span></span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;     <span class="comment">// 列数</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#[repr(transparent)]</span>                <span class="comment">// 单字段包装，零开销（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[ScreenChar; <span class="number">80</span>]; <span class="number">25</span>],  <span class="comment">// 25 行 × 80 列（篇一：二维数组）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>人话版：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Buffer = 25 × 80 个屏幕格子</span><br><span class="line">┌──────────────────────┐</span><br><span class="line">│ □ □ □ □ ... □        │  第 0 行</span><br><span class="line">│ □ □ □ □ ... □        │  第 1 行</span><br><span class="line">│ ...                  │</span><br><span class="line">│ □ □ □ □ ... □        │  第 24 行</span><br><span class="line">└──────────────────────┘</span><br></pre></td></tr></table></figure>
+<h3 id="第三层writer写字的人">🖋️ 第三层：Writer——写字的人</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;                  <span class="comment">// pub：模块外可见（篇一）</span></span><br><span class="line">    column_position: <span class="type">usize</span>,          <span class="comment">// 当前写到第几列</span></span><br><span class="line">    color_code: ColorCode,           <span class="comment">// 用什么颜色</span></span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,     <span class="comment">// VGA 屏幕在哪（篇二：&#x27;static）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>人话版：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Writer = 一个&quot;写字的人&quot;，它记录：</span><br><span class="line">  - 当前写到第几列（column_position）</span><br><span class="line">  - 用什么颜色（color_code）</span><br><span class="line">  - VGA 屏幕在哪（buffer：&#x27;static 可变引用，因为显存始终存在）</span><br></pre></td></tr></table></figure>
+<h3 id="第四层把地址变成引用">🔀 第四层：把地址变成引用</h3>
+<p>看这两个步骤，每一步都在前一篇出现过：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;   <span class="comment">// ① 整数地址 → 裸指针（篇二：as、*mut）</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">writer</span> = <span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *buffer &#125;;  <span class="comment">// ② 裸指针 → 可变引用（篇二：unsafe、*、&amp;mut）</span></span><br></pre></td></tr></table></figure>
+<p>① 人话：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0xb8000            硬件内存地址（VGA 显存起点）</span><br><span class="line">   ↓ as</span><br><span class="line">*mut Buffer        解释成&quot;指向 Buffer 的裸指针&quot;——只是一个地址</span><br></pre></td></tr></table></figure>
+<p>② 人话：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">*mut Buffer</span><br><span class="line">   ↓ *（解引用）</span><br><span class="line">Buffer</span><br><span class="line">   ↓ &amp;mut（可变借用）</span><br><span class="line">&amp;&#x27;static mut Buffer</span><br><span class="line">   ↓</span><br><span class="line">交给 Writer</span><br></pre></td></tr></table></figure>
+<p>组合起来，<code>unsafe &#123; &amp;mut *buffer &#125;</code> 的意思是：</p>
+<blockquote>
+<p><strong>通过裸指针找到那块显存，把它借成一个可修改的 Rust 引用，交给
+Writer 使用。</strong></p>
+</blockquote>
+<p>外面套 <code>unsafe</code> 是因为 Rust 无法证明 <code>0xb8000</code>
+真的有 <code>Buffer</code>——这是硬件规定的事实，由程序员负责声明。</p>
+<h3 id="第五层完整链路">🧭 第五层：完整链路</h3>
+<p>把整条链画出来：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">硬件地址 0xb8000</span><br><span class="line">   │ as</span><br><span class="line">   ▼</span><br><span class="line">*mut Buffer</span><br><span class="line">   │ unsafe + *（解引用）</span><br><span class="line">   ▼</span><br><span class="line">Buffer（显存内容）</span><br><span class="line">   │ &amp;mut</span><br><span class="line">   ▼</span><br><span class="line">&amp;&#x27;static mut Buffer</span><br><span class="line">   │</span><br><span class="line">   ▼</span><br><span class="line">Writer</span><br><span class="line">   ├── column_position   当前列</span><br><span class="line">   ├── color_code        颜色</span><br><span class="line">   └── buffer            显存引用</span><br><span class="line">          │ write_byte(b&#x27;A&#x27;)</span><br><span class="line">          ▼</span><br><span class="line">   buffer.chars[row][col] = ScreenChar &#123; ... &#125;   ← 写内存</span><br><span class="line">          │ VGA 硬件读取这块内存</span><br><span class="line">          ▼</span><br><span class="line">          屏幕显示</span><br></pre></td></tr></table></figure>
+<h3 id="学习方法rust-代码可以剥洋葱">🧅 学习方法：Rust
+代码可以剥洋葱</h3>
+<p>看到类似的表达式不要当成一整坨语法，而是<strong>从右往左一层层拆</strong>：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *(<span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer) &#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">unsafe            这里有 Rust 无法自动证明安全的操作</span><br><span class="line">0xb8000           一个整数地址</span><br><span class="line">as *mut Buffer    把地址解释成 Buffer 的裸指针</span><br><span class="line">*                 解引用，找到 Buffer</span><br><span class="line">&amp;mut              把 Buffer 借成可修改引用</span><br></pre></td></tr></table></figure>
+<p>Rust 代码几乎都可以这样拆开读。学 Rust OS
+时，最值得先打通的主线就一条：</p>
+<blockquote>
+<p><strong>对象 → 所有权 → 引用 → 借用 → <code>&amp;mut</code> → 裸指针
+→ <code>unsafe</code> → 生命周期</strong></p>
+</blockquote>
+<p>这条线弄明白后，后面
+<code>Writer</code>、<code>Volatile</code>、<code>lazy_static!</code>、<code>spin::Mutex</code>、中断处理这些模块，基本都围绕同一套思想展开——只是包装越来越厚。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>VGA 的 <code>Writer</code>
+把前三篇的语法串成了一条完整链路：<code>struct</code>
+描述硬件结构（<code>repr</code> 保证布局）→ 整数地址经 <code>as</code>
+变裸指针 → <code>unsafe</code> + 解引用变成
+<code>&amp;'static mut</code> 引用 → 封装成 <code>Writer</code>
+提供安全的写屏接口。读这类代码的关键是剥洋葱：一层层拆开看每一步做了什么。</p>
+</blockquote>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>Rust</tag>
+        <tag>VGA</tag>
+        <tag>裸指针</tag>
+        <tag>unsafe</tag>
+        <tag>Writer</tag>
+        <tag>综合实践</tag>
       </tags>
   </entry>
   <entry>
