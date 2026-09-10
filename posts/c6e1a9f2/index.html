@@ -30,7 +30,7 @@
 <meta property="og:description" content="入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、shared_ptr 和 weak_ptr，每块都值得单独深入，这里先打开一扇门。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-07-02T05:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.120Z">
+<meta property="article:modified_time" content="2026-09-10T03:07:32.314Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="CMake">
 <meta property="article:tag" content="C&#x2F;C++">
@@ -270,7 +270,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-10 11:07:32" itemprop="dateModified" datetime="2026-09-10T11:07:32+08:00">2026-09-10</time>
     </span>
 
   
@@ -287,7 +287,7 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>7.6k</span>
+      <span>7.5k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -389,7 +389,7 @@
 <h4 id="为什么需要-cmake">为什么需要 CMake</h4>
 <p>第 13 章里，两个源文件要手写
 <code>g++ main.cpp math.cpp -o app</code>。文件一多，编译命令就难以维护，还容易漏文件。CMake
-把”有哪些源文件、用什么编译选项”写进一份
+把有哪些源文件、用什么编译选项写进一份
 <code>CMakeLists.txt</code>，自动生成构建命令。</p>
 <p>最小示例：</p>
 <figure class="highlight cmake"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># CMakeLists.txt</span></span><br><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.10</span>)</span><br><span class="line"><span class="keyword">project</span>(MyApp)</span><br><span class="line"></span><br><span class="line"><span class="keyword">set</span>(CMAKE_CXX_STANDARD <span class="number">17</span>)          <span class="comment"># 指定 C++17</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">add_executable</span>(app main.cpp <span class="keyword">math</span>.cpp)   <span class="comment"># 源文件组织</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">target_compile_options</span>(app PRIVATE -Wall -Wextra)   <span class="comment"># 编译选项</span></span><br></pre></td></tr></table></figure>
@@ -437,9 +437,8 @@ target，库也是一个 target。</p>
 已经用到了模板——<code>vector</code> 是类模板，<code>&lt;int&gt;</code>
 是模板参数。自己写函数模板也很简单：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="function">T <span class="title">myMax</span><span class="params">(T a, T b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a &gt; b ? a : b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">myMax</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;         <span class="comment">// 5，T 推断为 int</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">myMax</span>(<span class="number">3.1</span>, <span class="number">2.9</span>) &lt;&lt; endl;     <span class="comment">// 3.1，T 推断为 double</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">myMax</span>(<span class="string">&#x27;a&#x27;</span>, <span class="string">&#x27;c&#x27;</span>) &lt;&lt; endl;     <span class="comment">// c，T 推断为 char</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>template &lt;typename T&gt;</code> 表示”下面这个函数对任意类型
-T
-都适用”。编译器会在<strong>编译期</strong>根据调用时的实际类型生成对应代码，不是运行时判断类型。</p>
+<p><code>template &lt;typename T&gt;</code> 表示下面这个函数对任意类型 T
+都适用。编译器会在<strong>编译期</strong>根据调用时的实际类型生成对应代码，不是运行时判断类型。</p>
 <h4 id="类模板">类模板</h4>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Box</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    T value;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Box</span>(T v) : <span class="built_in">value</span>(v) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function">T <span class="title">get</span><span class="params">()</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> value;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Box&lt;<span class="type">int</span>&gt; <span class="title">b1</span><span class="params">(<span class="number">42</span>)</span></span>;</span><br><span class="line">    <span class="function">Box&lt;string&gt; <span class="title">b2</span><span class="params">(<span class="string">&quot;hello&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; b<span class="number">1.</span><span class="built_in">get</span>() &lt;&lt; endl;   <span class="comment">// 42</span></span><br><span class="line">    cout &lt;&lt; b<span class="number">2.</span><span class="built_in">get</span>() &lt;&lt; endl;   <span class="comment">// hello</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <table>
@@ -464,12 +463,12 @@ T
 </tbody>
 </table>
 <blockquote>
-<p>泛型编程的核心思想：把”类型”也变成参数，一份逻辑服务多种类型。这是
-STL 容器和算法能通吃各种类型的原因。</p>
+<p>泛型编程的核心思想：把类型也变成参数，一份逻辑服务多种类型。这是 STL
+容器和算法能通吃各种类型的原因。</p>
 </blockquote>
 <h3 id="lambda就地定义的匿名函数">🥧 lambda：就地定义的匿名函数</h3>
 <p>第 9 章 <code>sort</code> 的自定义比较函数其实就用了 lambda。lambda
-是”就地定义、用完即走”的函数，语法：</p>
+是就地定义、用完即走的函数，语法：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[捕获列表](参数列表) -&gt; 返回类型 &#123; 函数体 &#125;</span><br></pre></td></tr></table></figure>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 捕获外部变量 x，返回两数之和</span></span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">auto</span> addX = [x](<span class="type">int</span> a) -&gt; <span class="type">int</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> a + x;</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; <span class="built_in">addX</span>(<span class="number">5</span>) &lt;&lt; endl;   <span class="comment">// 15</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 捕获方式：[] 不捕获，[=] 值捕获，[&amp;] 引用捕获</span></span><br><span class="line">    <span class="type">int</span> base = <span class="number">100</span>;</span><br><span class="line">    <span class="keyword">auto</span> addBase = [&amp;](<span class="type">int</span> a) &#123;   <span class="comment">// 引用捕获，可修改 base</span></span><br><span class="line">        <span class="keyword">return</span> a + base;</span><br><span class="line">    &#125;;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">addBase</span>(<span class="number">1</span>) &lt;&lt; endl;   <span class="comment">// 101</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <table>
@@ -508,10 +507,10 @@ STL 容器和算法能通吃各种类型的原因。</p>
 与右值引用</h3>
 <h4 id="为什么需要移动">为什么需要移动</h4>
 <p>拷贝构造（第 7
-章）复制内容；但对临时对象来说，复制是浪费——它的资源马上就不要了，不如直接”搬走”。</p>
+章）复制内容；但对临时对象来说，复制是浪费——它的资源马上就不要了，不如直接搬走。</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">big</span><span class="params">(<span class="number">1000000</span>)</span></span>;</span><br><span class="line">vector&lt;<span class="type">int</span>&gt; v2 = big;        <span class="comment">// 拷贝：复制 100 万个元素</span></span><br><span class="line">vector&lt;<span class="type">int</span>&gt; v3 = <span class="built_in">move</span>(big);  <span class="comment">// 移动：把 big 的内部指针搬给 v3，big 变空</span></span><br></pre></td></tr></table></figure>
 <p><code>std::move</code>
-把对象”标记”成可移动的，配合<strong>移动构造/移动赋值</strong>，资源直接转移而不是复制。<code>vector</code>、<code>string</code>
+把对象标记成可移动的，配合<strong>移动构造/移动赋值</strong>，资源直接转移而不是复制。<code>vector</code>、<code>string</code>
 等标准库类型都自带移动构造。</p>
 <h4 id="右值引用">右值引用</h4>
 <p>右值引用（<code>T&amp;&amp;</code>）绑定临时对象，是移动语义的载体：</p>
@@ -553,13 +552,13 @@ STL 容器和算法能通吃各种类型的原因。</p>
 章），就是移动语义的典型应用。写自己的资源类时，提供移动构造能显著提升性能。</p>
 </blockquote>
 <h3 id="函数指针">📌 函数指针</h3>
-<p>函数也有地址，可以存进指针、作为参数传递，实现”把函数当数据用”：</p>
+<p>函数也有地址，可以存进指针、作为参数传递，实现把函数当数据用：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span> </span>&#123; <span class="keyword">return</span> a + b; &#125;</span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">mul</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span> </span>&#123; <span class="keyword">return</span> a * b; &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 声明函数指针：返回类型 (*名字)(参数列表)</span></span><br><span class="line">    <span class="built_in">int</span> (*fp)(<span class="type">int</span>, <span class="type">int</span>);</span><br><span class="line"></span><br><span class="line">    fp = add;                  <span class="comment">// 指向 add</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">fp</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;  <span class="comment">// 5，通过指针调用</span></span><br><span class="line"></span><br><span class="line">    fp = mul;                  <span class="comment">// 改指向 mul</span></span><br><span class="line">    cout &lt;&lt; <span class="built_in">fp</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;  <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>函数指针最常见的用途是<strong>回调</strong>：把”要执行的操作”作为参数传给别人，由对方在合适的时机调用：</p>
+<p>函数指针最常见的用途是<strong>回调</strong>：把要执行的操作作为参数传给别人，由对方在合适的时机调用：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">forEach</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size, <span class="type">int</span> (*action)(<span class="type">int</span>))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] = <span class="built_in">action</span>(arr[i]);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <blockquote>
-<p>现代 C++ 里，很多”传函数”的场景可以用 <code>std::function</code> 或
-lambda（更灵活、更安全），但理解函数指针是理解”函数也是一等公民”的基础。</p>
+<p>现代 C++ 里，很多传函数的场景可以用 <code>std::function</code> 或
+lambda（更灵活、更安全），但理解函数指针是理解函数也是一等公民的基础。</p>
 </blockquote>
 <h3 id="c-风格类型转换">🔀 C++ 风格类型转换</h3>
 <p>第 2 章讲过 <code>static_cast</code>。C++ 提供四种风格化转换，比 C
@@ -613,7 +612,7 @@ lambda（更灵活、更安全），但理解函数指针是理解”函数也�
 <tr>
 <td>意图</td>
 <td>模糊，什么都能转</td>
-<td>明确是”常规转换”</td>
+<td>明确是常规转换</td>
 </tr>
 <tr>
 <td>编译器检查</td>
@@ -630,25 +629,25 @@ lambda（更灵活、更安全），但理解函数指针是理解”函数也�
 <blockquote>
 <p>优先用 C++
 风格转换：代码意图清晰，编译器能帮你抓住错误。<code>reinterpret_cast</code>
-和 <code>const_cast</code> 属于”知道自己在干什么”才用的工具。</p>
+和 <code>const_cast</code> 属于知道自己在干什么才用的工具。</p>
 </blockquote>
 <h3 id="异常">🚨 异常</h3>
 <h4 id="基本语法">基本语法</h4>
-<p>异常用于把错误从”发生的地方”传递到”能处理的地方”：</p>
+<p>异常用于把错误从发生的地方传递到能处理的地方：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdexcept&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">double</span> <span class="title">divide</span><span class="params">(<span class="type">double</span> a, <span class="type">double</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (b == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">throw</span> <span class="built_in">runtime_error</span>(<span class="string">&quot;除以零&quot;</span>);   <span class="comment">// 抛出异常</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> a / b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="type">double</span> r = <span class="built_in">divide</span>(<span class="number">10</span>, <span class="number">0</span>);</span><br><span class="line">        cout &lt;&lt; r &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">catch</span> (<span class="type">const</span> exception&amp; e) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;出错：&quot;</span> &lt;&lt; e.<span class="built_in">what</span>() &lt;&lt; endl;   <span class="comment">// 出错：除以零</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>throw</code> 把异常对象抛出去，<code>try</code>
 块里出现异常后，程序沿调用栈向上找匹配的
 <code>catch</code>，找到就进入处理，找不到程序会终止。</p>
 <h4 id="资源安全">资源安全</h4>
 <p>异常和 RAII（第 9
-章）是天生一对：抛出异常时会”栈展开”，栈上所有局部对象都会被自动析构。所以资源只要交给
+章）是天生一对：抛出异常时会栈展开，栈上所有局部对象都会被自动析构。所以资源只要交给
 RAII
 对象（<code>vector</code>、<code>unique_ptr</code>、文件流等），即使中途抛异常也会被正确释放。</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">process</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v</span><span class="params">(<span class="number">100</span>)</span></span>;   <span class="comment">// RAII：异常时自动释放</span></span><br><span class="line">    <span class="comment">// 如果这里抛异常，v 的析构函数照常执行</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <blockquote>
 <p>反过来，如果靠手动 <code>new</code>/<code>delete</code>
 管理资源，异常路径上的 <code>delete</code>
-很容易被跳过。这就是为什么现代 C++ 强调”RAII + 异常”组合。</p>
+很容易被跳过。这就是为什么现代 C++ 强调 RAII + 异常组合。</p>
 </blockquote>
 <h3 id="shared_ptr共享所有权">🤝 shared_ptr：共享所有权</h3>
 <p>第 9 章的 <code>unique_ptr</code>
@@ -706,7 +705,7 @@ flowchart LR
 </pre>
 <h4 id="weak_ptr-的解法">weak_ptr 的解法</h4>
 <p><code>weak_ptr</code>
-是”旁观者”：它可以指向对象，但<strong>不增加引用计数</strong>，也不拥有对象。要访问对象时，先
+是旁观者：它可以指向对象，但<strong>不增加引用计数</strong>，也不拥有对象。要访问对象时，先
 <code>lock()</code> 临时得到一个 <code>shared_ptr</code>：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Node</span> &#123;</span><br><span class="line">    weak_ptr&lt;Node&gt; next;   <span class="comment">// 改用 weak_ptr：不增加计数</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">auto</span> a = <span class="built_in">make_shared</span>&lt;Node&gt;();</span><br><span class="line">    <span class="keyword">auto</span> b = <span class="built_in">make_shared</span>&lt;Node&gt;();</span><br><span class="line">    a-&gt;next = b;</span><br><span class="line">    b-&gt;next = a;           <span class="comment">// 计数各为 1，离开作用域正常释放</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>观察用法：</p>
@@ -859,7 +858,7 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:35</span>
+    <span title="Reading time total">12:34</span>
   </span>
 </div>
 <div class="busuanzi-count">

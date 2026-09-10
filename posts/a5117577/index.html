@@ -30,7 +30,7 @@
 <meta property="og:description" content="物理地址（Physical Address）是一张地址地图，RAM 只是地图上的一种东西。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-02T02:20:00.000Z">
-<meta property="article:modified_time" content="2026-09-06T03:54:22.123Z">
+<meta property="article:modified_time" content="2026-09-10T03:07:47.017Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="Rust">
@@ -180,7 +180,7 @@
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80-ram-%E5%9C%B0%E5%9D%80"><span class="nav-number">2.</span> <span class="nav-text">🧩 物理地址 ≠ RAM 地址</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80%E7%A9%BA%E9%97%B4%E9%87%8C%E6%9C%89%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">🗺️ 物理地址空间里有什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#mmio%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84-io"><span class="nav-number">4.</span> <span class="nav-text">🔌 MMIO：内存映射 I&#x2F;O</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#reserved%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E7%A2%B0"><span class="nav-number">5.</span> <span class="nav-text">⚠️ Reserved：为什么不能碰</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#memory-mapbootloader-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E4%BC%A0%E7%BB%99-kernel"><span class="nav-number">6.</span> <span class="nav-text">📦 Memory
 Map：Bootloader 为什么要传给 Kernel</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-memory-map-%E5%88%B0-frame-allocator"><span class="nav-number">7.</span> <span class="nav-text">🧱 从 Memory Map 到 Frame
 Allocator</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%99%9A%E6%8B%9F%E5%9C%B0%E5%9D%80%E7%A8%8B%E5%BA%8F%E7%9C%8B%E5%88%B0%E7%9A%84%E5%9C%B0%E5%9D%80%E6%98%AF%E5%81%87%E7%9A%84"><span class="nav-number">8.</span> <span class="nav-text">🕳️
-虚拟地址：程序看到的地址是”假的”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E5%BC%A0%E5%9B%BE%E4%B8%B2%E8%B5%B7%E5%85%A8%E9%83%A8"><span class="nav-number">9.</span> <span class="nav-text">🎨 一张图串起全部</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+虚拟地址：程序看到的地址是假的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E5%BC%A0%E5%9B%BE%E4%B8%B2%E8%B5%B7%E5%85%A8%E9%83%A8"><span class="nav-number">9.</span> <span class="nav-text">🎨 一张图串起全部</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -272,7 +272,7 @@ Allocator</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" hr
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-06 11:54:22" itemprop="dateModified" datetime="2026-09-06T11:54:22+08:00">2026-09-06</time>
+      <time title="Modified: 2026-09-10 11:07:47" itemprop="dateModified" datetime="2026-09-10T11:07:47+08:00">2026-09-10</time>
     </span>
 
   
@@ -314,8 +314,8 @@ Allocator</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" hr
 class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
 href="/posts/5d0b788d/">Rust OS
 入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
-需要知道机器长什么样”那一节，把”物理地址空间里到底有什么、Bootloader
-为什么要把 Memory Map 传给 Kernel”彻底讲透。</p>
+需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
 </blockquote>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
@@ -355,7 +355,7 @@ href="/posts/5d0b788d/">Rust OS
 <tr>
 <td>Memory Map</td>
 <td>记录地址区域用途的地图</td>
-<td>Kernel 靠它分辨”能碰/不能碰”</td>
+<td>Kernel 靠它分辨能碰/不能碰</td>
 </tr>
 <tr>
 <td>Reserved</td>
@@ -365,7 +365,7 @@ href="/posts/5d0b788d/">Rust OS
 <tr>
 <td>虚拟地址（Virtual Address）</td>
 <td>程序看到的地址，经 MMU 翻译</td>
-<td>程序眼里的地址是”假的”</td>
+<td>程序眼里的地址是假的</td>
 </tr>
 </tbody>
 </table>
@@ -387,7 +387,7 @@ RAM</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
 <p>逐个来看：</p>
 <p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
-本身不规定”这里必须放什么”，启动后由操作系统动态填充：</p>
+本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
 <p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
 附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
@@ -403,8 +403,8 @@ ROM</strong>。</p>
 <blockquote>
 <p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
 </blockquote>
-<p>硬件工程师的思路是：CPU 本来就有”读地址 /
-写地址”的机制，那干脆把设备寄存器也放进地址空间，CPU
+<p>硬件工程师的思路是：CPU 本来就有读地址 /
+写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
 就不需要额外的指令来访问设备了。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
 <p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
@@ -423,8 +423,8 @@ MMIO，只是地址和机制更复杂。</p>
 </ul>
 <p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
-<p>所以 OS 必须非常小心地区分”绿色 = 可以拿来用，红色 = 千万别碰，黄色 =
-硬件”。</p>
+<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
+= 硬件。</p>
 <h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
 Map：Bootloader 为什么要传给 Kernel</h3>
 <p>现在就能理解为什么 Bootloader 要把 <strong>Memory
@@ -449,7 +449,7 @@ frame</strong>：</p>
 <p><strong>Memory Map → Frame Allocator → Page Table → Virtual
 Memory</strong> 就是接下来最自然的学习路线。</p>
 <h3 id="虚拟地址程序看到的地址是假的">🕳️
-虚拟地址：程序看到的地址是”假的”</h3>
+虚拟地址：程序看到的地址是假的</h3>
 <p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
 <p>通常<strong>并不是 RAM
@@ -459,8 +459,8 @@ Address）</strong>。现代操作系统的地址翻译链路是：</p>
 <p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
 <code>0x7FFF0000</code>，实际过程是：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
-<p>所以 <code>0x7FFF0000</code> 不是”RAM 第 0x7FFF0000
-个字节”，而是”当前这个进程看到的虚拟地址”。由此可以建立三层概念：</p>
+<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
+个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -494,7 +494,7 @@ Address）</strong>。现代操作系统的地址翻译链路是：</p>
 </table>
 <h3 id="一张图串起全部">🎨 一张图串起全部</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>再回到开头的疑问：“16GB RAM 里面有什么？”要分两种情况回答：</p>
+<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
 <ul>
 <li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
 Stack/Heap、Page Tables、各进程的
@@ -503,18 +503,17 @@ Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</l
 RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
 控制区域等。</li>
 </ul>
-<p><strong>这两个”内存里有什么”不是一回事。</strong></p>
+<p><strong>这两处提到的内存内容不是一回事。</strong></p>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
 <p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
 只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
-分辨”能碰 / 不能碰 / 是硬件”，才能安全地建立 Frame
+分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
 Allocator，进而进入虚拟内存的世界。</p>
 </blockquote>
 <p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
-Virtual Address</strong> 继续：搞清”一个 4 KiB
-的物理页帧到底是什么，Page Table
-怎么把虚拟地址翻译成物理地址”，前面的所有概念就会真正串起来。</p>
+Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
+Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
 <p>Happy Hacking! 🎉</p>
 
     </div>
@@ -581,7 +580,7 @@ Virtual Address</strong> 继续：搞清”一个 4 KiB
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:35</span>
+    <span title="Reading time total">12:34</span>
   </span>
 </div>
 <div class="busuanzi-count">

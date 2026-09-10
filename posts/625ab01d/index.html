@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="编译出来的”可执行文件”里到底长什么样？它和程序运行时的内存（Stack、Heap、.bss……）又是什么关系？">
+    <meta name="description" content="编译出来的可执行文件里到底长什么样？它和程序运行时的内存（Stack、Heap、.bss……）又是什么关系？">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Rust OS 入门：ELF 与程序内存布局——从文件里的段到运行时的堆栈">
 <meta property="og:url" content="https://iamzihao.github.io/posts/625ab01d/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="编译出来的”可执行文件”里到底长什么样？它和程序运行时的内存（Stack、Heap、.bss……）又是什么关系？">
+<meta property="og:description" content="编译出来的可执行文件里到底长什么样？它和程序运行时的内存（Stack、Heap、.bss……）又是什么关系？">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-04T03:08:00.000Z">
-<meta property="article:modified_time" content="2026-09-09T04:49:51.443Z">
+<meta property="article:modified_time" content="2026-09-10T03:07:29.439Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="编译原理">
@@ -177,7 +177,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#elf%E6%96%87%E4%BB%B6%E4%B8%8E%E5%86%85%E5%AD%98%E4%B9%8B%E9%97%B4%E7%9A%84%E7%BF%BB%E8%AF%91%E5%B1%82"><span class="nav-number">2.</span> <span class="nav-text">🧩 ELF：文件与内存之间的”翻译层”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E6%BA%90%E7%A0%81%E5%88%B0-elf%E4%B8%A4%E6%AD%A5%E8%B5%B0"><span class="nav-number">3.</span> <span class="nav-text">🏭 从源码到 ELF：两步走</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#elf-%E6%96%87%E4%BB%B6%E5%86%85%E9%83%A8header-%E4%B8%8E-sections"><span class="nav-number">4.</span> <span class="nav-text">🧱 ELF 文件内部：header 与
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#elf%E6%96%87%E4%BB%B6%E4%B8%8E%E5%86%85%E5%AD%98%E4%B9%8B%E9%97%B4%E7%9A%84%E7%BF%BB%E8%AF%91%E5%B1%82"><span class="nav-number">2.</span> <span class="nav-text">🧩 ELF：文件与内存之间的翻译层</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E6%BA%90%E7%A0%81%E5%88%B0-elf%E4%B8%A4%E6%AD%A5%E8%B5%B0"><span class="nav-number">3.</span> <span class="nav-text">🏭 从源码到 ELF：两步走</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#elf-%E6%96%87%E4%BB%B6%E5%86%85%E9%83%A8header-%E4%B8%8E-sections"><span class="nav-number">4.</span> <span class="nav-text">🧱 ELF 文件内部：header 与
 sections</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#sections-vs-segments%E9%93%BE%E6%8E%A5%E8%A7%86%E8%A7%92-vs-%E5%8A%A0%E8%BD%BD%E8%A7%86%E8%A7%92"><span class="nav-number">5.</span> <span class="nav-text">🔄 Sections vs
 Segments：链接视角 vs 加载视角</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%90%E8%A1%8C%E6%97%B6loader-%E7%9A%84%E6%96%BD%E5%B7%A5%E8%BF%87%E7%A8%8B"><span class="nav-number">6.</span> <span class="nav-text">🚀 运行时：loader 的施工过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#stack-%E4%B8%8E-heap%E8%BF%90%E8%A1%8C%E6%97%B6%E7%9A%84%E4%BA%A7%E7%89%A9%E4%B8%8D%E5%9C%A8%E6%96%87%E4%BB%B6%E9%87%8C"><span class="nav-number">7.</span> <span class="nav-text">🥞 Stack 与
 Heap：运行时的产物，不在文件里</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9B%9E%E5%88%B0-rust-os"><span class="nav-number">8.</span> <span class="nav-text">🎯 回到 Rust OS</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
@@ -272,7 +272,7 @@ Heap：运行时的产物，不在文件里</span></a></li><li class="nav-item n
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 12:49:51" itemprop="dateModified" datetime="2026-09-09T12:49:51+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-10 11:07:29" itemprop="dateModified" datetime="2026-09-10T11:07:29+08:00">2026-09-10</time>
     </span>
 
   
@@ -289,7 +289,7 @@ Heap：运行时的产物，不在文件里</span></a></li><li class="nav-item n
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.3k</span>
+      <span>5.2k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -306,7 +306,7 @@ Heap：运行时的产物，不在文件里</span></a></li><li class="nav-item n
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>编译出来的”可执行文件”里到底长什么样？它和程序运行时的内存（Stack、Heap、<code>.bss</code>……）又是什么关系？</p>
+    <div class="post-body" itemprop="articleBody"><p>编译出来的可执行文件里到底长什么样？它和程序运行时的内存（Stack、Heap、<code>.bss</code>……）又是什么关系？</p>
 <span id="more"></span>
 <blockquote>
 <p>本文是《Writing an OS in Rust》（<a target="_blank" rel="noopener" href="https://os.phil-opp.com/"
@@ -335,7 +335,7 @@ _start</a>》里的链接器分工。核心是下面这张经常被画错的内�
 <tr>
 <td>ELF</td>
 <td>Executable and Linkable Format，Linux 可执行/目标文件格式</td>
-<td>文件里的”代码+数据”容器</td>
+<td>文件里的代码+数据容器</td>
 </tr>
 <tr>
 <td>Section</td>
@@ -350,7 +350,7 @@ _start</a>》里的链接器分工。核心是下面这张经常被画错的内�
 </tr>
 <tr>
 <td>Program Header</td>
-<td>描述”哪些字节该加载到哪个地址”的表</td>
+<td>描述哪些字节该加载到哪个地址的表</td>
 <td>loader 的施工图</td>
 </tr>
 <tr>
@@ -366,7 +366,7 @@ _start</a>》里的链接器分工。核心是下面这张经常被画错的内�
 <tr>
 <td><code>.bss</code></td>
 <td>未初始化数据段，文件里不占空间，加载时清零</td>
-<td>“零”初始化</td>
+<td>零初始化</td>
 </tr>
 <tr>
 <td>VMA</td>
@@ -380,15 +380,15 @@ _start</a>》里的链接器分工。核心是下面这张经常被画错的内�
 </tr>
 </tbody>
 </table>
-<h3 id="elf文件与内存之间的翻译层">🧩 ELF：文件与内存之间的”翻译层”</h3>
+<h3 id="elf文件与内存之间的翻译层">🧩 ELF：文件与内存之间的翻译层</h3>
 <p>先建立一个关键直觉：</p>
 <blockquote>
-<p><strong>可执行文件不是”内存的镜像”，而是”一份待翻译的图纸”。</strong>
+<p><strong>可执行文件不是内存的镜像，而是一份待翻译的图纸。</strong>
 它描述的是一种中间状态——既不等于磁盘上的字节流，也不等于运行时的内存。</p>
 </blockquote>
 <p><strong>ELF（Executable and Linkable
 Format，可执行与可链接格式）</strong> 就是 Linux
-世界里这份”图纸”的标准格式。你的 Rust 程序、C 程序、内核，只要跑在 Linux
+世界里这份图纸的标准格式。你的 Rust 程序、C 程序、内核，只要跑在 Linux
 上，编译产物几乎都是 ELF。</p>
 <p>同一个 ELF 格式，按用途分三种类型：</p>
 <table>
@@ -423,9 +423,9 @@ Format，可执行与可链接格式）</strong> 就是 Linux
 </table>
 <p>（<code>e_type</code> 是 ELF header 里的一个字段，后面会看到。）</p>
 <h3 id="从源码到-elf两步走">🏭 从源码到 ELF：两步走</h3>
-<p>以 <code>cargo build</code> 为例，背后其实有两次”翻译”：</p>
+<p>以 <code>cargo build</code> 为例，背后其实有两次翻译：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">main.rs / lib.rs</span><br><span class="line">      │</span><br><span class="line">      │ ① 编译器（rustc）</span><br><span class="line">      ▼</span><br><span class="line">   main.o            ← 一个 ET_REL 文件</span><br><span class="line">      │</span><br><span class="line">      │ ② 链接器（ld / rust-lld）</span><br><span class="line">      ▼</span><br><span class="line">   rust_os           ← 可执行 ELF（或 kernel ELF）</span><br></pre></td></tr></table></figure>
-<p>第一步编译器只负责把<strong>单个源文件</strong>变成目标文件（<code>.o</code>），里面还留着大量”待填空”的符号引用；第二步<strong>链接器（linker）</strong>
+<p>第一步编译器只负责把<strong>单个源文件</strong>变成目标文件（<code>.o</code>），里面还留着大量待填空的符号引用；第二步<strong>链接器（linker）</strong>
 把多个 <code>.o</code>
 和库合并起来，解析符号、分配地址，最终产出可执行文件。这就是上一篇《从
 main 到 _start》里”链接器解析符号、确定 <code>_start</code>
@@ -433,7 +433,7 @@ main 到 _start》里”链接器解析符号、确定 <code>_start</code>
 <h3 id="elf-文件内部header-与-sections">🧱 ELF 文件内部：header 与
 sections</h3>
 <p>一个可执行 ELF 文件（用 <code>readelf -h</code> 可以看）最前面是
-<strong>ELF header</strong>，相当于文件的”身份证+目录”：</p>
+<strong>ELF header</strong>，相当于文件的身份证+目录：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">ELF header</span><br><span class="line">├── 魔数 0x7F &#x27;E&#x27; &#x27;L&#x27; &#x27;F&#x27;      ← 让 loader 认出这是 ELF</span><br><span class="line">├── class（32/64 位）</span><br><span class="line">├── e_type（ET_REL/ET_EXEC/ET_DYN）</span><br><span class="line">├── e_machine（x86_64 / aarch64 ...）</span><br><span class="line">├── e_entry                    ← 入口点地址，_start 在这</span><br><span class="line">├── e_phoff                    ← Program Header Table 的位置</span><br><span class="line">└── e_shoff                    ← Section Header Table 的位置</span><br></pre></td></tr></table></figure>
 <p>文件主体是一系列
 <strong>sections（节）</strong>，按内容分类存放：</p>
@@ -482,25 +482,24 @@ sections</h3>
 </table>
 <p><strong>为什么 <code>.bss</code> 特殊？</strong>
 因为它的内容全是零——既然全是零，就没必要真的在文件里存几千字节的
-0，文件里只记一个”大小”。加载时 loader
-负责把这块内存清零。这也是”零初始化（zero
-initialized）“的真正含义：不是编译期填零，而是<strong>加载期清零</strong>。</p>
+0，文件里只记一个大小。加载时 loader
+负责把这块内存清零。这也是零初始化（zero
+initialized）的真正含义：不是编译期填零，而是<strong>加载期清零</strong>。</p>
 <h3 id="sections-vs-segments链接视角-vs-加载视角">🔄 Sections vs
 Segments：链接视角 vs 加载视角</h3>
 <p>这是理解 ELF 最绕、也最关键的一点：</p>
 <blockquote>
 <p>同一个文件里有<strong>两张表</strong>描述它自己：Section Header Table
-按”内容类型”切（链接器用）；Program Header Table 按”加载方式”切（loader
+按内容类型切（链接器用）；Program Header Table 按加载方式切（loader
 用）。前者叫 sections，后者叫 <strong>segments（段）</strong>。</p>
 </blockquote>
 <p>链接器关心 <code>.text</code> 里有哪些符号、<code>.data</code>
 里有哪些变量，所以它按 section 工作；loader
-不关心符号，只关心”哪些字节、以什么权限、加载到哪个地址”，所以它按
-segment 工作。</p>
+不关心符号，只关心哪些字节、以什么权限、加载到哪个地址，所以它按 segment
+工作。</p>
 <p>多个相邻 section 往往被合并成一个 segment——例如把 <code>.text</code>
-和 <code>.rodata</code> 合并成”只读可执行”段、把 <code>.data</code> 和
-<code>.bss</code>
-合并成”可读写”段。合并的规则由<strong>链接器脚本（linker
+和 <code>.rodata</code> 合并成只读可执行段、把 <code>.data</code> 和
+<code>.bss</code> 合并成可读写段。合并的规则由<strong>链接器脚本（linker
 script）</strong> 决定，比如我们的 kernel 可以把各段放到指定地址。</p>
 <p>Program Header Table 里每条记录（<code>PT_LOAD</code>
 类型）大致长这样：</p>
@@ -524,7 +523,7 @@ Heap：运行时的产物，不在文件里</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">High Address</span><br><span class="line">+----------------+</span><br><span class="line">| Stack          |   ← ❌ 并不在 ELF 文件里</span><br><span class="line">+----------------+</span><br><span class="line">| Heap           |   ← ❌ 并不在 ELF 文件里</span><br><span class="line">+----------------+</span><br><span class="line">| .bss           |</span><br><span class="line">+----------------+</span><br><span class="line">| .data          |</span><br><span class="line">+----------------+</span><br><span class="line">| .rodata        |</span><br><span class="line">+----------------+</span><br><span class="line">| .text          |</span><br><span class="line">+----------------+</span><br><span class="line">Low Address</span><br></pre></td></tr></table></figure>
 <p><strong>Stack 和 Heap 是 loader
 完成后、进程运行时才存在的东西</strong>，由操作系统（或
-bootloader）在加载阶段创建，而不是编译产物。把”文件里有什么”和”运行时有什么”对照起来看：</p>
+bootloader）在加载阶段创建，而不是编译产物。把文件里有什么和运行时有什么对照起来看：</p>
 <table>
 <thead>
 <tr>
@@ -573,12 +572,12 @@ bootloader）在加载阶段创建，而不是编译产物。把”文件里有�
 <ul>
 <li><strong>Stack（栈）</strong>：由 loader/OS
 创建并设置好栈指针（x86_64
-上地址在高处、向下增长）。上一篇讲过：栈不是程序自己”分配”的，是启动环境给的。</li>
+上地址在高处、向下增长）。上一篇讲过：栈不是程序自己分配的，是启动环境给的。</li>
 <li><strong>Heap（堆）</strong>：给动态内存分配（<code>malloc</code>、<code>Box</code>）用。用户程序靠
 OS 提供（<code>brk</code>/<code>mmap</code>）；裸机内核没有 OS
 帮忙，只能自己写分配器（后面会学到）。</li>
-<li>文件里的 <code>.bss</code>
-只是”一段待清零的空间承诺”，真正的零内存是 loader 现场清零的。</li>
+<li>文件里的 <code>.bss</code> 只是一段待清零的空间承诺，真正的零内存是
+loader 现场清零的。</li>
 </ul>
 <h3 id="回到-rust-os">🎯 回到 Rust OS</h3>
 <p>把上面所有概念套到我们正在写的内核上，链路是：</p>
@@ -602,7 +601,7 @@ OS 提供（<code>brk</code>/<code>mmap</code>）；裸机内核没有 OS
 </ol>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
-<p><strong>ELF 是文件与内存之间的”图纸”：链接器按 sections
+<p><strong>ELF 是文件与内存之间的图纸：链接器按 sections
 把它搭出来，加载器按 segments（Program
 Header）把它搬进内存，<code>e_entry</code> 决定从哪开始执行；Stack 和
 Heap 不是文件的一部分，而是加载完成后的运行时产物。</strong></p>
@@ -678,7 +677,7 @@ Heap 不是文件的一部分，而是加载完成后的运行时产物。</stro
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:35</span>
+    <span title="Reading time total">12:34</span>
   </span>
 </div>
 <div class="busuanzi-count">
