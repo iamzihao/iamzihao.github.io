@@ -30,7 +30,7 @@
 <meta property="og:description" content="地址翻译由 hypervisor 负责，而 hypervisor 本身并不可信。SEV-SNP 用 NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原理。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-25T05:03:27.000Z">
-<meta property="article:modified_time" content="2026-09-09T04:55:23.016Z">
+<meta property="article:modified_time" content="2026-09-10T03:03:25.015Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="机密计算">
@@ -177,8 +177,8 @@
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81-snp%E7%AC%AC%E4%B8%80%E4%BB%A3-sev-%E7%9A%84%E6%BC%8F%E6%B4%9E"><span class="nav-number">2.</span> <span class="nav-text">🧩 为什么需要 SNP：第一代 SEV
 的漏洞</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#rmp%E5%8F%8D%E5%90%91%E6%98%A0%E5%B0%84%E8%A1%A8%E7%A1%AC%E4%BB%B6%E7%AE%A1%E7%9A%84%E6%89%80%E6%9C%89%E6%9D%83%E4%BA%8B%E5%AE%9E"><span class="nav-number">3.</span> <span class="nav-text">🔍
-RMP：反向映射表，硬件管的”所有权事实”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E5%BC%BA%E5%88%B6%E6%89%A7%E8%A1%8C%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84"><span class="nav-number">4.</span> <span class="nav-text">🔒 硬件强制执行是怎么实现的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BF%E9%97%AE%E8%80%85%E8%BA%AB%E4%BB%BD%E6%80%8E%E4%B9%88%E5%88%A4%E5%AE%9Aasid"><span class="nav-number">5.</span> <span class="nav-text">🪪 访问者身份怎么判定：ASID</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E6%BE%84%E6%B8%85hypervisor-%E5%8F%AA%E6%98%AF%E6%8F%90%E4%BE%9B%E8%A7%84%E5%88%99%E4%B8%8D%E6%98%AF%E6%89%A7%E8%A1%8C%E7%BF%BB%E8%AF%91"><span class="nav-number">6.</span> <span class="nav-text">💡
-关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B8%E5%9E%8B%E5%9C%BA%E6%99%AF%E5%AF%B9%E7%85%A7"><span class="nav-number">7.</span> <span class="nav-text">📋 典型场景对照</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+RMP：反向映射表，硬件管的所有权事实</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E5%BC%BA%E5%88%B6%E6%89%A7%E8%A1%8C%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84"><span class="nav-number">4.</span> <span class="nav-text">🔒 硬件强制执行是怎么实现的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BF%E9%97%AE%E8%80%85%E8%BA%AB%E4%BB%BD%E6%80%8E%E4%B9%88%E5%88%A4%E5%AE%9Aasid"><span class="nav-number">5.</span> <span class="nav-text">🪪 访问者身份怎么判定：ASID</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E6%BE%84%E6%B8%85hypervisor-%E5%8F%AA%E6%8F%90%E4%BE%9B%E8%A7%84%E5%88%99%E4%B8%8D%E6%89%A7%E8%A1%8C%E7%BF%BB%E8%AF%91"><span class="nav-number">6.</span> <span class="nav-text">💡 关键澄清：hypervisor
+只提供规则，不执行翻译</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B8%E5%9E%8B%E5%9C%BA%E6%99%AF%E5%AF%B9%E7%85%A7"><span class="nav-number">7.</span> <span class="nav-text">📋 典型场景对照</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -270,7 +270,7 @@ RMP：反向映射表，硬件管的”所有权事实”</span></a></li><li cla
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 12:55:23" itemprop="dateModified" datetime="2026-09-09T12:55:23+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-10 11:03:25" itemprop="dateModified" datetime="2026-09-10T11:03:25+08:00">2026-09-10</time>
     </span>
 
   
@@ -340,7 +340,7 @@ NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原�
 <tr>
 <td>RMP</td>
 <td>Reverse Map Table，反向映射表</td>
-<td>硬件记录的”物理页归谁”事实</td>
+<td>硬件记录的<strong>物理页归谁</strong>事实</td>
 </tr>
 <tr>
 <td>RMPE</td>
@@ -360,7 +360,7 @@ NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原�
 <tr>
 <td>VMRUN/VMEXIT</td>
 <td>进出虚拟机的特权指令</td>
-<td>硬件切换”当前身份”的开关</td>
+<td>硬件切换当前身份的开关</td>
 </tr>
 <tr>
 <td>VMPL</td>
@@ -418,10 +418,10 @@ NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原�
 </tbody>
 </table>
 <p>第一代 SEV
-只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证”别人读不懂”，但
-hypervisor 可以”把读的对象换掉”。这就是 SNP 要补的洞。</p>
+只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证别人读不懂，但
+hypervisor 可以把读的对象换掉。这就是 SNP 要补的洞。</p>
 <h3 id="rmp反向映射表硬件管的所有权事实">🔍
-RMP：反向映射表，硬件管的”所有权事实”</h3>
+RMP：反向映射表，硬件管的所有权事实</h3>
 <p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
 的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
 <p>RMP：每 4KB 物理页一行，硬件强制记录：</p>
@@ -441,8 +441,8 @@ RMP：反向映射表，硬件管的”所有权事实”</h3>
 </tr>
 </tbody>
 </table>
-<p>“反向”的含义：NPT 是 hypervisor 往前翻译”地址去哪”，RMP
-是硬件反过来锁”这页是谁的、谁才能动”。</p>
+<p>反向的含义：NPT 是 hypervisor 往前翻译地址去哪，RMP
+是硬件反过来锁住这页归谁、谁才能动。</p>
 <p>一句话对比：</p>
 <table>
 <thead>
@@ -472,12 +472,12 @@ RMP：反向映射表，硬件管的”所有权事实”</h3>
 固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
 都是白费力气，最终判定权在硬件手里。</p>
 <h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
-<p>“硬件强制执行，谁也绕不过”靠<strong>两把锁</strong>：</p>
+<p><strong>硬件强制执行，谁也绕不过</strong>，靠<strong>两把锁</strong>：</p>
 <p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
 <p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
-<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定”开多快”（建
+<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定开多快（建
 NPT
 规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
 <h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
@@ -489,17 +489,17 @@ Identifier，地址空间标识符）</strong>——每个 CVM
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
 <p><strong>为什么软件伪造不了身份？</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
-<p>类比：VMRUN 就是”刷门禁卡进房间”，CPU
-是门禁系统本身。门禁系统自己知道”现在里面是谁”——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
-<h3 id="关键澄清hypervisor-只是提供规则不是执行翻译">💡
-关键澄清：hypervisor 只是”提供规则”，不是”执行翻译”</h3>
+<p>类比：VMRUN 就是刷门禁卡进房间，CPU
+是门禁系统本身。门禁系统自己知道现在里面是谁——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
+<h3 id="关键澄清hypervisor-只提供规则不执行翻译">💡 关键澄清：hypervisor
+只提供规则，不执行翻译</h3>
 <p>这是最容易混的点。<strong>页表是谁建的 ≠
 翻译是谁执行的</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
 <p>关键事实：<code>GPA→SPA</code>
 的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
 写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
-的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的”地图”，但走路的是
+的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的地图，但走路的是
 CPU。</p>
 <p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
@@ -539,8 +539,8 @@ CPU。</p>
 <ul>
 <li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
 还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
-里分别记录各级的读/写/执行权限。ASID 管”是不是这家的”，VMPL
-管”这家里面谁有权碰”。</li>
+里分别记录各级的读/写/执行权限。ASID 管是不是这家的，VMPL
+管这家里面谁有权碰。</li>
 <li><strong>设备 DMA 同样受限</strong>：设备要通过
 IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
 DMA 指向 CVM 的私有页。</li>
@@ -572,7 +572,7 @@ DMA 指向 CVM 的私有页。</li>
 </tr>
 <tr>
 <td>内存加密就够防篡改</td>
-<td>加密只防”读不懂”，SNP/RMP 才是防”偷换、重映射”的关键</td>
+<td>加密只防读不懂，SNP/RMP 才是防偷换、重映射的关键</td>
 </tr>
 <tr>
 <td>ASID 是软件声明的身份</td>
@@ -587,10 +587,10 @@ DMA 指向 CVM 的私有页。</li>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
 <p>SEV-SNP 用 RMP
-把”物理页归谁”这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
-CPU 硬件执行，hypervisor 只提供页表规则；“当前访问者”是硬件通过
-VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管”地址往哪翻”，RMP
-管”翻过去之后你有没有资格碰”。</p>
+把物理页归谁这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
+CPU 硬件执行，hypervisor 只提供页表规则；当前访问者是硬件通过
+VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管地址往哪翻，RMP
+管翻过去之后你有没有资格碰。</p>
 </blockquote>
 <p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
 <p>Happy Hacking! 🎉</p>

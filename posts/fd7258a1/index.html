@@ -30,7 +30,7 @@
 <meta property="og:description" content="TPM（Trusted Platform Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的 BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-25T06:03:27.000Z">
-<meta property="article:modified_time" content="2026-09-09T04:56:10.698Z">
+<meta property="article:modified_time" content="2026-09-10T03:03:47.787Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="机密计算">
@@ -177,8 +177,8 @@
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E6%98%AF%E4%BB%80%E4%B9%88%E4%B8%80%E5%8F%B0%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA%E7%9A%84%E4%BF%9D%E9%99%A9%E7%AE%B1%E7%94%B5%E8%84%91"><span class="nav-number">2.</span> <span class="nav-text">🏦 TPM
-是什么：一台”只进不出”的保险箱电脑</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E7%9A%84%E4%B8%89%E5%A4%A7%E6%A0%B8%E5%BF%83%E8%83%BD%E5%8A%9B"><span class="nav-number">3.</span> <span class="nav-text">🧬 TPM 的三大核心能力</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BA%A6%E9%87%8Fmeasurementpcr-%E4%B8%8E%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA"><span class="nav-number">3.1.</span> <span class="nav-text">① 度量（Measurement）：PCR
-与”只进不出”</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AD%98%E5%82%A8sealing%E5%AF%86%E5%B0%81%E9%92%A5%E5%8C%99%E5%92%8C%E7%8A%B6%E6%80%81%E7%BB%91%E5%AE%9A"><span class="nav-number">3.2.</span> <span class="nav-text">②
+是什么：一台只进不出的保险箱电脑</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E7%9A%84%E4%B8%89%E5%A4%A7%E6%A0%B8%E5%BF%83%E8%83%BD%E5%8A%9B"><span class="nav-number">3.</span> <span class="nav-text">🧬 TPM 的三大核心能力</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BA%A6%E9%87%8Fmeasurementpcr-%E4%B8%8E%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA"><span class="nav-number">3.1.</span> <span class="nav-text">① 度量（Measurement）：PCR
+与只进不出</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AD%98%E5%82%A8sealing%E5%AF%86%E5%B0%81%E9%92%A5%E5%8C%99%E5%92%8C%E7%8A%B6%E6%80%81%E7%BB%91%E5%AE%9A"><span class="nav-number">3.2.</span> <span class="nav-text">②
 存储（Sealing，密封）：钥匙和状态绑定</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AE%A4%E8%AF%81attestationaik-%E4%B8%8E-quote"><span class="nav-number">3.3.</span> <span class="nav-text">③ 认证（Attestation）：AIK 与
 Quote</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E6%98%AF%E7%A1%AC%E4%BB%B6%E8%BF%98%E6%98%AF%E8%BD%AF%E4%BB%B6"><span class="nav-number">4.</span> <span class="nav-text">💻 TPM 是硬件还是软件？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tcg-%E6%98%AF%E5%95%A5"><span class="nav-number">5.</span> <span class="nav-text">🏛 TCG 是啥？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%94%A8%E6%88%B7%E6%80%8E%E4%B9%88%E8%AE%BF%E9%97%AE-tpm"><span class="nav-number">6.</span> <span class="nav-text">🛠 用户怎么访问 TPM</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BD%A0%E5%85%B6%E5%AE%9E%E5%B7%B2%E7%BB%8F%E5%9C%A8%E7%94%A8-tpm%E4%B8%89%E4%B8%AA%E6%97%A5%E5%B8%B8%E5%9C%BA%E6%99%AF"><span class="nav-number">7.</span> <span class="nav-text">🖥 你其实已经在用
 TPM：三个日常场景</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#blob-%E4%B8%8E%E4%B8%A4%E5%B1%82%E5%8A%A0%E5%AF%86"><span class="nav-number">8.</span> <span class="nav-text">🔑 blob 与两层加密</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%86%E9%92%A5%E6%A0%91%E4%B8%8E-nvram%E5%AE%B9%E5%99%A8%E5%92%8C%E7%BB%93%E6%9E%84%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="nav-number">9.</span> <span class="nav-text">🧅 密钥树与
@@ -275,7 +275,7 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-09 12:56:10" itemprop="dateModified" datetime="2026-09-09T12:56:10+08:00">2026-09-09</time>
+      <time title="Modified: 2026-09-10 11:03:47" itemprop="dateModified" datetime="2026-09-10T11:03:47+08:00">2026-09-10</time>
     </span>
 
   
@@ -292,14 +292,14 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.8k</span>
+      <span>5.7k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>11 mins.</span>
+      <span>10 mins.</span>
     </span>
 </div>
 
@@ -386,19 +386,19 @@ BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的
 </tbody>
 </table>
 <h3 id="tpm-是什么一台只进不出的保险箱电脑">🏦 TPM
-是什么：一台”只进不出”的保险箱电脑</h3>
+是什么：一台只进不出的保险箱电脑</h3>
 <p><strong>TPM（Trusted Platform Module，可信平台模块）</strong>
 是一颗独立的<strong>密码协处理器芯片</strong>，焊在主板上（PCIe/SPI
 总线连接）。它干的事：给你提供<strong>基于硬件的密钥存储和加密运算</strong>，密钥永远锁在芯片里，谁也拷不走。</p>
 <p>把 TPM 想象成一台<strong>迷你专用电脑</strong>，它有两个门：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">TPM（迷你电脑）</span><br><span class="line">│</span><br><span class="line">├── ① 输入口（命令接口）</span><br><span class="line">│      · 给它数据算哈希</span><br><span class="line">│      · 让它签名/加密/解密</span><br><span class="line">│      · 让它生成密钥</span><br><span class="line">│      · 让它扩展 PCR</span><br><span class="line">│</span><br><span class="line">└── ② 保险柜（内部存储）</span><br><span class="line">       · PCR 值（系统指纹）</span><br><span class="line">       · 密钥（永远不出来）</span><br><span class="line">       · NVRAM 数据</span><br><span class="line"></span><br><span class="line">它没有显示器、没有键盘——你不能&quot;登录进去看&quot;，</span><br><span class="line">只能通过命令指挥它干活</span><br></pre></td></tr></table></figure>
-<p><strong>最重要的一条规矩：密钥一旦生成就锁在保险柜里，任何软件都拿不到密钥本身</strong>。你只能让它”用这把钥匙帮我签名”——它签完把结果给你，钥匙还在柜子里。</p>
+<p><strong>最重要的一条规矩：密钥一旦生成就锁在保险柜里，任何软件都拿不到密钥本身</strong>。你只能让它用这把钥匙帮你签名——它签完把结果给你，钥匙还在柜子里。</p>
 <p>TPM 是<strong>行业标准</strong>（TCG 定义，ISO/IEC 11889），Windows
 11 强制要求，几乎所有新主板都带。</p>
 <h3 id="tpm-的三大核心能力">🧬 TPM 的三大核心能力</h3>
 <h4 id="度量measurementpcr-与只进不出">① 度量（Measurement）：PCR
-与”只进不出”</h4>
-<p>平台启动时，逐级”测量并记录”：</p>
+与只进不出</h4>
+<p>平台启动时，逐级测量并记录：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">平台启动时逐级测量：</span><br><span class="line">  固件 → 引导程序 → 内核 → ...</span><br><span class="line">  每级算出哈希，PCR_Extend 进 PCR</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">PCR 新值 = SHA256( PCR旧值 || 新测量值 )   ← || 是拼接，不是按位或</span><br></pre></td></tr></table></figure>
 <p><strong>PCR（Platform Configuration
 Register，平台配置寄存器）</strong> 只有两个特性：</p>
@@ -412,7 +412,7 @@ Register，平台配置寄存器）</strong> 只有两个特性：</p>
 <tbody>
 <tr>
 <td>只能 Extend（追加）</td>
-<td>没有”直接写”这个命令，固件层就不存在该接口</td>
+<td>没有直接写这个命令，固件层就不存在该接口</td>
 </tr>
 <tr>
 <td>开机清零</td>
@@ -421,22 +421,22 @@ Register，平台配置寄存器）</strong> 只有两个特性：</p>
 </tbody>
 </table>
 <p>所以 PCR 里的值 =
-这台机器”从开机到现在装了什么”的<strong>不可篡改指纹</strong>。想伪装成”没装过恶意软件”？改不了——你加载过的任何恶意代码必然出现在
+这台机器从开机到现在装了什么的<strong>不可篡改指纹</strong>。想伪装成没装过恶意软件？改不了——你加载过的任何恶意代码必然出现在
 Extend 链里。</p>
 <blockquote>
 <p>为什么只能 Extend？因为 PCR
-的意义是”不可抵赖的系统指纹”。如果能直接写，恶意软件就能把 PCR
-直接写成”干净的值”。Extend
+的意义是不可抵赖的系统指纹。如果能直接写，恶意软件就能把 PCR
+直接写成干净的值。Extend
 用哈希链保证历史不可抹除：账本只能往后加页，不能撕掉前面的页。</p>
 </blockquote>
 <h4 id="存储sealing密封钥匙和状态绑定">②
 存储（Sealing，密封）：钥匙和状态绑定</h4>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">seal(key, PCR值集合)  →  这把钥匙只在一个特定状态下才能 unseal</span><br><span class="line"></span><br><span class="line">TPM 内部有密钥层级：</span><br><span class="line">  SRK（存储根密钥）→ 保护下面的所有子密钥</span><br><span class="line">  子密钥 → 保护应用的密钥</span><br><span class="line">像一棵树，根在芯片里，枝叶在外面（磁盘上）</span><br></pre></td></tr></table></figure>
-<p>这就是”<strong>钥匙锁进保险箱，保险箱的门锁绑定系统状态</strong>”——系统被篡改（PCR
+<p>这就是<strong>钥匙锁进保险箱，保险箱的门锁绑定系统状态</strong>——系统被篡改（PCR
 不对），unseal 直接失败。</p>
 <p><strong>sealing
-的本质价值</strong>：密钥和”系统状态（PCR）“绑定。<strong>就算攻击者偷走了整个硬盘/内存里的密文，只要这台机器的状态不是当初密封时的状态（或他把东西搬去别的机器），密钥就永远解不开。</strong>
-把”密码保护”升级成”状态保护”。</p>
+的本质价值</strong>：密钥和系统状态（PCR）绑定。<strong>就算攻击者偷走了整个硬盘/内存里的密文，只要这台机器的状态不是当初密封时的状态（或他把东西搬去别的机器），密钥就永远解不开。</strong>
+把密码保护升级成状态保护。</p>
 <h4 id="认证attestationaik-与-quote">③ 认证（Attestation）：AIK 与
 Quote</h4>
 <table>
@@ -456,12 +456,12 @@ Quote</h4>
 <tr>
 <td>EK</td>
 <td>Endorsement Key，背书密钥</td>
-<td>出厂烧进芯片的身份密钥，证明”我是真 TPM”</td>
+<td>出厂烧进芯片的身份密钥，证明我是真 TPM</td>
 </tr>
 <tr>
 <td>AIK</td>
 <td>Attestation Identity Key，认证身份密钥</td>
-<td>由 EK 背书派生，专用于给”系统状态”签名（匿名）</td>
+<td>由 EK 背书派生，专用于给系统状态签名（匿名）</td>
 </tr>
 <tr>
 <td>SRK</td>
@@ -471,14 +471,14 @@ Quote</h4>
 </tbody>
 </table>
 <p><strong>Quote 操作</strong>：<code>TPM_Quote(AIK, PCR选择)</code> →
-返回”当前 PCR 值 + AIK 签名”。</p>
-<p>远程认证的经典玩法：验证方给个随机数 nonce → 被验证方 TPM 对”PCR +
-nonce”签名 → 验证方核对签名和 PCR 是否符合预期。nonce
+返回当前 PCR 值 + AIK 签名。</p>
+<p>远程认证的经典玩法：验证方给个随机数 nonce → 被验证方 TPM 对 PCR +
+nonce 签名 → 验证方核对签名和 PCR 是否符合预期。nonce
 防重放，签名保证真实。</p>
 <h3 id="tpm-是硬件还是软件">💻 TPM 是硬件还是软件？</h3>
-<p><strong>TPM 是一个”逻辑规范”，实现方式有多种。</strong> TPM 2.0
+<p><strong>TPM 是一个逻辑规范，实现方式有多种。</strong> TPM 2.0
 规范（TCG
-定的）定义”这台设备应该提供什么命令、什么语义”，实现形态看厂商：</p>
+定的）定义这台设备应该提供什么命令、什么语义，实现形态看厂商：</p>
 <table>
 <thead>
 <tr>
@@ -524,8 +524,7 @@ TPM）</strong> 的动机之一。</p>
 <h3 id="tcg-是啥">🏛 TCG 是啥？</h3>
 <p><strong>TCG（Trusted Computing Group，可信计算组织）</strong>
 是一个国际标准组织（成员包括 AMD、Intel、Microsoft、IBM
-等），<strong>负责制定 TPM 的规范</strong>。类比：TCG 是”国标委”，TPM
-2.0
+等），<strong>负责制定 TPM 的规范</strong>。类比：TCG 是国标委，TPM 2.0
 规范是它发布的标准，各家芯片厂（英飞凌、国民技术等）按标准造芯片。TCG
 还定义了 <strong>TSS（TCG Software Stack）</strong>——应用程序访问 TPM
 的统一接口库。</p>
@@ -538,7 +537,7 @@ TPM：三个日常场景</h3>
 <p><strong>场景 A：BitLocker（磁盘加密）——用 TPM
 保管磁盘密钥</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">① 启用 BitLocker，系统让 TPM 生成/存入&quot;磁盘加密密钥&quot;</span><br><span class="line">② 开机时：</span><br><span class="line">   系统问 TPM：&quot;当前 PCR 值是多少？符合预期吗？&quot;</span><br><span class="line">   TPM 比对 → 符合 → 释放密钥 → 系统解密磁盘</span><br><span class="line">            → 不符合（换了引导程序、有人改启动项）</span><br><span class="line">              → 拒绝释放 → 屏幕让你插恢复 U 盘</span><br></pre></td></tr></table></figure>
-<p>防的是”有人拆走你的硬盘去别的机器上读”——硬盘到哪都解不开。</p>
+<p>防的是有人拆走你的硬盘去别的机器上读——硬盘到哪都解不开。</p>
 <p><strong>场景 B：Windows Hello / 指纹登录</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">① 注册时，系统让 TPM 生成一对密钥，私钥锁进 TPM</span><br><span class="line">② 登录时，指纹匹配成功后系统让 TPM 用私钥签名</span><br><span class="line">   验证通过 → 放你进系统</span><br></pre></td></tr></table></figure>
 <p>私钥永远不会出现在内存/磁盘里，偷走 Windows 文件也偷不走密钥。</p>
@@ -549,7 +548,7 @@ TPM：三个日常场景</h3>
 PCR？它没有权限写 PCR。</p>
 <h3 id="blob-与两层加密">🔑 blob 与两层加密</h3>
 <p><strong>blob = Binary Large Object（二进制大对象）</strong>，在 TPM
-语境里特指”被父密钥加密后的密钥对象文件”：</p>
+语境里特指被父密钥加密后的密钥对象文件：</p>
 <p>磁盘上的一个密钥文件（比如 keyA.bin）：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">· 头部（元数据：密钥类型、属性）</span><br><span class="line">· 密钥材料（用父密钥加密后的密文）</span><br><span class="line">· 认证信息、策略等</span><br><span class="line">        ↑</span><br><span class="line">  这整个文件就叫&quot;密钥 blob&quot;</span><br></pre></td></tr></table></figure>
 <p><strong>blob 是密文</strong>，没有芯片里父密钥的参与，磁盘上的 blob
@@ -559,10 +558,10 @@ PCR？它没有权限写 PCR。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">第 1 层（密钥层）：父密钥加密 → 子密钥材料   → 产物 = 密钥 blob（密钥本身）</span><br><span class="line">第 2 层（数据层）：子密钥加密 → 数据          → 产物 = 数据密文（你的文件）</span><br><span class="line"></span><br><span class="line">磁盘上最终看到两个文件：</span><br><span class="line">  key.bin    ← 密钥 blob（里面是&quot;被 SRK 加密过的 AES 密钥材料&quot;）</span><br><span class="line">  data.enc   ← 数据密文（里面是&quot;被 AES 密钥加密过的文件内容&quot;）</span><br></pre></td></tr></table></figure>
 <p>类比三层套娃：保险箱（SRK，永远在芯片内）→ 钥匙盒（blob，里面是加密的
 AES 密钥材料）→ 信（数据，用这把钥匙加密）。blob
-保护”钥匙不泄露”，数据密文保护”内容不泄露”，各管一层。</p>
+保护钥匙不泄露，数据密文保护内容不泄露，各管一层。</p>
 <h3 id="密钥树与-nvram容器和结构的关系">🧅 密钥树与
 NVRAM：容器和结构的关系</h3>
-<p><strong>TPM 密钥体系是”洋葱式”的，绝大多数密钥根本不在 TPM
+<p><strong>TPM 密钥体系是洋葱式的，绝大多数密钥根本不在 TPM
 芯片里</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">芯片内（NVRAM/内部）：SRK、EK、种子（根节点）</span><br><span class="line">芯片外（磁盘/文件）：  所有子密钥 = &quot;用父密钥加密的 blob&quot;</span><br><span class="line">                          ↓ 要用时，blob 装进 TPM，父密钥在芯片内解开</span><br></pre></td></tr></table></figure>
 <p>存外面也不怕：<strong>没有芯片里的父密钥，磁盘上的 blob
@@ -582,7 +581,7 @@ NVRAM：容器和结构的关系</h3>
 </tr>
 <tr>
 <td>平台种子（如 EPSeed）</td>
-<td>所有密钥的”源头”</td>
+<td>所有密钥的源头</td>
 </tr>
 <tr>
 <td>部分 PCR 备份</td>
@@ -603,7 +602,7 @@ NVRAM：容器和结构的关系</h3>
 </tbody>
 </table>
 <p><strong>NVRAM
-和密钥树的关系</strong>——一个是”存储空间”，一个是”逻辑层级”：</p>
+和密钥树的关系</strong>——一个是存储空间，一个是逻辑层级：</p>
 <table>
 <thead>
 <tr>
@@ -626,12 +625,12 @@ NVRAM：容器和结构的关系</h3>
 </tbody>
 </table>
 <p>密钥树的<strong>根</strong>（SRK/种子）必须呆在芯片内；<strong>枝叶</strong>（blob）可以放
-NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树是”家谱”，NVRAM
-是”保险柜里的抽屉”；重要的东西锁在抽屉里，其余的放在外面的保险箱（加密磁盘）里也一样安全。</strong></p>
+NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树是家谱，NVRAM
+是保险柜里的抽屉；重要的东西锁在抽屉里，其余的放在外面的保险箱（加密磁盘）里也一样安全。</strong></p>
 <h3 id="完整例子用-tpm-加密一个文件6-步">🎬 完整例子：用 TPM
 加密一个文件（6 步）</h3>
 <p><strong>场景</strong>：把 <code>存折密码.txt</code>
-加密，要求”只有这台机器、且系统没被动过手脚时才能解开”。</p>
+加密，要求只有这台机器、且系统没被动过手脚时才能解开。</p>
 <p><strong>Step 1：芯片初始化</strong>（出厂时发生，不是你做的）</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">TPM 芯片出厂：内部生成 EK + 平台种子</span><br><span class="line">  → 这些是&quot;根&quot;，永远锁在芯片里</span><br></pre></td></tr></table></figure>
 <p><strong>Step 2：启动度量</strong>（每次开机自动发生）</p>
@@ -639,8 +638,8 @@ NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树�
 <p><strong>Step 3：创建你的加密密钥</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">你执行：tpm2_create ...（系统帮你调用 TPM）</span><br><span class="line"></span><br><span class="line">TPM 芯片内部：</span><br><span class="line">  · 用根密钥 SRK 派生/保护一个新密钥（AES 密钥）</span><br><span class="line">  · 把新密钥的&quot;材料&quot;用 SRK 加密</span><br><span class="line">  · 把加密结果吐出来给你</span><br><span class="line">          │</span><br><span class="line">          ▼</span><br><span class="line">磁盘上多了一个文件：mykey.bin   ← 这就是 blob</span><br></pre></td></tr></table></figure>
 <blockquote>
-<p>⚠️ AES 密钥本身从未离开过芯片。你拿到的是”被 SRK
-锁住的密钥”（blob），不是密钥。</p>
+<p>⚠️ AES 密钥本身从未离开过芯片。你拿到的是被 SRK
+锁住的密钥（blob），不是密钥。</p>
 </blockquote>
 <p><strong>Step 4：加密文件</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">① 让 TPM 加载 mykey.bin → 芯片内部用 SRK 解开 → AES 密钥就位（在芯片内）</span><br><span class="line">② 把文件内容喂给 TPM，TPM 在内部用 AES 密钥加密</span><br><span class="line">③ 吐出密文 → 写入 存折密码.txt.enc</span><br><span class="line"></span><br><span class="line">磁盘上现在有：</span><br><span class="line">  mykey.bin          （加密的密钥材料）</span><br><span class="line">  存折密码.txt.enc   （加密的数据）</span><br></pre></td></tr></table></figure>
@@ -649,8 +648,8 @@ NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树�
 <p><strong>Step 6：加一道 sealing</strong>（TPM 的灵魂功能）</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">创建密钥时指定：只有 PCR 值 == [0x3A2F..., ...] 时才能解开</span><br><span class="line">  → 密钥和&quot;这台机器此刻的状态&quot;绑死</span><br><span class="line"></span><br><span class="line">攻击场景演示：</span><br><span class="line">  ① 小偷把磁盘拆走，装到自己机器上</span><br><span class="line">     → 他那台机器的 PCR ≠ 你的 PCR → TPM 拒绝解开 ✅</span><br><span class="line">  ② 有人改了你的开机项/内核（植入恶意软件）</span><br><span class="line">     → PCR 变了 → TPM 拒绝解开 → 敏感文件宁可打不开也不泄露 ✅</span><br></pre></td></tr></table></figure>
 <p><strong>TPM
-的工作模式一句话</strong>：秘密（密钥）永远在芯片里；你永远只能”命令它”（加载
-blob、让它解密、让它签名）；它永远只把”结果”给你，不给”秘密”。</p>
+的工作模式一句话</strong>：秘密（密钥）永远在芯片里；你永远只能命令它（加载
+blob、让它解密、让它签名）；它永远只把结果给你，不给秘密。</p>
 <h3 id="常见误区">⚠️ 常见误区</h3>
 <table>
 <colgroup>
@@ -695,7 +694,7 @@ blob</td>
 </tr>
 <tr>
 <td>PCR 可以被软件直接改写</td>
-<td>固件层面只有 Extend 命令，没有”写 PCR”接口，历史不可抹除</td>
+<td>固件层面只有 Extend 命令，没有写 PCR 接口，历史不可抹除</td>
 </tr>
 <tr>
 <td>所有 TPM 实现一样安全</td>
@@ -709,7 +708,7 @@ blob</td>
 是一台只能通过命令指挥、密钥永不出柜的保险箱电脑：根密钥锁芯片内，子密钥以
 blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sealing
 把密钥和系统状态绑死，AIK Quote 支撑远程认证；BitLocker 和 Windows Hello
-就是它最日常的应用。三个”永不”：根密钥永不离开芯片、任何密钥的工作形式永不出现明文、PCR
+就是它最日常的应用。三个永不：根密钥永不离开芯片、任何密钥的工作形式永不出现明文、PCR
 永不接受直接写入。</p>
 </blockquote>
 <p>下一站：把 TPM 和 TEE 放到一起——信任根三件套与协作信任。</p>
