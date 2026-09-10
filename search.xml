@@ -1222,6 +1222,53 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>前端浏览器缓存机制</title>
     <url>/posts/50ac740b/</url>
     <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
@@ -1323,53 +1370,6 @@ JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件�
         <tag>前端</tag>
         <tag>浏览器</tag>
         <tag>缓存</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -2145,41 +2145,6 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
       </tags>
   </entry>
   <entry>
-    <title>DeepSeek本地部署</title>
-    <url>/posts/4f6ed32b/</url>
-    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
-<span id="more"></span>
-<h2 id="下载ollama">下载Ollama</h2>
-<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
-<p>下载地址：https://ollama.com/download/windows</p>
-<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
-<p>如下图所示</p>
-<p><img src="/assets/deepseek部署01.png" /></p>
-<blockquote>
-<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
-</blockquote>
-<p>上述步骤完成后，我们可以打开CMD，输入ollama
--v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
-<p><img src="/assets/deepseek部署02.png" /></p>
-<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
-<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
-<h2 id="下载deepseek">下载DeepSeek</h2>
-<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
-<p><img src="/assets/deepseek部署03.png" /></p>
-<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
-<p>如下图所示：</p>
-<p><img src="/assets/deepseek部署04.png" /></p>
-<p>最终效果如下图所示：</p>
-<p><img src="/assets/deepseek部署05.png" /></p>
-]]></content>
-      <tags>
-        <tag>大语言模型</tag>
-        <tag>人工智能</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Understanding the Linux Kernel Lecture 1 Note</title>
     <url>/posts/b1b647fa/</url>
     <content><![CDATA[<h2 id="引言">引言</h2>
@@ -2921,6 +2886,41 @@ ID)，及sticky用来定义文件的模式。当这些标记位应用到可执�
         <tag>Linux</tag>
         <tag>操作系统</tag>
         <tag>内核</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>DeepSeek本地部署</title>
+    <url>/posts/4f6ed32b/</url>
+    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
+<span id="more"></span>
+<h2 id="下载ollama">下载Ollama</h2>
+<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
+<p>下载地址：https://ollama.com/download/windows</p>
+<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
+<p>如下图所示</p>
+<p><img src="/assets/deepseek部署01.png" /></p>
+<blockquote>
+<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
+</blockquote>
+<p>上述步骤完成后，我们可以打开CMD，输入ollama
+-v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
+<p><img src="/assets/deepseek部署02.png" /></p>
+<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
+<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
+<h2 id="下载deepseek">下载DeepSeek</h2>
+<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
+<p><img src="/assets/deepseek部署03.png" /></p>
+<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
+<p>如下图所示：</p>
+<p><img src="/assets/deepseek部署04.png" /></p>
+<p>最终效果如下图所示：</p>
+<p><img src="/assets/deepseek部署05.png" /></p>
+]]></content>
+      <tags>
+        <tag>大语言模型</tag>
+        <tag>人工智能</tag>
       </tags>
   </entry>
   <entry>
@@ -8795,6 +8795,214 @@ href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.swi
       </tags>
   </entry>
   <entry>
+    <title>大模型百词</title>
+    <url>/posts/8c9ab17b/</url>
+    <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
+的惊艳亮相到各类 AIGC
+应用的层出不穷，我们每天都会接触到海量的新名词和新概念。为了帮助大家更好地理解这个日新月异的领域，本文梳理了一系列核心术语，希望能为你构建一个清晰的知识地图。</p>
+<span id="more"></span>
+<h2 id="基本概念">基本概念</h2>
+<ol type="1">
+<li><strong>函数
+(Function)</strong>：通过一个或多个输入得到对应输出的关系，万物皆函数</li>
+<li><strong>符号主义
+(Symbolism)</strong>：找出精确函数以试图解释一切原理，但存在瓶颈</li>
+<li><strong>联结主义
+(Connectionism)</strong>：不进行预设，通过复杂函数计算出的预测值与真实值的误差，对函数中的未知参数进行不断调整</li>
+<li><strong>模型 (Model)</strong>：联结主义思想所使用的复杂函数</li>
+<li><strong>权重 (Weights)</strong>：模型中需要调整的参数</li>
+<li><strong>大模型 (Large Model)</strong>：需要调整参数较多的模型</li>
+<li><strong>大语言模型 (Large Language Model,
+LLM)</strong>：用于自然语言处理的模型</li>
+<li><strong>生成式AI (Generative
+AI)</strong>：根据输入内容持续计算并自动生成新内容的人工智能系统</li>
+<li><strong>通用人工智能 (Artificial General Intelligence,
+AGI)</strong>：是指能够在各种领域执行复杂认知任务的人工智能系统</li>
+<li><strong>Token</strong>：将文字、图像、声音、视频分割成的最小粒度</li>
+<li><strong>上下文 (Context)</strong>：对话时给到大模型的所有信息</li>
+<li><strong>提示词
+(Prompt)</strong>：用于指导模型的回答流程与风格，与上下文含义类似</li>
+<li><strong>提示词工程师 (Prompt
+Engineer)</strong>：研究如何与大模型对话以达到更优反馈的职位</li>
+</ol>
+<h2 id="训练与推理">训练与推理</h2>
+<ol type="1">
+<li><strong>训练 (Training)</strong>：对模型中的参数进行调整</li>
+<li><strong>预训练
+(Pre-training)</strong>：在大量数据上训练基础模型以学习通用特征</li>
+<li><strong>微调
+(Fine-tuning)</strong>：在预训练模型基础上对特定方向任务进行训练</li>
+<li><strong>推理
+(Inference)</strong>：参数调整完成后，根据函数的输入计算输出结果的过程</li>
+<li><strong>涌现
+(Emergence)</strong>：模型参数量显著增长后，推理能力得到大幅提升的现象</li>
+<li><strong>随机性
+(Randomness)</strong>：对大模型固定输出的内容进行调整，使其并不是总取概率最高</li>
+<li><strong>温度 (Temperature)</strong>：控制随机性的参数</li>
+<li><strong>Top-K</strong>：控制输出中选择出前K个最大或最小的元素的操作</li>
+<li><strong>幻觉
+(Hallucination)</strong>：随机性过高或过低导致输出结果存在事实性错误或虚假信息的情况</li>
+<li><strong>联网 (Web
+Browsing)</strong>：通过互联网获取相关信息，结合相关信息进行输出，以减少幻觉的方法</li>
+</ol>
+<h2 id="模型与产品">模型与产品</h2>
+<ol type="1">
+<li><strong>ChatGPT</strong>：2023年爆火的用于聊天的产品</li>
+<li><strong>GPT (Generative Pre-trained Transformer,
+生成式预训练变换器)</strong>：为大语言模型的一种系列</li>
+<li><strong>OpenAI</strong>：开发ChatGPT的公司，产品为闭源</li>
+<li><strong>Claude</strong>：Anthropic发布的大语言模型</li>
+<li><strong>Gemini</strong>：Google DeepMind发布的AI</li>
+<li><strong>DeepSeek</strong>：深度求索公司发布的AI</li>
+<li><strong>豆包
+(Doubao)</strong>：字节跳动公司基于云雀模型开发的AI</li>
+<li><strong>通义千问 (Qwen)</strong>：阿里云发布的AI</li>
+<li><strong>腾讯元宝 (Tencent
+Yuanbao)</strong>：腾讯发布的基于自研混元大模型开发的C端AI</li>
+<li><strong>Midjourney</strong>：闭源的AI图像生成器（中国实验室版名为悠船）</li>
+<li><strong>Stable Diffusion</strong>：Stability
+AI推出的开源AI图像生成器</li>
+<li><strong>Sora</strong>：OpenAI发布的人工智能文生视频大模型</li>
+<li><strong>可灵 (Kling)</strong>：快手AI团队发布的视频生成大模型</li>
+<li><strong>即梦
+(Jmeng)</strong>：字节跳动旗下剪映团队研发的AI创作平台</li>
+</ol>
+<h2 id="模型分类与部署">模型分类与部署</h2>
+<ol type="1">
+<li><strong>闭源模型 (Closed-source
+Model)</strong>：不开放源代码与权重，只提供最终服务的模型（如ChatGPT、Claude、Gemini）</li>
+<li><strong>开放权重模型 (Open-weight
+Model)</strong>：可本地部署的，开放权重以供调整的模型（不开放训练代码与数据，如DeepSeek、LLaMA）</li>
+<li><strong>完全开源模型 (Fully Open-source
+Model)</strong>：开放训练代码、数据、权重的模型（如‌Mistral）</li>
+<li><strong>私有化部署 (Private
+Deployment)</strong>：不依托其他服务，将模型下载到本地进行使用的过程</li>
+<li><strong>云桌面 (Cloud
+Desktop)</strong>：搭载好了所需环境的，高性能的，可远程网络控制的一种服务</li>
+<li><strong>镜像
+(Image)</strong>：用于特定开发所需的打包好的环境和软件</li>
+</ol>
+<h2 id="技术与应用">技术与应用</h2>
+<ol type="1">
+<li><strong>多模态
+(Multimodality)</strong>：能处理图像、声音、视频多种内容的能力</li>
+<li><strong>检索增强生成 (Retrieval-Augmented Generation,
+RAG)</strong>：在私有数据库中进行搜索以获取信息的方法</li>
+<li><strong>知识库 (Knowledge
+Base)</strong>：用于大模型查询所用的私有数据库</li>
+<li><strong>向量数据库 (Vector
+Database)</strong>：特化模型与知识库语义匹配，以向量形式存储的数据库</li>
+<li><strong>词嵌入 (Word
+Embedding)</strong>：把文字转换为词向量的方式，用于捕捉词间语义关系</li>
+<li><strong>向量检索 (Vector
+Retrieval)</strong>：对比词向量相似度，以在知识库中找到相关问题答案的方式</li>
+<li><strong>数字人 (Digital
+Human)</strong>：运用数字技术创造出来的、与人类形象接近的数字化人物形象</li>
+<li><strong>工作流
+(Workflow)</strong>：多次使用大模型能力，将工作内容分为多个步骤分别处理并整合为一个流程的能力</li>
+<li><strong>智能体
+(Agent)</strong>：按工作流封装大模型与工具集以实现自动完成复杂任务的程序</li>
+<li><strong>多智能体
+(Multi-Agent)</strong>：多个智能体协作完成更复杂任务的程序</li>
+<li><strong>插件 (Plugins)</strong>：ChatGPT
+的附加组件系统（智能体）</li>
+<li><strong>AutoGPT</strong>：GPT模型驱动的智能体系统</li>
+<li><strong>Manus</strong>：具备从规划到执行全流程自主完成任务能力的智能体</li>
+<li><strong>MCP (Model-graded Controllable
+Preference)</strong>：Anthropic提出的，用于AI操作外部世界的协议</li>
+<li><strong>A2A
+(Agent-to-Agent)</strong>：Google提出的用于智能体与智能体间通信的协议</li>
+</ol>
+<h2 id="优化与进阶">优化与进阶</h2>
+<ol type="1">
+<li><strong>模型压缩 (Model
+Compression)</strong>：由于模型大小与能力出现边际收益递减，以减少成本与方便个人的减小模型大小的方法</li>
+<li><strong>量化
+(Quantization)</strong>：把模型中的浮点数用更低精度表示以减少显存与计算的方法</li>
+<li><strong>蒸馏
+(Distillation)</strong>：用参数量较大的大模型指导参数量较小的小模型的方法</li>
+<li><strong>剪枝
+(Pruning)</strong>：删除模型中不重要神经元，让模型更稀疏以提升速度的方法</li>
+<li><strong>低秩适应 (Low-Rank Adaptation,
+LoRA)</strong>：用更低成本改善微调方式的方法</li>
+<li><strong>思维链 (Chain-of-Thought,
+CoT)</strong>：从推理能力方向增强模型能力的方法</li>
+<li><strong>人类反馈强化学习 (Reinforcement Learning from Human
+Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
+</ol>
+<h2 id="生态与行业">生态与行业</h2>
+<ol type="1">
+<li><strong>专业生产内容 (Professional Generated Content,
+PGC)</strong></li>
+<li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
+<li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
+<li><strong>炸裂体 (Explosive
+Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
+<li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
+<li><strong>卖铲子 (Selling
+Shovels)</strong>：提供工具或服务、教程等帮助他人在AI中淘金的赚钱方式</li>
+<li><strong>Hugging Face</strong>：AI开源平台及社区</li>
+</ol>
+<h2 id="硬件与框架">硬件与框架</h2>
+<ol type="1">
+<li><strong>GPU (Graphics Processing Unit,
+图形处理单元)</strong>:NVIDIA公司的产品</li>
+<li><strong>CUDA (Compute Unified Device
+Architecture)</strong>：NVIDIA推出的AI开发框架</li>
+<li><strong>TPU (Tensor Processing Unit,
+张量处理单元)</strong>：专用与大规模神经网络训练与推理的处理器</li>
+<li><strong>NPU (Neural Processing Unit,
+神经网络处理单元)</strong>：专用于终端设备加速推理的处理器</li>
+<li><strong>Python</strong>：适合AI开发的编程语言</li>
+<li><strong>PyTorch</strong>：Python提供的针对AI编程的库</li>
+<li><strong>TensorFlow</strong>：由 Google Brain
+团队开发的深度学习框架</li>
+<li><strong>Ollama</strong>：大模型本地运行工具</li>
+<li><strong>vLLM</strong>：提升大语言模型推理速度的推理引擎</li>
+<li><strong>ComfyUI</strong>：构建在 Stable Diffusion
+之上的基于节点的绘画工作流软件（B站:秋葉aaaki
+大佬制作了很多相关整合包）</li>
+<li><strong>扣子 (Coze)</strong>：在网页端编排工作流的一款工具</li>
+<li><strong>LangChain</strong>：以代码方式编排工具流的方式</li>
+<li><strong>Cursor</strong>：Anysphere开发的人工智能编程助手</li>
+<li><strong>GitHub
+Copilot</strong>：微软与OpenAI共同推出的AI编程工具</li>
+</ol>
+<h2 id="神经网络基础">神经网络基础</h2>
+<ol type="1">
+<li><strong>数学
+(Mathematics)</strong>：AI基石，包括线性代数、微积分、概率论等</li>
+<li><strong>自然语言处理 (Natural Language Processing,
+NLP)</strong>：人工智能的一大分支领域，其主要目的是让机器理解人类的语言文字，从而执行一系列任务</li>
+<li><strong>计算机视觉 (Computer Vision,
+CV)</strong>：与图片高度相关</li>
+<li><strong>神经网络 (Neural
+Network)</strong>：模仿生物神经系统结构和功能的计算模型</li>
+<li><strong>损失函数 (Loss
+Function)</strong>：估量模型的预测值f(x)与真实值Y的不一致程度的函数</li>
+<li><strong>反向传播
+(Backpropagation)</strong>：计算损失函数关于网络参数的梯度来更新参数</li>
+<li><strong>多层感知机 (Multilayer Perceptron,
+MLP)</strong>：将输入的多个数据集映射到单一的输出的数据集，是一种人工神经网络模型</li>
+<li><strong>卷积神经网络 (Convolutional Neural Network,
+CNN)</strong>：包含卷积计算且具有深度结构的神经网络</li>
+<li><strong>循环神经网络 (Recurrent Neural Network,
+RNN)</strong>：适合于处理序列数据的神经网络</li>
+<li><strong>注意力机制 (Attention
+Mechanism)</strong>：模拟人类选择性注意机制，提升信息处理效率</li>
+<li><strong>Transformer</strong>：一种基于注意力机制的神经网络结构</li>
+<li><strong>文本转语音 (Text To Speech, TTS)</strong></li>
+<li><strong>语音转文字 (Automatic Speech Recognition, ASR)</strong></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>AI</tag>
+        <tag>LLM</tag>
+        <tag>术语</tag>
+        <tag>大模型</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>内网穿透与远程桌面：用 Tailscale 随时随地访问你的 Windows</title>
     <url>/posts/8a7b3c2d/</url>
     <content><![CDATA[<p>在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网
@@ -9042,211 +9250,68 @@ IP 地址，然后点击连接，按提示输入主机的用户名和密码。</
       </tags>
   </entry>
   <entry>
-    <title>大模型百词</title>
-    <url>/posts/8c9ab17b/</url>
-    <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
-的惊艳亮相到各类 AIGC
-应用的层出不穷，我们每天都会接触到海量的新名词和新概念。为了帮助大家更好地理解这个日新月异的领域，本文梳理了一系列核心术语，希望能为你构建一个清晰的知识地图。</p>
+    <title>了解Diffusion Language Model</title>
+    <url>/posts/a1d79e4c/</url>
+    <content><![CDATA[<p>我们熟悉的 Transformer
+等模型采用“自回归”方式逐词生成文本，这限制了生成速度且不易保证长文本连贯。受图像生成领域成功的
+<strong>扩散模型 (Diffusion Model)</strong>
+启发，研究者将其引入文本生成，<strong>扩散语言模型 (Diffusion Language
+Model)</strong> 应运而生。</p>
 <span id="more"></span>
-<h2 id="基本概念">基本概念</h2>
+<h2 id="什么是扩散模型">什么是扩散模型？</h2>
+<p><img src="/assets/image.png" /></p>
+<p>在深入了解其如何应用于语言之前，我们先通过一个直观的例子——图像生成——来理解扩散模型的核心思想。它主要包含两个过程：</p>
 <ol type="1">
-<li><strong>函数
-(Function)</strong>：通过一个或多个输入得到对应输出的关系，万物皆函数</li>
-<li><strong>符号主义
-(Symbolism)</strong>：找出精确函数以试图解释一切原理，但存在瓶颈</li>
-<li><strong>联结主义
-(Connectionism)</strong>：不进行预设，通过复杂函数计算出的预测值与真实值的误差，对函数中的未知参数进行不断调整</li>
-<li><strong>模型 (Model)</strong>：联结主义思想所使用的复杂函数</li>
-<li><strong>权重 (Weights)</strong>：模型中需要调整的参数</li>
-<li><strong>大模型 (Large Model)</strong>：需要调整参数较多的模型</li>
-<li><strong>大语言模型 (Large Language Model,
-LLM)</strong>：用于自然语言处理的模型</li>
-<li><strong>生成式AI (Generative
-AI)</strong>：根据输入内容持续计算并自动生成新内容的人工智能系统</li>
-<li><strong>通用人工智能 (Artificial General Intelligence,
-AGI)</strong>：是指能够在各种领域执行复杂认知任务的人工智能系统</li>
-<li><strong>Token</strong>：将文字、图像、声音、视频分割成的最小粒度</li>
-<li><strong>上下文 (Context)</strong>：对话时给到大模型的所有信息</li>
-<li><strong>提示词
-(Prompt)</strong>：用于指导模型的回答流程与风格，与上下文含义类似</li>
-<li><strong>提示词工程师 (Prompt
-Engineer)</strong>：研究如何与大模型对话以达到更优反馈的职位</li>
+<li><p><strong>前向过程（Forward
+Process）</strong>：也叫“扩散”过程。想象一下，我们从一张清晰的图片开始，一步步地、逐渐地向图片中添加微小的“噪声”，直到这张图片完全变成一个毫无规律的噪声图。这个过程是固定的、可控的。</p></li>
+<li><p><strong>反向过程（Reverse
+Process）</strong>：也叫“去噪”过程。这是真正的“生成”环节。我们训练一个神经网络，让它学会上述过程的“逆操作”——即从一张纯噪声的图片开始，一步步地、逐渐地去除噪声，最终还原出一张清晰、有意义的图片。</p></li>
 </ol>
-<h2 id="训练与推理">训练与推理</h2>
+<p>一旦模型学会了如何“去噪”，我们就可以给它任何随机噪声，让它“创造”出全新的、从未见过的图片。</p>
+<h2 id="如何将扩散模型用于文本">如何将扩散模型用于文本？</h2>
+<p>直接将扩散模型应用于文本面临一个核心挑战：<strong>文本是离散的，而扩散过程处理的是连续的数据</strong>。我们无法像给图片像素值加噪声那样，给一个“词”加上一点“噪声”变成另一个“半词”。</p>
+<p>解决方案是：<strong>在连续空间中操作</strong>。</p>
+<p>我们不直接处理文字，而是先将文字通过 <strong>词嵌入（Word
+Embedding）</strong>
+技术转换为高维度的连续向量。这样，文本序列就变成了一组向量，我们可以在这个连续的向量空间中执行扩散和去噪过程。</p>
+<h2 id="diffusion-语言模型的工作原理">Diffusion 语言模型的工作原理</h2>
+<p>理解了以上概念后，扩散语言模型的工作流程就清晰了：</p>
 <ol type="1">
-<li><strong>训练 (Training)</strong>：对模型中的参数进行调整</li>
-<li><strong>预训练
-(Pre-training)</strong>：在大量数据上训练基础模型以学习通用特征</li>
-<li><strong>微调
-(Fine-tuning)</strong>：在预训练模型基础上对特定方向任务进行训练</li>
-<li><strong>推理
-(Inference)</strong>：参数调整完成后，根据函数的输入计算输出结果的过程</li>
-<li><strong>涌现
-(Emergence)</strong>：模型参数量显著增长后，推理能力得到大幅提升的现象</li>
-<li><strong>随机性
-(Randomness)</strong>：对大模型固定输出的内容进行调整，使其并不是总取概率最高</li>
-<li><strong>温度 (Temperature)</strong>：控制随机性的参数</li>
-<li><strong>Top-K</strong>：控制输出中选择出前K个最大或最小的元素的操作</li>
-<li><strong>幻觉
-(Hallucination)</strong>：随机性过高或过低导致输出结果存在事实性错误或虚假信息的情况</li>
-<li><strong>联网 (Web
-Browsing)</strong>：通过互联网获取相关信息，结合相关信息进行输出，以减少幻觉的方法</li>
+<li><strong>前向过程</strong>：取一个句子，将其转换为词向量序列。然后，逐步向这些向量中添加噪声，直到它们变成一组随机向量。</li>
+<li><strong>反向过程</strong>：训练一个模型（通常是基于 Transformer
+架构）来学习逆转这个过程。模型的任务是接收一串加了噪声的向量，并预测出“更干净”的向量应该是什么样子。</li>
+<li><strong>文本生成</strong>：当需要生成新文本时，我们从一组完全随机的向量开始，然后反复利用训练好的去噪模型进行迭代处理。每一步，向量都会变得“更清晰”一点，逐渐从无序的噪声收敛为有意义的词向量。最后，将这些“去噪”完成的词向量转换回人类可读的文字，就完成了一次文本生成。</li>
 </ol>
-<h2 id="模型与产品">模型与产品</h2>
-<ol type="1">
-<li><strong>ChatGPT</strong>：2023年爆火的用于聊天的产品</li>
-<li><strong>GPT (Generative Pre-trained Transformer,
-生成式预训练变换器)</strong>：为大语言模型的一种系列</li>
-<li><strong>OpenAI</strong>：开发ChatGPT的公司，产品为闭源</li>
-<li><strong>Claude</strong>：Anthropic发布的大语言模型</li>
-<li><strong>Gemini</strong>：Google DeepMind发布的AI</li>
-<li><strong>DeepSeek</strong>：深度求索公司发布的AI</li>
-<li><strong>豆包
-(Doubao)</strong>：字节跳动公司基于云雀模型开发的AI</li>
-<li><strong>通义千问 (Qwen)</strong>：阿里云发布的AI</li>
-<li><strong>腾讯元宝 (Tencent
-Yuanbao)</strong>：腾讯发布的基于自研混元大模型开发的C端AI</li>
-<li><strong>Midjourney</strong>：闭源的AI图像生成器（中国实验室版名为悠船）</li>
-<li><strong>Stable Diffusion</strong>：Stability
-AI推出的开源AI图像生成器</li>
-<li><strong>Sora</strong>：OpenAI发布的人工智能文生视频大模型</li>
-<li><strong>可灵 (Kling)</strong>：快手AI团队发布的视频生成大模型</li>
-<li><strong>即梦
-(Jmeng)</strong>：字节跳动旗下剪映团队研发的AI创作平台</li>
-</ol>
-<h2 id="模型分类与部署">模型分类与部署</h2>
-<ol type="1">
-<li><strong>闭源模型 (Closed-source
-Model)</strong>：不开放源代码与权重，只提供最终服务的模型（如ChatGPT、Claude、Gemini）</li>
-<li><strong>开放权重模型 (Open-weight
-Model)</strong>：可本地部署的，开放权重以供调整的模型（不开放训练代码与数据，如DeepSeek、LLaMA）</li>
-<li><strong>完全开源模型 (Fully Open-source
-Model)</strong>：开放训练代码、数据、权重的模型（如‌Mistral）</li>
-<li><strong>私有化部署 (Private
-Deployment)</strong>：不依托其他服务，将模型下载到本地进行使用的过程</li>
-<li><strong>云桌面 (Cloud
-Desktop)</strong>：搭载好了所需环境的，高性能的，可远程网络控制的一种服务</li>
-<li><strong>镜像
-(Image)</strong>：用于特定开发所需的打包好的环境和软件</li>
-</ol>
-<h2 id="技术与应用">技术与应用</h2>
-<ol type="1">
-<li><strong>多模态
-(Multimodality)</strong>：能处理图像、声音、视频多种内容的能力</li>
-<li><strong>检索增强生成 (Retrieval-Augmented Generation,
-RAG)</strong>：在私有数据库中进行搜索以获取信息的方法</li>
-<li><strong>知识库 (Knowledge
-Base)</strong>：用于大模型查询所用的私有数据库</li>
-<li><strong>向量数据库 (Vector
-Database)</strong>：特化模型与知识库语义匹配，以向量形式存储的数据库</li>
-<li><strong>词嵌入 (Word
-Embedding)</strong>：把文字转换为词向量的方式，用于捕捉词间语义关系</li>
-<li><strong>向量检索 (Vector
-Retrieval)</strong>：对比词向量相似度，以在知识库中找到相关问题答案的方式</li>
-<li><strong>数字人 (Digital
-Human)</strong>：运用数字技术创造出来的、与人类形象接近的数字化人物形象</li>
-<li><strong>工作流
-(Workflow)</strong>：多次使用大模型能力，将工作内容分为多个步骤分别处理并整合为一个流程的能力</li>
-<li><strong>智能体
-(Agent)</strong>：按工作流封装大模型与工具集以实现自动完成复杂任务的程序</li>
-<li><strong>多智能体
-(Multi-Agent)</strong>：多个智能体协作完成更复杂任务的程序</li>
-<li><strong>插件 (Plugins)</strong>：ChatGPT
-的附加组件系统（智能体）</li>
-<li><strong>AutoGPT</strong>：GPT模型驱动的智能体系统</li>
-<li><strong>Manus</strong>：具备从规划到执行全流程自主完成任务能力的智能体</li>
-<li><strong>MCP (Model-graded Controllable
-Preference)</strong>：Anthropic提出的，用于AI操作外部世界的协议</li>
-<li><strong>A2A
-(Agent-to-Agent)</strong>：Google提出的用于智能体与智能体间通信的协议</li>
-</ol>
-<h2 id="优化与进阶">优化与进阶</h2>
-<ol type="1">
-<li><strong>模型压缩 (Model
-Compression)</strong>：由于模型大小与能力出现边际收益递减，以减少成本与方便个人的减小模型大小的方法</li>
-<li><strong>量化
-(Quantization)</strong>：把模型中的浮点数用更低精度表示以减少显存与计算的方法</li>
-<li><strong>蒸馏
-(Distillation)</strong>：用参数量较大的大模型指导参数量较小的小模型的方法</li>
-<li><strong>剪枝
-(Pruning)</strong>：删除模型中不重要神经元，让模型更稀疏以提升速度的方法</li>
-<li><strong>低秩适应 (Low-Rank Adaptation,
-LoRA)</strong>：用更低成本改善微调方式的方法</li>
-<li><strong>思维链 (Chain-of-Thought,
-CoT)</strong>：从推理能力方向增强模型能力的方法</li>
-<li><strong>人类反馈强化学习 (Reinforcement Learning from Human
-Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
-</ol>
-<h2 id="生态与行业">生态与行业</h2>
-<ol type="1">
-<li><strong>专业生产内容 (Professional Generated Content,
-PGC)</strong></li>
-<li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
-<li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
-<li><strong>炸裂体 (Explosive
-Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
-<li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
-<li><strong>卖铲子 (Selling
-Shovels)</strong>：提供工具或服务、教程等帮助他人在AI中淘金的赚钱方式</li>
-<li><strong>Hugging Face</strong>：AI开源平台及社区</li>
-</ol>
-<h2 id="硬件与框架">硬件与框架</h2>
-<ol type="1">
-<li><strong>GPU (Graphics Processing Unit,
-图形处理单元)</strong>:NVIDIA公司的产品</li>
-<li><strong>CUDA (Compute Unified Device
-Architecture)</strong>：NVIDIA推出的AI开发框架</li>
-<li><strong>TPU (Tensor Processing Unit,
-张量处理单元)</strong>：专用与大规模神经网络训练与推理的处理器</li>
-<li><strong>NPU (Neural Processing Unit,
-神经网络处理单元)</strong>：专用于终端设备加速推理的处理器</li>
-<li><strong>Python</strong>：适合AI开发的编程语言</li>
-<li><strong>PyTorch</strong>：Python提供的针对AI编程的库</li>
-<li><strong>TensorFlow</strong>：由 Google Brain
-团队开发的深度学习框架</li>
-<li><strong>Ollama</strong>：大模型本地运行工具</li>
-<li><strong>vLLM</strong>：提升大语言模型推理速度的推理引擎</li>
-<li><strong>ComfyUI</strong>：构建在 Stable Diffusion
-之上的基于节点的绘画工作流软件（B站:秋葉aaaki
-大佬制作了很多相关整合包）</li>
-<li><strong>扣子 (Coze)</strong>：在网页端编排工作流的一款工具</li>
-<li><strong>LangChain</strong>：以代码方式编排工具流的方式</li>
-<li><strong>Cursor</strong>：Anysphere开发的人工智能编程助手</li>
-<li><strong>GitHub
-Copilot</strong>：微软与OpenAI共同推出的AI编程工具</li>
-</ol>
-<h2 id="神经网络基础">神经网络基础</h2>
-<ol type="1">
-<li><strong>数学
-(Mathematics)</strong>：AI基石，包括线性代数、微积分、概率论等</li>
-<li><strong>自然语言处理 (Natural Language Processing,
-NLP)</strong>：人工智能的一大分支领域，其主要目的是让机器理解人类的语言文字，从而执行一系列任务</li>
-<li><strong>计算机视觉 (Computer Vision,
-CV)</strong>：与图片高度相关</li>
-<li><strong>神经网络 (Neural
-Network)</strong>：模仿生物神经系统结构和功能的计算模型</li>
-<li><strong>损失函数 (Loss
-Function)</strong>：估量模型的预测值f(x)与真实值Y的不一致程度的函数</li>
-<li><strong>反向传播
-(Backpropagation)</strong>：计算损失函数关于网络参数的梯度来更新参数</li>
-<li><strong>多层感知机 (Multilayer Perceptron,
-MLP)</strong>：将输入的多个数据集映射到单一的输出的数据集，是一种人工神经网络模型</li>
-<li><strong>卷积神经网络 (Convolutional Neural Network,
-CNN)</strong>：包含卷积计算且具有深度结构的神经网络</li>
-<li><strong>循环神经网络 (Recurrent Neural Network,
-RNN)</strong>：适合于处理序列数据的神经网络</li>
-<li><strong>注意力机制 (Attention
-Mechanism)</strong>：模拟人类选择性注意机制，提升信息处理效率</li>
-<li><strong>Transformer</strong>：一种基于注意力机制的神经网络结构</li>
-<li><strong>文本转语音 (Text To Speech, TTS)</strong></li>
-<li><strong>语音转文字 (Automatic Speech Recognition, ASR)</strong></li>
-</ol>
+<h2 id="diffusion-语言模型的优势">Diffusion 语言模型的优势</h2>
+<p>与传统的自回归模型相比，扩散语言模型展现出一些独特的优势：</p>
+<ul>
+<li><strong>并行生成</strong>：扩散模型在生成时是迭代式地对整个序列进行优化的，而不是像自回归模型那样必须逐词生成。这为并行计算和更快的生成速度提供了可能。</li>
+<li><strong>全局一致性</strong>：由于模型的每一步去噪都是基于对整个序列的观察，它能更好地捕捉全局依赖关系，生成的文本在长距离连贯性和结构完整性上可能更具优势。</li>
+<li><strong>可控性更强</strong>：扩散模型的迭代特性使其在生成过程中更容易被引导和控制。我们可以通过修改去噪过程来控制生成文本的风格、主题或结构，使其更适用于文本编辑、修复和改写等任务。</li>
+</ul>
+<h2 id="前沿研究进展">前沿研究进展</h2>
+<p>尽管扩散语言模型是一个较新的研究方向，但它已经展现出惊人的潜力，涌现了许多前沿工作：</p>
+<ul>
+<li><strong>大规模模型的成功</strong>：以 <strong>LLaDA</strong>
+为代表的研究表明，当参数规模扩大到数十亿级别时，精心设计的扩散语言模型在性能上足以媲美甚至在某些复杂任务上超越顶尖的自回归模型（如
+LLaMA3、GPT-4o），这证明了该技术路线的可行性与潜力。</li>
+<li><strong>效率与质量的权衡</strong>：一些研究也指出，当前扩散语言模型在推理时为了达到高质量的生成效果，可能需要较多的“去噪”迭代步骤，这导致其计算成本相对较高。如何平衡生成质量与推理效率，是目前该领域的研究热点之一。</li>
+<li><strong>多模态统一框架</strong>：部分工作（如
+<strong>Transfusion</strong> 架构）尝试将扩散模型与 Transformer
+深度融合，在一个统一的框架内同时处理文本和图像的生成任务，为多模态内容创作提供了新的思路。</li>
+<li><strong>行业巨头的投入</strong>：以 Google 推出的 <strong>Gemini
+Diffusion</strong>
+为例，科技巨头们也开始在该领域发力，进一步验证了文本扩散模型作为下一代生成技术核心的潜力。</li>
+</ul>
+<h2 id="总结">总结</h2>
+<p>扩散语言模型通过借鉴图像生成领域的成功经验，为自然语言生成任务提供了一种全新的、非自回归的解决方案。它通过在连续的词向量空间中进行“加噪”和“去噪”，克服了文本数据的离散性难题。尽管这一领域仍处于快速发展阶段，但其在并行生成、全局连贯性和可控性方面展现出的巨大潜力，预示着它将成为未来自然语言处理领域一个重要的研究方向。</p>
 ]]></content>
       <tags>
         <tag>AI</tag>
         <tag>LLM</tag>
-        <tag>术语</tag>
-        <tag>大模型</tag>
+        <tag>Diffusion</tag>
+        <tag>生成模型</tag>
+        <tag>扩散模型</tag>
       </tags>
   </entry>
   <entry>
@@ -9324,334 +9389,6 @@ True。</li>
         <tag>复杂度理论</tag>
         <tag>P与NP</tag>
         <tag>计算机科学</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>了解Diffusion Language Model</title>
-    <url>/posts/a1d79e4c/</url>
-    <content><![CDATA[<p>我们熟悉的 Transformer
-等模型采用“自回归”方式逐词生成文本，这限制了生成速度且不易保证长文本连贯。受图像生成领域成功的
-<strong>扩散模型 (Diffusion Model)</strong>
-启发，研究者将其引入文本生成，<strong>扩散语言模型 (Diffusion Language
-Model)</strong> 应运而生。</p>
-<span id="more"></span>
-<h2 id="什么是扩散模型">什么是扩散模型？</h2>
-<p><img src="/assets/image.png" /></p>
-<p>在深入了解其如何应用于语言之前，我们先通过一个直观的例子——图像生成——来理解扩散模型的核心思想。它主要包含两个过程：</p>
-<ol type="1">
-<li><p><strong>前向过程（Forward
-Process）</strong>：也叫“扩散”过程。想象一下，我们从一张清晰的图片开始，一步步地、逐渐地向图片中添加微小的“噪声”，直到这张图片完全变成一个毫无规律的噪声图。这个过程是固定的、可控的。</p></li>
-<li><p><strong>反向过程（Reverse
-Process）</strong>：也叫“去噪”过程。这是真正的“生成”环节。我们训练一个神经网络，让它学会上述过程的“逆操作”——即从一张纯噪声的图片开始，一步步地、逐渐地去除噪声，最终还原出一张清晰、有意义的图片。</p></li>
-</ol>
-<p>一旦模型学会了如何“去噪”，我们就可以给它任何随机噪声，让它“创造”出全新的、从未见过的图片。</p>
-<h2 id="如何将扩散模型用于文本">如何将扩散模型用于文本？</h2>
-<p>直接将扩散模型应用于文本面临一个核心挑战：<strong>文本是离散的，而扩散过程处理的是连续的数据</strong>。我们无法像给图片像素值加噪声那样，给一个“词”加上一点“噪声”变成另一个“半词”。</p>
-<p>解决方案是：<strong>在连续空间中操作</strong>。</p>
-<p>我们不直接处理文字，而是先将文字通过 <strong>词嵌入（Word
-Embedding）</strong>
-技术转换为高维度的连续向量。这样，文本序列就变成了一组向量，我们可以在这个连续的向量空间中执行扩散和去噪过程。</p>
-<h2 id="diffusion-语言模型的工作原理">Diffusion 语言模型的工作原理</h2>
-<p>理解了以上概念后，扩散语言模型的工作流程就清晰了：</p>
-<ol type="1">
-<li><strong>前向过程</strong>：取一个句子，将其转换为词向量序列。然后，逐步向这些向量中添加噪声，直到它们变成一组随机向量。</li>
-<li><strong>反向过程</strong>：训练一个模型（通常是基于 Transformer
-架构）来学习逆转这个过程。模型的任务是接收一串加了噪声的向量，并预测出“更干净”的向量应该是什么样子。</li>
-<li><strong>文本生成</strong>：当需要生成新文本时，我们从一组完全随机的向量开始，然后反复利用训练好的去噪模型进行迭代处理。每一步，向量都会变得“更清晰”一点，逐渐从无序的噪声收敛为有意义的词向量。最后，将这些“去噪”完成的词向量转换回人类可读的文字，就完成了一次文本生成。</li>
-</ol>
-<h2 id="diffusion-语言模型的优势">Diffusion 语言模型的优势</h2>
-<p>与传统的自回归模型相比，扩散语言模型展现出一些独特的优势：</p>
-<ul>
-<li><strong>并行生成</strong>：扩散模型在生成时是迭代式地对整个序列进行优化的，而不是像自回归模型那样必须逐词生成。这为并行计算和更快的生成速度提供了可能。</li>
-<li><strong>全局一致性</strong>：由于模型的每一步去噪都是基于对整个序列的观察，它能更好地捕捉全局依赖关系，生成的文本在长距离连贯性和结构完整性上可能更具优势。</li>
-<li><strong>可控性更强</strong>：扩散模型的迭代特性使其在生成过程中更容易被引导和控制。我们可以通过修改去噪过程来控制生成文本的风格、主题或结构，使其更适用于文本编辑、修复和改写等任务。</li>
-</ul>
-<h2 id="前沿研究进展">前沿研究进展</h2>
-<p>尽管扩散语言模型是一个较新的研究方向，但它已经展现出惊人的潜力，涌现了许多前沿工作：</p>
-<ul>
-<li><strong>大规模模型的成功</strong>：以 <strong>LLaDA</strong>
-为代表的研究表明，当参数规模扩大到数十亿级别时，精心设计的扩散语言模型在性能上足以媲美甚至在某些复杂任务上超越顶尖的自回归模型（如
-LLaMA3、GPT-4o），这证明了该技术路线的可行性与潜力。</li>
-<li><strong>效率与质量的权衡</strong>：一些研究也指出，当前扩散语言模型在推理时为了达到高质量的生成效果，可能需要较多的“去噪”迭代步骤，这导致其计算成本相对较高。如何平衡生成质量与推理效率，是目前该领域的研究热点之一。</li>
-<li><strong>多模态统一框架</strong>：部分工作（如
-<strong>Transfusion</strong> 架构）尝试将扩散模型与 Transformer
-深度融合，在一个统一的框架内同时处理文本和图像的生成任务，为多模态内容创作提供了新的思路。</li>
-<li><strong>行业巨头的投入</strong>：以 Google 推出的 <strong>Gemini
-Diffusion</strong>
-为例，科技巨头们也开始在该领域发力，进一步验证了文本扩散模型作为下一代生成技术核心的潜力。</li>
-</ul>
-<h2 id="总结">总结</h2>
-<p>扩散语言模型通过借鉴图像生成领域的成功经验，为自然语言生成任务提供了一种全新的、非自回归的解决方案。它通过在连续的词向量空间中进行“加噪”和“去噪”，克服了文本数据的离散性难题。尽管这一领域仍处于快速发展阶段，但其在并行生成、全局连贯性和可控性方面展现出的巨大潜力，预示着它将成为未来自然语言处理领域一个重要的研究方向。</p>
-]]></content>
-      <tags>
-        <tag>AI</tag>
-        <tag>LLM</tag>
-        <tag>Diffusion</tag>
-        <tag>生成模型</tag>
-        <tag>扩散模型</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Clash 与网络代理详解</title>
-    <url>/posts/755f751e/</url>
-    <content><![CDATA[<p>本文梳理 VPN、TUN
-模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>VPN</strong></td>
-<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
-<td>秘密隧道</td>
-</tr>
-<tr>
-<td><strong>Proxy</strong></td>
-<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
-<td>传话筒</td>
-</tr>
-<tr>
-<td><strong>Clash</strong></td>
-<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
-<td>智能调度员</td>
-</tr>
-<tr>
-<td><strong>Rule</strong></td>
-<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
-<td>分流路牌</td>
-</tr>
-<tr>
-<td><strong>TUN</strong></td>
-<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
-<td>虚拟网卡</td>
-</tr>
-<tr>
-<td><strong>Mixin</strong></td>
-<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
-<td>补丁包</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
-<table>
-<colgroup>
-<col style="width: 24%" />
-<col style="width: 20%" />
-<col style="width: 56%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>VPN</th>
-<th>代理 (Proxy)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>工作层级</strong></td>
-<td>操作系统层 (OSI L3 网络层)</td>
-<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
-</tr>
-<tr>
-<td><strong>接管范围</strong></td>
-<td>全局接管（通常），所有软件流量都走隧道</td>
-<td>仅接管支持代理设置的软件 (如浏览器)</td>
-</tr>
-<tr>
-<td><strong>加密程度</strong></td>
-<td>全程加密，强调安全性</td>
-<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
-</tr>
-<tr>
-<td><strong>灵活性</strong></td>
-<td>较差，通常“全走”或“全不走”</td>
-<td>极高，可按域名/进程分流</td>
-</tr>
-<tr>
-<td><strong>典型协议</strong></td>
-<td>WireGuard, OpenVPN, IPSec</td>
-<td>HTTP, Socks5, Shadowsocks, VMess</td>
-</tr>
-</tbody>
-</table>
-</blockquote>
-<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
-<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
-<h4 id="global-全局模式">1. Global 全局模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
-<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
-的所有活动。</li>
-<li><strong>缺点</strong>：访问国内网站（如
-B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
-</ul>
-<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
-<ul>
-<li><strong>原理</strong>：根据预设的规则列表（Rule
-List）智能判断。</li>
-<li><strong>流程</strong>：
-<ol type="1">
-<li>拦截请求。</li>
-<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
-<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
-</ol></li>
-<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
-</ul>
-<h4 id="direct-直连模式">3. Direct 直连模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
-<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
-</ul>
-<h4 id="script-脚本模式">4. Script 脚本模式</h4>
-<ul>
-<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
-<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
-</ul>
-<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
-<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
-Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
-<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
-7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
-7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
-<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
-<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
-<pre>
-<code class="mermaid">
-
-graph TD;
-    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
-    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
-    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
-    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
-    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
-</code>
-</pre>
-<ol type="1">
-<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
-<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
-<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
-<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
-3)，它处理的是 IP
-数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
-<li><strong>用户态处理</strong>：Clash 读取 TUN
-设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
-</ol>
-<blockquote>
-<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
-VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
-</blockquote>
-<blockquote>
-<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
-<p>这是一个核心问题：<strong>TUN
-模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
-<ul>
-<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
-Clash
-能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
-Clash 核心。</li>
-<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
-</ul>
-<p><strong>结论</strong>：开启 TUN
-模式并选择<strong>规则模式</strong>，意味着
-“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
-</blockquote>
-<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
-<p>在 Windows/macOS 上开启 TUN
-模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
-<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
-<strong>Service Mode</strong>。</p>
-<ul>
-<li><strong>守护进程</strong>：Service Mode
-会安装一个后台系统服务（Daemon）。</li>
-<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
-劫持、TUN 路由）。</li>
-<li><strong>UI 分离</strong>：Clash
-的图形界面（UI）只需要以普通权限运行，通过 IPC
-接口指挥后台服务干活。</li>
-<li><strong>主要作用</strong>：
-<ol type="1">
-<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
-<li><strong>系统级抗杀</strong>：UI
-关闭了，后台代理服务依然可以在线。</li>
-<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
-</ol></li>
-</ul>
-<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
-<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
-<h4 id="核心结构">核心结构</h4>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
-<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
-<p>很多时候我们使用机场提供的订阅链接，这个 URL
-下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
-TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
-<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
-<ul>
-<li><strong>原理</strong>：Clash
-启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
-配置，将两者<strong>合并</strong>。</li>
-<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
-<li><strong>用途</strong>：
-<ul>
-<li>强制开启 TUN 模式。</li>
-<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
-<li>添加个人的局域网 IP 直连规则。</li>
-</ul></li>
-</ul>
-<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
-模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
-IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
-浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
-的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
-</blockquote>
-<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
-<ol type="1">
-<li><strong>“开了全局模式就是最安全的”</strong>
-<ul>
-<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
-HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
-</ul></li>
-<li><strong>“Ping 值低网速就快”</strong>
-<ul>
-<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
-<code>TCP Handshake</code>
-时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
-等）。</li>
-</ul></li>
-<li><strong>“TUN 模式会影响打游戏吗？”</strong>
-<ul>
-<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
-协议，普通代理模式无法代理 UDP，必须开启 TUN
-模式才能让游戏流量走代理加速。</li>
-</ul></li>
-<li><strong>Clash 是 VPN 吗？</strong>
-<ul>
-<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
-<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
-VPN 几乎一致（接管全系统流量）。</li>
-</ul></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>Network</tag>
-        <tag>VPN</tag>
-        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -10934,6 +10671,269 @@ A20 Gate。</li>
         <tag>固件</tag>
         <tag>启动流程</tag>
         <tag>UEFI</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Clash 与网络代理详解</title>
+    <url>/posts/755f751e/</url>
+    <content><![CDATA[<p>本文梳理 VPN、TUN
+模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>VPN</strong></td>
+<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
+<td>秘密隧道</td>
+</tr>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
+<td>传话筒</td>
+</tr>
+<tr>
+<td><strong>Clash</strong></td>
+<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
+<td>智能调度员</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
+<td>分流路牌</td>
+</tr>
+<tr>
+<td><strong>TUN</strong></td>
+<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
+<td>虚拟网卡</td>
+</tr>
+<tr>
+<td><strong>Mixin</strong></td>
+<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
+<td>补丁包</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>VPN</th>
+<th>代理 (Proxy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工作层级</strong></td>
+<td>操作系统层 (OSI L3 网络层)</td>
+<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
+</tr>
+<tr>
+<td><strong>接管范围</strong></td>
+<td>全局接管（通常），所有软件流量都走隧道</td>
+<td>仅接管支持代理设置的软件 (如浏览器)</td>
+</tr>
+<tr>
+<td><strong>加密程度</strong></td>
+<td>全程加密，强调安全性</td>
+<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
+</tr>
+<tr>
+<td><strong>灵活性</strong></td>
+<td>较差，通常“全走”或“全不走”</td>
+<td>极高，可按域名/进程分流</td>
+</tr>
+<tr>
+<td><strong>典型协议</strong></td>
+<td>WireGuard, OpenVPN, IPSec</td>
+<td>HTTP, Socks5, Shadowsocks, VMess</td>
+</tr>
+</tbody>
+</table>
+</blockquote>
+<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
+<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
+<h4 id="global-全局模式">1. Global 全局模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
+<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
+的所有活动。</li>
+<li><strong>缺点</strong>：访问国内网站（如
+B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
+</ul>
+<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
+<ul>
+<li><strong>原理</strong>：根据预设的规则列表（Rule
+List）智能判断。</li>
+<li><strong>流程</strong>：
+<ol type="1">
+<li>拦截请求。</li>
+<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
+<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
+</ol></li>
+<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
+</ul>
+<h4 id="direct-直连模式">3. Direct 直连模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
+<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
+</ul>
+<h4 id="script-脚本模式">4. Script 脚本模式</h4>
+<ul>
+<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
+<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
+</ul>
+<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
+<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
+Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
+<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
+7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
+7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
+<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
+<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
+<pre>
+<code class="mermaid">
+
+graph TD;
+    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
+    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
+    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
+    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
+    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
+</code>
+</pre>
+<ol type="1">
+<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
+<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
+<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
+<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
+3)，它处理的是 IP
+数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
+<li><strong>用户态处理</strong>：Clash 读取 TUN
+设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
+</ol>
+<blockquote>
+<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
+VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
+</blockquote>
+<blockquote>
+<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
+<p>这是一个核心问题：<strong>TUN
+模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
+<ul>
+<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
+Clash
+能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
+Clash 核心。</li>
+<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
+</ul>
+<p><strong>结论</strong>：开启 TUN
+模式并选择<strong>规则模式</strong>，意味着
+“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
+</blockquote>
+<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
+<p>在 Windows/macOS 上开启 TUN
+模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
+<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
+<strong>Service Mode</strong>。</p>
+<ul>
+<li><strong>守护进程</strong>：Service Mode
+会安装一个后台系统服务（Daemon）。</li>
+<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
+劫持、TUN 路由）。</li>
+<li><strong>UI 分离</strong>：Clash
+的图形界面（UI）只需要以普通权限运行，通过 IPC
+接口指挥后台服务干活。</li>
+<li><strong>主要作用</strong>：
+<ol type="1">
+<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
+<li><strong>系统级抗杀</strong>：UI
+关闭了，后台代理服务依然可以在线。</li>
+<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
+</ol></li>
+</ul>
+<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
+<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
+<h4 id="核心结构">核心结构</h4>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
+<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
+<p>很多时候我们使用机场提供的订阅链接，这个 URL
+下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
+TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
+<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
+<ul>
+<li><strong>原理</strong>：Clash
+启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
+配置，将两者<strong>合并</strong>。</li>
+<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
+<li><strong>用途</strong>：
+<ul>
+<li>强制开启 TUN 模式。</li>
+<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
+<li>添加个人的局域网 IP 直连规则。</li>
+</ul></li>
+</ul>
+<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
+模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
+IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
+浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
+的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
+</blockquote>
+<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
+<ol type="1">
+<li><strong>“开了全局模式就是最安全的”</strong>
+<ul>
+<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
+HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
+</ul></li>
+<li><strong>“Ping 值低网速就快”</strong>
+<ul>
+<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
+<code>TCP Handshake</code>
+时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
+等）。</li>
+</ul></li>
+<li><strong>“TUN 模式会影响打游戏吗？”</strong>
+<ul>
+<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
+协议，普通代理模式无法代理 UDP，必须开启 TUN
+模式才能让游戏流量走代理加速。</li>
+</ul></li>
+<li><strong>Clash 是 VPN 吗？</strong>
+<ul>
+<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
+<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
+VPN 几乎一致（接管全系统流量）。</li>
+</ul></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>Network</tag>
+        <tag>VPN</tag>
+        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -12966,6 +12966,281 @@ scope（避免读旧值/重排导致的逻辑错误）。</li>
       </tags>
   </entry>
   <entry>
+    <title>VibeCoding 与 Claude Code</title>
+    <url>/posts/c1audecode/</url>
+    <content><![CDATA[<p>最近一直在用 Cursor，后来也体验了
+Copilot（因为有免费额度），但一直还没真正体验过 Claude Code。听说最近
+GLM 4.7 非常火，就打算来体验一下 CC + GLM 4.7 的效果。</p>
+<span id="more"></span>
+<h3 id="什么是-vibecoding">🌊 什么是 VibeCoding</h3>
+<p><strong>VibeCoding</strong> = <strong>Vibe</strong>（氛围/直觉）+
+<strong>Coding</strong>（编程）</p>
+<p>一种新的编程范式：你用自然语言描述<strong>意图</strong>，AI Agent
+执行<strong>操作</strong>。你不再是逐行敲代码，而是与 AI
+<strong>对话式协作</strong>——你负责想做什么，AI 负责怎么做。</p>
+<blockquote>
+<p>传统编程：IDE + 手写代码 → VibeCoding：AI Agent + 自然语言指令</p>
+</blockquote>
+<h4 id="主流-vibecoding-工具对比">🛠️ 主流 VibeCoding 工具对比</h4>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 18%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>工具</th>
+<th>定位</th>
+<th>核心优势</th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Claude Code</strong></td>
+<td>CLI 工具</td>
+<td>终端原生、Agent 任务、MCP 生态</td>
+<td>自动化脚本、代码重构、项目操作</td>
+</tr>
+<tr>
+<td><strong>Cursor</strong></td>
+<td>IDE</td>
+<td>VSCode 体验、代码库理解、多模型切换</td>
+<td>日常开发、新项目上手、代码补全</td>
+</tr>
+<tr>
+<td><strong>Copilot</strong></td>
+<td>编辑器插件</td>
+<td>GitHub 深度集成、代码补全</td>
+<td>快速补全、样板代码生成</td>
+</tr>
+<tr>
+<td><strong>Cline</strong></td>
+<td>VSCode 插件</td>
+<td>自动任务执行、多步骤操作</td>
+<td>复杂任务自动化</td>
+</tr>
+</tbody>
+</table>
+<h3 id="claude-code-的安装与配置">Claude Code 的安装与配置</h3>
+<p>我是先在 WSL 里安装的 Claude Code，中间遇到代理的问题，WSL 不支持 WIN
+本地的代理，于是用的虚拟网卡设置代理，要打开 clash
+的局域网选项才可以。</p>
+<p>在zshrc中添加了一下配置就ok了</p>
+<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> ALL_PROXY=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br></pre></td></tr></table></figure>
+<h4 id="什么是-mcp">什么是 MCP</h4>
+<p><strong>MCP</strong> = <strong>Model Context
+Protocol</strong>（模型上下文协议）</p>
+<p>一个开放标准协议，让 AI
+模型能够<strong>安全、统一地访问外部数据源和工具</strong>。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐   MCP   ┌─────────────┐</span><br><span class="line">│  AI Model   │ ←─────→ │ MCP Server  │  ← Claude 等（客户端）</span><br><span class="line">│  (Client)   │         │  (Provider) │  ← 工具/能力提供方</span><br><span class="line">└─────────────┘         └─────────────┘</span><br><span class="line">                               │</span><br><span class="line">                     ┌─────────┼─────────┐</span><br></pre></td></tr></table></figure>
+<p><strong>核心价值</strong>：AI
+不再是孤立的大脑，而是能连接真实世界的智能体。</p>
+<h4 id="什么是-agent">什么是 Agent</h4>
+<p><strong>Agent</strong> =
+<strong>智能体</strong>，能自主执行复杂任务的 AI 系统。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐          ┌──────────────────────────────┐</span><br><span class="line">│  Q -&gt; A     │          │ Goal -&gt; Plan -&gt; Act -&gt; Verify│  ← 多步自主执行</span><br><span class="line">│  Single-turn│          │  Multi-step agentic          │</span><br><span class="line">└─────────────┘          └──────────────────────────────┘</span><br><span class="line">    单轮对话                    多步自主执行</span><br></pre></td></tr></table></figure>
+<p><strong>Agent 的能力</strong>：</p>
+<ul>
+<li><strong>规划</strong>：把复杂任务拆解成步骤</li>
+<li><strong>工具调用</strong>：读写文件、执行命令、搜索网页</li>
+<li><strong>自我修正</strong>：遇到错误自动重试</li>
+</ul>
+<h4 id="mcp-生态">MCP 生态</h4>
+<p>这是 Claude Code 最强大的地方。MCP 允许你扩展 Claude 的能力：</p>
+<table>
+<thead>
+<tr>
+<th>MCP 类型</th>
+<th>作用</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>文件系统</strong></td>
+<td>读写文件</td>
+<td><span class="citation"
+data-cites="filesystem">@filesystem</span></td>
+</tr>
+<tr>
+<td><strong>Git 操作</strong></td>
+<td>commit/rebase/branch</td>
+<td><span class="citation" data-cites="git">@git</span></td>
+</tr>
+<tr>
+<td><strong>网页搜索</strong></td>
+<td>查询最新资料</td>
+<td><span class="citation"
+data-cites="web-search">@web-search</span></td>
+</tr>
+<tr>
+<td><strong>数据库</strong></td>
+<td>查询/修改数据</td>
+<td><span class="citation" data-cites="postgres">@postgres</span>/<span
+class="citation" data-cites="sqlite">@sqlite</span></td>
+</tr>
+<tr>
+<td><strong>浏览器</strong></td>
+<td>自动化操作</td>
+<td><span class="citation" data-cites="puppeteer">@puppeteer</span></td>
+</tr>
+</tbody>
+</table>
+<h4 id="如何安装-mcp">如何安装 MCP</h4>
+<p><strong>是的，MCP 服务器需要自己安装</strong>。MCP
+采用客户端-服务器架构：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────────┐   config    ┌─────────────────┐</span><br><span class="line">│  Claude Code    │ ←────────→  │  MCP Servers    │  ← 客户端（你自己装）</span><br><span class="line">│  (Client)       │             │  (Servers)      │</span><br><span class="line">└─────────────────┘             └─────────────────┘</span><br></pre></td></tr></table></figure>
+<p><strong>安装步骤</strong>（以 npx 方式为例）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 方法1：使用 claude mcp 命令</span></span><br><span class="line">claude mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /home/algernon</span><br><span class="line"></span><br><span class="line"><span class="comment"># 方法2：手动编辑 ~/.claude.json 或项目下的 .claude.json</span></span><br><span class="line"><span class="comment"># 添加 MCP 服务器配置：</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="string">&quot;mcpServers&quot;</span>: &#123;</span><br><span class="line">    <span class="string">&quot;filesystem&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-filesystem&quot;</span>, <span class="string">&quot;/allowed/path&quot;</span>]</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;git&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-git&quot;</span>, <span class="string">&quot;--repository&quot;</span>, <span class="string">&quot;/path/to/repo&quot;</span>]</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="已配置的-mcp-服务器">已配置的 MCP 服务器</h4>
+<table>
+<colgroup>
+<col style="width: 42%" />
+<col style="width: 23%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>MCP 服务器</th>
+<th>包名</th>
+<th>功能说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>zai-mcp-server</strong></td>
+<td><code>@z_ai/mcp-server</code></td>
+<td>UI 分析、OCR 文字提取、错误诊断、数据可视化分析、视频内容理解</td>
+</tr>
+<tr>
+<td><strong>memory</strong></td>
+<td><code>@modelcontextprotocol/server-memory</code></td>
+<td>持久化记忆存储，可创建实体和关系，跨会话保存信息</td>
+</tr>
+<tr>
+<td><strong>filesystem</strong></td>
+<td><code>@modelcontextprotocol/server-filesystem</code></td>
+<td>安全的文件系统访问，支持读写、搜索、目录树等操作</td>
+</tr>
+<tr>
+<td><strong>fetch</strong></td>
+<td><code>@kazuph/mcp-fetch</code></td>
+<td>HTTP 请求工具，可获取网页内容、调用 API</td>
+</tr>
+</tbody>
+</table>
+<h3 id="使用-glm-模型">使用 GLM 模型</h3>
+<p>Claude Code 支持自定义 API，可以接入 GLM 等国产大模型。</p>
+<p><strong>配置方式</strong>：在 <code>~/.claude/settings.json</code>
+中添加环境变量：</p>
+<figure class="highlight json"><table><tr><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;env&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_AUTH_TOKEN&quot;</span><span class="punctuation">:</span> <span class="string">&quot;your-api-key&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_BASE_URL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;https://open.bigmodel.cn/api/anthropic&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_SONNET_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_OPUS_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_HAIKU_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.5-air&quot;</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>环境变量</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANTHROPIC_AUTH_TOKEN</code></td>
+<td>API Key</td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_BASE_URL</code></td>
+<td>API 地址</td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_DEFAULT_*_MODEL</code></td>
+<td>默认模型映射</td>
+</tr>
+</tbody>
+</table>
+<h4 id="claude.md">CLAUDE.md</h4>
+<p><strong><code>CLAUDE.md</code></strong>
+是项目根目录的特殊文件，用于向 Claude
+提供项目上下文。每次新会话开始时，Claude 会自动读取它。</p>
+<p><strong>典型用途</strong>： <figure class="highlight markdown"><table><tr><td class="code"><pre><span class="line"><span class="section"># 项目说明</span></span><br><span class="line"></span><br><span class="line">这是一个基于 Next.js 的博客系统。</span><br><span class="line"></span><br><span class="line"><span class="section">## 项目结构</span></span><br><span class="line"><span class="bullet">-</span> <span class="code">`/source`</span> - 博客文章源码</span><br><span class="line"><span class="bullet">-</span> <span class="code">`/themes`</span> - 主题文件</span><br><span class="line"><span class="bullet">-</span> <span class="code">`package.json`</span> 中的 <span class="code">`build`</span> 命令用于生成静态站点</span><br><span class="line"></span><br><span class="line"><span class="section">## 开发规范</span></span><br><span class="line"><span class="bullet">-</span> 使用 TypeScript</span><br><span class="line"><span class="bullet">-</span> 组件放在 <span class="code">`/components`</span> 目录</span><br><span class="line"><span class="bullet">-</span> 样式使用 CSS Modules</span><br><span class="line"></span><br><span class="line"><span class="section">## 注意事项</span></span><br><span class="line"><span class="bullet">-</span> 构建前先运行 <span class="code">`npm run lint`</span></span><br><span class="line"><span class="bullet">-</span> 部署使用 <span class="code">`npm run deploy`</span></span><br></pre></td></tr></table></figure></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>技巧</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>文件引用</strong></td>
+<td>用 <code>[filename.js](src/filename.js)</code>
+格式引用文件，生成可点击链接</td>
+<td>代码定位更快</td>
+</tr>
+<tr>
+<td><strong>明确意图</strong></td>
+<td>一次性说完整需求，避免来回确认</td>
+<td>“添加一个深色切换按钮，点击时切换主题，状态存 localStorage”</td>
+</tr>
+<tr>
+<td><strong>分步任务</strong></td>
+<td>复杂任务直接说”帮我规划”</td>
+<td>“帮我规划一下如何重构登录流程”</td>
+</tr>
+<tr>
+<td><strong>选中代码</strong></td>
+<td>IDE 中选中代码后提问，Claude 知道上下文</td>
+<td>选中函数后问”优化这段代码”</td>
+</tr>
+<tr>
+<td><strong>/commit</strong></td>
+<td>自动生成 commit message</td>
+<td><code>/commit</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="适用场景">适用场景</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐工具</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>日常开发、代码补全</td>
+<td>Cursor</td>
+</tr>
+<tr>
+<td>项目重构、脚本自动化</td>
+<td>Claude Code</td>
+</tr>
+<tr>
+<td>快速补全、GitHub 深度集成</td>
+<td>Copilot</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">总结</h3>
+<p>如果你已经在用 Cursor 或 Copilot，不妨试试 Claude
+Code，它可能会给你带来不一样的体验。</p>
+]]></content>
+      <tags>
+        <tag>人工智能</tag>
+        <tag>AI</tag>
+        <tag>Coding</tag>
+        <tag>Claude</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>LLVM 入门：从编译流程到 IR 结构</title>
     <url>/posts/18482fd9/</url>
     <content><![CDATA[<p>编译器的职责是把高级语言翻译成机器指令，LLVM
@@ -13814,281 +14089,6 @@ Clash，最稳的策略就三条：</p>
         <tag>VS Code</tag>
         <tag>端口转发</tag>
         <tag>Proxy</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>VibeCoding 与 Claude Code</title>
-    <url>/posts/c1audecode/</url>
-    <content><![CDATA[<p>最近一直在用 Cursor，后来也体验了
-Copilot（因为有免费额度），但一直还没真正体验过 Claude Code。听说最近
-GLM 4.7 非常火，就打算来体验一下 CC + GLM 4.7 的效果。</p>
-<span id="more"></span>
-<h3 id="什么是-vibecoding">🌊 什么是 VibeCoding</h3>
-<p><strong>VibeCoding</strong> = <strong>Vibe</strong>（氛围/直觉）+
-<strong>Coding</strong>（编程）</p>
-<p>一种新的编程范式：你用自然语言描述<strong>意图</strong>，AI Agent
-执行<strong>操作</strong>。你不再是逐行敲代码，而是与 AI
-<strong>对话式协作</strong>——你负责想做什么，AI 负责怎么做。</p>
-<blockquote>
-<p>传统编程：IDE + 手写代码 → VibeCoding：AI Agent + 自然语言指令</p>
-</blockquote>
-<h4 id="主流-vibecoding-工具对比">🛠️ 主流 VibeCoding 工具对比</h4>
-<table>
-<colgroup>
-<col style="width: 18%" />
-<col style="width: 18%" />
-<col style="width: 31%" />
-<col style="width: 31%" />
-</colgroup>
-<thead>
-<tr>
-<th>工具</th>
-<th>定位</th>
-<th>核心优势</th>
-<th>典型场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Claude Code</strong></td>
-<td>CLI 工具</td>
-<td>终端原生、Agent 任务、MCP 生态</td>
-<td>自动化脚本、代码重构、项目操作</td>
-</tr>
-<tr>
-<td><strong>Cursor</strong></td>
-<td>IDE</td>
-<td>VSCode 体验、代码库理解、多模型切换</td>
-<td>日常开发、新项目上手、代码补全</td>
-</tr>
-<tr>
-<td><strong>Copilot</strong></td>
-<td>编辑器插件</td>
-<td>GitHub 深度集成、代码补全</td>
-<td>快速补全、样板代码生成</td>
-</tr>
-<tr>
-<td><strong>Cline</strong></td>
-<td>VSCode 插件</td>
-<td>自动任务执行、多步骤操作</td>
-<td>复杂任务自动化</td>
-</tr>
-</tbody>
-</table>
-<h3 id="claude-code-的安装与配置">Claude Code 的安装与配置</h3>
-<p>我是先在 WSL 里安装的 Claude Code，中间遇到代理的问题，WSL 不支持 WIN
-本地的代理，于是用的虚拟网卡设置代理，要打开 clash
-的局域网选项才可以。</p>
-<p>在zshrc中添加了一下配置就ok了</p>
-<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> ALL_PROXY=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br></pre></td></tr></table></figure>
-<h4 id="什么是-mcp">什么是 MCP</h4>
-<p><strong>MCP</strong> = <strong>Model Context
-Protocol</strong>（模型上下文协议）</p>
-<p>一个开放标准协议，让 AI
-模型能够<strong>安全、统一地访问外部数据源和工具</strong>。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐   MCP   ┌─────────────┐</span><br><span class="line">│  AI Model   │ ←─────→ │ MCP Server  │  ← Claude 等（客户端）</span><br><span class="line">│  (Client)   │         │  (Provider) │  ← 工具/能力提供方</span><br><span class="line">└─────────────┘         └─────────────┘</span><br><span class="line">                               │</span><br><span class="line">                     ┌─────────┼─────────┐</span><br></pre></td></tr></table></figure>
-<p><strong>核心价值</strong>：AI
-不再是孤立的大脑，而是能连接真实世界的智能体。</p>
-<h4 id="什么是-agent">什么是 Agent</h4>
-<p><strong>Agent</strong> =
-<strong>智能体</strong>，能自主执行复杂任务的 AI 系统。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐          ┌──────────────────────────────┐</span><br><span class="line">│  Q -&gt; A     │          │ Goal -&gt; Plan -&gt; Act -&gt; Verify│  ← 多步自主执行</span><br><span class="line">│  Single-turn│          │  Multi-step agentic          │</span><br><span class="line">└─────────────┘          └──────────────────────────────┘</span><br><span class="line">    单轮对话                    多步自主执行</span><br></pre></td></tr></table></figure>
-<p><strong>Agent 的能力</strong>：</p>
-<ul>
-<li><strong>规划</strong>：把复杂任务拆解成步骤</li>
-<li><strong>工具调用</strong>：读写文件、执行命令、搜索网页</li>
-<li><strong>自我修正</strong>：遇到错误自动重试</li>
-</ul>
-<h4 id="mcp-生态">MCP 生态</h4>
-<p>这是 Claude Code 最强大的地方。MCP 允许你扩展 Claude 的能力：</p>
-<table>
-<thead>
-<tr>
-<th>MCP 类型</th>
-<th>作用</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>文件系统</strong></td>
-<td>读写文件</td>
-<td><span class="citation"
-data-cites="filesystem">@filesystem</span></td>
-</tr>
-<tr>
-<td><strong>Git 操作</strong></td>
-<td>commit/rebase/branch</td>
-<td><span class="citation" data-cites="git">@git</span></td>
-</tr>
-<tr>
-<td><strong>网页搜索</strong></td>
-<td>查询最新资料</td>
-<td><span class="citation"
-data-cites="web-search">@web-search</span></td>
-</tr>
-<tr>
-<td><strong>数据库</strong></td>
-<td>查询/修改数据</td>
-<td><span class="citation" data-cites="postgres">@postgres</span>/<span
-class="citation" data-cites="sqlite">@sqlite</span></td>
-</tr>
-<tr>
-<td><strong>浏览器</strong></td>
-<td>自动化操作</td>
-<td><span class="citation" data-cites="puppeteer">@puppeteer</span></td>
-</tr>
-</tbody>
-</table>
-<h4 id="如何安装-mcp">如何安装 MCP</h4>
-<p><strong>是的，MCP 服务器需要自己安装</strong>。MCP
-采用客户端-服务器架构：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────────┐   config    ┌─────────────────┐</span><br><span class="line">│  Claude Code    │ ←────────→  │  MCP Servers    │  ← 客户端（你自己装）</span><br><span class="line">│  (Client)       │             │  (Servers)      │</span><br><span class="line">└─────────────────┘             └─────────────────┘</span><br></pre></td></tr></table></figure>
-<p><strong>安装步骤</strong>（以 npx 方式为例）：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 方法1：使用 claude mcp 命令</span></span><br><span class="line">claude mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /home/algernon</span><br><span class="line"></span><br><span class="line"><span class="comment"># 方法2：手动编辑 ~/.claude.json 或项目下的 .claude.json</span></span><br><span class="line"><span class="comment"># 添加 MCP 服务器配置：</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="string">&quot;mcpServers&quot;</span>: &#123;</span><br><span class="line">    <span class="string">&quot;filesystem&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-filesystem&quot;</span>, <span class="string">&quot;/allowed/path&quot;</span>]</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;git&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-git&quot;</span>, <span class="string">&quot;--repository&quot;</span>, <span class="string">&quot;/path/to/repo&quot;</span>]</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="已配置的-mcp-服务器">已配置的 MCP 服务器</h4>
-<table>
-<colgroup>
-<col style="width: 42%" />
-<col style="width: 23%" />
-<col style="width: 34%" />
-</colgroup>
-<thead>
-<tr>
-<th>MCP 服务器</th>
-<th>包名</th>
-<th>功能说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>zai-mcp-server</strong></td>
-<td><code>@z_ai/mcp-server</code></td>
-<td>UI 分析、OCR 文字提取、错误诊断、数据可视化分析、视频内容理解</td>
-</tr>
-<tr>
-<td><strong>memory</strong></td>
-<td><code>@modelcontextprotocol/server-memory</code></td>
-<td>持久化记忆存储，可创建实体和关系，跨会话保存信息</td>
-</tr>
-<tr>
-<td><strong>filesystem</strong></td>
-<td><code>@modelcontextprotocol/server-filesystem</code></td>
-<td>安全的文件系统访问，支持读写、搜索、目录树等操作</td>
-</tr>
-<tr>
-<td><strong>fetch</strong></td>
-<td><code>@kazuph/mcp-fetch</code></td>
-<td>HTTP 请求工具，可获取网页内容、调用 API</td>
-</tr>
-</tbody>
-</table>
-<h3 id="使用-glm-模型">使用 GLM 模型</h3>
-<p>Claude Code 支持自定义 API，可以接入 GLM 等国产大模型。</p>
-<p><strong>配置方式</strong>：在 <code>~/.claude/settings.json</code>
-中添加环境变量：</p>
-<figure class="highlight json"><table><tr><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;env&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_AUTH_TOKEN&quot;</span><span class="punctuation">:</span> <span class="string">&quot;your-api-key&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_BASE_URL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;https://open.bigmodel.cn/api/anthropic&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_SONNET_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_OPUS_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_HAIKU_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.5-air&quot;</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
-<table>
-<thead>
-<tr>
-<th>环境变量</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ANTHROPIC_AUTH_TOKEN</code></td>
-<td>API Key</td>
-</tr>
-<tr>
-<td><code>ANTHROPIC_BASE_URL</code></td>
-<td>API 地址</td>
-</tr>
-<tr>
-<td><code>ANTHROPIC_DEFAULT_*_MODEL</code></td>
-<td>默认模型映射</td>
-</tr>
-</tbody>
-</table>
-<h4 id="claude.md">CLAUDE.md</h4>
-<p><strong><code>CLAUDE.md</code></strong>
-是项目根目录的特殊文件，用于向 Claude
-提供项目上下文。每次新会话开始时，Claude 会自动读取它。</p>
-<p><strong>典型用途</strong>： <figure class="highlight markdown"><table><tr><td class="code"><pre><span class="line"><span class="section"># 项目说明</span></span><br><span class="line"></span><br><span class="line">这是一个基于 Next.js 的博客系统。</span><br><span class="line"></span><br><span class="line"><span class="section">## 项目结构</span></span><br><span class="line"><span class="bullet">-</span> <span class="code">`/source`</span> - 博客文章源码</span><br><span class="line"><span class="bullet">-</span> <span class="code">`/themes`</span> - 主题文件</span><br><span class="line"><span class="bullet">-</span> <span class="code">`package.json`</span> 中的 <span class="code">`build`</span> 命令用于生成静态站点</span><br><span class="line"></span><br><span class="line"><span class="section">## 开发规范</span></span><br><span class="line"><span class="bullet">-</span> 使用 TypeScript</span><br><span class="line"><span class="bullet">-</span> 组件放在 <span class="code">`/components`</span> 目录</span><br><span class="line"><span class="bullet">-</span> 样式使用 CSS Modules</span><br><span class="line"></span><br><span class="line"><span class="section">## 注意事项</span></span><br><span class="line"><span class="bullet">-</span> 构建前先运行 <span class="code">`npm run lint`</span></span><br><span class="line"><span class="bullet">-</span> 部署使用 <span class="code">`npm run deploy`</span></span><br></pre></td></tr></table></figure></p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>技巧</th>
-<th>说明</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>文件引用</strong></td>
-<td>用 <code>[filename.js](src/filename.js)</code>
-格式引用文件，生成可点击链接</td>
-<td>代码定位更快</td>
-</tr>
-<tr>
-<td><strong>明确意图</strong></td>
-<td>一次性说完整需求，避免来回确认</td>
-<td>“添加一个深色切换按钮，点击时切换主题，状态存 localStorage”</td>
-</tr>
-<tr>
-<td><strong>分步任务</strong></td>
-<td>复杂任务直接说”帮我规划”</td>
-<td>“帮我规划一下如何重构登录流程”</td>
-</tr>
-<tr>
-<td><strong>选中代码</strong></td>
-<td>IDE 中选中代码后提问，Claude 知道上下文</td>
-<td>选中函数后问”优化这段代码”</td>
-</tr>
-<tr>
-<td><strong>/commit</strong></td>
-<td>自动生成 commit message</td>
-<td><code>/commit</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="适用场景">适用场景</h3>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>推荐工具</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>日常开发、代码补全</td>
-<td>Cursor</td>
-</tr>
-<tr>
-<td>项目重构、脚本自动化</td>
-<td>Claude Code</td>
-</tr>
-<tr>
-<td>快速补全、GitHub 深度集成</td>
-<td>Copilot</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">总结</h3>
-<p>如果你已经在用 Cursor 或 Copilot，不妨试试 Claude
-Code，它可能会给你带来不一样的体验。</p>
-]]></content>
-      <tags>
-        <tag>人工智能</tag>
-        <tag>AI</tag>
-        <tag>Coding</tag>
-        <tag>Claude</tag>
       </tags>
   </entry>
   <entry>
@@ -15524,6 +15524,417 @@ flowchart TD
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：函数</title>
+    <url>/posts/f3c9a8d6/</url>
+    <content><![CDATA[<p>学完变量、运算符和控制流之后，函数就是把一段逻辑整理成“可重复使用的小模块”。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数</td>
+<td>一段有名字、可以被调用的代码</td>
+<td>可复用逻辑</td>
+</tr>
+<tr>
+<td>参数</td>
+<td>调用函数时传进去的数据</td>
+<td>输入</td>
+</tr>
+<tr>
+<td>返回值</td>
+<td>函数执行完交回来的结果</td>
+<td>输出</td>
+</tr>
+<tr>
+<td>函数声明</td>
+<td>提前告诉编译器函数长什么样</td>
+<td>先打招呼</td>
+</tr>
+<tr>
+<td>函数定义</td>
+<td>真正写出函数体</td>
+<td>真正干活</td>
+</tr>
+<tr>
+<td>值传递</td>
+<td>把实参的值复制一份传给函数</td>
+<td>传副本</td>
+</tr>
+<tr>
+<td>函数重载</td>
+<td>多个函数同名，但参数列表不同</td>
+<td>同名不同参</td>
+</tr>
+<tr>
+<td>递归</td>
+<td>函数自己调用自己</td>
+<td>自己拆问题</td>
+</tr>
+</tbody>
+</table>
+<h3 id="函数的基本模型">🧩 函数的基本模型</h3>
+<p>函数可以先粗略理解成一个加工盒子：给它输入，它执行一段逻辑，然后返回结果。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[参数] --&gt; B[函数体]
+    B --&gt; C[返回值]
+</code>
+</pre>
+<p>最小例子：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> result = <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这段代码里：</p>
+<table>
+<thead>
+<tr>
+<th>部分</th>
+<th>示例</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>返回类型</td>
+<td><code>int</code></td>
+<td>函数最后会返回一个整数</td>
+</tr>
+<tr>
+<td>函数名</td>
+<td><code>add</code></td>
+<td>调用函数时使用的名字</td>
+</tr>
+<tr>
+<td>参数列表</td>
+<td><code>int a, int b</code></td>
+<td>函数需要两个整数输入</td>
+</tr>
+<tr>
+<td>函数体</td>
+<td><code>&#123; return a + b; &#125;</code></td>
+<td>函数真正执行的逻辑</td>
+</tr>
+<tr>
+<td>函数调用</td>
+<td><code>add(3, 5)</code></td>
+<td>让函数运行一次</td>
+</tr>
+</tbody>
+</table>
+<h3 id="函数定义与调用">🛠️ 函数定义与调用</h3>
+<h4 id="函数定义">函数定义</h4>
+<p>函数定义的一般形式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">返回类型 函数名(参数列表)</span><br><span class="line">&#123;</span><br><span class="line">    函数体</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>示例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>square</code> 接收一个整数 <code>x</code>，返回
+<code>x * x</code> 的结果。</p>
+<h4 id="函数调用">函数调用</h4>
+<p>调用函数时，要写函数名，并在括号里放入实际参数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="built_in">square</span>(<span class="number">4</span>);</span><br><span class="line">cout &lt;&lt; value &lt;&lt; endl;  <span class="comment">// 16</span></span><br></pre></td></tr></table></figure>
+<p>调用过程可以理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">square(4)</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">x = 4</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">return x * x</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">返回 16</span><br></pre></td></tr></table></figure>
+<h4 id="没有返回值的函数">没有返回值的函数</h4>
+<p>如果函数只做一件事，不需要返回结果，可以使用 <code>void</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printLine</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">printLine</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>void</code>
+表示“没有返回值”。这种函数可以直接调用，不需要接收结果。</p>
+<h3 id="函数声明与头文件前置认识">🧾 函数声明与头文件前置认识</h3>
+<h4 id="为什么需要函数声明">为什么需要函数声明</h4>
+<p>C/C++ 编译器通常<strong>从上到下</strong>读取代码。如果在
+<code>main</code>
+里调用一个后面才定义的函数，编译器可能还不知道这个函数存在。</p>
+<p>例如：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这时可以在前面加一个<strong>函数声明</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>int add(int a, int b);</code>
+这一行就是声明。它告诉编译器：</p>
+<blockquote>
+<p>后面会有一个叫 <code>add</code> 的函数，它接收两个
+<code>int</code>，并返回一个 <code>int</code>。</p>
+</blockquote>
+<h4 id="声明和定义的区别">声明和定义的区别</h4>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>是否有函数体</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数声明</td>
+<td>没有</td>
+<td>告诉编译器函数接口</td>
+</tr>
+<tr>
+<td>函数定义</td>
+<td>有</td>
+<td>写出函数实际逻辑</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;       <span class="comment">// 声明</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span>        <span class="comment">// 定义</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="头文件前置认识">头文件前置认识</h4>
+<p>实际项目里，函数声明常放在头文件里，比如
+<code>math_utils.h</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.h</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
+<p>函数定义放在 <code>.cpp</code> 文件里：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.cpp</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>使用函数的地方包含头文件：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>初学阶段先记住：<strong>头文件通常放声明，源文件通常放定义</strong>。</p>
+<h3 id="参数传递">📦 参数传递</h3>
+<h4 id="值传递">值传递</h4>
+<p>最常见的是<strong>值传递</strong>。函数拿到的是实参的一份<strong>副本</strong>，函数内部修改参数，不会影响外面的变量。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">change</span>(a);</span><br><span class="line">    cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>change(a)</code> 调用时，<code>a</code> 的值被复制给
+<code>x</code>。修改 <code>x</code> 不等于修改 <code>a</code>。</p>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">a = 10</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">复制一份给 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">x = 100</span><br><span class="line"></span><br><span class="line">a 仍然是 10</span><br></pre></td></tr></table></figure>
+<h4 id="指针参数预告">指针参数预告</h4>
+<p>如果希望函数能修改外部变量，C
+语言里常用<strong>指针参数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    *p = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>p</code>
+保存的是<strong>变量地址</strong>，<code>*p</code>
+表示通过地址找到原来的变量。指针涉及地址和内存，后面会单独展开。</p>
+<h4 id="引用参数预告">引用参数预告</h4>
+<p>C++ 里还常用<strong>引用参数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> &amp;x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>引用可以先理解为“给原变量起了一个别名”。函数里改
+<code>x</code>，外面的变量也会被改。引用也会在后续文章里详细讲。</p>
+<h4 id="三种传参方式先对比">三种传参方式先对比</h4>
+<table>
+<thead>
+<tr>
+<th>方式</th>
+<th>示例</th>
+<th>是否能修改外部变量</th>
+<th>初学阶段理解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>值传递</td>
+<td><code>int x</code></td>
+<td>否</td>
+<td>传副本</td>
+</tr>
+<tr>
+<td>指针参数</td>
+<td><code>int *p</code></td>
+<td>可以</td>
+<td>传地址</td>
+</tr>
+<tr>
+<td>引用参数</td>
+<td><code>int &amp;x</code></td>
+<td>可以</td>
+<td>传别名</td>
+</tr>
+</tbody>
+</table>
+<h3 id="返回值">🔁 返回值</h3>
+<h4 id="返回普通值">返回普通值</h4>
+<p>最常见的返回值就是返回计算结果：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">maxValue</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (a &gt; b) &#123;</span><br><span class="line">        <span class="keyword">return</span> a;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>return</code> 会结束当前函数，并把后面的值交回调用者。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> m = <span class="built_in">maxValue</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">cout &lt;&lt; m &lt;&lt; endl;  <span class="comment">// 5</span></span><br></pre></td></tr></table></figure>
+<h4 id="返回状态码">返回状态码</h4>
+<p>有些函数不只关心“结果是什么”，还关心“是否成功”。这时可以返回状态码。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">divide</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b, <span class="type">int</span> &amp;result)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (b == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    result = a / b;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用时：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> result = <span class="number">0</span>;</span><br><span class="line"><span class="type">int</span> code = <span class="built_in">divide</span>(<span class="number">10</span>, <span class="number">2</span>, result);</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (code == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;divide failed&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里约定：</p>
+<table>
+<thead>
+<tr>
+<th>返回码</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>成功</td>
+</tr>
+<tr>
+<td>非 <code>0</code></td>
+<td>失败或不同错误类型</td>
+</tr>
+</tbody>
+</table>
+<p>这种风格在 C 语言和系统编程里很常见。</p>
+<h4 id="避免返回局部对象地址">避免返回局部对象地址</h4>
+<p>不要返回局部变量的地址：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;  <span class="comment">// 错误示例：不要这样写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>原因是：<code>x</code>
+是函数里的局部变量，函数结束后它的生命周期也结束了。返回
+<code>&amp;x</code> 等于把一个已经失效的位置交给外面使用。</p>
+<p>可以粗略理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">进入 bad()</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">创建局部变量 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">返回 x 的地址</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">函数结束，x 失效</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">外面拿到的是危险地址</span><br></pre></td></tr></table></figure>
+<p>初学阶段先记住：<strong>不要返回局部变量的指针或引用</strong>。</p>
+<h3 id="函数重载">🧬 函数重载</h3>
+<h4 id="同名函数">同名函数</h4>
+<p>C++
+允许多个函数使用同一个名字，只要它们的参数列表不同。这叫<strong>函数重载</strong>。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">double</span> <span class="title">add</span><span class="params">(<span class="type">double</span> a, <span class="type">double</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用时，编译器会根据参数类型选择合适的版本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;       <span class="comment">// 调用 int 版本</span></span><br><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">1.2</span>, <span class="number">3.4</span>) &lt;&lt; endl;   <span class="comment">// 调用 double 版本</span></span><br></pre></td></tr></table></figure>
+<h4 id="参数匹配">参数匹配</h4>
+<p>重载主要看<strong>参数列表</strong>，包括参数个数和参数类型。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x, <span class="type">int</span> y)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; y &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面三种调用会匹配不同函数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="number">10</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">3.14</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">10</span>, <span class="number">20</span>);</span><br></pre></td></tr></table></figure>
+<h4 id="返回类型不能单独构成重载">返回类型不能单独构成重载</h4>
+<p>只改返回类型，不改参数列表，不算合法重载：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">getValue</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">10</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// double getValue()</span></span><br><span class="line"><span class="comment">// &#123;</span></span><br><span class="line"><span class="comment">//     return 10.0;</span></span><br><span class="line"><span class="comment">// &#125;</span></span><br></pre></td></tr></table></figure>
+<p>原因是调用 <code>getValue()</code>
+时，编译器只看调用形式，无法仅靠返回类型稳定判断应该选哪个函数。</p>
+<h4 id="二义性">二义性</h4>
+<p>如果多个重载版本都像是“差不多能匹配”，编译器可能报二义性错误。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">long</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">show</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>10</code> 是 <code>int</code>，它既可以转换成
+<code>long</code>，也可以转换成
+<code>double</code>。类似场景可能让编译器难以选择。</p>
+<p>避免二义性的简单办法：</p>
+<table>
+<thead>
+<tr>
+<th>做法</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>让参数类型更明确</td>
+<td><code>show(10L);</code></td>
+</tr>
+<tr>
+<td>手动类型转换</td>
+<td><code>show(static_cast&lt;double&gt;(10));</code></td>
+</tr>
+<tr>
+<td>不写过于接近的重载</td>
+<td>避免 <code>long</code> 和 <code>double</code> 混在一起</td>
+</tr>
+</tbody>
+</table>
+<h3 id="递归基础">🧠 递归基础</h3>
+<h4 id="什么是递归">什么是递归</h4>
+<p>递归就是函数自己调用自己。它适合处理“一个大问题可以拆成更小的同类问题”的场景。</p>
+<p>典型例子是阶乘：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">5! = 5 * 4!</span><br><span class="line">4! = 4 * 3!</span><br><span class="line">3! = 3 * 2!</span><br><span class="line">2! = 2 * 1!</span><br><span class="line">1! = 1</span><br></pre></td></tr></table></figure>
+<p>代码：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">factorial</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n * <span class="built_in">factorial</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="递归出口">递归出口</h4>
+<p>递归必须有出口，也就是停止继续调用自己的条件。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这就是阶乘函数的递归出口。如果没有出口，函数会一直调用自己，直到程序崩溃。</p>
+<h4 id="调用栈">调用栈</h4>
+<p>每次函数调用，程序都会在<strong>调用栈</strong>里保存这次调用的现场。递归调用多次，就会一层一层压栈。</p>
+<p>以 <code>factorial(4)</code> 为例：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(4)</span><br><span class="line">  -&gt; factorial(3)</span><br><span class="line">      -&gt; factorial(2)</span><br><span class="line">          -&gt; factorial(1)</span><br></pre></td></tr></table></figure>
+<p>到达出口后，再一层一层返回：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(1) 返回 1</span><br><span class="line">factorial(2) 返回 2 * 1</span><br><span class="line">factorial(3) 返回 3 * 2</span><br><span class="line">factorial(4) 返回 4 * 6</span><br></pre></td></tr></table></figure>
+<p>所以 <code>factorial(4)</code> 的结果是 <code>24</code>。</p>
+<h4 id="典型错误">典型错误</h4>
+<table>
+<thead>
+<tr>
+<th>错误</th>
+<th>问题</th>
+<th>修正</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>没有递归出口</td>
+<td>无限递归</td>
+<td>写清楚停止条件</td>
+</tr>
+<tr>
+<td>递归没有逼近出口</td>
+<td>参数不变或方向错</td>
+<td>每次调用都让问题变小</td>
+</tr>
+<tr>
+<td>递归层数太深</td>
+<td>调用栈耗尽</td>
+<td>改用循环或优化算法</td>
+</tr>
+<tr>
+<td>忘记处理边界值</td>
+<td><code>0</code>、负数等输入异常</td>
+<td>先判断边界</td>
+</tr>
+</tbody>
+</table>
+<p>错误示例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">bad</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bad</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这个函数永远不会停止。</p>
+<p>一个更合理的版本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">sumTo</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n + <span class="built_in">sumTo</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数声明和函数定义是一回事</td>
+<td>声明只告诉接口，定义才有函数体</td>
+</tr>
+<tr>
+<td>参数传进去后一定会修改原变量</td>
+<td>值传递只修改副本</td>
+</tr>
+<tr>
+<td><code>return</code> 之后函数还会继续执行</td>
+<td><code>return</code> 会立刻结束当前函数</td>
+</tr>
+<tr>
+<td>返回局部变量地址也能用</td>
+<td>局部变量函数结束后失效，不能这样返回</td>
+</tr>
+<tr>
+<td>函数重载只看函数名</td>
+<td>还要看参数个数和参数类型</td>
+</tr>
+<tr>
+<td>递归就是循环的高级写法</td>
+<td>递归依赖问题拆分和调用栈，不是无脑替代循环</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>函数的核心价值，是把一段逻辑封装成清晰、可复用、可组合的模块。</p>
+</blockquote>
+<p>初学阶段先抓住四件事：函数怎么定义、怎么调用、参数怎么传、结果怎么返回。至于指针、引用、头文件拆分和递归优化，后面可以继续一层层展开。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>函数</tag>
+        <tag>编程入门</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：基础语法</title>
     <url>/posts/b7e3c9a2/</url>
     <content><![CDATA[<p>学完 HelloWorld
@@ -16181,419 +16592,8 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
 ]]></content>
       <tags>
         <tag>C/C++</tag>
+        <tag>编程入门</tag>
         <tag>基础语法</tag>
-        <tag>编程入门</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：函数</title>
-    <url>/posts/f3c9a8d6/</url>
-    <content><![CDATA[<p>学完变量、运算符和控制流之后，函数就是把一段逻辑整理成“可重复使用的小模块”。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数</td>
-<td>一段有名字、可以被调用的代码</td>
-<td>可复用逻辑</td>
-</tr>
-<tr>
-<td>参数</td>
-<td>调用函数时传进去的数据</td>
-<td>输入</td>
-</tr>
-<tr>
-<td>返回值</td>
-<td>函数执行完交回来的结果</td>
-<td>输出</td>
-</tr>
-<tr>
-<td>函数声明</td>
-<td>提前告诉编译器函数长什么样</td>
-<td>先打招呼</td>
-</tr>
-<tr>
-<td>函数定义</td>
-<td>真正写出函数体</td>
-<td>真正干活</td>
-</tr>
-<tr>
-<td>值传递</td>
-<td>把实参的值复制一份传给函数</td>
-<td>传副本</td>
-</tr>
-<tr>
-<td>函数重载</td>
-<td>多个函数同名，但参数列表不同</td>
-<td>同名不同参</td>
-</tr>
-<tr>
-<td>递归</td>
-<td>函数自己调用自己</td>
-<td>自己拆问题</td>
-</tr>
-</tbody>
-</table>
-<h3 id="函数的基本模型">🧩 函数的基本模型</h3>
-<p>函数可以先粗略理解成一个加工盒子：给它输入，它执行一段逻辑，然后返回结果。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[参数] --&gt; B[函数体]
-    B --&gt; C[返回值]
-</code>
-</pre>
-<p>最小例子：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> result = <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这段代码里：</p>
-<table>
-<thead>
-<tr>
-<th>部分</th>
-<th>示例</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>返回类型</td>
-<td><code>int</code></td>
-<td>函数最后会返回一个整数</td>
-</tr>
-<tr>
-<td>函数名</td>
-<td><code>add</code></td>
-<td>调用函数时使用的名字</td>
-</tr>
-<tr>
-<td>参数列表</td>
-<td><code>int a, int b</code></td>
-<td>函数需要两个整数输入</td>
-</tr>
-<tr>
-<td>函数体</td>
-<td><code>&#123; return a + b; &#125;</code></td>
-<td>函数真正执行的逻辑</td>
-</tr>
-<tr>
-<td>函数调用</td>
-<td><code>add(3, 5)</code></td>
-<td>让函数运行一次</td>
-</tr>
-</tbody>
-</table>
-<h3 id="函数定义与调用">🛠️ 函数定义与调用</h3>
-<h4 id="函数定义">函数定义</h4>
-<p>函数定义的一般形式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">返回类型 函数名(参数列表)</span><br><span class="line">&#123;</span><br><span class="line">    函数体</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>示例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>square</code> 接收一个整数 <code>x</code>，返回
-<code>x * x</code> 的结果。</p>
-<h4 id="函数调用">函数调用</h4>
-<p>调用函数时，要写函数名，并在括号里放入实际参数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="built_in">square</span>(<span class="number">4</span>);</span><br><span class="line">cout &lt;&lt; value &lt;&lt; endl;  <span class="comment">// 16</span></span><br></pre></td></tr></table></figure>
-<p>调用过程可以理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">square(4)</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">x = 4</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">return x * x</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">返回 16</span><br></pre></td></tr></table></figure>
-<h4 id="没有返回值的函数">没有返回值的函数</h4>
-<p>如果函数只做一件事，不需要返回结果，可以使用 <code>void</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printLine</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">printLine</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>void</code>
-表示“没有返回值”。这种函数可以直接调用，不需要接收结果。</p>
-<h3 id="函数声明与头文件前置认识">🧾 函数声明与头文件前置认识</h3>
-<h4 id="为什么需要函数声明">为什么需要函数声明</h4>
-<p>C/C++ 编译器通常<strong>从上到下</strong>读取代码。如果在
-<code>main</code>
-里调用一个后面才定义的函数，编译器可能还不知道这个函数存在。</p>
-<p>例如：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这时可以在前面加一个<strong>函数声明</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>int add(int a, int b);</code>
-这一行就是声明。它告诉编译器：</p>
-<blockquote>
-<p>后面会有一个叫 <code>add</code> 的函数，它接收两个
-<code>int</code>，并返回一个 <code>int</code>。</p>
-</blockquote>
-<h4 id="声明和定义的区别">声明和定义的区别</h4>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>是否有函数体</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数声明</td>
-<td>没有</td>
-<td>告诉编译器函数接口</td>
-</tr>
-<tr>
-<td>函数定义</td>
-<td>有</td>
-<td>写出函数实际逻辑</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;       <span class="comment">// 声明</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span>        <span class="comment">// 定义</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="头文件前置认识">头文件前置认识</h4>
-<p>实际项目里，函数声明常放在头文件里，比如
-<code>math_utils.h</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.h</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
-<p>函数定义放在 <code>.cpp</code> 文件里：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.cpp</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>使用函数的地方包含头文件：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>初学阶段先记住：<strong>头文件通常放声明，源文件通常放定义</strong>。</p>
-<h3 id="参数传递">📦 参数传递</h3>
-<h4 id="值传递">值传递</h4>
-<p>最常见的是<strong>值传递</strong>。函数拿到的是实参的一份<strong>副本</strong>，函数内部修改参数，不会影响外面的变量。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">change</span>(a);</span><br><span class="line">    cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>change(a)</code> 调用时，<code>a</code> 的值被复制给
-<code>x</code>。修改 <code>x</code> 不等于修改 <code>a</code>。</p>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">a = 10</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">复制一份给 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">x = 100</span><br><span class="line"></span><br><span class="line">a 仍然是 10</span><br></pre></td></tr></table></figure>
-<h4 id="指针参数预告">指针参数预告</h4>
-<p>如果希望函数能修改外部变量，C
-语言里常用<strong>指针参数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    *p = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>p</code>
-保存的是<strong>变量地址</strong>，<code>*p</code>
-表示通过地址找到原来的变量。指针涉及地址和内存，后面会单独展开。</p>
-<h4 id="引用参数预告">引用参数预告</h4>
-<p>C++ 里还常用<strong>引用参数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> &amp;x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>引用可以先理解为“给原变量起了一个别名”。函数里改
-<code>x</code>，外面的变量也会被改。引用也会在后续文章里详细讲。</p>
-<h4 id="三种传参方式先对比">三种传参方式先对比</h4>
-<table>
-<thead>
-<tr>
-<th>方式</th>
-<th>示例</th>
-<th>是否能修改外部变量</th>
-<th>初学阶段理解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>值传递</td>
-<td><code>int x</code></td>
-<td>否</td>
-<td>传副本</td>
-</tr>
-<tr>
-<td>指针参数</td>
-<td><code>int *p</code></td>
-<td>可以</td>
-<td>传地址</td>
-</tr>
-<tr>
-<td>引用参数</td>
-<td><code>int &amp;x</code></td>
-<td>可以</td>
-<td>传别名</td>
-</tr>
-</tbody>
-</table>
-<h3 id="返回值">🔁 返回值</h3>
-<h4 id="返回普通值">返回普通值</h4>
-<p>最常见的返回值就是返回计算结果：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">maxValue</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (a &gt; b) &#123;</span><br><span class="line">        <span class="keyword">return</span> a;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>return</code> 会结束当前函数，并把后面的值交回调用者。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> m = <span class="built_in">maxValue</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">cout &lt;&lt; m &lt;&lt; endl;  <span class="comment">// 5</span></span><br></pre></td></tr></table></figure>
-<h4 id="返回状态码">返回状态码</h4>
-<p>有些函数不只关心“结果是什么”，还关心“是否成功”。这时可以返回状态码。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">divide</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b, <span class="type">int</span> &amp;result)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (b == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    result = a / b;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>调用时：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> result = <span class="number">0</span>;</span><br><span class="line"><span class="type">int</span> code = <span class="built_in">divide</span>(<span class="number">10</span>, <span class="number">2</span>, result);</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (code == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;divide failed&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里约定：</p>
-<table>
-<thead>
-<tr>
-<th>返回码</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>0</code></td>
-<td>成功</td>
-</tr>
-<tr>
-<td>非 <code>0</code></td>
-<td>失败或不同错误类型</td>
-</tr>
-</tbody>
-</table>
-<p>这种风格在 C 语言和系统编程里很常见。</p>
-<h4 id="避免返回局部对象地址">避免返回局部对象地址</h4>
-<p>不要返回局部变量的地址：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;  <span class="comment">// 错误示例：不要这样写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>原因是：<code>x</code>
-是函数里的局部变量，函数结束后它的生命周期也结束了。返回
-<code>&amp;x</code> 等于把一个已经失效的位置交给外面使用。</p>
-<p>可以粗略理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">进入 bad()</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">创建局部变量 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">返回 x 的地址</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">函数结束，x 失效</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">外面拿到的是危险地址</span><br></pre></td></tr></table></figure>
-<p>初学阶段先记住：<strong>不要返回局部变量的指针或引用</strong>。</p>
-<h3 id="函数重载">🧬 函数重载</h3>
-<h4 id="同名函数">同名函数</h4>
-<p>C++
-允许多个函数使用同一个名字，只要它们的参数列表不同。这叫<strong>函数重载</strong>。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">double</span> <span class="title">add</span><span class="params">(<span class="type">double</span> a, <span class="type">double</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>调用时，编译器会根据参数类型选择合适的版本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;       <span class="comment">// 调用 int 版本</span></span><br><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">1.2</span>, <span class="number">3.4</span>) &lt;&lt; endl;   <span class="comment">// 调用 double 版本</span></span><br></pre></td></tr></table></figure>
-<h4 id="参数匹配">参数匹配</h4>
-<p>重载主要看<strong>参数列表</strong>，包括参数个数和参数类型。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x, <span class="type">int</span> y)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; y &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>下面三种调用会匹配不同函数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="number">10</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">3.14</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">10</span>, <span class="number">20</span>);</span><br></pre></td></tr></table></figure>
-<h4 id="返回类型不能单独构成重载">返回类型不能单独构成重载</h4>
-<p>只改返回类型，不改参数列表，不算合法重载：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">getValue</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">10</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// double getValue()</span></span><br><span class="line"><span class="comment">// &#123;</span></span><br><span class="line"><span class="comment">//     return 10.0;</span></span><br><span class="line"><span class="comment">// &#125;</span></span><br></pre></td></tr></table></figure>
-<p>原因是调用 <code>getValue()</code>
-时，编译器只看调用形式，无法仅靠返回类型稳定判断应该选哪个函数。</p>
-<h4 id="二义性">二义性</h4>
-<p>如果多个重载版本都像是“差不多能匹配”，编译器可能报二义性错误。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">long</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">show</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>10</code> 是 <code>int</code>，它既可以转换成
-<code>long</code>，也可以转换成
-<code>double</code>。类似场景可能让编译器难以选择。</p>
-<p>避免二义性的简单办法：</p>
-<table>
-<thead>
-<tr>
-<th>做法</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>让参数类型更明确</td>
-<td><code>show(10L);</code></td>
-</tr>
-<tr>
-<td>手动类型转换</td>
-<td><code>show(static_cast&lt;double&gt;(10));</code></td>
-</tr>
-<tr>
-<td>不写过于接近的重载</td>
-<td>避免 <code>long</code> 和 <code>double</code> 混在一起</td>
-</tr>
-</tbody>
-</table>
-<h3 id="递归基础">🧠 递归基础</h3>
-<h4 id="什么是递归">什么是递归</h4>
-<p>递归就是函数自己调用自己。它适合处理“一个大问题可以拆成更小的同类问题”的场景。</p>
-<p>典型例子是阶乘：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">5! = 5 * 4!</span><br><span class="line">4! = 4 * 3!</span><br><span class="line">3! = 3 * 2!</span><br><span class="line">2! = 2 * 1!</span><br><span class="line">1! = 1</span><br></pre></td></tr></table></figure>
-<p>代码：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">factorial</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n * <span class="built_in">factorial</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="递归出口">递归出口</h4>
-<p>递归必须有出口，也就是停止继续调用自己的条件。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这就是阶乘函数的递归出口。如果没有出口，函数会一直调用自己，直到程序崩溃。</p>
-<h4 id="调用栈">调用栈</h4>
-<p>每次函数调用，程序都会在<strong>调用栈</strong>里保存这次调用的现场。递归调用多次，就会一层一层压栈。</p>
-<p>以 <code>factorial(4)</code> 为例：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(4)</span><br><span class="line">  -&gt; factorial(3)</span><br><span class="line">      -&gt; factorial(2)</span><br><span class="line">          -&gt; factorial(1)</span><br></pre></td></tr></table></figure>
-<p>到达出口后，再一层一层返回：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(1) 返回 1</span><br><span class="line">factorial(2) 返回 2 * 1</span><br><span class="line">factorial(3) 返回 3 * 2</span><br><span class="line">factorial(4) 返回 4 * 6</span><br></pre></td></tr></table></figure>
-<p>所以 <code>factorial(4)</code> 的结果是 <code>24</code>。</p>
-<h4 id="典型错误">典型错误</h4>
-<table>
-<thead>
-<tr>
-<th>错误</th>
-<th>问题</th>
-<th>修正</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>没有递归出口</td>
-<td>无限递归</td>
-<td>写清楚停止条件</td>
-</tr>
-<tr>
-<td>递归没有逼近出口</td>
-<td>参数不变或方向错</td>
-<td>每次调用都让问题变小</td>
-</tr>
-<tr>
-<td>递归层数太深</td>
-<td>调用栈耗尽</td>
-<td>改用循环或优化算法</td>
-</tr>
-<tr>
-<td>忘记处理边界值</td>
-<td><code>0</code>、负数等输入异常</td>
-<td>先判断边界</td>
-</tr>
-</tbody>
-</table>
-<p>错误示例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">bad</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bad</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这个函数永远不会停止。</p>
-<p>一个更合理的版本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">sumTo</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n + <span class="built_in">sumTo</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数声明和函数定义是一回事</td>
-<td>声明只告诉接口，定义才有函数体</td>
-</tr>
-<tr>
-<td>参数传进去后一定会修改原变量</td>
-<td>值传递只修改副本</td>
-</tr>
-<tr>
-<td><code>return</code> 之后函数还会继续执行</td>
-<td><code>return</code> 会立刻结束当前函数</td>
-</tr>
-<tr>
-<td>返回局部变量地址也能用</td>
-<td>局部变量函数结束后失效，不能这样返回</td>
-</tr>
-<tr>
-<td>函数重载只看函数名</td>
-<td>还要看参数个数和参数类型</td>
-</tr>
-<tr>
-<td>递归就是循环的高级写法</td>
-<td>递归依赖问题拆分和调用栈，不是无脑替代循环</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>函数的核心价值，是把一段逻辑封装成清晰、可复用、可组合的模块。</p>
-</blockquote>
-<p>初学阶段先抓住四件事：函数怎么定义、怎么调用、参数怎么传、结果怎么返回。至于指针、引用、头文件拆分和递归优化，后面可以继续一层层展开。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>函数</tag>
       </tags>
   </entry>
   <entry>
@@ -21946,338 +21946,6 @@ PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
       </tags>
   </entry>
   <entry>
-    <title>机密计算入门：数据使用中的安全与TEE</title>
-    <url>/posts/84b980d1/</url>
-    <content><![CDATA[<p>硬盘和网络传输中的数据都有加密保护，但数据进入内存参与计算时往往是明文。机密计算（Confidential
-Computing）解决的就是这个问题，本文介绍它与 TEE 的基本概念。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>数据三态</td>
-<td>静态、传输中、使用中三种数据状态</td>
-<td>内存里的数据最危险</td>
-</tr>
-<tr>
-<td>TEE</td>
-<td>Trusted Execution Environment，可信执行环境</td>
-<td>CPU 里的硬件保险箱</td>
-</tr>
-<tr>
-<td>CVM</td>
-<td>Confidential Virtual Machine，机密虚拟机</td>
-<td>内存被硬件加密的虚拟机</td>
-</tr>
-<tr>
-<td>SEV-SNP</td>
-<td>AMD 的 CVM 技术（安全加密虚拟化-安全嵌套分页）</td>
-<td>AMD 系机密虚拟机</td>
-</tr>
-<tr>
-<td>TDX</td>
-<td>Intel 的 CVM 技术（信任域扩展）</td>
-<td>Intel 系机密虚拟机</td>
-</tr>
-<tr>
-<td>CCA</td>
-<td>ARM 的 CVM 技术（机密计算架构）</td>
-<td>ARM 系机密虚拟机</td>
-</tr>
-<tr>
-<td>内存加密</td>
-<td>数据在内存里以密文形式存储</td>
-<td>明文只在 CPU 芯片内出现</td>
-</tr>
-<tr>
-<td>信任根（RoT）</td>
-<td>Root of Trust，信任链的起点</td>
-<td>安全体系的根</td>
-</tr>
-<tr>
-<td>黑盒信任根</td>
-<td>用户无法直接验证的信任根</td>
-<td>信任全押在厂商身上</td>
-</tr>
-<tr>
-<td>信任缺口</td>
-<td>trust gap，用户与云平台间的信任落差</td>
-<td>数据你说了不算</td>
-</tr>
-<tr>
-<td>TLS</td>
-<td>Transport Layer Security，传输层安全协议</td>
-<td>加密管道本身</td>
-</tr>
-<tr>
-<td>HTTPS</td>
-<td>HTTP over TLS</td>
-<td>加密管道送 HTTP</td>
-</tr>
-</tbody>
-</table>
-<h3 id="数据三态为什么内存里的数据最难保护">🧩
-数据三态：为什么内存里的数据最难保护</h3>
-<p>任何数据在生命周期里都有三种状态：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 静态数据 (Data at Rest)      → 存在硬盘/磁盘里</span><br><span class="line">② 传输中数据 (Data in Transit) → 网络上传输</span><br><span class="line">③ 使用中数据 (Data in Use)     → 在内存里被 CPU 计算</span><br></pre></td></tr></table></figure>
-<p>传统加密方案只保护前两种：</p>
-<table>
-<thead>
-<tr>
-<th>状态</th>
-<th>保护手段</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>静态</td>
-<td>磁盘加密</td>
-<td>BitLocker、LUKS</td>
-</tr>
-<tr>
-<td>传输中</td>
-<td>网络加密</td>
-<td>HTTPS/TLS</td>
-</tr>
-<tr>
-<td>使用中</td>
-<td>❌ 传统方案管不了</td>
-<td>内存里的明文</td>
-</tr>
-</tbody>
-</table>
-<p>第 ③ 种状态是真正的盲区：<strong>数据在内存里被 CPU
-处理时是明文</strong>。在传统云环境里，云服务商的运维人员、管理员、甚至被攻破的虚拟机监控器（hypervisor）都能看到内存里的明文数据。</p>
-<blockquote>
-<p>典型场景：云端跑 AI
-推理，模型权重和用户数据在内存里参与计算。磁盘加密管静态、HTTPS
-管传输，唯独正在计算这一头是裸奔的。</p>
-</blockquote>
-<h3 id="tee给-cpu-装一个保险箱">🏦 TEE：给 CPU 装一个保险箱</h3>
-<p><strong>TEE（Trusted Execution Environment，可信执行环境）</strong>
-的思路：在 CPU
-硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
-<p><strong>普通虚拟机 vs 机密虚拟机（CVM）：</strong></p>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>普通 VM</th>
-<th>CVM（机密虚拟机）</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>内存</td>
-<td>明文</td>
-<td>硬件加密</td>
-</tr>
-<tr>
-<td>hypervisor</td>
-<td>能读</td>
-<td>读不了</td>
-</tr>
-<tr>
-<td>云管理员</td>
-<td>能读</td>
-<td>读不了</td>
-</tr>
-<tr>
-<td>物理攻击</td>
-<td>可读内存</td>
-<td>也读不了</td>
-</tr>
-</tbody>
-</table>
-<p>主流的 CVM 技术：</p>
-<table>
-<thead>
-<tr>
-<th>技术</th>
-<th>厂商</th>
-<th>特点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AMD SEV-SNP</td>
-<td>AMD</td>
-<td>内存加密 + SNP（安全嵌套分页）防篡改，生态最成熟</td>
-</tr>
-<tr>
-<td>Intel TDX</td>
-<td>Intel</td>
-<td>类似思路，生态还在早期</td>
-</tr>
-<tr>
-<td>ARM CCA</td>
-<td>ARM</td>
-<td>面向 ARM 芯片，适合移动/嵌入式</td>
-</tr>
-</tbody>
-</table>
-<p>概括：<strong>TEE = 硬件帮你把正在计算的数据锁进保险箱</strong>。</p>
-<h3 id="内存加密计算时不还是要解密吗">🔐
-内存加密：计算时不还是要解密吗？</h3>
-<p>这是最常问的问题。答案：<strong>要解密，但解密发生在 CPU
-芯片内部，明文永远不出芯片</strong>。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统（无内存加密）：</span><br><span class="line">  DRAM(明文) ──内存总线──&gt; CPU 计算 ──&gt; DRAM(明文)</span><br><span class="line">  ▲                                ▲</span><br><span class="line">  └─ 总线嗅探、插内存条、冷启动都能读到明文 ─┘</span><br><span class="line"></span><br><span class="line">内存加密后（SEV）：</span><br><span class="line">  DRAM(密文) ──内存总线──&gt; CPU 内部解密 → 明文只存在于芯片内 ──&gt; 重新加密写回 DRAM</span><br><span class="line">                    │        （缓存/寄存器/执行单元）</span><br><span class="line">                    │</span><br><span class="line">                    └─ 总线上的、DRAM 里的，全是密文 AES(key)</span><br></pre></td></tr></table></figure>
-<p>四个关键点：</p>
-<ol type="1">
-<li><strong>密钥永远在 CPU 内部</strong>，由 CPU 的专用安全处理器（AMD
-是 PSP，Platform Security Processor）生成和管理，外界拿不到。</li>
-<li><strong>解密点 = 内存控制器</strong>，它就在 CPU 芯片上。数据从 DRAM
-进入芯片后才被解密；离开芯片写回内存前被加密。</li>
-<li>攻击者能接触到的所有地方——内存条、总线、DMA
-设备——看到的都是密文。<strong>计算这个动作发生在芯片内部，外人看不到明文</strong>。</li>
-<li>类比：CPU
-是个保密工厂。仓库（DRAM）里堆的全是加密原料，原料进车间（芯片内部）才解锁加工，成品出车间前重新上锁。你能抢仓库、能蹲在传送带（总线）旁边，但看到的永远是锁着的东西。</li>
-</ol>
-<blockquote>
-<p>边界提醒：这个模型防的是外部窃读。如果攻击者攻破了 CVM
-<strong>内部</strong>的软件（guest kernel
-漏洞），明文当然还是会被读到——这要靠后面讲的远程认证来保证 CVM
-内部没被装后门。</p>
-</blockquote>
-<h3 id="https-和-tls-的区别">🧷 HTTPS 和 TLS 的区别</h3>
-<p><strong>TLS 是加密管道协议本身，HTTPS 是 HTTP 跑在 TLS
-管道里这个组合。</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">HTTP ──┐</span><br><span class="line">TLS  ──┼──&gt; HTTPS = HTTP over TLS（https:// 前缀）</span><br><span class="line">TCP/IP─┘</span><br></pre></td></tr></table></figure>
-<table>
-<colgroup>
-<col style="width: 42%" />
-<col style="width: 57%" />
-</colgroup>
-<thead>
-<tr>
-<th>概念</th>
-<th>是什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>TLS</td>
-<td>独立的加密协议：握手、证书验证、密钥协商、加密传输。不关心上面跑的是什么</td>
-</tr>
-<tr>
-<td>HTTPS</td>
-<td>HTTP + TLS 的固定组合，是 TLS 最常见的应用场景</td>
-</tr>
-<tr>
-<td>SSL</td>
-<td>TLS 的前身（SSL 3.0 → TLS 1.0），现在说 SSL 证书其实都是 TLS
-证书</td>
-</tr>
-</tbody>
-</table>
-<p>TLS 不只服务 HTTP：比如内核里可以直接跑 TLS（kernel
-TLS），给特定通道做端到端加密，这是机密计算里的常见性能优化点。</p>
-<h3 id="黑盒信任根tee-的信任缺口">🔮 黑盒信任根：TEE 的信任缺口</h3>
-<p>TEE 的保险箱钥匙（信任根）捏在<strong>芯片厂商</strong>手里：</p>
-<ul>
-<li>你要相信 AMD/Intel 的密钥管理、固件、证书链全都没问题</li>
-<li>用户<strong>无法直接验证</strong>，只能信任厂商，这叫
-<strong>black-box trust root（黑盒信任根）</strong></li>
-<li>用户和云平台之间存在 <strong>trust
-gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
-</ul>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统 TEE 信任模型：</span><br><span class="line">  用户 → 信任 → 云平台 → 信任 → 芯片厂商</span><br><span class="line">        └──────────────────────────┘</span><br><span class="line">        信任链全部建立在&quot;厂商没毛病&quot;上，</span><br><span class="line">        用户没有独立验证的入口，这叫黑盒</span><br></pre></td></tr></table></figure>
-<p>三个具体痛点：</p>
-<table>
-<thead>
-<tr>
-<th>痛点</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>厂商依赖</td>
-<td>用户必须信任制造商，制造商出问题或作恶，安全就崩</td>
-</tr>
-<tr>
-<td>无法独立验证</td>
-<td>验证服务本身也是厂商/平台提供的，用户只能被动接受结论</td>
-</tr>
-<tr>
-<td>多租户复杂</td>
-<td>多租户云环境虚拟化栈复杂，漏洞不可避免，风险放大</td>
-</tr>
-</tbody>
-</table>
-<p>这正是 TEE 与 TPM 协作信任的切入点：<strong>TPM
-是用户能直接访问、能自己配置的白盒信任根，用它来制衡 TEE
-的黑盒信任根</strong>。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>磁盘加密 + HTTPS 就能保护云端数据</td>
-<td>只保护静态和传输两种状态，内存里的使用中数据仍是明文</td>
-</tr>
-<tr>
-<td>内存加密后 CPU 计算会暴露明文</td>
-<td>解密只在 CPU 芯片内部，外部看到的永远是密文</td>
-</tr>
-<tr>
-<td>TEE 是纯软件方案</td>
-<td>TEE 依赖 CPU 硬件隔离和内存加密，密钥由芯片内安全处理器管理</td>
-</tr>
-<tr>
-<td>信任厂商 = 安全</td>
-<td>黑盒信任根意味着用户无法独立验证，存在信任缺口</td>
-</tr>
-<tr>
-<td>HTTPS 和 TLS 是两种加密技术</td>
-<td>HTTPS = HTTP over TLS，TLS 才是底层协议</td>
-</tr>
-<tr>
-<td>SSL 和 TLS 没关系</td>
-<td>TLS 是 SSL 的继任者，本质同一套体系</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>数据在使用中（内存里）是明文，传统加密管不了，需要 TEE
-这类硬件级隔离；TEE 靠内存加密 +
-解密只在芯片内保护使用中数据，但它的信任根归厂商、用户无法验证，形成了黑盒信任缺口——这正是
-TEE + TPM 协作信任要解决的问题。</p>
-</blockquote>
-<p>下一站：SEV-SNP 的隔离到底怎么做到的（NPT、RMP、ASID）。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>机密计算</tag>
-        <tag>内存加密</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 入门：从 main 到 _start</title>
     <url>/posts/76bb2795/</url>
     <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
@@ -22746,6 +22414,338 @@ class="uri">https://os.phil-opp.com/</a></li>
         <tag>no_std</tag>
         <tag>裸机</tag>
         <tag>链接器</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>机密计算入门：数据使用中的安全与TEE</title>
+    <url>/posts/84b980d1/</url>
+    <content><![CDATA[<p>硬盘和网络传输中的数据都有加密保护，但数据进入内存参与计算时往往是明文。机密计算（Confidential
+Computing）解决的就是这个问题，本文介绍它与 TEE 的基本概念。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据三态</td>
+<td>静态、传输中、使用中三种数据状态</td>
+<td>内存里的数据最危险</td>
+</tr>
+<tr>
+<td>TEE</td>
+<td>Trusted Execution Environment，可信执行环境</td>
+<td>CPU 里的硬件保险箱</td>
+</tr>
+<tr>
+<td>CVM</td>
+<td>Confidential Virtual Machine，机密虚拟机</td>
+<td>内存被硬件加密的虚拟机</td>
+</tr>
+<tr>
+<td>SEV-SNP</td>
+<td>AMD 的 CVM 技术（安全加密虚拟化-安全嵌套分页）</td>
+<td>AMD 系机密虚拟机</td>
+</tr>
+<tr>
+<td>TDX</td>
+<td>Intel 的 CVM 技术（信任域扩展）</td>
+<td>Intel 系机密虚拟机</td>
+</tr>
+<tr>
+<td>CCA</td>
+<td>ARM 的 CVM 技术（机密计算架构）</td>
+<td>ARM 系机密虚拟机</td>
+</tr>
+<tr>
+<td>内存加密</td>
+<td>数据在内存里以密文形式存储</td>
+<td>明文只在 CPU 芯片内出现</td>
+</tr>
+<tr>
+<td>信任根（RoT）</td>
+<td>Root of Trust，信任链的起点</td>
+<td>安全体系的根</td>
+</tr>
+<tr>
+<td>黑盒信任根</td>
+<td>用户无法直接验证的信任根</td>
+<td>信任全押在厂商身上</td>
+</tr>
+<tr>
+<td>信任缺口</td>
+<td>trust gap，用户与云平台间的信任落差</td>
+<td>数据你说了不算</td>
+</tr>
+<tr>
+<td>TLS</td>
+<td>Transport Layer Security，传输层安全协议</td>
+<td>加密管道本身</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>HTTP over TLS</td>
+<td>加密管道送 HTTP</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数据三态为什么内存里的数据最难保护">🧩
+数据三态：为什么内存里的数据最难保护</h3>
+<p>任何数据在生命周期里都有三种状态：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 静态数据 (Data at Rest)      → 存在硬盘/磁盘里</span><br><span class="line">② 传输中数据 (Data in Transit) → 网络上传输</span><br><span class="line">③ 使用中数据 (Data in Use)     → 在内存里被 CPU 计算</span><br></pre></td></tr></table></figure>
+<p>传统加密方案只保护前两种：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>保护手段</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>静态</td>
+<td>磁盘加密</td>
+<td>BitLocker、LUKS</td>
+</tr>
+<tr>
+<td>传输中</td>
+<td>网络加密</td>
+<td>HTTPS/TLS</td>
+</tr>
+<tr>
+<td>使用中</td>
+<td>❌ 传统方案管不了</td>
+<td>内存里的明文</td>
+</tr>
+</tbody>
+</table>
+<p>第 ③ 种状态是真正的盲区：<strong>数据在内存里被 CPU
+处理时是明文</strong>。在传统云环境里，云服务商的运维人员、管理员、甚至被攻破的虚拟机监控器（hypervisor）都能看到内存里的明文数据。</p>
+<blockquote>
+<p>典型场景：云端跑 AI
+推理，模型权重和用户数据在内存里参与计算。磁盘加密管静态、HTTPS
+管传输，唯独正在计算这一头是裸奔的。</p>
+</blockquote>
+<h3 id="tee给-cpu-装一个保险箱">🏦 TEE：给 CPU 装一个保险箱</h3>
+<p><strong>TEE（Trusted Execution Environment，可信执行环境）</strong>
+的思路：在 CPU
+硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
+<p><strong>普通虚拟机 vs 机密虚拟机（CVM）：</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>普通 VM</th>
+<th>CVM（机密虚拟机）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内存</td>
+<td>明文</td>
+<td>硬件加密</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>能读</td>
+<td>读不了</td>
+</tr>
+<tr>
+<td>云管理员</td>
+<td>能读</td>
+<td>读不了</td>
+</tr>
+<tr>
+<td>物理攻击</td>
+<td>可读内存</td>
+<td>也读不了</td>
+</tr>
+</tbody>
+</table>
+<p>主流的 CVM 技术：</p>
+<table>
+<thead>
+<tr>
+<th>技术</th>
+<th>厂商</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AMD SEV-SNP</td>
+<td>AMD</td>
+<td>内存加密 + SNP（安全嵌套分页）防篡改，生态最成熟</td>
+</tr>
+<tr>
+<td>Intel TDX</td>
+<td>Intel</td>
+<td>类似思路，生态还在早期</td>
+</tr>
+<tr>
+<td>ARM CCA</td>
+<td>ARM</td>
+<td>面向 ARM 芯片，适合移动/嵌入式</td>
+</tr>
+</tbody>
+</table>
+<p>概括：<strong>TEE = 硬件帮你把正在计算的数据锁进保险箱</strong>。</p>
+<h3 id="内存加密计算时不还是要解密吗">🔐
+内存加密：计算时不还是要解密吗？</h3>
+<p>这是最常问的问题。答案：<strong>要解密，但解密发生在 CPU
+芯片内部，明文永远不出芯片</strong>。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统（无内存加密）：</span><br><span class="line">  DRAM(明文) ──内存总线──&gt; CPU 计算 ──&gt; DRAM(明文)</span><br><span class="line">  ▲                                ▲</span><br><span class="line">  └─ 总线嗅探、插内存条、冷启动都能读到明文 ─┘</span><br><span class="line"></span><br><span class="line">内存加密后（SEV）：</span><br><span class="line">  DRAM(密文) ──内存总线──&gt; CPU 内部解密 → 明文只存在于芯片内 ──&gt; 重新加密写回 DRAM</span><br><span class="line">                    │        （缓存/寄存器/执行单元）</span><br><span class="line">                    │</span><br><span class="line">                    └─ 总线上的、DRAM 里的，全是密文 AES(key)</span><br></pre></td></tr></table></figure>
+<p>四个关键点：</p>
+<ol type="1">
+<li><strong>密钥永远在 CPU 内部</strong>，由 CPU 的专用安全处理器（AMD
+是 PSP，Platform Security Processor）生成和管理，外界拿不到。</li>
+<li><strong>解密点 = 内存控制器</strong>，它就在 CPU 芯片上。数据从 DRAM
+进入芯片后才被解密；离开芯片写回内存前被加密。</li>
+<li>攻击者能接触到的所有地方——内存条、总线、DMA
+设备——看到的都是密文。<strong>计算这个动作发生在芯片内部，外人看不到明文</strong>。</li>
+<li>类比：CPU
+是个保密工厂。仓库（DRAM）里堆的全是加密原料，原料进车间（芯片内部）才解锁加工，成品出车间前重新上锁。你能抢仓库、能蹲在传送带（总线）旁边，但看到的永远是锁着的东西。</li>
+</ol>
+<blockquote>
+<p>边界提醒：这个模型防的是外部窃读。如果攻击者攻破了 CVM
+<strong>内部</strong>的软件（guest kernel
+漏洞），明文当然还是会被读到——这要靠后面讲的远程认证来保证 CVM
+内部没被装后门。</p>
+</blockquote>
+<h3 id="https-和-tls-的区别">🧷 HTTPS 和 TLS 的区别</h3>
+<p><strong>TLS 是加密管道协议本身，HTTPS 是 HTTP 跑在 TLS
+管道里这个组合。</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">HTTP ──┐</span><br><span class="line">TLS  ──┼──&gt; HTTPS = HTTP over TLS（https:// 前缀）</span><br><span class="line">TCP/IP─┘</span><br></pre></td></tr></table></figure>
+<table>
+<colgroup>
+<col style="width: 42%" />
+<col style="width: 57%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TLS</td>
+<td>独立的加密协议：握手、证书验证、密钥协商、加密传输。不关心上面跑的是什么</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>HTTP + TLS 的固定组合，是 TLS 最常见的应用场景</td>
+</tr>
+<tr>
+<td>SSL</td>
+<td>TLS 的前身（SSL 3.0 → TLS 1.0），现在说 SSL 证书其实都是 TLS
+证书</td>
+</tr>
+</tbody>
+</table>
+<p>TLS 不只服务 HTTP：比如内核里可以直接跑 TLS（kernel
+TLS），给特定通道做端到端加密，这是机密计算里的常见性能优化点。</p>
+<h3 id="黑盒信任根tee-的信任缺口">🔮 黑盒信任根：TEE 的信任缺口</h3>
+<p>TEE 的保险箱钥匙（信任根）捏在<strong>芯片厂商</strong>手里：</p>
+<ul>
+<li>你要相信 AMD/Intel 的密钥管理、固件、证书链全都没问题</li>
+<li>用户<strong>无法直接验证</strong>，只能信任厂商，这叫
+<strong>black-box trust root（黑盒信任根）</strong></li>
+<li>用户和云平台之间存在 <strong>trust
+gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统 TEE 信任模型：</span><br><span class="line">  用户 → 信任 → 云平台 → 信任 → 芯片厂商</span><br><span class="line">        └──────────────────────────┘</span><br><span class="line">        信任链全部建立在&quot;厂商没毛病&quot;上，</span><br><span class="line">        用户没有独立验证的入口，这叫黑盒</span><br></pre></td></tr></table></figure>
+<p>三个具体痛点：</p>
+<table>
+<thead>
+<tr>
+<th>痛点</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>厂商依赖</td>
+<td>用户必须信任制造商，制造商出问题或作恶，安全就崩</td>
+</tr>
+<tr>
+<td>无法独立验证</td>
+<td>验证服务本身也是厂商/平台提供的，用户只能被动接受结论</td>
+</tr>
+<tr>
+<td>多租户复杂</td>
+<td>多租户云环境虚拟化栈复杂，漏洞不可避免，风险放大</td>
+</tr>
+</tbody>
+</table>
+<p>这正是 TEE 与 TPM 协作信任的切入点：<strong>TPM
+是用户能直接访问、能自己配置的白盒信任根，用它来制衡 TEE
+的黑盒信任根</strong>。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>磁盘加密 + HTTPS 就能保护云端数据</td>
+<td>只保护静态和传输两种状态，内存里的使用中数据仍是明文</td>
+</tr>
+<tr>
+<td>内存加密后 CPU 计算会暴露明文</td>
+<td>解密只在 CPU 芯片内部，外部看到的永远是密文</td>
+</tr>
+<tr>
+<td>TEE 是纯软件方案</td>
+<td>TEE 依赖 CPU 硬件隔离和内存加密，密钥由芯片内安全处理器管理</td>
+</tr>
+<tr>
+<td>信任厂商 = 安全</td>
+<td>黑盒信任根意味着用户无法独立验证，存在信任缺口</td>
+</tr>
+<tr>
+<td>HTTPS 和 TLS 是两种加密技术</td>
+<td>HTTPS = HTTP over TLS，TLS 才是底层协议</td>
+</tr>
+<tr>
+<td>SSL 和 TLS 没关系</td>
+<td>TLS 是 SSL 的继任者，本质同一套体系</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数据在使用中（内存里）是明文，传统加密管不了，需要 TEE
+这类硬件级隔离；TEE 靠内存加密 +
+解密只在芯片内保护使用中数据，但它的信任根归厂商、用户无法验证，形成了黑盒信任缺口——这正是
+TEE + TPM 协作信任要解决的问题。</p>
+</blockquote>
+<p>下一站：SEV-SNP 的隔离到底怎么做到的（NPT、RMP、ASID）。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>机密计算</tag>
+        <tag>内存加密</tag>
       </tags>
   </entry>
   <entry>
@@ -24510,6 +24510,11 @@ href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
 <h3 id="第二层screenchar-与-buffer一个格子与整块屏幕">🧱
 第二层：ScreenChar 与 Buffer——一个格子与整块屏幕</h3>
 <figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="meta">#[repr(C)]</span>                                      <span class="comment">// ASCII 在前、颜色在后，和硬件一致</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,                        <span class="comment">// 一个字符单元的第一字节</span></span><br><span class="line">    color_code: ColorCode,                      <span class="comment">// 第二字节（布局等同 u8）</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;                <span class="comment">// 行数（篇一：const）</span></span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;                 <span class="comment">// 列数</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">use</span> volatile::Volatile;                         <span class="comment">// 显存必须用 volatile 访问，理由见下</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[Volatile&lt;ScreenChar&gt;; BUFFER_WIDTH]; BUFFER_HEIGHT],   <span class="comment">// 25 行 × 80 列</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>Buffer</code>
+自己没有加属性，也不必加：它只有一个字段，<code>chars</code>
+相对它的偏移恒为 0，代码又只通过 <code>chars[row][col]</code>
+访问，布局细节不影响正确性。硬件真正依赖的布局是另外两个——<code>ScreenChar</code>
+的字段顺序，以及 <code>ColorCode</code> 的 1 字节。</p>
 <p><code>Volatile</code> 是这一层唯一需要展开的地方。显存是内存映射
 I/O（MMIO），它的内容会被硬件改动，而编译器看不到这件事；没有这层包装，编译器可能把连续的多次写合并掉，也可能认为刚写进去的值还在寄存器里、读取时不必回内存。第五层的
 <code>new_line</code>
@@ -24518,14 +24523,6 @@ I/O（MMIO），它的内容会被硬件改动，而编译器看不到这件事�
 <code>Buffer</code> 在内存里仍然严格是 25 × 80 × 2
 字节，和显存逐格对应。</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Buffer = 25 × 80 个格子，每格 2 字节</span><br><span class="line">        ┌───────────────────┐</span><br><span class="line">Row 0   │ . . . . . . . . . │  ← 第 0 行</span><br><span class="line">Row 1   │ . . . . . . . . . │  ← 第 1 行</span><br><span class="line"> ...    │        ...        │</span><br><span class="line">Row 24  │ . . . . . . . . . │  ← 第 24 行</span><br><span class="line">        └───────────────────┘</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>前面几篇为了讲语法，把 <code>Buffer</code> 写成
-<code>[[ScreenChar; 80]; 25]</code> 并加了
-<code>#[repr(transparent)]</code>。真实代码里 <code>Buffer</code>
-没有任何属性，元素是 <code>Volatile&lt;ScreenChar&gt;</code>；真正需要
-<code>#[repr(transparent)]</code> 的是第一层那个
-<code>ColorCode</code>。</p>
-</blockquote>
 <h3 id="第三层writer写字的人">🖋️ 第三层：Writer——写字的人</h3>
 <figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;                  <span class="comment">// pub：模块外可见（篇一）</span></span><br><span class="line">    column_position: <span class="type">usize</span>,          <span class="comment">// 当前写到第几列（0～79）</span></span><br><span class="line">    color_code: ColorCode,           <span class="comment">// 整屏统一的颜色，构造后不再改</span></span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,     <span class="comment">// 可变：要往里写；&#x27;static：显存一直存在（篇二）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>三个字段凑起来就是一句话：<strong>光标在哪、用什么颜色、往哪写</strong>。后面所有方法都只是围绕这三件事操作。</p>

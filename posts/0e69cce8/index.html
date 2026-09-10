@@ -30,7 +30,7 @@
 <meta property="og:description" content="前三篇的语法与思想，最终都落在一个真实的模块上：VGA 文本模式的 vga_buffer.rs。这篇不贴全文，而是把它拆成九块来读——从颜色怎么压进一个字节，一直讲到 println! 怎么变成对显存的一次写。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-07T04:05:00.000Z">
-<meta property="article:modified_time" content="2026-09-10T09:05:02.360Z">
+<meta property="article:modified_time" content="2026-09-10T09:19:15.426Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="Rust">
 <meta property="article:tag" content="VGA">
@@ -278,7 +278,7 @@ println!——宏与 _print</span></a></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 17:05:02" itemprop="dateModified" datetime="2026-09-10T17:05:02+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-10 17:19:15" itemprop="dateModified" datetime="2026-09-10T17:19:15+08:00">2026-09-10</time>
     </span>
 
   
@@ -399,6 +399,11 @@ href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
 <h3 id="第二层screenchar-与-buffer一个格子与整块屏幕">🧱
 第二层：ScreenChar 与 Buffer——一个格子与整块屏幕</h3>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="meta">#[repr(C)]</span>                                      <span class="comment">// ASCII 在前、颜色在后，和硬件一致</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,                        <span class="comment">// 一个字符单元的第一字节</span></span><br><span class="line">    color_code: ColorCode,                      <span class="comment">// 第二字节（布局等同 u8）</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;                <span class="comment">// 行数（篇一：const）</span></span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;                 <span class="comment">// 列数</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">use</span> volatile::Volatile;                         <span class="comment">// 显存必须用 volatile 访问，理由见下</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[Volatile&lt;ScreenChar&gt;; BUFFER_WIDTH]; BUFFER_HEIGHT],   <span class="comment">// 25 行 × 80 列</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>Buffer</code>
+自己没有加属性，也不必加：它只有一个字段，<code>chars</code>
+相对它的偏移恒为 0，代码又只通过 <code>chars[row][col]</code>
+访问，布局细节不影响正确性。硬件真正依赖的布局是另外两个——<code>ScreenChar</code>
+的字段顺序，以及 <code>ColorCode</code> 的 1 字节。</p>
 <p><code>Volatile</code> 是这一层唯一需要展开的地方。显存是内存映射
 I/O（MMIO），它的内容会被硬件改动，而编译器看不到这件事；没有这层包装，编译器可能把连续的多次写合并掉，也可能认为刚写进去的值还在寄存器里、读取时不必回内存。第五层的
 <code>new_line</code>
@@ -407,14 +412,6 @@ I/O（MMIO），它的内容会被硬件改动，而编译器看不到这件事�
 <code>Buffer</code> 在内存里仍然严格是 25 × 80 × 2
 字节，和显存逐格对应。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Buffer = 25 × 80 个格子，每格 2 字节</span><br><span class="line">        ┌───────────────────┐</span><br><span class="line">Row 0   │ . . . . . . . . . │  ← 第 0 行</span><br><span class="line">Row 1   │ . . . . . . . . . │  ← 第 1 行</span><br><span class="line"> ...    │        ...        │</span><br><span class="line">Row 24  │ . . . . . . . . . │  ← 第 24 行</span><br><span class="line">        └───────────────────┘</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>前面几篇为了讲语法，把 <code>Buffer</code> 写成
-<code>[[ScreenChar; 80]; 25]</code> 并加了
-<code>#[repr(transparent)]</code>。真实代码里 <code>Buffer</code>
-没有任何属性，元素是 <code>Volatile&lt;ScreenChar&gt;</code>；真正需要
-<code>#[repr(transparent)]</code> 的是第一层那个
-<code>ColorCode</code>。</p>
-</blockquote>
 <h3 id="第三层writer写字的人">🖋️ 第三层：Writer——写字的人</h3>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;                  <span class="comment">// pub：模块外可见（篇一）</span></span><br><span class="line">    column_position: <span class="type">usize</span>,          <span class="comment">// 当前写到第几列（0～79）</span></span><br><span class="line">    color_code: ColorCode,           <span class="comment">// 整屏统一的颜色，构造后不再改</span></span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,     <span class="comment">// 可变：要往里写；&#x27;static：显存一直存在（篇二）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>三个字段凑起来就是一句话：<strong>光标在哪、用什么颜色、往哪写</strong>。后面所有方法都只是围绕这三件事操作。</p>
