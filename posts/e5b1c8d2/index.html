@@ -30,7 +30,7 @@
 <meta property="og:description" content="本文记录在 Ubuntu 24.04 + H100 上从零跑通 CUDA 代码的过程，包括环境配置和常见问题。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-08-11T09:20:08.000Z">
-<meta property="article:modified_time" content="2026-09-07T03:17:34.146Z">
+<meta property="article:modified_time" content="2026-09-10T03:25:44.431Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CUDA">
@@ -269,7 +269,7 @@ PyTorch（CUDA-12.4 wheel）</span></a></li><li class="nav-item nav-level-3"><a 
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-07 11:17:34" itemprop="dateModified" datetime="2026-09-07T11:17:34+08:00">2026-09-07</time>
+      <time title="Modified: 2026-09-10 11:25:44" itemprop="dateModified" datetime="2026-09-10T11:25:44+08:00">2026-09-10</time>
     </span>
 
   
@@ -383,11 +383,14 @@ kernel：</p>
 <code>&lt;&lt;&lt;grid,block&gt;&gt;&gt;</code> 启动的
 kernel，将被编译为 PTX/SASS 在 GPU 上跑。</li>
 </ol>
-<p>为什么单独用 <code>.cu</code>？ - 让 <code>nvcc</code>
-识别文件需要“双重编译”：CPU 端交给主机编译器，GPU 端生成
-PTX/SASS。<br />
-- 一个文件里即可 <code>cudaMalloc/cudaMemcpy</code> 及定义
-kernel，方便小项目/快速实验。</p>
+<p>为什么单独用 <code>.cu</code>？</p>
+<ul>
+<li>让 <code>nvcc</code> 识别文件需要“双重编译”：CPU
+端交给主机编译器，GPU 端生成 PTX/SASS。<br />
+</li>
+<li>一个文件里即可 <code>cudaMalloc/cudaMemcpy</code> 及定义
+kernel，方便小项目/快速实验。</li>
+</ul>
 <p>常见编译方式： <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 直接生成可执行</span></span><br><span class="line">nvcc vec_add.cu -o vec_add</span><br><span class="line"></span><br><span class="line"><span class="comment"># 先生成对象，再由 g++ 链接</span></span><br><span class="line">nvcc -c my_kernel.cu -o my_kernel.o</span><br><span class="line">g++ host_main.cpp my_kernel.o -lcudart -L/usr/local/cuda/lib64</span><br></pre></td></tr></table></figure></p>
 <table>
 <thead>
@@ -477,28 +480,37 @@ PyTorch（CUDA-12.4 wheel）</h3>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">python projects/gpu_fuzz/gen/collect_env.py \</span><br><span class="line">       &gt; projects/gpu_learn/log/env.txt 2&gt;&amp;1</span><br><span class="line"><span class="built_in">head</span> -n 24 projects/gpu_learn/log/env.txt</span><br></pre></td></tr></table></figure>
 <p>重点确认： <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">PyTorch version: 2.6.0+cu124</span><br><span class="line">CUDA runtime version: 12.6.85</span><br><span class="line">Is CUDA available: True</span><br></pre></td></tr></table></figure></p>
 <blockquote>
-<p>详细解读（常见疑问都在这里）： -
-<code>PyTorch version: 2.6.0+cu124</code> —— <strong>2.6.0</strong>
+<p>详细解读（常见疑问都在这里）：</p>
+</blockquote>
+<blockquote>
+<ul>
+<li><code>PyTorch version: 2.6.0+cu124</code> —— <strong>2.6.0</strong>
 是框架版本；<code>+cu124</code> 表示它自带 CUDA-12.4
-编译产物（cuDNN/cuBLAS 等)。 - <code>Is debug build: False</code> ——
-官方 Release 版（True 时为带断言的调试版，速度慢）。 -
-<code>CUDA used to build PyTorch: 12.4</code> —— wheel 内置的编译 CUDA
-版本；与系统 <code>runtime 12.6</code> 向下兼容即可。 -
-<code>OS / GCC / Clang / CMake</code> —— 编译本地 C++/CUDA
-扩展时要用到的工具链版本，记录可复现性。 -
-<code>Python version: 3.11.x (conda-forge)</code> ——
-确认与你的虚拟环境一致，便于后续 <code>pip install</code> ABI 兼容。 -
-<code>Is CUDA available: True</code> ——
+编译产物（cuDNN/cuBLAS 等)。</li>
+<li><code>Is debug build: False</code> —— 官方 Release 版（True
+时为带断言的调试版，速度慢）。</li>
+<li><code>CUDA used to build PyTorch: 12.4</code> —— wheel 内置的编译
+CUDA 版本；与系统 <code>runtime 12.6</code> 向下兼容即可。</li>
+<li><code>OS / GCC / Clang / CMake</code> —— 编译本地 C++/CUDA
+扩展时要用到的工具链版本，记录可复现性。</li>
+<li><code>Python version: 3.11.x (conda-forge)</code> ——
+确认与你的虚拟环境一致，便于后续 <code>pip install</code> ABI
+兼容。</li>
+<li><code>Is CUDA available: True</code> ——
 <code>torch.cuda.is_available()</code> 结果，若 False 请先查驱动 /
-环境变量。 - <code>CUDA runtime version: 12.6.85</code> —— 驱动自带的
-<code>libcuda.so</code> runtime 版本，只要 ≥ wheel 内的 12.4 即 OK。 -
-<code>CUDA_MODULE_LOADING: LAZY</code> —— 默认懒加载
-PTX，可减少启动时延；如需即时插桩可设 <code>EAGER</code>。 -
-<code>GPU 0: NVIDIA H100 PCIe</code> —— 检测到的物理
-GPU，与预期硬件相符。 - <code>cuDNN/cuBLAS/cuFFT/…</code> —— 列表展示
-wheel 自带的具体子库版本，用于排查 “库不匹配” 问题。 -
-<code>CPU:</code>及后续 ——
-主机硬件与漏洞缓解信息，可忽略；仅在编译器优化或虚拟化环境排错时有用。</p>
+环境变量。</li>
+<li><code>CUDA runtime version: 12.6.85</code> —— 驱动自带的
+<code>libcuda.so</code> runtime 版本，只要 ≥ wheel 内的 12.4 即
+OK。</li>
+<li><code>CUDA_MODULE_LOADING: LAZY</code> —— 默认懒加载
+PTX，可减少启动时延；如需即时插桩可设 <code>EAGER</code>。</li>
+<li><code>GPU 0: NVIDIA H100 PCIe</code> —— 检测到的物理
+GPU，与预期硬件相符。</li>
+<li><code>cuDNN/cuBLAS/cuFFT/…</code> —— 列表展示 wheel
+自带的具体子库版本，用于排查 “库不匹配” 问题。</li>
+<li><code>CPU:</code>及后续 ——
+主机硬件与漏洞缓解信息，可忽略；仅在编译器优化或虚拟化环境排错时有用。</li>
+</ul>
 <p>省流：<strong>三行打勾 + 驱动≥CUDA + GPU 型号正确 =
 环境健康。</strong></p>
 </blockquote>
@@ -619,7 +631,7 @@ wheel 自带的具体子库版本，用于排查 “库不匹配” 问题。 -
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:34</span>
+    <span title="Reading time total">12:33</span>
   </span>
 </div>
 <div class="busuanzi-count">

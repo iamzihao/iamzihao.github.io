@@ -30,7 +30,7 @@
 <meta property="og:description" content="今天来看一下 NVIDIA GPU 的中间表示（PTX）指令。我们以 ld（load）指令为主线，把 PTX 语法 和 GPU 存储层次&#x2F;缓存&#x2F;一致性 串起来理解。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-12-13T01:54:37.000Z">
-<meta property="article:modified_time" content="2026-09-10T03:13:18.270Z">
+<meta property="article:modified_time" content="2026-09-10T03:25:44.640Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CUDA">
@@ -284,7 +284,7 @@ Access）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" hr
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 11:13:18" itemprop="dateModified" datetime="2026-09-10T11:13:18+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-10 11:25:44" itemprop="dateModified" datetime="2026-09-10T11:25:44+08:00">2026-09-10</time>
     </span>
 
   
@@ -944,11 +944,13 @@ Cache</strong>。<strong>特性</strong>：若 Warp
 Addressing）</h3>
 <p>如果在 <code>ld</code>
 指令后<strong>没有</strong>任何空间修饰符（例如直接写
-<code>ld.f32 %r1, [%rd1]</code>），则表示使用<strong>通用寻址</strong>。
-- <strong>机制</strong>：指针携带元数据，硬件运行时判断它指向
+<code>ld.f32 %r1, [%rd1]</code>），则表示使用<strong>通用寻址</strong>。</p>
+<ul>
+<li><strong>机制</strong>：指针携带元数据，硬件运行时判断它指向
 Global/Shared/Local。<br />
--
-<strong>性能</strong>：略慢于显式空间（多一步判别）。能写清楚就尽量写清楚。</p>
+</li>
+<li><strong>性能</strong>：略慢于显式空间（多一步判别）。能写清楚就尽量写清楚。</li>
+</ul>
 <h2 id="读什么数据形状data-shape">读什么：数据形状（Data Shape）</h2>
 <p>这是指令的“宾语”，告诉 GPU
 “你要搬运的包裹长什么样”。选择正确的形状对于利用<strong>带宽</strong>至关重要。</p>
@@ -1255,17 +1257,22 @@ Cluster。</li>
 </ul>
 <blockquote>
 <p><strong>Cluster 扩展知识 (Hopper 新特性, H100, Compute Capability
-9.0)</strong>： * <strong>层级位置</strong>：位于 Grid 和 Block 之间
-(Grid &gt; Cluster &gt; Block &gt; Thread)。 *
-<strong>物理含义</strong>：保证一组 Block（如 4
-个）被调度到<strong>物理相邻</strong>的 SM 上（GPC 内部）。 *
-<strong>解决痛点</strong>：Block 和 Block 之间是完全隔离的。哪怕 Block A
-和 Block B 就在隔壁的两个 SM 上运行，它们想交换数据，也必须走最慢的
-Global Memory。 * <strong>超能力</strong>：Cluster 内的不同 Block
-可以直接访问对方的 Shared Memory（称为
-<strong>DSMEM</strong>），通信不用绕道 L2，极其适合大模型训练中跨 Block
-的数据交换。 <em>把属于同一个 Cluster 的所有 Block，调度到同一个
-GPC里的不同 SM上去。</em></p>
+9.0)</strong>：</p>
+</blockquote>
+<blockquote>
+<ul>
+<li><strong>层级位置</strong>：位于 Grid 和 Block 之间 (Grid &gt;
+Cluster &gt; Block &gt; Thread)。</li>
+<li><strong>物理含义</strong>：保证一组 Block（如 4
+个）被调度到<strong>物理相邻</strong>的 SM 上（GPC 内部）。</li>
+<li><strong>解决痛点</strong>：Block 和 Block 之间是完全隔离的。哪怕
+Block A 和 Block B 就在隔壁的两个 SM
+上运行，它们想交换数据，也必须走最慢的 Global Memory。</li>
+<li><strong>超能力</strong>：Cluster 内的不同 Block 可以直接访问对方的
+Shared Memory（称为 <strong>DSMEM</strong>），通信不用绕道
+L2，极其适合大模型训练中跨 Block 的数据交换。 <em>把属于同一个 Cluster
+的所有 Block，调度到同一个 GPC里的不同 SM上去。</em></li>
+</ul>
 </blockquote>
 <p>典型组合：</p>
 <ul>
@@ -1381,7 +1388,7 @@ scope（避免读旧值/重排导致的逻辑错误）。</li>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:34</span>
+    <span title="Reading time total">12:33</span>
   </span>
 </div>
 <div class="busuanzi-count">

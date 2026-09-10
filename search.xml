@@ -1222,53 +1222,6 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>前端浏览器缓存机制</title>
     <url>/posts/50ac740b/</url>
     <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
@@ -1370,6 +1323,53 @@ JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件�
         <tag>前端</tag>
         <tag>浏览器</tag>
         <tag>缓存</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -1700,77 +1700,6 @@ Communication，近场通信）是一种短距离无线通信技术，工作频�
       </tags>
   </entry>
   <entry>
-    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
-    <url>/posts/f520f9c/</url>
-    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
-<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
-<span id="more"></span>
-<h3 id="网络分层模型">网络分层模型</h3>
-<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
-<ul>
-<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
-<li>传输层:TCP、UDP等传输控制协议</li>
-<li>网络层:IP、ICMP等网络协议</li>
-<li>网络接口层:以太网、WiFi等物理传输协议</li>
-</ul>
-<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
-<h2 id="协议栈的演进">协议栈的演进</h2>
-<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
-<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
-<p>TCP(传输控制协议): - 面向连接:通信前需要建立连接(三次握手) -
-可靠传输:使用确认机制和重传机制保证数据可靠到达 -
-流量控制:根据接收方处理能力调整发送速率 -
-拥塞控制:根据网络状况调整发送速率 -
-适用场景:文件传输、网页访问等对可靠性要求高的应用</p>
-<p>UDP(用户数据报协议): - 无连接:不需要建立连接即可传输数据 -
-不可靠:不保证数据一定送达 - 无流量控制和拥塞控制 - 开销小、延迟低 -
-适用场景:视频直播、游戏等对实时性要求高的应用</p>
-<h3 id="应用层的发展">应用层的发展</h3>
-<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
-<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
-<p>HTTP/1.1: - 持久连接:复用TCP连接 - 管道化请求:支持多个请求排队 -
-但存在队头阻塞问题</p>
-<p>HTTP/2: - 多路复用:在同一连接上并发处理多个请求 -
-头部压缩:减少传输开销 - 服务器推送:主动推送相关资源 -
-二进制分帧:更高效的数据传输</p>
-<h4 id="grpc---现代分布式系统的新选择">gRPC -
-现代分布式系统的新选择</h4>
-<p>gRPC是基于HTTP/2构建的高性能RPC框架: - 协议层次: * 应用层:gRPC API *
-中间层:HTTP/2 * 传输层:TCP * 安全层:TLS(可选)</p>
-<p>四种通信模式: 1. 一元RPC(Unary): - 类似HTTP/1.1的请求-响应模式 -
-适用于传统的客户端-服务器交互</p>
-<ol start="2" type="1">
-<li>服务器流式RPC(Server Streaming):
-<ul>
-<li>客户端发送一个请求,服务器返回数据流</li>
-<li>适用于服务器推送场景,如订阅更新</li>
-</ul></li>
-<li>客户端流式RPC(Client Streaming):
-<ul>
-<li>客户端发送数据流,服务器返回一个响应</li>
-<li>适用于数据上传场景</li>
-</ul></li>
-<li>双向流式RPC(Bidirectional Streaming):
-<ul>
-<li>客户端和服务器同时收发数据流</li>
-<li>适用于实时通信场景,如在线游戏</li>
-</ul></li>
-</ol>
-<p>gRPC的优势: - 基于HTTP/2的高性能 - Protocol Buffers的高效序列化 -
-强类型接口定义 - 跨语言支持 - 内置流控和安全机制</p>
-<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
-<p>TLS在传输层和应用层之间提供了安全保障: - 加密:保护数据不被窃听 -
-认证:验证通信双方身份 - 完整性:确保数据不被篡改</p>
-<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
-]]></content>
-      <tags>
-        <tag>网络协议</tag>
-        <tag>gRPC</tag>
-        <tag>TLS</tag>
-        <tag>HTTP</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>2.4G 无线通信笔记</title>
     <url>/posts/a25d78f8/</url>
     <content><![CDATA[<h2 id="什么是2.4g无线通信">什么是2.4G无线通信？</h2>
@@ -1918,9 +1847,15 @@ Communication，近场通信）是一种短距离无线通信技术，工作频�
 </ol>
 <blockquote>
 <p><strong>技术选型建议</strong></p>
-<p>根据实际需求选择合适的技术： 1. 需要接入互联网 → 选择WiFi 2.
-追求低功耗 → 选择蓝牙（特别是BLE） 3. 要求低延迟、简单可靠 →
-选择普通2.4G 4. 成本敏感 → 普通2.4G最经济</p>
+<p>根据实际需求选择合适的技术：</p>
+</blockquote>
+<blockquote>
+<ol type="1">
+<li>需要接入互联网 → 选择WiFi</li>
+<li>追求低功耗 → 选择蓝牙（特别是BLE）</li>
+<li>要求低延迟、简单可靠 → 选择普通2.4G</li>
+<li>成本敏感 → 普通2.4G最经济</li>
+</ol>
 </blockquote>
 <h3 id="g的特点">2.4G的特点</h3>
 <ol type="1">
@@ -2101,38 +2036,112 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
       </tags>
   </entry>
   <entry>
-    <title>DeepSeek本地部署</title>
-    <url>/posts/4f6ed32b/</url>
-    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
+    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
+    <url>/posts/f520f9c/</url>
+    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
+<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
 <span id="more"></span>
-<h2 id="下载ollama">下载Ollama</h2>
-<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
-<p>下载地址：https://ollama.com/download/windows</p>
-<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
-<p>如下图所示</p>
-<p><img src="/assets/deepseek部署01.png" /></p>
-<blockquote>
-<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
-</blockquote>
-<p>上述步骤完成后，我们可以打开CMD，输入ollama
--v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
-<p><img src="/assets/deepseek部署02.png" /></p>
-<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
-<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
-<h2 id="下载deepseek">下载DeepSeek</h2>
-<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
-<p><img src="/assets/deepseek部署03.png" /></p>
-<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
-<p>如下图所示：</p>
-<p><img src="/assets/deepseek部署04.png" /></p>
-<p>最终效果如下图所示：</p>
-<p><img src="/assets/deepseek部署05.png" /></p>
+<h3 id="网络分层模型">网络分层模型</h3>
+<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
+<ul>
+<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
+<li>传输层:TCP、UDP等传输控制协议</li>
+<li>网络层:IP、ICMP等网络协议</li>
+<li>网络接口层:以太网、WiFi等物理传输协议</li>
+</ul>
+<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
+<h2 id="协议栈的演进">协议栈的演进</h2>
+<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
+<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
+<p>TCP(传输控制协议):</p>
+<ul>
+<li>面向连接:通信前需要建立连接(三次握手)</li>
+<li>可靠传输:使用确认机制和重传机制保证数据可靠到达</li>
+<li>流量控制:根据接收方处理能力调整发送速率</li>
+<li>拥塞控制:根据网络状况调整发送速率</li>
+<li>适用场景:文件传输、网页访问等对可靠性要求高的应用</li>
+</ul>
+<p>UDP(用户数据报协议):</p>
+<ul>
+<li>无连接:不需要建立连接即可传输数据</li>
+<li>不可靠:不保证数据一定送达</li>
+<li>无流量控制和拥塞控制</li>
+<li>开销小、延迟低</li>
+<li>适用场景:视频直播、游戏等对实时性要求高的应用</li>
+</ul>
+<h3 id="应用层的发展">应用层的发展</h3>
+<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
+<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
+<p>HTTP/1.1:</p>
+<ul>
+<li>持久连接:复用TCP连接</li>
+<li>管道化请求:支持多个请求排队</li>
+<li>但存在队头阻塞问题</li>
+</ul>
+<p>HTTP/2:</p>
+<ul>
+<li>多路复用:在同一连接上并发处理多个请求</li>
+<li>头部压缩:减少传输开销</li>
+<li>服务器推送:主动推送相关资源</li>
+<li>二进制分帧:更高效的数据传输</li>
+</ul>
+<h4 id="grpc---现代分布式系统的新选择">gRPC -
+现代分布式系统的新选择</h4>
+<p>gRPC是基于HTTP/2构建的高性能RPC框架:</p>
+<ul>
+<li>协议层次:
+<ul>
+<li>应用层:gRPC API</li>
+<li>中间层:HTTP/2</li>
+<li>传输层:TCP</li>
+<li>安全层:TLS(可选)</li>
+</ul></li>
+</ul>
+<p>四种通信模式:</p>
+<ol type="1">
+<li>一元RPC(Unary):
+<ul>
+<li>类似HTTP/1.1的请求-响应模式</li>
+<li>适用于传统的客户端-服务器交互</li>
+</ul></li>
+<li>服务器流式RPC(Server Streaming):
+<ul>
+<li>客户端发送一个请求,服务器返回数据流</li>
+<li>适用于服务器推送场景,如订阅更新</li>
+</ul></li>
+<li>客户端流式RPC(Client Streaming):
+<ul>
+<li>客户端发送数据流,服务器返回一个响应</li>
+<li>适用于数据上传场景</li>
+</ul></li>
+<li>双向流式RPC(Bidirectional Streaming):
+<ul>
+<li>客户端和服务器同时收发数据流</li>
+<li>适用于实时通信场景,如在线游戏</li>
+</ul></li>
+</ol>
+<p>gRPC的优势:</p>
+<ul>
+<li>基于HTTP/2的高性能</li>
+<li>Protocol Buffers的高效序列化</li>
+<li>强类型接口定义</li>
+<li>跨语言支持</li>
+<li>内置流控和安全机制</li>
+</ul>
+<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
+<p>TLS在传输层和应用层之间提供了安全保障:</p>
+<ul>
+<li>加密:保护数据不被窃听</li>
+<li>认证:验证通信双方身份</li>
+<li>完整性:确保数据不被篡改</li>
+</ul>
+<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
 ]]></content>
       <tags>
-        <tag>大语言模型</tag>
-        <tag>人工智能</tag>
+        <tag>TLS</tag>
+        <tag>网络协议</tag>
+        <tag>gRPC</tag>
+        <tag>HTTP</tag>
       </tags>
   </entry>
   <entry>
@@ -2231,9 +2240,13 @@ LWP)实现多线程支持。Linux将轻量级进程当作基本的执行上下�
 <p>Linux
 2.6支持不同存储模式的对称多处理(SMP),包括NUMA架构。系统不仅可以使用多处理器,而且每个处理器可以毫无区别地处理任何一个任务。</p>
 <h2 id="文件系统支持">文件系统支持</h2>
-<p>Linux支持多种文件系统格式: - Ext2/Ext3: 标准的Linux文件系统 -
-ReiserFS: 适合处理大量小文件的高性能文件系统 - 其他日志文件系统:
-如IBM的JFS和SGI的XFS - 支持多种商业文件系统,便于与其他系统交互</p>
+<p>Linux支持多种文件系统格式:</p>
+<ul>
+<li>Ext2/Ext3: 标准的Linux文件系统</li>
+<li>ReiserFS: 适合处理大量小文件的高性能文件系统</li>
+<li>其他日志文件系统: 如IBM的JFS和SGI的XFS</li>
+<li>支持多种商业文件系统,便于与其他系统交互</li>
+</ul>
 <h2 id="linux的优势">Linux的优势</h2>
 <ol type="1">
 <li>免费开源</li>
@@ -2456,8 +2469,11 @@ V850微控制器</li>
 <li>系统维护任务</li>
 </ul>
 <h3 id="进程process">进程(Process)</h3>
-<p>进程是操作系统使用的一种基本抽象，可以定义为： - 程序执行时的一个实例
-- 一个运行程序的执行上下文</p>
+<p>进程是操作系统使用的一种基本抽象，可以定义为：</p>
+<ul>
+<li>程序执行时的一个实例</li>
+<li>一个运行程序的执行上下文</li>
+</ul>
 <h4 id="进程特征">进程特征</h4>
 <ol type="1">
 <li>地址空间</li>
@@ -2817,23 +2833,34 @@ ID)，及sticky用来定义文件的模式。当这些标记位应用到可执�
 </ul>
 <h4 id="lseek系统调用">lseek系统调用</h4>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line">newoffset=lseek(fd, offset, whence);</span><br></pre></td></tr></table></figure>
-<p><strong>参数说明：</strong> - <strong>fd</strong>:
-打开文件的文件描述符 - <strong>offset</strong>:
-有符号整数值，用于计算文件指针的新位置 - <strong>whence</strong>:
-指定文件指针新位置的计算方式 - offset加0：从文件头移动 -
-offset加当前位置：从当前位置移动 - offset加文件末尾：从文件末尾移动</p>
+<p><strong>参数说明：</strong></p>
+<ul>
+<li><strong>fd</strong>: 打开文件的文件描述符</li>
+<li><strong>offset</strong>: 有符号整数值，用于计算文件指针的新位置</li>
+<li><strong>whence</strong>: 指定文件指针新位置的计算方式
+<ul>
+<li>offset加0：从文件头移动</li>
+<li>offset加当前位置：从当前位置移动</li>
+<li>offset加文件末尾：从文件末尾移动</li>
+</ul></li>
+</ul>
 <h4 id="read系统调用">read系统调用</h4>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line">count=read(fd, buf, count);</span><br></pre></td></tr></table></figure>
-<p><strong>参数说明：</strong> - <strong>fd</strong>:
-打开文件的文件描述符 - <strong>buf</strong>:
-指向缓冲区的指针，用于存储读取的数据 - <strong>count</strong>:
-要读取的字节数</p>
-<p><strong>操作说明：</strong> -
-内核会尝试从文件描述符fd指向的文件中读取count个字节 -
-读取起始位置为文件的offset字段当前值 -
-可能因文件结束、空管道等原因无法读取全部字节 -
-返回值nread表示实际读取的字节数 - 读取完成后会更新文件指针 -
-write()系统调用的参数与read()类似</p>
+<p><strong>参数说明：</strong></p>
+<ul>
+<li><strong>fd</strong>: 打开文件的文件描述符</li>
+<li><strong>buf</strong>: 指向缓冲区的指针，用于存储读取的数据</li>
+<li><strong>count</strong>: 要读取的字节数</li>
+</ul>
+<p><strong>操作说明：</strong></p>
+<ul>
+<li>内核会尝试从文件描述符fd指向的文件中读取count个字节</li>
+<li>读取起始位置为文件的offset字段当前值</li>
+<li>可能因文件结束、空管道等原因无法读取全部字节</li>
+<li>返回值nread表示实际读取的字节数</li>
+<li>读取完成后会更新文件指针</li>
+<li>write()系统调用的参数与read()类似</li>
+</ul>
 <h3 id="关闭文件">关闭文件</h3>
 <p>当进程不再需要访问文件内容时，使用系统调用：</p>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line">result=close(fd);</span><br></pre></td></tr></table></figure>
@@ -2862,79 +2889,38 @@ write()系统调用的参数与read()类似</p>
       </tags>
   </entry>
   <entry>
-    <title>Dotfiles</title>
-    <url>/posts/e5afd7e1/</url>
-    <content><![CDATA[<p>在 Linux 或 macOS
-系统中，以点（<code>.</code>）开头的文件和文件夹统称
-<code>dotfiles</code>（如
-<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
-Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
-<span id="more"></span></p>
-<h3
-id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
-<p>我们通常会经历几个阶段： 1.
-<strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。
-2. <strong>自动化脚本的萌芽</strong>：编写 Shell
-脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。
-3. <strong>Git 裸仓库的炫技</strong>：使用
-<code>git bare repository</code>
-是一个更高级的方案，它允许我们直接在主目录下用 Git
-进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
-Git 操作的直观性。</p>
-<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
-GNU Stow 的舞台。</p>
-<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
-的哲学：一个优雅的“符号链接农场”</h3>
-<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
-Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
-<p>想象一下： * 你的 <code>~/dotfiles</code>
-目录是一个<strong>农场</strong>。 * 农场里的每一个子目录（如
-<code>nvim</code>, <code>git</code>,
-<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。 * 你的主目录
-<code>~</code> 是需要播种的<strong>土地</strong>。</p>
-<p><code>stow</code>
-命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
-<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
-<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
-Concerns）： 1. <strong>配置的源码</strong>：你的 <code>dotfiles</code>
-仓库是所有配置的唯一“真理之源”（Single Source of
-Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。 2.
-<strong>配置的部署</strong>：主目录 <code>~</code>
-下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</p>
-<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
-<code>dotfiles</code>
-仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
-会负责实现它。</p>
-<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
-<ol type="1">
-<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
-最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
-下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
-目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
-<li><p><strong>高度模块化 (Modular)</strong>
-每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
-Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
-配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
-配置？只需选择性地 <code>stow</code>
-即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
-<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
-与 <code>git</code>
-结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
-几条命令，一个熟悉的环境便跃然屏上。</p></li>
-<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
-在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
-</ol>
-<h3 id="结论大道至简">结论：大道至简</h3>
-<p>在 dotfiles 管理的江湖里，<code>stow</code>
-并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
-<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
-值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
+    <title>DeepSeek本地部署</title>
+    <url>/posts/4f6ed32b/</url>
+    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
+<span id="more"></span>
+<h2 id="下载ollama">下载Ollama</h2>
+<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
+<p>下载地址：https://ollama.com/download/windows</p>
+<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
+<p>如下图所示</p>
+<p><img src="/assets/deepseek部署01.png" /></p>
+<blockquote>
+<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
+</blockquote>
+<p>上述步骤完成后，我们可以打开CMD，输入ollama
+-v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
+<p><img src="/assets/deepseek部署02.png" /></p>
+<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
+<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
+<h2 id="下载deepseek">下载DeepSeek</h2>
+<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
+<p><img src="/assets/deepseek部署03.png" /></p>
+<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
+<p>如下图所示：</p>
+<p><img src="/assets/deepseek部署04.png" /></p>
+<p>最终效果如下图所示：</p>
+<p><img src="/assets/deepseek部署05.png" /></p>
 ]]></content>
       <tags>
-        <tag>Linux</tag>
-        <tag>Git</tag>
-        <tag>工具</tag>
-        <tag>Dotfiles</tag>
+        <tag>大语言模型</tag>
+        <tag>人工智能</tag>
       </tags>
   </entry>
   <entry>
@@ -3110,6 +3096,89 @@ TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和�
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Dotfiles</title>
+    <url>/posts/e5afd7e1/</url>
+    <content><![CDATA[<p>在 Linux 或 macOS
+系统中，以点（<code>.</code>）开头的文件和文件夹统称
+<code>dotfiles</code>（如
+<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
+Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
+<span id="more"></span></p>
+<h3
+id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
+<p>我们通常会经历几个阶段：</p>
+<ol type="1">
+<li><strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。</li>
+<li><strong>自动化脚本的萌芽</strong>：编写 Shell
+脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。</li>
+<li><strong>Git 裸仓库的炫技</strong>：使用
+<code>git bare repository</code>
+是一个更高级的方案，它允许我们直接在主目录下用 Git
+进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
+Git 操作的直观性。</li>
+</ol>
+<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
+GNU Stow 的舞台。</p>
+<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
+的哲学：一个优雅的“符号链接农场”</h3>
+<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
+Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
+<p>想象一下：</p>
+<ul>
+<li>你的 <code>~/dotfiles</code> 目录是一个<strong>农场</strong>。</li>
+<li>农场里的每一个子目录（如 <code>nvim</code>, <code>git</code>,
+<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。</li>
+<li>你的主目录 <code>~</code> 是需要播种的<strong>土地</strong>。</li>
+</ul>
+<p><code>stow</code>
+命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
+<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
+<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
+Concerns）：</p>
+<ol type="1">
+<li><strong>配置的源码</strong>：你的 <code>dotfiles</code>
+仓库是所有配置的唯一“真理之源”（Single Source of
+Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。</li>
+<li><strong>配置的部署</strong>：主目录 <code>~</code>
+下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</li>
+</ol>
+<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
+<code>dotfiles</code>
+仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
+会负责实现它。</p>
+<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
+<ol type="1">
+<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
+最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
+下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
+目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
+<li><p><strong>高度模块化 (Modular)</strong>
+每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
+Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
+配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
+配置？只需选择性地 <code>stow</code>
+即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
+<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
+与 <code>git</code>
+结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
+几条命令，一个熟悉的环境便跃然屏上。</p></li>
+<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
+在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
+</ol>
+<h3 id="结论大道至简">结论：大道至简</h3>
+<p>在 dotfiles 管理的江湖里，<code>stow</code>
+并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
+<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
+值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
+]]></content>
+      <tags>
+        <tag>Linux</tag>
+        <tag>Git</tag>
+        <tag>工具</tag>
+        <tag>Dotfiles</tag>
       </tags>
   </entry>
   <entry>
@@ -4474,16 +4543,20 @@ Key)</strong> 和 <strong>私钥 (Private Key)</strong>。</p>
 <li><strong>公钥</strong>：可以任意公开，任何人都可以获取。它用于<strong>加密数据</strong>和<strong>验证签名</strong>。</li>
 <li><strong>私钥</strong>：必须严格保密，只有持有者知道。它用于<strong>解密数据</strong>和<strong>生成签名</strong>。</li>
 </ul>
-<p>它的工作流分为两种： 1. <strong>加密/解密</strong>：<code>A</code>
-想给 <code>B</code> 发送机密消息。<code>A</code> 用 <code>B</code>
+<p>它的工作流分为两种：</p>
+<ol type="1">
+<li><strong>加密/解密</strong>：<code>A</code> 想给 <code>B</code>
+发送机密消息。<code>A</code> 用 <code>B</code>
 的公钥加密消息，<code>B</code>
 收到后用自己的私钥解密。其他人即使截获了消息，没有 <code>B</code>
-的私钥也无法破解。 2. <strong>签名/验证</strong>：<code>A</code>
+的私钥也无法破解。</li>
+<li><strong>签名/验证</strong>：<code>A</code>
 想证明某条消息确实是自己发的。<code>A</code>
 用自己的私钥对消息签名，并将签名连同消息一起发给
 <code>B</code>。<code>B</code> 用 <code>A</code>
 的公钥来验证签名，如果成功，就能确定消息来自 <code>A</code>
-且未被篡改。</p>
+且未被篡改。</li>
+</ol>
 <ul>
 <li><strong>优点</strong>：完美解决了密钥分发问题，安全性高，且能实现数字签名。</li>
 <li><strong>缺点</strong>：计算复杂度高，加密速度远慢于对称加密，不适合直接加密大量数据。</li>
@@ -4833,8 +4906,11 @@ DLP、可分块重用数据（如矩阵乘、卷积、光线追踪）。</li>
 <li>适合
 CPU：复杂分支、状态机密集、数据量小且延迟敏感（如事务、编译器前端）。</li>
 </ul>
-<p>小清单： - 单请求首响应（µs 级）/强交互/大量系统调用 → 倾向 CPU -
-高算术密度/规则批处理/大规模并行 → 倾向 GPU</p>
+<p>小清单：</p>
+<ul>
+<li>单请求首响应（µs 级）/强交互/大量系统调用 → 倾向 CPU</li>
+<li>高算术密度/规则批处理/大规模并行 → 倾向 GPU</li>
+</ul>
 <h3 id="常见误区">🧨 常见误区</h3>
 <ul>
 <li>“GPU 频率高就一定更快？”——吞吐取决于并行度与访存模式。</li>
@@ -5064,11 +5140,14 @@ kernel：</p>
 <code>&lt;&lt;&lt;grid,block&gt;&gt;&gt;</code> 启动的
 kernel，将被编译为 PTX/SASS 在 GPU 上跑。</li>
 </ol>
-<p>为什么单独用 <code>.cu</code>？ - 让 <code>nvcc</code>
-识别文件需要“双重编译”：CPU 端交给主机编译器，GPU 端生成
-PTX/SASS。<br />
-- 一个文件里即可 <code>cudaMalloc/cudaMemcpy</code> 及定义
-kernel，方便小项目/快速实验。</p>
+<p>为什么单独用 <code>.cu</code>？</p>
+<ul>
+<li>让 <code>nvcc</code> 识别文件需要“双重编译”：CPU
+端交给主机编译器，GPU 端生成 PTX/SASS。<br />
+</li>
+<li>一个文件里即可 <code>cudaMalloc/cudaMemcpy</code> 及定义
+kernel，方便小项目/快速实验。</li>
+</ul>
 <p>常见编译方式： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 直接生成可执行</span></span><br><span class="line">nvcc vec_add.cu -o vec_add</span><br><span class="line"></span><br><span class="line"><span class="comment"># 先生成对象，再由 g++ 链接</span></span><br><span class="line">nvcc -c my_kernel.cu -o my_kernel.o</span><br><span class="line">g++ host_main.cpp my_kernel.o -lcudart -L/usr/local/cuda/lib64</span><br></pre></td></tr></table></figure></p>
 <table>
 <thead>
@@ -5158,28 +5237,37 @@ PyTorch（CUDA-12.4 wheel）</h3>
 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python projects/gpu_fuzz/gen/collect_env.py \</span><br><span class="line">       &gt; projects/gpu_learn/log/env.txt 2&gt;&amp;1</span><br><span class="line"><span class="built_in">head</span> -n 24 projects/gpu_learn/log/env.txt</span><br></pre></td></tr></table></figure>
 <p>重点确认： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">PyTorch version: 2.6.0+cu124</span><br><span class="line">CUDA runtime version: 12.6.85</span><br><span class="line">Is CUDA available: True</span><br></pre></td></tr></table></figure></p>
 <blockquote>
-<p>详细解读（常见疑问都在这里）： -
-<code>PyTorch version: 2.6.0+cu124</code> —— <strong>2.6.0</strong>
+<p>详细解读（常见疑问都在这里）：</p>
+</blockquote>
+<blockquote>
+<ul>
+<li><code>PyTorch version: 2.6.0+cu124</code> —— <strong>2.6.0</strong>
 是框架版本；<code>+cu124</code> 表示它自带 CUDA-12.4
-编译产物（cuDNN/cuBLAS 等)。 - <code>Is debug build: False</code> ——
-官方 Release 版（True 时为带断言的调试版，速度慢）。 -
-<code>CUDA used to build PyTorch: 12.4</code> —— wheel 内置的编译 CUDA
-版本；与系统 <code>runtime 12.6</code> 向下兼容即可。 -
-<code>OS / GCC / Clang / CMake</code> —— 编译本地 C++/CUDA
-扩展时要用到的工具链版本，记录可复现性。 -
-<code>Python version: 3.11.x (conda-forge)</code> ——
-确认与你的虚拟环境一致，便于后续 <code>pip install</code> ABI 兼容。 -
-<code>Is CUDA available: True</code> ——
+编译产物（cuDNN/cuBLAS 等)。</li>
+<li><code>Is debug build: False</code> —— 官方 Release 版（True
+时为带断言的调试版，速度慢）。</li>
+<li><code>CUDA used to build PyTorch: 12.4</code> —— wheel 内置的编译
+CUDA 版本；与系统 <code>runtime 12.6</code> 向下兼容即可。</li>
+<li><code>OS / GCC / Clang / CMake</code> —— 编译本地 C++/CUDA
+扩展时要用到的工具链版本，记录可复现性。</li>
+<li><code>Python version: 3.11.x (conda-forge)</code> ——
+确认与你的虚拟环境一致，便于后续 <code>pip install</code> ABI
+兼容。</li>
+<li><code>Is CUDA available: True</code> ——
 <code>torch.cuda.is_available()</code> 结果，若 False 请先查驱动 /
-环境变量。 - <code>CUDA runtime version: 12.6.85</code> —— 驱动自带的
-<code>libcuda.so</code> runtime 版本，只要 ≥ wheel 内的 12.4 即 OK。 -
-<code>CUDA_MODULE_LOADING: LAZY</code> —— 默认懒加载
-PTX，可减少启动时延；如需即时插桩可设 <code>EAGER</code>。 -
-<code>GPU 0: NVIDIA H100 PCIe</code> —— 检测到的物理
-GPU，与预期硬件相符。 - <code>cuDNN/cuBLAS/cuFFT/…</code> —— 列表展示
-wheel 自带的具体子库版本，用于排查 “库不匹配” 问题。 -
-<code>CPU:</code>及后续 ——
-主机硬件与漏洞缓解信息，可忽略；仅在编译器优化或虚拟化环境排错时有用。</p>
+环境变量。</li>
+<li><code>CUDA runtime version: 12.6.85</code> —— 驱动自带的
+<code>libcuda.so</code> runtime 版本，只要 ≥ wheel 内的 12.4 即
+OK。</li>
+<li><code>CUDA_MODULE_LOADING: LAZY</code> —— 默认懒加载
+PTX，可减少启动时延；如需即时插桩可设 <code>EAGER</code>。</li>
+<li><code>GPU 0: NVIDIA H100 PCIe</code> —— 检测到的物理
+GPU，与预期硬件相符。</li>
+<li><code>cuDNN/cuBLAS/cuFFT/…</code> —— 列表展示 wheel
+自带的具体子库版本，用于排查 “库不匹配” 问题。</li>
+<li><code>CPU:</code>及后续 ——
+主机硬件与漏洞缓解信息，可忽略；仅在编译器优化或虚拟化环境排错时有用。</li>
+</ul>
 <p>省流：<strong>三行打勾 + 驱动≥CUDA + GPU 型号正确 =
 环境健康。</strong></p>
 </blockquote>
@@ -5505,17 +5593,25 @@ BLOCK_ROWS 对应 blockDim.y，代表一次搬运/计算的 行数批次；典�
 🔴。</li>
 </ul>
 <blockquote>
-<p><strong>常见触发 Bank 冲突的模式（未做 +1 时）</strong><br />
-1. <strong>同列访问</strong>：矩阵转置/列拷贝，线程 (i,j 固定) →
+<p><strong>常见触发 Bank 冲突的模式（未做 +1 时）</strong></p>
+</blockquote>
+<blockquote>
+<ol type="1">
+<li><strong>同列访问</strong>：矩阵转置/列拷贝，线程 (i,j 固定) →
 地址步长 = 32×4B。<br />
-2. <strong>Stride 为 32 的倍数</strong>：Tile 宽度 32、64…
+</li>
+<li><strong>Stride 为 32 的倍数</strong>：Tile 宽度 32、64…
 行间起点对齐同 bank。<br />
-3. <strong>跨步写入</strong>：线程 i 访问 <code>base + i*32</code> 等模
+</li>
+<li><strong>跨步写入</strong>：线程 i 访问 <code>base + i*32</code> 等模
 32 重合的地址。<br />
-4. <strong>纯行或纯列归约</strong>：只动 <code>x</code> 或
+</li>
+<li><strong>纯行或纯列归约</strong>：只动 <code>x</code> 或
 <code>y</code>，导致多线程集中一个 bank。<br />
-5. <strong>稀疏 gather/scatter</strong>：索引映射使
-<code>(addr/4)&amp;31</code> 分布极度不均。</p>
+</li>
+<li><strong>稀疏 gather/scatter</strong>：索引映射使
+<code>(addr/4)&amp;31</code> 分布极度不均。</li>
+</ol>
 <p><strong>+1 Padding 的效果？</strong><br />
 • ✅ 有效：前 3 类（同列访问、stride 为 32 的倍数、跨步 32）——本质都是
 <em>行间步长=32k</em>，加 1 立刻破坏同 bank 对齐。<br />
@@ -6015,12 +6111,17 @@ PyTorch）里的一个特殊对象。框架会“接收”你的 Python
 <blockquote>
 <p>🌰 <strong>示例：</strong> 输入 <code>I=5</code>, Kernel
 <code>K=3</code>, Padding <code>P=1</code>, Stride <code>S=2</code>,
-Dilation <code>D=1</code>。 - 加上 padding 后的总宽度是
-<code>5 + 2*1 = 7</code>。 - Kernel 覆盖范围是
-<code>1*(3-1)+1 = 3</code>。 - 滑动总距离是 <code>7 - 3 = 4</code>。 -
-能滑几步？<code>4 / 2 = 2</code> 步。 -
-总共能摆放几次？<code>2 + 1 = 3</code> 次。所以输出
-<code>OUT=3</code>。</p>
+Dilation <code>D=1</code>。</p>
+</blockquote>
+<blockquote>
+<ul>
+<li>加上 padding 后的总宽度是 <code>5 + 2*1 = 7</code>。</li>
+<li>Kernel 覆盖范围是 <code>1*(3-1)+1 = 3</code>。</li>
+<li>滑动总距离是 <code>7 - 3 = 4</code>。</li>
+<li>能滑几步？<code>4 / 2 = 2</code> 步。</li>
+<li>总共能摆放几次？<code>2 + 1 = 3</code> 次。所以输出
+<code>OUT=3</code>。</li>
+</ul>
 </blockquote>
 <h3 id="转置卷积-transposed-conv">转置卷积 (Transposed Conv)</h3>
 <p>也叫“反卷积”，但这个名字不准确。它的作用和正向卷积相反，常用来<strong>放大</strong>特征图（上采样）。</p>
@@ -6074,8 +6175,13 @@ Pooling）或平均值（Average Pooling）。</p>
 <blockquote>
 <p><strong>规则</strong>：对于 <code>A @ B</code> (在 Python 里
 <code>@</code> 是矩阵乘法的运算符)，A 的 <strong>列数</strong> 必须等于
-B 的 <strong>行数</strong>。 - <code>A (n, m)</code> @
-<code>B (m, p)</code> → <code>C (n, p)</code></p>
+B 的 <strong>行数</strong>。</p>
+</blockquote>
+<blockquote>
+<ul>
+<li><code>A (n, m)</code> @ <code>B (m, p)</code> →
+<code>C (n, p)</code></li>
+</ul>
 <p>把它想象成“配对消除”：中间的 <code>m</code> 维配对后消失，剩下两头的
 <code>n</code> 和 <code>p</code> 组成新形状。</p>
 </blockquote>
@@ -6942,9 +7048,12 @@ Interposition)</strong>：链接器“抢先”绑定了你的假
 <p><strong>最小拦截示例：统计 <code>malloc</code> 使用次数</strong>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// file: hook.c</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> _GNU_SOURCE</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;dlfcn.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">void</span>* (*real_malloc)(<span class="type">size_t</span>) = <span class="literal">NULL</span>;</span><br><span class="line"><span class="type">static</span> <span class="type">size_t</span> g_count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">__attribute__((constructor)) <span class="type">static</span> <span class="type">void</span> <span class="title function_">init_hook</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;[hook] loaded\n&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">void</span>* <span class="title function_">malloc</span><span class="params">(<span class="type">size_t</span> size)</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (!real_malloc) &#123;</span><br><span class="line">        <span class="comment">// RTLD_NEXT: 从下一个库开始找 malloc</span></span><br><span class="line">        real_malloc = (<span class="type">void</span>*(*)(<span class="type">size_t</span>))dlsym(RTLD_NEXT, <span class="string">&quot;malloc&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="type">void</span>* p = real_malloc(size);</span><br><span class="line">    g_count++;</span><br><span class="line">    <span class="keyword">if</span> (getenv(<span class="string">&quot;HOOK_VERBOSE&quot;</span>)) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;[hook] malloc(%zu) =&gt; %p (count=%zu)\n&quot;</span>, size, p, g_count);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> p;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <p><strong>编译与运行</strong> <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">gcc -shared -fPIC -ldl hook.c -o libhook.so</span><br><span class="line">LD_PRELOAD=<span class="variable">$PWD</span>/libhook.so HOOK_VERBOSE=1 ./your_program</span><br></pre></td></tr></table></figure></p>
-<p><strong>要点</strong> - <strong>与 NVBit 的关系</strong>：NVBit 注入
+<p><strong>要点</strong></p>
+<ul>
+<li><strong>与 NVBit 的关系</strong>：NVBit 注入
 <code>libnvbit.so</code> 来拦截 CUDA Driver API（如
-<code>cuLaunchKernel</code>），原理与此完全相同。</p>
+<code>cuLaunchKernel</code>），原理与此完全相同。</li>
+</ul>
 <h3 id="环境变量给工具遥控器">4.3 环境变量：给工具“遥控器”</h3>
 <p>用环境变量控制行为是业界惯例：无需改代码/重编译，随开随关。</p>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">get_int_env</span><span class="params">(<span class="type">const</span> <span class="type">char</span>* key, <span class="type">int</span> defv)</span> &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">char</span>* v = getenv(key);</span><br><span class="line">    <span class="keyword">return</span> v ? atoi(v) : defv;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">get_bool_env</span><span class="params">(<span class="type">const</span> <span class="type">char</span>* key, <span class="type">int</span> defv)</span> &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">char</span>* v = getenv(key);</span><br><span class="line">    <span class="keyword">if</span> (!v) <span class="keyword">return</span> defv;</span><br><span class="line">    <span class="keyword">return</span> (!<span class="built_in">strcmp</span>(v, <span class="string">&quot;1&quot;</span>) || !<span class="built_in">strcmp</span>(v, <span class="string">&quot;true&quot;</span>) || !<span class="built_in">strcmp</span>(v, <span class="string">&quot;on&quot;</span>));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 用法：</span></span><br><span class="line"><span class="comment">// int verbose = get_bool_env(&quot;NVBIT_VERBOSE&quot;, 0);</span></span><br><span class="line"><span class="comment">// int sample_n = get_int_env(&quot;MY_TOOL_SAMPLE_N&quot;, 100);</span></span><br></pre></td></tr></table></figure>
@@ -8434,13 +8543,17 @@ Python 风格的方式。</li>
 <p><strong>为何需要 <code>train()</code> 和
 <code>eval()</code>模式?</strong></p>
 <p>模型的某些层（如 <code>Dropout</code> 和
-<code>BatchNorm</code>）在训练和评估时的行为是不同的。 - <strong>训练时
-(<code>train()</code>模式)</strong>:
+<code>BatchNorm</code>）在训练和评估时的行为是不同的。</p>
+</blockquote>
+<blockquote>
+<ul>
+<li><strong>训练时 (<code>train()</code>模式)</strong>:
 <code>Dropout</code>会随机失活一些神经元来防止过拟合；<code>BatchNorm</code>
-会计算当前批次的均值和方差来归一化数据。 - <strong>评估时
-(<code>eval()</code>模式)</strong>:
+会计算当前批次的均值和方差来归一化数据。</li>
+<li><strong>评估时 (<code>eval()</code>模式)</strong>:
 <code>Dropout</code>会被禁用；<code>BatchNorm</code>
-会使用在整个训练过程中学习到的全局均值和方差。</p>
+会使用在整个训练过程中学习到的全局均值和方差。</li>
+</ul>
 <p>切换模式能确保模型在正确的状态下进行训练和推理。</p>
 </blockquote>
 <h3 id="迁移到-gpu-训练">⚡️ 迁移到 GPU 训练</h3>
@@ -8629,13 +8742,16 @@ K)</strong>：代表被查询的词，用于和查询向量进行匹配。</li>
 <p>这三个向量是通过将每个词的词向量（已包含位置编码）分别与三个可训练的权重矩阵
 <code>Wq</code>、<code>Wk</code>、<code>Wv</code> 相乘得到的。</p>
 <p><img src="/assets/image-20251010230923988.png" /></p>
-<p>计算过程如下： 1. 拿一个词的查询向量 <code>q</code>
-去和所有词（包括它自己）的键向量 <code>k</code> 做点积，得到一个
-<strong>注意力分数</strong>。这个分数衡量了两个词之间的相关性。 2.
-对得到的分数进行归一化处理（例如通过 SoftMax）。 3.
-将归一化后的分数与每个词对应的值向量 <code>v</code> 相乘。 4.
-将所有加权后的值向量 <code>v</code> 相加，就得到了一个新的向量
-<code>a</code>。</p>
+<p>计算过程如下：</p>
+<ol type="1">
+<li>拿一个词的查询向量 <code>q</code> 去和所有词（包括它自己）的键向量
+<code>k</code> 做点积，得到一个
+<strong>注意力分数</strong>。这个分数衡量了两个词之间的相关性。</li>
+<li>对得到的分数进行归一化处理（例如通过 SoftMax）。</li>
+<li>将归一化后的分数与每个词对应的值向量 <code>v</code> 相乘。</li>
+<li>将所有加权后的值向量 <code>v</code> 相加，就得到了一个新的向量
+<code>a</code>。</li>
+</ol>
 <p><img src="/assets/image-20251010231017325.png" /></p>
 <p>这个新向量 <code>a</code>
 就包含了整个句子上下文的信息，并且是为当前词量身定制的。对句子中的每一个词都执行相同的操作，我们就能得到一组全新的、富含上下文信息的词向量。</p>
@@ -8936,10 +9052,12 @@ IP 地址</strong>来访问互联网。当外部数据返回时，NAT
 </blockquote>
 <h4 id="端口程序的服务窗口">4. 端口：程序的服务窗口</h4>
 <p>如果说 IP
-地址是一栋大楼的地址，那么端口号就是这栋楼里具体的房间号或窗口号。一台电脑上可以同时运行很多网络服务（网页服务、游戏、远程桌面等），操作系统就是用端口号来区分数据应该交给哪个程序处理。
-- <code>80</code> 端口通常用于 HTTP 网页服务。 - <code>443</code>
-端口用于 HTTPS 加密网页服务。 - <code>3389</code> 端口是 Windows
-远程桌面的默认端口。</p>
+地址是一栋大楼的地址，那么端口号就是这栋楼里具体的房间号或窗口号。一台电脑上可以同时运行很多网络服务（网页服务、游戏、远程桌面等），操作系统就是用端口号来区分数据应该交给哪个程序处理。</p>
+<ul>
+<li><code>80</code> 端口通常用于 HTTP 网页服务。</li>
+<li><code>443</code> 端口用于 HTTPS 加密网页服务。</li>
+<li><code>3389</code> 端口是 Windows 远程桌面的默认端口。</li>
+</ul>
 <blockquote>
 <p><strong>省流</strong>：IP
 地址用来定位电脑，端口号用来定位电脑上的具体<strong>程序（服务）</strong>。<code>IP:端口号</code>
@@ -9241,11 +9359,15 @@ X
 <strong>NP-Complete</strong> 问题。NP-Complete 问题是 NP
 问题中最难的一类。</p></li>
 </ul>
-<p>常见的 NP-Complete 问题包括： - <strong>逻辑电路问题
-(SAT)</strong>：给定一个逻辑电路，是否存在一种输入，使其输出为 True。 -
-<strong>哈密顿回路问题</strong>：在一个图中，是否存在一条经过每个顶点一次且仅一次的回路。
-- <strong>旅行商问题
-(TSP)</strong>：给定一系列城市和每对城市之间的距离，求解访问每一座城市一次并返回起点的最短路径。</p>
+<p>常见的 NP-Complete 问题包括：</p>
+<ul>
+<li><strong>逻辑电路问题
+(SAT)</strong>：给定一个逻辑电路，是否存在一种输入，使其输出为
+True。</li>
+<li><strong>哈密顿回路问题</strong>：在一个图中，是否存在一条经过每个顶点一次且仅一次的回路。</li>
+<li><strong>旅行商问题
+(TSP)</strong>：给定一系列城市和每对城市之间的距离，求解访问每一座城市一次并返回起点的最短路径。</li>
+</ul>
 <h2 id="pnp-世纪难题">P=NP? 世纪难题</h2>
 <p>理解了以上概念后，“P=NP?”问题的核心就浮出水面了：</p>
 <blockquote>
@@ -11198,9 +11320,12 @@ style="text-align: left;">受限访问、不能执行特权指令、不能直接
 <p>访问数据段： <code>CPL ≤ DPL</code> (数字越小特权越高)
 <code>RPL ≤ DPL</code></p>
 <p>调用代码段：更复杂，涉及到Call Gate（后续章节）</p>
-<p><strong>示例：</strong> - Ring 0 代码 (CPL=0) 可以访问任何 DPL 段 -
-Ring 3 代码 (CPL=3) 只能访问 DPL=3 的段 - 如果 Ring 3 代码试图访问 Ring
-0 的段，CPU会触发保护异常 (#GP)</p>
+<p><strong>示例：</strong></p>
+<ul>
+<li>Ring 0 代码 (CPL=0) 可以访问任何 DPL 段</li>
+<li>Ring 3 代码 (CPL=3) 只能访问 DPL=3 的段</li>
+<li>如果 Ring 3 代码试图访问 Ring 0 的段，CPU会触发保护异常 (#GP)</li>
+</ul>
 <h4 id="特权指令">特权指令：</h4>
 <p>只有在 Ring 0 才能执行的指令（特权指令）：</p>
 <table>
@@ -11524,10 +11649,12 @@ Decay）时的理论缺陷。</p>
 <li><strong>计算机视觉</strong>：ViT（Vision Transformer）等</li>
 <li><strong>现代深度学习</strong>：几乎成为新项目的默认选择</li>
 </ul>
-<p><strong>为什么现在更推荐 AdamW？</strong> 1.
-理论更严谨：权重衰减的实现方式更符合数学原理 2.
-泛化性能更好：在大多数任务上测试集表现更优 3. 超参数更稳定:对
-<code>weight_decay</code> 的敏感性更低</p>
+<p><strong>为什么现在更推荐 AdamW？</strong></p>
+<ol type="1">
+<li>理论更严谨：权重衰减的实现方式更符合数学原理</li>
+<li>泛化性能更好：在大多数任务上测试集表现更优</li>
+<li>超参数更稳定:对 <code>weight_decay</code> 的敏感性更低</li>
+</ol>
 <h3 id="其他新兴优化器">🎯 其他新兴优化器</h3>
 <h4 id="nadam-nesterov-accelerated-adam">NAdam (Nesterov-accelerated
 Adam)</h4>
@@ -11632,11 +11759,14 @@ win的时候发现这些映射又容易出问题，于是想办法搞成动态�
 <code>Alt</code> 映射为 <code>Ctrl</code>（因为 Mac 的 Command
 键就在这个位置）。</p>
 <p>然而，当你从一台 Mac 通过 Microsoft Remote Desktop 远程连接到这台
-Windows 时，问题就出现了： 1. <strong>本地使用时</strong>：我们需要
-<code>Alt</code> -&gt; <code>Ctrl</code>。 2. <strong>Mac
-远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command 键映射为 Windows
-的 <code>Win</code> 键。此时，我们在 Mac 上按
-<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</p>
+Windows 时，问题就出现了：</p>
+<ol type="1">
+<li><strong>本地使用时</strong>：我们需要 <code>Alt</code> -&gt;
+<code>Ctrl</code>。</li>
+<li><strong>Mac 远程连接时</strong>：Mac 的 RDP 客户端通常会将 Command
+键映射为 Windows 的 <code>Win</code> 键。此时，我们在 Mac 上按
+<code>Cmd + C</code>，Windows 接收到的是 <code>Win + C</code>。</li>
+</ol>
 <p>如果我们简单粗暴地全局重映射，就会导致远程连接时快捷键失效。我们需要一个智能的脚本，它能知道<strong>当前是谁在操作电脑</strong>。</p>
 <h3 id="解决方案wtsapi-动态识别">🔍 解决方案：WTSAPI 动态识别</h3>
 <p>Windows 提供了 WTSAPI (Windows Terminal Services
@@ -12446,11 +12576,13 @@ Cache</strong>。<strong>特性</strong>：若 Warp
 Addressing）</h3>
 <p>如果在 <code>ld</code>
 指令后<strong>没有</strong>任何空间修饰符（例如直接写
-<code>ld.f32 %r1, [%rd1]</code>），则表示使用<strong>通用寻址</strong>。
-- <strong>机制</strong>：指针携带元数据，硬件运行时判断它指向
+<code>ld.f32 %r1, [%rd1]</code>），则表示使用<strong>通用寻址</strong>。</p>
+<ul>
+<li><strong>机制</strong>：指针携带元数据，硬件运行时判断它指向
 Global/Shared/Local。<br />
--
-<strong>性能</strong>：略慢于显式空间（多一步判别）。能写清楚就尽量写清楚。</p>
+</li>
+<li><strong>性能</strong>：略慢于显式空间（多一步判别）。能写清楚就尽量写清楚。</li>
+</ul>
 <h2 id="读什么数据形状data-shape">读什么：数据形状（Data Shape）</h2>
 <p>这是指令的“宾语”，告诉 GPU
 “你要搬运的包裹长什么样”。选择正确的形状对于利用<strong>带宽</strong>至关重要。</p>
@@ -12757,17 +12889,22 @@ Cluster。</li>
 </ul>
 <blockquote>
 <p><strong>Cluster 扩展知识 (Hopper 新特性, H100, Compute Capability
-9.0)</strong>： * <strong>层级位置</strong>：位于 Grid 和 Block 之间
-(Grid &gt; Cluster &gt; Block &gt; Thread)。 *
-<strong>物理含义</strong>：保证一组 Block（如 4
-个）被调度到<strong>物理相邻</strong>的 SM 上（GPC 内部）。 *
-<strong>解决痛点</strong>：Block 和 Block 之间是完全隔离的。哪怕 Block A
-和 Block B 就在隔壁的两个 SM 上运行，它们想交换数据，也必须走最慢的
-Global Memory。 * <strong>超能力</strong>：Cluster 内的不同 Block
-可以直接访问对方的 Shared Memory（称为
-<strong>DSMEM</strong>），通信不用绕道 L2，极其适合大模型训练中跨 Block
-的数据交换。 <em>把属于同一个 Cluster 的所有 Block，调度到同一个
-GPC里的不同 SM上去。</em></p>
+9.0)</strong>：</p>
+</blockquote>
+<blockquote>
+<ul>
+<li><strong>层级位置</strong>：位于 Grid 和 Block 之间 (Grid &gt;
+Cluster &gt; Block &gt; Thread)。</li>
+<li><strong>物理含义</strong>：保证一组 Block（如 4
+个）被调度到<strong>物理相邻</strong>的 SM 上（GPC 内部）。</li>
+<li><strong>解决痛点</strong>：Block 和 Block 之间是完全隔离的。哪怕
+Block A 和 Block B 就在隔壁的两个 SM
+上运行，它们想交换数据，也必须走最慢的 Global Memory。</li>
+<li><strong>超能力</strong>：Cluster 内的不同 Block 可以直接访问对方的
+Shared Memory（称为 <strong>DSMEM</strong>），通信不用绕道
+L2，极其适合大模型训练中跨 Block 的数据交换。 <em>把属于同一个 Cluster
+的所有 Block，调度到同一个 GPC里的不同 SM上去。</em></li>
+</ul>
 </blockquote>
 <p>典型组合：</p>
 <ul>
@@ -24607,6 +24744,217 @@ System for AI Computing</em> 的入门精读笔记。）</p>
       </tags>
   </entry>
   <entry>
+    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
+    <url>/posts/9f387285/</url>
+    <content><![CDATA[<blockquote>
+<p>接前两篇：<a
+href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
+href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
+work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
+逐个验证兼容性、安全性、性能和极端场景。</p>
+</blockquote>
+<span id="more"></span>
+<h2 id="rq-总览">📋 RQ 总览</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>RQ</th>
+<th>问题</th>
+<th>一句话答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RQ1</td>
+<td>与现有方案比，兼容性如何？</td>
+<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
+</tr>
+<tr>
+<td>RQ2</td>
+<td>能不能防住攻击者？</td>
+<td>链路完整：可信 + 保密 + 防篡改</td>
+</tr>
+<tr>
+<td>RQ3</td>
+<td>LLM 上性能损失多少？</td>
+<td>overhead 只有 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>RQ4</td>
+<td>换不同 LLM / xPU 呢？</td>
+<td>依然稳定，且不随模型大小线性变差</td>
+</tr>
+<tr>
+<td>RQ5</td>
+<td>优化有没有用？</td>
+<td>E2E overhead 直接降约 89%</td>
+</tr>
+<tr>
+<td>RQ6</td>
+<td>极端情况呢？</td>
+<td>带宽砍半、显存不够也不崩</td>
+</tr>
+</tbody>
+</table>
+<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭的 PCIe-SC 原型。</p>
+<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
+<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
+2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
+TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
+即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
+软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
+加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
+<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
+RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
+12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
+硬件、NVIDIA driver、CUDA 或 AI
+application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
+<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
+上实际跑起来慢多少，是后面 RQ4 的事。</p>
+<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
+RQ2：安全性——假设攻击者控制特权软件</h2>
+<p>RQ2
+假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
+software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
+<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
+完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
+通信完整</strong>，缺一不可。</p>
+<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</h2>
+<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
+<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E2E Latency</strong></td>
+<td>从输入问题到完整回答生成的总时长</td>
+</tr>
+<tr>
+<td><strong>TPS</strong></td>
+<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
+</tr>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
+</tr>
+</tbody>
+</table>
+<p>结果：<strong>overhead
+0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
+100ms，5% overhead 就是约 105ms。</p>
+<p><strong>为什么没慢很多？</strong>
+因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
+加密；大量普通包走 A4
+免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
+<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
+xPU——稳定性验证</h2>
+<h3 id="不同-llm">不同 LLM</h3>
+<p>从小到大多种模型都测了，整体 overhead
+<strong>0.72%～4.76%</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
+<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
+是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
+2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
+带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
+<h3 id="不同-xpu">不同 xPU</h3>
+<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
+Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
+<strong>0.58%～2.40%</strong>。</p>
+<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
+的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
+重新设计安全机制。</p>
+<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
+89%</h2>
+<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
+latency overhead 降低了 88.7%～89.8%</strong>。</p>
+<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
+再读一点 → 再问一次）。三个优化对症下药：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
+<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
+次数大幅减少。</p>
+<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
+<p>最后作者主动加难度：</p>
+<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
+一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
+<strong>4.45%</strong>。</p>
+<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
+<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
+间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
+<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
+overhead 小于 2%</strong>。</p>
+<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
+的额外代价依然可控。</p>
+<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">兼容性     ✅ 5 种不同 xPU，不改硬件/驱动/应用</span><br><span class="line">安全性     ✅ 加密 + 完整性 + 可信建立全链路</span><br><span class="line">LLM 性能   ✅ overhead 0.05%～5.67%</span><br><span class="line">多模型     ✅ 0.72%～4.76%，不随模型大小线性恶化</span><br><span class="line">多 xPU     ✅ 0.58%～2.40%</span><br><span class="line">优化效果   ✅ E2E overhead 降低约 89%</span><br><span class="line">极端场景   ✅ 带宽减半 / 显存溢出仍可控</span><br></pre></td></tr></table></figure>
+<p>整套系统一句话：</p>
+<blockquote>
+<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
+PCIe
+通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
+</blockquote>
+<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
+layer（共同抽象层）</strong>。</p>
+<h3 id="怎么读才有收获">怎么读才有收获</h3>
+<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
+5（Filter 规则）/ 6（Attestation 协议）/
+7-8（实验）</strong>，串起来就是全篇。</p>
+<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
+<ul>
+<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
+LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
+的表现需要另外验证。</li>
+<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
+分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
+<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
+固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
+两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
+sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
+</ul>
+<h2 id="系列回顾">📚 系列回顾</h2>
+<ul>
+<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
+背景</li>
+<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
+精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
+Handler / Adaptor / 信任建立 / 实现</li>
+<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
+</ul>
+<p>如果对背景概念想补课，可以看站内的 <a
+href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
+href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em>
+的入门精读笔记，全部实验数据来自论文原文。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+        <tag>性能测试</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</title>
     <url>/posts/25a4a786/</url>
     <content><![CDATA[<blockquote>
@@ -24953,17 +25301,23 @@ Report 大概是：</p>
 第五站：Implementation——作者真做出来了</h2>
 <p>论文用 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
 搭了原型，实现两个东西：</p>
-<p><strong>① Adaptor（软件）</strong> - 新增 <code>ccAI_adaptor</code>
-kernel module（不改 CUDA / GPU Driver / AI Application） - 提供
-<code>encrypt_data()</code> / <code>decrypt_data()</code>，用
-<strong>AES-128</strong> + Intel <strong>AES-NI</strong> 加速 - 分到
-<strong>64 KB MMIO 区域</strong> 控制 PCIe-SC（装载规则到 L1/L2、启停
-H2D/D2H 传输、查状态）</p>
-<p><strong>② PCIe-SC（FPGA 硬件）</strong> - 分配 <strong>4 KB BAR
-空间</strong>存放 L1/L2 规则表 - Packet Filter 从 header
-提取三要素做匹配：<strong>Packet Type</strong>（Memory
-Read/Write…）、<strong>Route ID</strong>（谁发/发给谁）、<strong>Payload
-Metadata</strong>（start/end address，访问哪段内存）</p>
+<p><strong>① Adaptor（软件）</strong></p>
+<ul>
+<li>新增 <code>ccAI_adaptor</code> kernel module（不改 CUDA / GPU Driver
+/ AI Application）</li>
+<li>提供 <code>encrypt_data()</code> / <code>decrypt_data()</code>，用
+<strong>AES-128</strong> + Intel <strong>AES-NI</strong> 加速</li>
+<li>分到 <strong>64 KB MMIO 区域</strong> 控制 PCIe-SC（装载规则到
+L1/L2、启停 H2D/D2H 传输、查状态）</li>
+</ul>
+<p><strong>② PCIe-SC（FPGA 硬件）</strong></p>
+<ul>
+<li>分配 <strong>4 KB BAR 空间</strong>存放 L1/L2 规则表</li>
+<li>Packet Filter 从 header 提取三要素做匹配：<strong>Packet
+Type</strong>（Memory Read/Write…）、<strong>Route
+ID</strong>（谁发/发给谁）、<strong>Payload Metadata</strong>（start/end
+address，访问哪段内存）</li>
+</ul>
 <h2 id="小结">📌 小结</h2>
 <table>
 <thead>
@@ -25012,217 +25366,6 @@ System for AI Computing</em> 的入门精读笔记。）</p>
         <tag>机密计算</tag>
         <tag>论文精读</tag>
         <tag>FPGA</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
-    <url>/posts/9f387285/</url>
-    <content><![CDATA[<blockquote>
-<p>接前两篇：<a
-href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
-href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
-work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
-逐个验证兼容性、安全性、性能和极端场景。</p>
-</blockquote>
-<span id="more"></span>
-<h2 id="rq-总览">📋 RQ 总览</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>RQ</th>
-<th>问题</th>
-<th>一句话答案</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RQ1</td>
-<td>与现有方案比，兼容性如何？</td>
-<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
-</tr>
-<tr>
-<td>RQ2</td>
-<td>能不能防住攻击者？</td>
-<td>链路完整：可信 + 保密 + 防篡改</td>
-</tr>
-<tr>
-<td>RQ3</td>
-<td>LLM 上性能损失多少？</td>
-<td>overhead 只有 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>RQ4</td>
-<td>换不同 LLM / xPU 呢？</td>
-<td>依然稳定，且不随模型大小线性变差</td>
-</tr>
-<tr>
-<td>RQ5</td>
-<td>优化有没有用？</td>
-<td>E2E overhead 直接降约 89%</td>
-</tr>
-<tr>
-<td>RQ6</td>
-<td>极端情况呢？</td>
-<td>带宽砍半、显存不够也不崩</td>
-</tr>
-</tbody>
-</table>
-<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
-搭的 PCIe-SC 原型。</p>
-<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
-<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
-2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
-TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
-即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
-软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
-加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
-<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
-RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
-12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
-硬件、NVIDIA driver、CUDA 或 AI
-application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
-<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
-上实际跑起来慢多少，是后面 RQ4 的事。</p>
-<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
-RQ2：安全性——假设攻击者控制特权软件</h2>
-<p>RQ2
-假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
-software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
-<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
-完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
-通信完整</strong>，缺一不可。</p>
-<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
-怎么来的？</h2>
-<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
-<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
-<table>
-<thead>
-<tr>
-<th>指标</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>E2E Latency</strong></td>
-<td>从输入问题到完整回答生成的总时长</td>
-</tr>
-<tr>
-<td><strong>TPS</strong></td>
-<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
-</tr>
-<tr>
-<td><strong>TTFT</strong></td>
-<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
-</tr>
-</tbody>
-</table>
-<p>结果：<strong>overhead
-0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
-100ms，5% overhead 就是约 105ms。</p>
-<p><strong>为什么没慢很多？</strong>
-因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
-加密；大量普通包走 A4
-免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
-<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
-xPU——稳定性验证</h2>
-<h3 id="不同-llm">不同 LLM</h3>
-<p>从小到大多种模型都测了，整体 overhead
-<strong>0.72%～4.76%</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
-<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
-是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
-2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
-带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
-<h3 id="不同-xpu">不同 xPU</h3>
-<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
-Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
-<strong>0.58%～2.40%</strong>。</p>
-<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
-的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
-重新设计安全机制。</p>
-<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
-89%</h2>
-<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
-latency overhead 降低了 88.7%～89.8%</strong>。</p>
-<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
-再读一点 → 再问一次）。三个优化对症下药：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
-<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
-次数大幅减少。</p>
-<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
-<p>最后作者主动加难度：</p>
-<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
-一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
-<strong>4.45%</strong>。</p>
-<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
-<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
-间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
-<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
-overhead 小于 2%</strong>。</p>
-<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
-的额外代价依然可控。</p>
-<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">兼容性     ✅ 5 种不同 xPU，不改硬件/驱动/应用</span><br><span class="line">安全性     ✅ 加密 + 完整性 + 可信建立全链路</span><br><span class="line">LLM 性能   ✅ overhead 0.05%～5.67%</span><br><span class="line">多模型     ✅ 0.72%～4.76%，不随模型大小线性恶化</span><br><span class="line">多 xPU     ✅ 0.58%～2.40%</span><br><span class="line">优化效果   ✅ E2E overhead 降低约 89%</span><br><span class="line">极端场景   ✅ 带宽减半 / 显存溢出仍可控</span><br></pre></td></tr></table></figure>
-<p>整套系统一句话：</p>
-<blockquote>
-<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
-PCIe
-通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
-</blockquote>
-<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
-layer（共同抽象层）</strong>。</p>
-<h3 id="怎么读才有收获">怎么读才有收获</h3>
-<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
-<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
-5（Filter 规则）/ 6（Attestation 协议）/
-7-8（实验）</strong>，串起来就是全篇。</p>
-<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
-<ul>
-<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
-LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
-的表现需要另外验证。</li>
-<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
-分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
-<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
-固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
-两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
-sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
-</ul>
-<h2 id="系列回顾">📚 系列回顾</h2>
-<ul>
-<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
-精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
-背景</li>
-<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
-精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
-Handler / Adaptor / 信任建立 / 实现</li>
-<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
-</ul>
-<p>如果对背景概念想补课，可以看站内的 <a
-href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
-href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
-<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
-System for AI Computing</em>
-的入门精读笔记，全部实验数据来自论文原文。）</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>GPU</tag>
-        <tag>AI</tag>
-        <tag>机密计算</tag>
-        <tag>论文精读</tag>
-        <tag>性能测试</tag>
       </tags>
   </entry>
 </search>

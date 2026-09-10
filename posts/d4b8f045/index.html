@@ -31,7 +31,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://iamzihao.github.io/assets/bank_conflict.png">
 <meta property="article:published_time" content="2025-08-13T04:11:31.000Z">
-<meta property="article:modified_time" content="2026-09-07T03:17:34.154Z">
+<meta property="article:modified_time" content="2026-09-10T03:25:44.446Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CUDA">
@@ -274,7 +274,7 @@ shared 形影不离？</span></a></li></ol></li><li class="nav-item nav-level-2"
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-07 11:17:34" itemprop="dateModified" datetime="2026-09-07T11:17:34+08:00">2026-09-07</time>
+      <time title="Modified: 2026-09-10 11:25:44" itemprop="dateModified" datetime="2026-09-10T11:25:44+08:00">2026-09-10</time>
     </span>
 
   
@@ -291,7 +291,7 @@ shared 形影不离？</span></a></li></ol></li><li class="nav-item nav-level-2"
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5k</span>
+      <span>4.9k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -565,17 +565,25 @@ BLOCK_ROWS 对应 blockDim.y，代表一次搬运/计算的 行数批次；典�
 🔴。</li>
 </ul>
 <blockquote>
-<p><strong>常见触发 Bank 冲突的模式（未做 +1 时）</strong><br />
-1. <strong>同列访问</strong>：矩阵转置/列拷贝，线程 (i,j 固定) →
+<p><strong>常见触发 Bank 冲突的模式（未做 +1 时）</strong></p>
+</blockquote>
+<blockquote>
+<ol type="1">
+<li><strong>同列访问</strong>：矩阵转置/列拷贝，线程 (i,j 固定) →
 地址步长 = 32×4B。<br />
-2. <strong>Stride 为 32 的倍数</strong>：Tile 宽度 32、64…
+</li>
+<li><strong>Stride 为 32 的倍数</strong>：Tile 宽度 32、64…
 行间起点对齐同 bank。<br />
-3. <strong>跨步写入</strong>：线程 i 访问 <code>base + i*32</code> 等模
+</li>
+<li><strong>跨步写入</strong>：线程 i 访问 <code>base + i*32</code> 等模
 32 重合的地址。<br />
-4. <strong>纯行或纯列归约</strong>：只动 <code>x</code> 或
+</li>
+<li><strong>纯行或纯列归约</strong>：只动 <code>x</code> 或
 <code>y</code>，导致多线程集中一个 bank。<br />
-5. <strong>稀疏 gather/scatter</strong>：索引映射使
-<code>(addr/4)&amp;31</code> 分布极度不均。</p>
+</li>
+<li><strong>稀疏 gather/scatter</strong>：索引映射使
+<code>(addr/4)&amp;31</code> 分布极度不均。</li>
+</ol>
 <p><strong>+1 Padding 的效果？</strong><br />
 • ✅ 有效：前 3 类（同列访问、stride 为 32 的倍数、跨步 32）——本质都是
 <em>行间步长=32k</em>，加 1 立刻破坏同 bank 对齐。<br />
@@ -744,7 +752,7 @@ Warp”藏延迟，性能归根结底是访存模式与并行度的艺术 ✨</s
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">12:34</span>
+    <span title="Reading time total">12:33</span>
   </span>
 </div>
 <div class="busuanzi-count">
