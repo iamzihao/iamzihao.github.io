@@ -17231,6 +17231,438 @@ flowchart TD
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：STL 容器</title>
+    <url>/posts/e9f3b7c2/</url>
+    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
+提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STL</td>
+<td>Standard Template Library，标准模板库</td>
+<td>C++ 标准库的容器 + 算法</td>
+</tr>
+<tr>
+<td>容器（container）</td>
+<td>存储和管理一组元素的数据结构</td>
+<td>装数据的东西</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td>动态数组，内存连续，自动扩容</td>
+<td>自动扩容的数组</td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>字符串类型，自动管理字符内存</td>
+<td>好用的字符串</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>键值对映射，按键有序</td>
+<td>字典/映射</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>不重复元素的有序集合</td>
+<td>去重 + 有序</td>
+</tr>
+<tr>
+<td>迭代器（iterator）</td>
+<td>遍历容器的指针式对象</td>
+<td>容器的通用游标</td>
+</tr>
+<tr>
+<td>范围 for</td>
+<td><code>for (auto x : c)</code> 遍历语法</td>
+<td>简单遍历</td>
+</tr>
+</tbody>
+</table>
+<h3 id="stl-是什么">🧩 STL 是什么</h3>
+<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
+<table>
+<thead>
+<tr>
+<th>组成</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>容器</td>
+<td>存储数据</td>
+<td><code>vector</code>、<code>map</code>、<code>set</code></td>
+</tr>
+<tr>
+<td>算法</td>
+<td>操作数据</td>
+<td><code>sort</code>、<code>find</code></td>
+</tr>
+<tr>
+<td>迭代器</td>
+<td>连接容器和算法</td>
+<td><code>begin()</code>、<code>end()</code></td>
+</tr>
+</tbody>
+</table>
+<p>STL
+用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[容器] &lt;--&gt; B[迭代器]
+    B &lt;--&gt; C[算法]
+    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
+    C --&gt; E[sort&#x2F;find&#x2F;count]
+</code>
+</pre>
+<p>先记住一个总原则：<strong>能用 STL
+容器解决的，不要自己造轮子</strong>。</p>
+<h3 id="vector动态数组">🧮 vector：动态数组</h3>
+<h4 id="基本用法">基本用法</h4>
+<p><code>vector</code>
+是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以在创建时直接给初始值：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>size()</code> 返回的是
+<code>size_t</code>（无符号整数），所以循环变量建议也用
+<code>size_t</code>，避免有符号/无符号比较的警告。</p>
+</blockquote>
+<h4 id="常用接口">常用接口</h4>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_back(x)</code></td>
+<td>尾部追加元素</td>
+</tr>
+<tr>
+<td><code>pop_back()</code></td>
+<td>删除尾部元素</td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>empty()</code></td>
+<td>是否为空</td>
+</tr>
+<tr>
+<td><code>front()</code> / <code>back()</code></td>
+<td>第一个 / 最后一个元素</td>
+</tr>
+<tr>
+<td><code>v[i]</code></td>
+<td>按下标访问，<strong>不检查越界</strong></td>
+</tr>
+<tr>
+<td><code>v.at(i)</code></td>
+<td>按下标访问，越界抛异常</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>v[i]</code>
+越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
+<code>v.at(i)</code> 更安全。</p>
+</blockquote>
+<h3 id="string常用接口与互转">📝 string：常用接口与互转</h3>
+<h4 id="常用接口-1">常用接口</h4>
+<p><code>string</code> 是 C++
+的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>find</code> 找不到时返回
+<code>string::npos</code>，判断要用它：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="与-c-字符串互转">与 C 字符串互转</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
+<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
+省去了手动管理长度、手动拼接的麻烦：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>C 风格 <code>char[]</code></th>
+<th><code>string</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拼接</td>
+<td><code>strcat</code>，要保证空间够</td>
+<td><code>s1 + s2</code></td>
+</tr>
+<tr>
+<td>比较</td>
+<td><code>strcmp</code></td>
+<td><code>==</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td><code>strlen</code></td>
+<td><code>.size()</code></td>
+</tr>
+<tr>
+<td>拷贝</td>
+<td><code>strcpy</code></td>
+<td><code>=</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="map键值对">🗺️ map：键值对</h3>
+<h4 id="基本用法-1">基本用法</h4>
+<p><code>map</code>
+保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出（按键排序）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
+<h4 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h4>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>键不存在时</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scores["Bob"]</code></td>
+<td>自动插入一个默认值（0）</td>
+<td>需要写入时</td>
+</tr>
+<tr>
+<td><code>scores.find("Bob")</code></td>
+<td>返回 <code>end()</code>，不插入</td>
+<td>只查询时</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
+<code>count</code>，避免误插入脏数据：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="set去重与有序">🧹 set：去重与有序</h3>
+<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th><code>vector</code></th>
+<th><code>set</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>顺序</td>
+<td>保持插入顺序</td>
+<td>自动排序</td>
+</tr>
+<tr>
+<td>重复</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>按下标访问</td>
+<td>可以</td>
+<td>不可以，用迭代器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>需要去重 + 有序时用
+<code>set</code>；需要保持插入顺序、按下标访问时用
+<code>vector</code>。</p>
+</blockquote>
+<h3 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h3>
+<h4 id="基本概念">基本概念</h4>
+<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
+指向第一个元素，<code>end()</code>
+指向最后一个元素的下一个位置（不指向有效元素）。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[begin 指向第一个元素] --&gt; B[元素...]
+    B --&gt; C[end 指向末尾之后]
+</code>
+</pre>
+<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
+的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
+<code>it-&gt;second</code> 访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="迭代器失效问题">迭代器失效问题</h4>
+<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
+<p>最典型的例子是 <code>vector</code> 扩容：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
+<p>什么时候要警惕：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>是否可能使旧迭代器失效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
+<td>可能失效</td>
+</tr>
+<tr>
+<td><code>vector</code> 中间插入/删除</td>
+<td>受影响位置之后失效</td>
+</tr>
+<tr>
+<td><code>map</code>/<code>set</code> 插入</td>
+<td>通常不失效</td>
+</tr>
+<tr>
+<td>遍历中删除当前元素</td>
+<td>当前迭代器失效</td>
+</tr>
+</tbody>
+</table>
+<p>范围 for
+内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
+<h3 id="sort-算法">🔀 sort 算法</h3>
+<h4 id="默认排序">默认排序</h4>
+<p><code>sort</code> 属于 STL
+算法，对迭代器范围内的元素排序，默认升序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>降序可以用标准库提供的比较器：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
+<h4 id="自定义比较函数">自定义比较函数</h4>
+<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
+<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
+前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
+<code>&gt;=</code> 这种包含等号的条件。</p>
+<h4 id="小结">小结</h4>
+<table>
+<thead>
+<tr>
+<th>用法</th>
+<th>代码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升序</td>
+<td><code>sort(v.begin(), v.end())</code></td>
+</tr>
+<tr>
+<td>降序</td>
+<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
+</tr>
+<tr>
+<td>按自定义规则</td>
+<td><code>sort(v.begin(), v.end(), lambda)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 下标越界会报错</td>
+<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
+会抛异常</td>
+</tr>
+<tr>
+<td><code>string</code> 就是 <code>char[]</code></td>
+<td><code>string</code> 自动管理内存，支持
+<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+</tr>
+<tr>
+<td>用 <code>map[]</code> 查询很安全</td>
+<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
+<code>find</code>/<code>count</code></td>
+</tr>
+<tr>
+<td><code>set</code> 和 <code>vector</code> 都能去重</td>
+<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+</tr>
+<tr>
+<td>范围 for 遍历时随便删元素</td>
+<td>删除元素可能导致迭代器失效，需小心处理</td>
+</tr>
+<tr>
+<td><code>sort</code> 只能排数字</td>
+<td>传自定义比较函数就能排任意类型</td>
+</tr>
+<tr>
+<td>STL 容器都要自己管理内存</td>
+<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>STL
+三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+</blockquote>
+<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
+管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
+自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>STL</tag>
+        <tag>vector</tag>
+        <tag>string</tag>
+        <tag>map</tag>
+        <tag>set</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：动态内存管理</title>
     <url>/posts/d6a2e8f1/</url>
     <content><![CDATA[<p>栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。</p>
@@ -17664,438 +18096,6 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：STL 容器</title>
-    <url>/posts/e9f3b7c2/</url>
-    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
-提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>STL</td>
-<td>Standard Template Library，标准模板库</td>
-<td>C++ 标准库的容器 + 算法</td>
-</tr>
-<tr>
-<td>容器（container）</td>
-<td>存储和管理一组元素的数据结构</td>
-<td>装数据的东西</td>
-</tr>
-<tr>
-<td><code>vector</code></td>
-<td>动态数组，内存连续，自动扩容</td>
-<td>自动扩容的数组</td>
-</tr>
-<tr>
-<td><code>string</code></td>
-<td>字符串类型，自动管理字符内存</td>
-<td>好用的字符串</td>
-</tr>
-<tr>
-<td><code>map</code></td>
-<td>键值对映射，按键有序</td>
-<td>字典/映射</td>
-</tr>
-<tr>
-<td><code>set</code></td>
-<td>不重复元素的有序集合</td>
-<td>去重 + 有序</td>
-</tr>
-<tr>
-<td>迭代器（iterator）</td>
-<td>遍历容器的指针式对象</td>
-<td>容器的通用游标</td>
-</tr>
-<tr>
-<td>范围 for</td>
-<td><code>for (auto x : c)</code> 遍历语法</td>
-<td>简单遍历</td>
-</tr>
-</tbody>
-</table>
-<h3 id="stl-是什么">🧩 STL 是什么</h3>
-<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
-<table>
-<thead>
-<tr>
-<th>组成</th>
-<th>作用</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>容器</td>
-<td>存储数据</td>
-<td><code>vector</code>、<code>map</code>、<code>set</code></td>
-</tr>
-<tr>
-<td>算法</td>
-<td>操作数据</td>
-<td><code>sort</code>、<code>find</code></td>
-</tr>
-<tr>
-<td>迭代器</td>
-<td>连接容器和算法</td>
-<td><code>begin()</code>、<code>end()</code></td>
-</tr>
-</tbody>
-</table>
-<p>STL
-用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[容器] &lt;--&gt; B[迭代器]
-    B &lt;--&gt; C[算法]
-    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
-    C --&gt; E[sort&#x2F;find&#x2F;count]
-</code>
-</pre>
-<p>先记住一个总原则：<strong>能用 STL
-容器解决的，不要自己造轮子</strong>。</p>
-<h3 id="vector动态数组">🧮 vector：动态数组</h3>
-<h4 id="基本用法">基本用法</h4>
-<p><code>vector</code>
-是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以在创建时直接给初始值：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>size()</code> 返回的是
-<code>size_t</code>（无符号整数），所以循环变量建议也用
-<code>size_t</code>，避免有符号/无符号比较的警告。</p>
-</blockquote>
-<h4 id="常用接口">常用接口</h4>
-<table>
-<thead>
-<tr>
-<th>接口</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>push_back(x)</code></td>
-<td>尾部追加元素</td>
-</tr>
-<tr>
-<td><code>pop_back()</code></td>
-<td>删除尾部元素</td>
-</tr>
-<tr>
-<td><code>size()</code></td>
-<td>元素个数</td>
-</tr>
-<tr>
-<td><code>empty()</code></td>
-<td>是否为空</td>
-</tr>
-<tr>
-<td><code>front()</code> / <code>back()</code></td>
-<td>第一个 / 最后一个元素</td>
-</tr>
-<tr>
-<td><code>v[i]</code></td>
-<td>按下标访问，<strong>不检查越界</strong></td>
-</tr>
-<tr>
-<td><code>v.at(i)</code></td>
-<td>按下标访问，越界抛异常</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>v[i]</code>
-越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
-<code>v.at(i)</code> 更安全。</p>
-</blockquote>
-<h3 id="string常用接口与互转">📝 string：常用接口与互转</h3>
-<h4 id="常用接口-1">常用接口</h4>
-<p><code>string</code> 是 C++
-的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>find</code> 找不到时返回
-<code>string::npos</code>，判断要用它：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="与-c-字符串互转">与 C 字符串互转</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
-<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
-省去了手动管理长度、手动拼接的麻烦：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>C 风格 <code>char[]</code></th>
-<th><code>string</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>拼接</td>
-<td><code>strcat</code>，要保证空间够</td>
-<td><code>s1 + s2</code></td>
-</tr>
-<tr>
-<td>比较</td>
-<td><code>strcmp</code></td>
-<td><code>==</code></td>
-</tr>
-<tr>
-<td>长度</td>
-<td><code>strlen</code></td>
-<td><code>.size()</code></td>
-</tr>
-<tr>
-<td>拷贝</td>
-<td><code>strcpy</code></td>
-<td><code>=</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="map键值对">🗺️ map：键值对</h3>
-<h4 id="基本用法-1">基本用法</h4>
-<p><code>map</code>
-保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出（按键排序）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
-<h4 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h4>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>键不存在时</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>scores["Bob"]</code></td>
-<td>自动插入一个默认值（0）</td>
-<td>需要写入时</td>
-</tr>
-<tr>
-<td><code>scores.find("Bob")</code></td>
-<td>返回 <code>end()</code>，不插入</td>
-<td>只查询时</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
-<code>count</code>，避免误插入脏数据：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="set去重与有序">🧹 set：去重与有序</h3>
-<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th><code>vector</code></th>
-<th><code>set</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>顺序</td>
-<td>保持插入顺序</td>
-<td>自动排序</td>
-</tr>
-<tr>
-<td>重复</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>按下标访问</td>
-<td>可以</td>
-<td>不可以，用迭代器</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>需要去重 + 有序时用
-<code>set</code>；需要保持插入顺序、按下标访问时用
-<code>vector</code>。</p>
-</blockquote>
-<h3 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h3>
-<h4 id="基本概念">基本概念</h4>
-<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
-指向第一个元素，<code>end()</code>
-指向最后一个元素的下一个位置（不指向有效元素）。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[begin 指向第一个元素] --&gt; B[元素...]
-    B --&gt; C[end 指向末尾之后]
-</code>
-</pre>
-<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
-的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
-<code>it-&gt;second</code> 访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="迭代器失效问题">迭代器失效问题</h4>
-<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
-<p>最典型的例子是 <code>vector</code> 扩容：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
-<p>什么时候要警惕：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>是否可能使旧迭代器失效</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
-<td>可能失效</td>
-</tr>
-<tr>
-<td><code>vector</code> 中间插入/删除</td>
-<td>受影响位置之后失效</td>
-</tr>
-<tr>
-<td><code>map</code>/<code>set</code> 插入</td>
-<td>通常不失效</td>
-</tr>
-<tr>
-<td>遍历中删除当前元素</td>
-<td>当前迭代器失效</td>
-</tr>
-</tbody>
-</table>
-<p>范围 for
-内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
-<h3 id="sort-算法">🔀 sort 算法</h3>
-<h4 id="默认排序">默认排序</h4>
-<p><code>sort</code> 属于 STL
-算法，对迭代器范围内的元素排序，默认升序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>降序可以用标准库提供的比较器：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
-<h4 id="自定义比较函数">自定义比较函数</h4>
-<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
-<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
-前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
-<code>&gt;=</code> 这种包含等号的条件。</p>
-<h4 id="小结">小结</h4>
-<table>
-<thead>
-<tr>
-<th>用法</th>
-<th>代码</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>升序</td>
-<td><code>sort(v.begin(), v.end())</code></td>
-</tr>
-<tr>
-<td>降序</td>
-<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
-</tr>
-<tr>
-<td>按自定义规则</td>
-<td><code>sort(v.begin(), v.end(), lambda)</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 下标越界会报错</td>
-<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
-会抛异常</td>
-</tr>
-<tr>
-<td><code>string</code> 就是 <code>char[]</code></td>
-<td><code>string</code> 自动管理内存，支持
-<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
-</tr>
-<tr>
-<td>用 <code>map[]</code> 查询很安全</td>
-<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
-<code>find</code>/<code>count</code></td>
-</tr>
-<tr>
-<td><code>set</code> 和 <code>vector</code> 都能去重</td>
-<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
-</tr>
-<tr>
-<td>范围 for 遍历时随便删元素</td>
-<td>删除元素可能导致迭代器失效，需小心处理</td>
-</tr>
-<tr>
-<td><code>sort</code> 只能排数字</td>
-<td>传自定义比较函数就能排任意类型</td>
-</tr>
-<tr>
-<td>STL 容器都要自己管理内存</td>
-<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>STL
-三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
-</blockquote>
-<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
-管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
-自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>STL</tag>
-        <tag>vector</tag>
-        <tag>string</tag>
-        <tag>map</tag>
-        <tag>set</tag>
       </tags>
   </entry>
   <entry>
@@ -19828,335 +19828,6 @@ guard、保持最小包含，警惕重复定义和循环包含。</p>
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：文件 IO 流</title>
-    <url>/posts/a7c2e9d4/</url>
-    <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
-stream）就是 C++ 读写文件的通道。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>文件流（file stream）</td>
-<td>把文件当成数据流的输入输出对象</td>
-<td>读写文件的通道</td>
-</tr>
-<tr>
-<td><code>ifstream</code></td>
-<td>输入文件流，从文件读数据</td>
-<td>读</td>
-</tr>
-<tr>
-<td><code>ofstream</code></td>
-<td>输出文件流，向文件写数据</td>
-<td>写</td>
-</tr>
-<tr>
-<td><code>fstream</code></td>
-<td>可读可写的文件流</td>
-<td>读写</td>
-</tr>
-<tr>
-<td>文本文件</td>
-<td>以字符形式存储，人能直接阅读</td>
-<td>记事本能打开</td>
-</tr>
-<tr>
-<td>二进制文件</td>
-<td>按内存中的字节原样存储</td>
-<td>紧凑、机器可读</td>
-</tr>
-<tr>
-<td>序列化（serialization）</td>
-<td>把对象转成可存储/传输的字节序列</td>
-<td>对象存盘</td>
-</tr>
-<tr>
-<td>反序列化（deserialization）</td>
-<td>从字节序列恢复出对象</td>
-<td>从盘恢复对象</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
-<p>之前用的 <code>cout</code>、<code>cin</code>
-是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[程序] --&gt; B[ofstream 输出流]
-    B --&gt; C[文件]
-    C --&gt; D[ifstream 输入流]
-    D --&gt; A
-</code>
-</pre>
-<table>
-<thead>
-<tr>
-<th>流对象</th>
-<th>头文件</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ifstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>从文件读</td>
-</tr>
-<tr>
-<td><code>ofstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>向文件写</td>
-</tr>
-<tr>
-<td><code>fstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>既读又写</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
-<h4 id="写文件ofstream">写文件：ofstream</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>ofstream</code>
-默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
-<h4 id="读文件ifstream">读文件：ifstream</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>close()</code>
-也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
-<code>close()</code>
-能让文件何时关闭更清晰，也方便在同一个作用域里重新打开别的文件。</p>
-</blockquote>
-<h4 id="常用打开模式">常用打开模式</h4>
-<table>
-<thead>
-<tr>
-<th>模式</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ios::in</code></td>
-<td>读模式（<code>ifstream</code> 默认）</td>
-</tr>
-<tr>
-<td><code>ios::out</code></td>
-<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
-</tr>
-<tr>
-<td><code>ios::app</code></td>
-<td>追加写</td>
-</tr>
-<tr>
-<td><code>ios::binary</code></td>
-<td>二进制模式</td>
-</tr>
-<tr>
-<td><code>ios::trunc</code></td>
-<td>打开即清空文件</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文本文件读写">📝 文本文件读写</h3>
-<h4 id="逐行读取">逐行读取</h4>
-<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>getline</code>
-读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
-<h4 id="格式化写入">格式化写入</h4>
-<p>文本写入就是把要保存的字段拼成可读文本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>写出的文件内容：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
-<p>反过来读回时，用 <code>getline</code> 按行读，再用
-<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
-<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
-<h4 id="基本用法">基本用法</h4>
-<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
-<code>read</code>/<code>write</code> 操作：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>write</code>/<code>read</code> 的参数都是字符指针 +
-字节数，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
-转换。</p>
-<h4 id="重要限制">重要限制</h4>
-<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
-<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p><code>string</code>、<code>vector</code>
-内部管理堆内存，把整个对象字节写进文件，存进去的是指针地址，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
-<table>
-<thead>
-<tr>
-<th>数据</th>
-<th>二进制直接读写</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int</code>、<code>double</code>、POD 结构体</td>
-<td>可以</td>
-<td>字节布局稳定</td>
-</tr>
-<tr>
-<td><code>string</code>、<code>vector</code></td>
-<td>不行</td>
-<td>内部有指针，要序列化</td>
-</tr>
-</tbody>
-</table>
-<h3 id="对象持久化">💾 对象持久化</h3>
-<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
-<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
-<p>把对象的每个字段转成文本，逐字段保存：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
-<h4 id="版本兼容意识">版本兼容意识</h4>
-<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是老文件还能被新程序读的基础意识。</p>
-<blockquote>
-<p>序列化是很大的话题，工程里常用 JSON、protobuf
-等现成格式。入门阶段先理解把字段存下来、再读回来这件事本身。</p>
-</blockquote>
-<h3 id="错误处理">⚠️ 错误处理</h3>
-<h4 id="打开失败">打开失败</h4>
-<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="读写状态">读写状态</h4>
-<p>流对象内部记录着状态标志：</p>
-<table>
-<thead>
-<tr>
-<th>状态</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>good()</code></td>
-<td>一切正常</td>
-</tr>
-<tr>
-<td><code>eof()</code></td>
-<td>读到文件末尾（正常情况）</td>
-</tr>
-<tr>
-<td><code>fail()</code></td>
-<td>操作失败，比如类型不匹配、打开失败</td>
-</tr>
-<tr>
-<td><code>bad()</code></td>
-<td>严重错误，比如底层 IO 故障</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>把读取操作本身当作判断条件，是最稳妥的写法。</p>
-<h4 id="路径问题">路径问题</h4>
-<table>
-<thead>
-<tr>
-<th>问题</th>
-<th>建议</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>相对路径</td>
-<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
-</tr>
-<tr>
-<td>绝对路径</td>
-<td>最稳妥，但换机器要改</td>
-</tr>
-<tr>
-<td>目录不存在</td>
-<td>文件流不会自动创建目录，先建目录再打开</td>
-</tr>
-<tr>
-<td>权限不足</td>
-<td>只读文件用写模式打开会失败，先检查权限</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>文件一定能打开成功</td>
-<td>路径、权限、目录都可能失败，必须检查打开结果</td>
-</tr>
-<tr>
-<td><code>string</code> 可以直接二进制 <code>write</code></td>
-<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
-</tr>
-<tr>
-<td>忘写 <code>close()</code> 会立刻出问题</td>
-<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
-</tr>
-<tr>
-<td>读到 EOF 是错误</td>
-<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
-</tr>
-<tr>
-<td>二进制数据用文本模式读写没关系</td>
-<td>二进制文件要加
-<code>ios::binary</code>，否则可能被换行符转换破坏</td>
-</tr>
-<tr>
-<td>文件格式随便定，反正自己用</td>
-<td>加版本号，为以后格式变更留余地</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
-写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
-POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
-</blockquote>
-<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
-的又一次体现；配合第 10 章的
-<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>文件</tag>
-        <tag>文件流</tag>
-        <tag>序列化</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：拓展选学</title>
     <url>/posts/c6e1a9f2/</url>
     <content><![CDATA[<p>入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、<code>shared_ptr</code>
@@ -20656,6 +20327,335 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
         <tag>智能指针</tag>
         <tag>模板</tag>
         <tag>异常</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：文件 IO 流</title>
+    <url>/posts/a7c2e9d4/</url>
+    <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
+stream）就是 C++ 读写文件的通道。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件流（file stream）</td>
+<td>把文件当成数据流的输入输出对象</td>
+<td>读写文件的通道</td>
+</tr>
+<tr>
+<td><code>ifstream</code></td>
+<td>输入文件流，从文件读数据</td>
+<td>读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td>输出文件流，向文件写数据</td>
+<td>写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td>可读可写的文件流</td>
+<td>读写</td>
+</tr>
+<tr>
+<td>文本文件</td>
+<td>以字符形式存储，人能直接阅读</td>
+<td>记事本能打开</td>
+</tr>
+<tr>
+<td>二进制文件</td>
+<td>按内存中的字节原样存储</td>
+<td>紧凑、机器可读</td>
+</tr>
+<tr>
+<td>序列化（serialization）</td>
+<td>把对象转成可存储/传输的字节序列</td>
+<td>对象存盘</td>
+</tr>
+<tr>
+<td>反序列化（deserialization）</td>
+<td>从字节序列恢复出对象</td>
+<td>从盘恢复对象</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
+<p>之前用的 <code>cout</code>、<code>cin</code>
+是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[程序] --&gt; B[ofstream 输出流]
+    B --&gt; C[文件]
+    C --&gt; D[ifstream 输入流]
+    D --&gt; A
+</code>
+</pre>
+<table>
+<thead>
+<tr>
+<th>流对象</th>
+<th>头文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ifstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>从文件读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>向文件写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>既读又写</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
+<h4 id="写文件ofstream">写文件：ofstream</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>ofstream</code>
+默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
+<h4 id="读文件ifstream">读文件：ifstream</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>close()</code>
+也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
+<code>close()</code>
+能让文件何时关闭更清晰，也方便在同一个作用域里重新打开别的文件。</p>
+</blockquote>
+<h4 id="常用打开模式">常用打开模式</h4>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ios::in</code></td>
+<td>读模式（<code>ifstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::out</code></td>
+<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::app</code></td>
+<td>追加写</td>
+</tr>
+<tr>
+<td><code>ios::binary</code></td>
+<td>二进制模式</td>
+</tr>
+<tr>
+<td><code>ios::trunc</code></td>
+<td>打开即清空文件</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文本文件读写">📝 文本文件读写</h3>
+<h4 id="逐行读取">逐行读取</h4>
+<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>getline</code>
+读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
+<h4 id="格式化写入">格式化写入</h4>
+<p>文本写入就是把要保存的字段拼成可读文本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>写出的文件内容：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
+<p>反过来读回时，用 <code>getline</code> 按行读，再用
+<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
+<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
+<h4 id="基本用法">基本用法</h4>
+<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
+<code>read</code>/<code>write</code> 操作：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>write</code>/<code>read</code> 的参数都是字符指针 +
+字节数，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
+转换。</p>
+<h4 id="重要限制">重要限制</h4>
+<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
+<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><code>string</code>、<code>vector</code>
+内部管理堆内存，把整个对象字节写进文件，存进去的是指针地址，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
+<table>
+<thead>
+<tr>
+<th>数据</th>
+<th>二进制直接读写</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code>、<code>double</code>、POD 结构体</td>
+<td>可以</td>
+<td>字节布局稳定</td>
+</tr>
+<tr>
+<td><code>string</code>、<code>vector</code></td>
+<td>不行</td>
+<td>内部有指针，要序列化</td>
+</tr>
+</tbody>
+</table>
+<h3 id="对象持久化">💾 对象持久化</h3>
+<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
+<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
+<p>把对象的每个字段转成文本，逐字段保存：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
+<h4 id="版本兼容意识">版本兼容意识</h4>
+<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是老文件还能被新程序读的基础意识。</p>
+<blockquote>
+<p>序列化是很大的话题，工程里常用 JSON、protobuf
+等现成格式。入门阶段先理解把字段存下来、再读回来这件事本身。</p>
+</blockquote>
+<h3 id="错误处理">⚠️ 错误处理</h3>
+<h4 id="打开失败">打开失败</h4>
+<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="读写状态">读写状态</h4>
+<p>流对象内部记录着状态标志：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>good()</code></td>
+<td>一切正常</td>
+</tr>
+<tr>
+<td><code>eof()</code></td>
+<td>读到文件末尾（正常情况）</td>
+</tr>
+<tr>
+<td><code>fail()</code></td>
+<td>操作失败，比如类型不匹配、打开失败</td>
+</tr>
+<tr>
+<td><code>bad()</code></td>
+<td>严重错误，比如底层 IO 故障</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>把读取操作本身当作判断条件，是最稳妥的写法。</p>
+<h4 id="路径问题">路径问题</h4>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>相对路径</td>
+<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
+</tr>
+<tr>
+<td>绝对路径</td>
+<td>最稳妥，但换机器要改</td>
+</tr>
+<tr>
+<td>目录不存在</td>
+<td>文件流不会自动创建目录，先建目录再打开</td>
+</tr>
+<tr>
+<td>权限不足</td>
+<td>只读文件用写模式打开会失败，先检查权限</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件一定能打开成功</td>
+<td>路径、权限、目录都可能失败，必须检查打开结果</td>
+</tr>
+<tr>
+<td><code>string</code> 可以直接二进制 <code>write</code></td>
+<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
+</tr>
+<tr>
+<td>忘写 <code>close()</code> 会立刻出问题</td>
+<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
+</tr>
+<tr>
+<td>读到 EOF 是错误</td>
+<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
+</tr>
+<tr>
+<td>二进制数据用文本模式读写没关系</td>
+<td>二进制文件要加
+<code>ios::binary</code>，否则可能被换行符转换破坏</td>
+</tr>
+<tr>
+<td>文件格式随便定，反正自己用</td>
+<td>加版本号，为以后格式变更留余地</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
+写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
+POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
+</blockquote>
+<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
+的又一次体现；配合第 10 章的
+<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>文件</tag>
+        <tag>文件流</tag>
+        <tag>序列化</tag>
       </tags>
   </entry>
   <entry>
@@ -23711,181 +23711,6 @@ Heap 不是文件的一部分，而是加载完成后的运行时产物。</stro
       </tags>
   </entry>
   <entry>
-    <title>Rust OS 前置：从 C 到 Rust——变量、类型与 struct</title>
-    <url>/posts/5bfe3d1c/</url>
-    <content><![CDATA[<p>学 Rust OS 时会密集碰到
-<code>struct</code>、引用、裸指针、<code>unsafe</code>、生命周期这些概念。如果此前没有
-Rust 基础，直接读 OS 代码会很吃力。这篇先用 C/C++
-作对照，把你已经会的东西在 Rust 里怎么写过一遍，建立一张 Rust 地图。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文是 Rust OS
-学习系列的前置篇。后续会接着讲引用与借用、属性与内存布局，并把它们综合到《<a
-href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》的
-<code>Writer</code> 代码上。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>含义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>let</code></td>
-<td>声明变量</td>
-<td>默认不可变</td>
-</tr>
-<tr>
-<td><code>let mut</code></td>
-<td>声明可变变量</td>
-<td>想改就加 <code>mut</code></td>
-</tr>
-<tr>
-<td><code>: T</code></td>
-<td>变量名后写类型</td>
-<td><code>let x: u8 = 10;</code></td>
-</tr>
-<tr>
-<td><code>struct</code></td>
-<td>把多个数据组织在一起</td>
-<td>类似 C 的 struct</td>
-</tr>
-<tr>
-<td><code>impl</code></td>
-<td>给 struct 添加方法</td>
-<td>类似 C++ 的 class 方法</td>
-</tr>
-<tr>
-<td><code>pub</code></td>
-<td>允许模块外访问</td>
-<td>默认模块内私有</td>
-</tr>
-<tr>
-<td><code>[T; N]</code></td>
-<td>定长数组类型</td>
-<td><code>[[ScreenChar; 80]; 25]</code></td>
-</tr>
-<tr>
-<td><code>match</code></td>
-<td>模式匹配</td>
-<td>更强大的 switch</td>
-</tr>
-<tr>
-<td><code>Option&lt;T&gt;</code></td>
-<td>有值/无值</td>
-<td><code>Some(v)</code> / <code>None</code></td>
-</tr>
-<tr>
-<td><code>Result&lt;T, E&gt;</code></td>
-<td>成功/失败</td>
-<td><code>Ok(v)</code> / <code>Err(e)</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="先建一张-rust-地图">🗺️ 先建一张 Rust 地图</h3>
-<p>如果熟悉 C，Rust 可以这样对照着看：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">C</span><br><span class="line">│</span><br><span class="line">├── 变量</span><br><span class="line">├── 指针</span><br><span class="line">├── struct</span><br><span class="line">├── 函数</span><br><span class="line">├── 数组</span><br><span class="line">└── malloc / free</span><br></pre></td></tr></table></figure>
-<p>Rust
-也有这些东西，只是在它们之上加了一套<strong>所有权与借用</strong>的思想：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">                 Rust</span><br><span class="line">                   │</span><br><span class="line">    ┌──────────────┴──────────────┐</span><br><span class="line">    │                             │</span><br><span class="line">C/C++ 熟悉的东西              Rust 核心思想</span><br><span class="line">    │                             │</span><br><span class="line"> 变量                            所有权</span><br><span class="line"> struct                          借用 &amp;</span><br><span class="line"> 指针                            可变借用 &amp;mut</span><br><span class="line"> 数组                            生命周期 &#x27;a</span><br><span class="line"> 函数                            Option / Result</span><br><span class="line"> 类型                            unsafe</span><br></pre></td></tr></table></figure>
-<p>学习 OS 时的最大难点往往不是 Rust 语法本身，而是所有权 + 借用 + 引用
-+ 生命周期这套思想。本篇先讲 C 里也有、只是写法不同的部分。</p>
-<h3 id="let变量与不可变性">📦 let：变量与不可变性</h3>
-<p>Rust 声明变量用 <code>let</code>：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;        <span class="comment">// 类型自动推断为 i32</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10u8</span>;      <span class="comment">// 显式字面量后缀：u8</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10usize</span>;   <span class="comment">// usize</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">u8</span> = <span class="number">10</span>;    <span class="comment">// 或写在冒号后</span></span><br></pre></td></tr></table></figure>
-<p>可以对照 C 的 <code>int x = 10;</code>。语法上类型写在变量名后：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">let x: u8 = 10;</span><br><span class="line">    │   │</span><br><span class="line">    │   └── 类型</span><br><span class="line">    └────── 变量名</span><br></pre></td></tr></table></figure>
-<p><strong>Rust 默认变量不可变</strong>——这是和 C 的一个关键差异：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line">x = <span class="number">20</span>;        <span class="comment">// ❌ 编译错误：cannot assign to immutable variable</span></span><br></pre></td></tr></table></figure>
-<p>要修改必须显式声明可变：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line">x = <span class="number">20</span>;        <span class="comment">// ✅</span></span><br></pre></td></tr></table></figure>
-<p>简单记：<code>let</code> 是创建不可变变量，<code>let mut</code>
-是创建可变变量。VGA 的 <code>Writer</code> 里会看到：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">column_position</span> = <span class="number">0</span>;</span><br><span class="line">column_position += <span class="number">1</span>;   <span class="comment">// 需要 mut</span></span><br></pre></td></tr></table></figure>
-<h3 id="类型写在变量名后">🏷️ 类型：写在变量名后</h3>
-<p>OS 开发里最常见的整数类型：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">u8    无符号 8 位</span><br><span class="line">u16   无符号 16 位</span><br><span class="line">u32   无符号 32 位</span><br><span class="line">u64   无符号 64 位</span><br><span class="line">usize 与机器地址大小相关（64 位机上就是 u64 宽度）</span><br><span class="line"></span><br><span class="line">i8 / i16 / i32 / i64   有符号版本</span><br><span class="line">bool / char            布尔 / 字符</span><br><span class="line">&amp;str                   字符串切片</span><br><span class="line">String                 动态字符串（需要分配器）</span><br></pre></td></tr></table></figure>
-<p>裸机代码里出现频率最高的是
-<code>usize</code>、<code>u8</code>、<code>u16</code>、<code>u32</code>、<code>u64</code>——它们直接对应寄存器、地址和
-MMIO 宽度。</p>
-<h3 id="struct和-c-很像">🧱 struct：和 C 很像</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>基本对应 C：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ScreenChar</span> &#123;</span></span><br><span class="line">    <span class="type">uint8_t</span> ascii_character;</span><br><span class="line">    ColorCode color_code;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>创建与访问：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">c</span> = ScreenChar &#123;</span><br><span class="line">    ascii_character: <span class="string">b&#x27;A&#x27;</span>,</span><br><span class="line">    color_code: color,</span><br><span class="line">&#125;;</span><br><span class="line">c.ascii_character;   <span class="comment">// 读字段</span></span><br><span class="line">c.color_code;</span><br></pre></td></tr></table></figure>
-<h3 id="pub谁能看到">🚪 pub：谁能看到</h3>
-<p><code>pub</code> 表示 public，允许模块外访问；不加 <code>pub</code>
-的结构体默认只在当前模块内可用：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;          <span class="comment">// 外部能看见 Writer</span></span><br><span class="line">    column_position: <span class="type">usize</span>,  <span class="comment">// 但字段仍是私有的</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="impl给-struct-加方法">🛠️ impl：给 struct 加方法</h3>
-<p>C 里要写 <code>writer_write(writer, ...)</code> 这类散装函数；Rust
-把方法挂在类型上：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">impl</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    <span class="keyword">fn</span> <span class="title function_">write_byte</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, byte: <span class="type">u8</span>) &#123;</span><br><span class="line">        <span class="comment">// ...</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>调用：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">writer.<span class="title function_ invoke__">write_byte</span>(<span class="string">b&#x27;A&#x27;</span>);</span><br></pre></td></tr></table></figure>
-<p>可以理解为 struct + impl = 类型 + 它的方法，类似 C++ 的 class，只不过
-Rust
-把<strong>数据（struct）</strong>和<strong>方法（impl）</strong>分开声明。</p>
-<h3 id="数组与索引">📐 数组与索引</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">a</span> = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>];   <span class="comment">// 类型 [i32; 4]</span></span><br></pre></td></tr></table></figure>
-<p>类型里的两个数字分别表示元素类型与个数：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">[i32; 4]</span><br><span class="line">  │    │</span><br><span class="line">  │    └── 4 个元素</span><br><span class="line">  └─────── 每个元素是 i32</span><br></pre></td></tr></table></figure>
-<p>VGA 里的屏幕缓冲正是二维数组：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT]</span><br><span class="line"><span class="comment">// 即 [[ScreenChar; 80]; 25]：25 行，每行 80 个字符单元</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">               80</span><br><span class="line">         ┌───────────────┐</span><br><span class="line">第 0 行   │ □ □ □ □ ... □ │</span><br><span class="line">第 1 行   │ □ □ □ □ ... □ │</span><br><span class="line">第 2 行   │ □ □ □ □ ... □ │</span><br><span class="line">  ...    │               │</span><br><span class="line">第 24 行  │ □ □ □ □ ... □ │</span><br><span class="line">         └───────────────┘</span><br><span class="line">                25</span><br></pre></td></tr></table></figure>
-<p>索引从 0 开始，和 C 一样：<code>buffer.chars[24][0]</code> 表示第 24
-行第 0 列。</p>
-<h3 id="const">🔒 const</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;</span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;</span><br></pre></td></tr></table></figure>
-<p>类似 C 的 <code>#define</code>，但 Rust 的 <code>const</code>
-带类型、参与类型检查。</p>
-<h3 id="函数与最后一行是返回值">🧮 函数与最后一行是返回值</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">fn</span> <span class="title function_">add</span>(a: <span class="type">i32</span>, b: <span class="type">i32</span>) <span class="punctuation">-&gt;</span> <span class="type">i32</span> &#123;</span><br><span class="line">    a + b      <span class="comment">// 没有分号：这是返回值</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>Rust 函数体的<strong>最后一个表达式</strong>就是返回值。如果写成
-<code>a + b;</code>，加了分号就变成语句，返回 <code>()</code>。这引出了
-Rust 和 C 一个很大的思维差异——<strong>Rust 喜欢表达式</strong>：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="keyword">if</span> condition &#123;</span><br><span class="line">    <span class="number">10</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="number">20</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>if</code> 本身产生一个值并赋给 <code>x</code>。这也是
-Rust 代码看起来和 C 不一样的原因之一。</p>
-<h3 id="match更强大的-switch">🔀 match：更强大的 switch</h3>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">match</span> number &#123;</span><br><span class="line">    <span class="number">0</span> =&gt; <span class="built_in">println!</span>(<span class="string">&quot;zero&quot;</span>),</span><br><span class="line">    <span class="number">1</span> =&gt; <span class="built_in">println!</span>(<span class="string">&quot;one&quot;</span>),</span><br><span class="line">    _ =&gt; <span class="built_in">println!</span>(<span class="string">&quot;other&quot;</span>),</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>match</code> 是模式匹配，后面学
-<code>Option</code>/<code>Result</code>/枚举时它是核心工具，可暂时理解为加强版
-<code>switch</code>。</p>
-<h3 id="option-与-result不靠-null-和--1">🟢 Option 与 Result：不靠 NULL
-和 -1</h3>
-<p>C 里常用 <code>NULL</code> 表示没有值、用 <code>return -1</code>
-表示失败。Rust 不喜欢这种方式，改用两个显式类型：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Option&lt;T&gt;  =  Some(T) 有值  |  None 没有值</span><br><span class="line">Result&lt;T,E&gt; =  Ok(T)  成功  |  Err(E) 失败</span><br></pre></td></tr></table></figure>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; = <span class="title function_ invoke__">Some</span>(<span class="number">10</span>);</span><br><span class="line"><span class="keyword">let</span> <span class="variable">y</span>: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; = <span class="literal">None</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">divide</span>(a: <span class="type">i32</span>, b: <span class="type">i32</span>) <span class="punctuation">-&gt;</span> <span class="type">Result</span>&lt;<span class="type">i32</span>, <span class="type">String</span>&gt; &#123;</span><br><span class="line">    <span class="keyword">if</span> b == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="title function_ invoke__">Err</span>(<span class="string">&quot;除数不能为 0&quot;</span>.<span class="title function_ invoke__">into</span>())</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="title function_ invoke__">Ok</span>(a / b)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>Some/None/Ok/Err</code> 加上
-<code>match</code>，就能强制调用方处理可能没有值或可能失败的情况——这是
-Rust 错误处理的基本形态，OS 代码里读取 MMIO
-寄存器、解析结构时常会遇到。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>从 C 到
-Rust，变量、类型、<code>struct</code>、数组、函数这些零件大多能一一对应，差异主要在三点：<strong>变量默认不可变（<code>mut</code>）</strong>、<strong>类型写在变量名后</strong>、<strong>最后一个表达式即返回值</strong>。真正的分水岭是下一篇要讲的引用与所有权。</p>
-</blockquote>
-<p>下一篇接着讲这条核心主线：<code>&amp;</code>（借用）→
-<code>&amp;mut</code>（可变借用）→ 裸指针 → <code>unsafe</code> →
-生命周期，把内存到底归谁管讲清楚。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>裸机</tag>
-        <tag>Rust 基础</tag>
-        <tag>所有权</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 入门：VGA 字符模式——往一块内存写字符，屏幕就有字了</title>
     <url>/posts/b07aa795/</url>
     <content><![CDATA[<p>内核启动后，屏幕上出现了
@@ -24108,6 +23933,181 @@ Writer：println! 背后是什么</h3>
         <tag>VGA</tag>
         <tag>字符模式</tag>
         <tag>显存</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Rust OS 前置：从 C 到 Rust——变量、类型与 struct</title>
+    <url>/posts/5bfe3d1c/</url>
+    <content><![CDATA[<p>学 Rust OS 时会密集碰到
+<code>struct</code>、引用、裸指针、<code>unsafe</code>、生命周期这些概念。如果此前没有
+Rust 基础，直接读 OS 代码会很吃力。这篇先用 C/C++
+作对照，把你已经会的东西在 Rust 里怎么写过一遍，建立一张 Rust 地图。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是 Rust OS
+学习系列的前置篇。后续会接着讲引用与借用、属性与内存布局，并把它们综合到《<a
+href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》的
+<code>Writer</code> 代码上。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>含义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>let</code></td>
+<td>声明变量</td>
+<td>默认不可变</td>
+</tr>
+<tr>
+<td><code>let mut</code></td>
+<td>声明可变变量</td>
+<td>想改就加 <code>mut</code></td>
+</tr>
+<tr>
+<td><code>: T</code></td>
+<td>变量名后写类型</td>
+<td><code>let x: u8 = 10;</code></td>
+</tr>
+<tr>
+<td><code>struct</code></td>
+<td>把多个数据组织在一起</td>
+<td>类似 C 的 struct</td>
+</tr>
+<tr>
+<td><code>impl</code></td>
+<td>给 struct 添加方法</td>
+<td>类似 C++ 的 class 方法</td>
+</tr>
+<tr>
+<td><code>pub</code></td>
+<td>允许模块外访问</td>
+<td>默认模块内私有</td>
+</tr>
+<tr>
+<td><code>[T; N]</code></td>
+<td>定长数组类型</td>
+<td><code>[[ScreenChar; 80]; 25]</code></td>
+</tr>
+<tr>
+<td><code>match</code></td>
+<td>模式匹配</td>
+<td>更强大的 switch</td>
+</tr>
+<tr>
+<td><code>Option&lt;T&gt;</code></td>
+<td>有值/无值</td>
+<td><code>Some(v)</code> / <code>None</code></td>
+</tr>
+<tr>
+<td><code>Result&lt;T, E&gt;</code></td>
+<td>成功/失败</td>
+<td><code>Ok(v)</code> / <code>Err(e)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="先建一张-rust-地图">🗺️ 先建一张 Rust 地图</h3>
+<p>如果熟悉 C，Rust 可以这样对照着看：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">C</span><br><span class="line">│</span><br><span class="line">├── 变量</span><br><span class="line">├── 指针</span><br><span class="line">├── struct</span><br><span class="line">├── 函数</span><br><span class="line">├── 数组</span><br><span class="line">└── malloc / free</span><br></pre></td></tr></table></figure>
+<p>Rust
+也有这些东西，只是在它们之上加了一套<strong>所有权与借用</strong>的思想：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">                 Rust</span><br><span class="line">                   │</span><br><span class="line">    ┌──────────────┴──────────────┐</span><br><span class="line">    │                             │</span><br><span class="line">C/C++ 熟悉的东西              Rust 核心思想</span><br><span class="line">    │                             │</span><br><span class="line"> 变量                            所有权</span><br><span class="line"> struct                          借用 &amp;</span><br><span class="line"> 指针                            可变借用 &amp;mut</span><br><span class="line"> 数组                            生命周期 &#x27;a</span><br><span class="line"> 函数                            Option / Result</span><br><span class="line"> 类型                            unsafe</span><br></pre></td></tr></table></figure>
+<p>学习 OS 时的最大难点往往不是 Rust 语法本身，而是所有权 + 借用 + 引用
++ 生命周期这套思想。本篇先讲 C 里也有、只是写法不同的部分。</p>
+<h3 id="let变量与不可变性">📦 let：变量与不可变性</h3>
+<p>Rust 声明变量用 <code>let</code>：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;        <span class="comment">// 类型自动推断为 i32</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10u8</span>;      <span class="comment">// 显式字面量后缀：u8</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10usize</span>;   <span class="comment">// usize</span></span><br><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">u8</span> = <span class="number">10</span>;    <span class="comment">// 或写在冒号后</span></span><br></pre></td></tr></table></figure>
+<p>可以对照 C 的 <code>int x = 10;</code>。语法上类型写在变量名后：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">let x: u8 = 10;</span><br><span class="line">    │   │</span><br><span class="line">    │   └── 类型</span><br><span class="line">    └────── 变量名</span><br></pre></td></tr></table></figure>
+<p><strong>Rust 默认变量不可变</strong>——这是和 C 的一个关键差异：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line">x = <span class="number">20</span>;        <span class="comment">// ❌ 编译错误：cannot assign to immutable variable</span></span><br></pre></td></tr></table></figure>
+<p>要修改必须显式声明可变：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line">x = <span class="number">20</span>;        <span class="comment">// ✅</span></span><br></pre></td></tr></table></figure>
+<p>简单记：<code>let</code> 是创建不可变变量，<code>let mut</code>
+是创建可变变量。VGA 的 <code>Writer</code> 里会看到：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">column_position</span> = <span class="number">0</span>;</span><br><span class="line">column_position += <span class="number">1</span>;   <span class="comment">// 需要 mut</span></span><br></pre></td></tr></table></figure>
+<h3 id="类型写在变量名后">🏷️ 类型：写在变量名后</h3>
+<p>OS 开发里最常见的整数类型：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">u8    无符号 8 位</span><br><span class="line">u16   无符号 16 位</span><br><span class="line">u32   无符号 32 位</span><br><span class="line">u64   无符号 64 位</span><br><span class="line">usize 与机器地址大小相关（64 位机上就是 u64 宽度）</span><br><span class="line"></span><br><span class="line">i8 / i16 / i32 / i64   有符号版本</span><br><span class="line">bool / char            布尔 / 字符</span><br><span class="line">&amp;str                   字符串切片</span><br><span class="line">String                 动态字符串（需要分配器）</span><br></pre></td></tr></table></figure>
+<p>裸机代码里出现频率最高的是
+<code>usize</code>、<code>u8</code>、<code>u16</code>、<code>u32</code>、<code>u64</code>——它们直接对应寄存器、地址和
+MMIO 宽度。</p>
+<h3 id="struct和-c-很像">🧱 struct：和 C 很像</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>基本对应 C：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ScreenChar</span> &#123;</span></span><br><span class="line">    <span class="type">uint8_t</span> ascii_character;</span><br><span class="line">    ColorCode color_code;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>创建与访问：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">c</span> = ScreenChar &#123;</span><br><span class="line">    ascii_character: <span class="string">b&#x27;A&#x27;</span>,</span><br><span class="line">    color_code: color,</span><br><span class="line">&#125;;</span><br><span class="line">c.ascii_character;   <span class="comment">// 读字段</span></span><br><span class="line">c.color_code;</span><br></pre></td></tr></table></figure>
+<h3 id="pub谁能看到">🚪 pub：谁能看到</h3>
+<p><code>pub</code> 表示 public，允许模块外访问；不加 <code>pub</code>
+的结构体默认只在当前模块内可用：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;          <span class="comment">// 外部能看见 Writer</span></span><br><span class="line">    column_position: <span class="type">usize</span>,  <span class="comment">// 但字段仍是私有的</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="impl给-struct-加方法">🛠️ impl：给 struct 加方法</h3>
+<p>C 里要写 <code>writer_write(writer, ...)</code> 这类散装函数；Rust
+把方法挂在类型上：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">impl</span> <span class="title class_">Writer</span> &#123;</span><br><span class="line">    <span class="keyword">fn</span> <span class="title function_">write_byte</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, byte: <span class="type">u8</span>) &#123;</span><br><span class="line">        <span class="comment">// ...</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">writer.<span class="title function_ invoke__">write_byte</span>(<span class="string">b&#x27;A&#x27;</span>);</span><br></pre></td></tr></table></figure>
+<p>可以理解为 struct + impl = 类型 + 它的方法，类似 C++ 的 class，只不过
+Rust
+把<strong>数据（struct）</strong>和<strong>方法（impl）</strong>分开声明。</p>
+<h3 id="数组与索引">📐 数组与索引</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">a</span> = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>];   <span class="comment">// 类型 [i32; 4]</span></span><br></pre></td></tr></table></figure>
+<p>类型里的两个数字分别表示元素类型与个数：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">[i32; 4]</span><br><span class="line">  │    │</span><br><span class="line">  │    └── 4 个元素</span><br><span class="line">  └─────── 每个元素是 i32</span><br></pre></td></tr></table></figure>
+<p>VGA 里的屏幕缓冲正是二维数组：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT]</span><br><span class="line"><span class="comment">// 即 [[ScreenChar; 80]; 25]：25 行，每行 80 个字符单元</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">               80</span><br><span class="line">         ┌───────────────┐</span><br><span class="line">第 0 行   │ □ □ □ □ ... □ │</span><br><span class="line">第 1 行   │ □ □ □ □ ... □ │</span><br><span class="line">第 2 行   │ □ □ □ □ ... □ │</span><br><span class="line">  ...    │               │</span><br><span class="line">第 24 行  │ □ □ □ □ ... □ │</span><br><span class="line">         └───────────────┘</span><br><span class="line">                25</span><br></pre></td></tr></table></figure>
+<p>索引从 0 开始，和 C 一样：<code>buffer.chars[24][0]</code> 表示第 24
+行第 0 列。</p>
+<h3 id="const">🔒 const</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;</span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;</span><br></pre></td></tr></table></figure>
+<p>类似 C 的 <code>#define</code>，但 Rust 的 <code>const</code>
+带类型、参与类型检查。</p>
+<h3 id="函数与最后一行是返回值">🧮 函数与最后一行是返回值</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">fn</span> <span class="title function_">add</span>(a: <span class="type">i32</span>, b: <span class="type">i32</span>) <span class="punctuation">-&gt;</span> <span class="type">i32</span> &#123;</span><br><span class="line">    a + b      <span class="comment">// 没有分号：这是返回值</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>Rust 函数体的<strong>最后一个表达式</strong>就是返回值。如果写成
+<code>a + b;</code>，加了分号就变成语句，返回 <code>()</code>。这引出了
+Rust 和 C 一个很大的思维差异——<strong>Rust 喜欢表达式</strong>：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="keyword">if</span> condition &#123;</span><br><span class="line">    <span class="number">10</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="number">20</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>if</code> 本身产生一个值并赋给 <code>x</code>。这也是
+Rust 代码看起来和 C 不一样的原因之一。</p>
+<h3 id="match更强大的-switch">🔀 match：更强大的 switch</h3>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">match</span> number &#123;</span><br><span class="line">    <span class="number">0</span> =&gt; <span class="built_in">println!</span>(<span class="string">&quot;zero&quot;</span>),</span><br><span class="line">    <span class="number">1</span> =&gt; <span class="built_in">println!</span>(<span class="string">&quot;one&quot;</span>),</span><br><span class="line">    _ =&gt; <span class="built_in">println!</span>(<span class="string">&quot;other&quot;</span>),</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>match</code> 是模式匹配，后面学
+<code>Option</code>/<code>Result</code>/枚举时它是核心工具，可暂时理解为加强版
+<code>switch</code>。</p>
+<h3 id="option-与-result不靠-null-和--1">🟢 Option 与 Result：不靠 NULL
+和 -1</h3>
+<p>C 里常用 <code>NULL</code> 表示没有值、用 <code>return -1</code>
+表示失败。Rust 不喜欢这种方式，改用两个显式类型：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Option&lt;T&gt;  =  Some(T) 有值  |  None 没有值</span><br><span class="line">Result&lt;T,E&gt; =  Ok(T)  成功  |  Err(E) 失败</span><br></pre></td></tr></table></figure>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; = <span class="title function_ invoke__">Some</span>(<span class="number">10</span>);</span><br><span class="line"><span class="keyword">let</span> <span class="variable">y</span>: <span class="type">Option</span>&lt;<span class="type">i32</span>&gt; = <span class="literal">None</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">divide</span>(a: <span class="type">i32</span>, b: <span class="type">i32</span>) <span class="punctuation">-&gt;</span> <span class="type">Result</span>&lt;<span class="type">i32</span>, <span class="type">String</span>&gt; &#123;</span><br><span class="line">    <span class="keyword">if</span> b == <span class="number">0</span> &#123;</span><br><span class="line">        <span class="title function_ invoke__">Err</span>(<span class="string">&quot;除数不能为 0&quot;</span>.<span class="title function_ invoke__">into</span>())</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="title function_ invoke__">Ok</span>(a / b)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>Some/None/Ok/Err</code> 加上
+<code>match</code>，就能强制调用方处理可能没有值或可能失败的情况——这是
+Rust 错误处理的基本形态，OS 代码里读取 MMIO
+寄存器、解析结构时常会遇到。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>从 C 到
+Rust，变量、类型、<code>struct</code>、数组、函数这些零件大多能一一对应，差异主要在三点：<strong>变量默认不可变（<code>mut</code>）</strong>、<strong>类型写在变量名后</strong>、<strong>最后一个表达式即返回值</strong>。真正的分水岭是下一篇要讲的引用与所有权。</p>
+</blockquote>
+<p>下一篇接着讲这条核心主线：<code>&amp;</code>（借用）→
+<code>&amp;mut</code>（可变借用）→ 裸指针 → <code>unsafe</code> →
+生命周期，把内存到底归谁管讲清楚。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>裸机</tag>
+        <tag>Rust 基础</tag>
+        <tag>所有权</tag>
       </tags>
   </entry>
   <entry>
@@ -25311,7 +25311,52 @@ overhead 小于 2%</strong>。</p>
 <p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
 的额外代价依然可控。</p>
 <h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">兼容性     ✅ 5 种不同 xPU，不改硬件/驱动/应用</span><br><span class="line">安全性     ✅ 加密 + 完整性 + 可信建立全链路</span><br><span class="line">LLM 性能   ✅ overhead 0.05%～5.67%</span><br><span class="line">多模型     ✅ 0.72%～4.76%，不随模型大小线性恶化</span><br><span class="line">多 xPU     ✅ 0.58%～2.40%</span><br><span class="line">优化效果   ✅ E2E overhead 降低约 89%</span><br><span class="line">极端场景   ✅ 带宽减半 / 显存溢出仍可控</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>兼容性</td>
+<td>✅</td>
+<td>5 种不同 xPU，不改硬件/驱动/应用</td>
+</tr>
+<tr>
+<td>安全性</td>
+<td>✅</td>
+<td>加密 + 完整性 + 可信建立全链路</td>
+</tr>
+<tr>
+<td>LLM 性能</td>
+<td>✅</td>
+<td>overhead 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>多模型</td>
+<td>✅</td>
+<td>0.72%～4.76%，不随模型大小线性恶化</td>
+</tr>
+<tr>
+<td>多 xPU</td>
+<td>✅</td>
+<td>0.58%～2.40%</td>
+</tr>
+<tr>
+<td>优化效果</td>
+<td>✅</td>
+<td>E2E overhead 降低约 89%</td>
+</tr>
+<tr>
+<td>极端场景</td>
+<td>✅</td>
+<td>带宽减半 / 显存溢出仍可控</td>
+</tr>
+</tbody>
+</table>
 <p>整套系统一句话：</p>
 <blockquote>
 <p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
