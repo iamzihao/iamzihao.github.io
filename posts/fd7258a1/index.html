@@ -30,7 +30,7 @@
 <meta property="og:description" content="TPM（Trusted Platform Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的 BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-25T06:03:27.000Z">
-<meta property="article:modified_time" content="2026-09-10T03:24:43.373Z">
+<meta property="article:modified_time" content="2026-09-10T03:34:17.796Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="机密计算">
@@ -275,7 +275,7 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 11:24:43" itemprop="dateModified" datetime="2026-09-10T11:24:43+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-10 11:34:17" itemprop="dateModified" datetime="2026-09-10T11:34:17+08:00">2026-09-10</time>
     </span>
 
   
@@ -625,7 +625,7 @@ NVRAM：容器和结构的关系</h3>
 </tbody>
 </table>
 <p>密钥树的<strong>根</strong>（SRK/种子）必须呆在芯片内；<strong>枝叶</strong>（blob）可以放
-NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树是家谱，NVRAM
+NVRAM，也可以放外部磁盘（更常见）。小结：<strong>密钥树是家谱，NVRAM
 是保险柜里的抽屉；重要的东西锁在抽屉里，其余的放在外面的保险箱（加密磁盘）里也一样安全。</strong></p>
 <h3 id="完整例子用-tpm-加密一个文件6-步">🎬 完整例子：用 TPM
 加密一个文件（6 步）</h3>
@@ -648,7 +648,7 @@ NVRAM，也可以放外部磁盘（更常见）。一句话：<strong>密钥树�
 <p><strong>Step 6：加一道 sealing</strong>（TPM 的灵魂功能）</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">创建密钥时指定：只有 PCR 值 == [0x3A2F..., ...] 时才能解开</span><br><span class="line">  → 密钥和&quot;这台机器此刻的状态&quot;绑死</span><br><span class="line"></span><br><span class="line">攻击场景演示：</span><br><span class="line">  ① 小偷把磁盘拆走，装到自己机器上</span><br><span class="line">     → 他那台机器的 PCR ≠ 你的 PCR → TPM 拒绝解开 ✅</span><br><span class="line">  ② 有人改了你的开机项/内核（植入恶意软件）</span><br><span class="line">     → PCR 变了 → TPM 拒绝解开 → 敏感文件宁可打不开也不泄露 ✅</span><br></pre></td></tr></table></figure>
 <p><strong>TPM
-的工作模式一句话</strong>：秘密（密钥）永远在芯片里；你永远只能命令它（加载
+的工作模式</strong>：秘密（密钥）永远在芯片里；你永远只能命令它（加载
 blob、让它解密、让它签名）；它永远只把结果给你，不给秘密。</p>
 <h3 id="常见误区">⚠️ 常见误区</h3>
 <table>
