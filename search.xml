@@ -307,53 +307,6 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1266,6 +1219,53 @@ TDX 的体系结构、内存保护机制、I/O
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -7216,6 +7216,185 @@ NVBit“在哪些指令前，插入哪些函数调用”。</p>
       </tags>
   </entry>
   <entry>
+    <title>CMake 入门</title>
+    <url>/posts/233853f2/</url>
+    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
+Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
+IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
+或分别维护 VS/Xcode 工程，成本会直线上升。</p>
+<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
+需要的工程与命令。 <span id="more"></span></p>
+<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
+<ul>
+<li><p><strong>跨平台</strong>：一份
+<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
+Studio、Xcode）。</p></li>
+<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
+<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
+</ul>
+<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
+  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
+  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
+  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
+</code>
+</pre>
+<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
+<ul>
+<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
+<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
+调用本机构建器编译/链接）。</li>
+<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
+Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
+<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
+</ul>
+<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
+<ul>
+<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
+<code>.sln/.vcxproj</code>、Xcode
+<code>.xcodeproj</code>（由生成器决定）。</li>
+<li>CMake
+缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
+<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
+<code>configure_file()</code> 生成的配置头/源文件。</li>
+<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
+</ul>
+<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
+<ul>
+<li>可执行文件：如 <code>build/hello</code>（Windows 为
+<code>build/hello.exe</code>）。</li>
+<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
+<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
+<li>自定义输出：可用
+<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
+调整位置。</li>
+</ul>
+<h3 id="分钟上手">5 分钟上手</h3>
+<p>目录结构：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
+<p><code>CMakeLists.txt</code>：</p>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
+<p><code>src/main.cpp</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>构建与运行：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
+<h3 id="cmake-改变了什么一个对比例子">CMake
+改变了什么：一个对比例子</h3>
+<p>场景：两个源文件
+<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
+Linux 与 Windows 上都能构建。</p>
+<ul>
+<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
+<li><p>Linux（GCC/Clang）：</p></li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li>Windows（MSVC）：</li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li><p>维护代价：命令不通用，IDE
+工程（VS/Xcode）还要各自维护一份。</p></li>
+<li><p>有 CMake（一份脚本到处用）</p></li>
+</ul>
+<p><code>CMakeLists.txt</code>：</p>
+<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
+<p>构建命令（所有平台一致）：</p>
+<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
+<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
+VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
+<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
+<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
+<p>以 Linux 的命令为例：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
+<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
+<code>/std:c++17</code>）。</p></li>
+<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
+<li><p><strong>src/main.cpp
+src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
+<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
+<code>include</code>。</p></li>
+<li><p><strong>-o app</strong>：输出可执行文件名为
+<code>app</code>。</p></li>
+</ul>
+<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
+CMake 希望你“声明语义、自动映射细节”的原因。</p>
+<h3 id="工作原理">工作原理</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
+  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
+  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
+  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
+</code>
+</pre>
+<p>概括：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
+<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>cmake_minimum_required(VERSION
+3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
+<li><p><strong>project(app LANGUAGES
+CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
+编译器与平台特性。</p></li>
+<li><p><strong>add_executable(app …)</strong>：声明目标
+<code>app</code>；CMake
+为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
+<li><p><strong>target_compile_features(app PRIVATE
+cxx_std_17)</strong>：声明“需要 C++17”，CMake
+按编译器映射成正确开关：</p>
+<ul>
+<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
+<li><p>MSVC：<code>/std:c++17</code></p></li>
+</ul></li>
+<li><p><strong>target_include_directories(app PRIVATE
+include)</strong>：声明头文件目录，按平台生成参数：</p>
+<ul>
+<li><p>GCC/Clang：<code>-I include</code></p></li>
+<li><p>MSVC：<code>/I include</code></p></li>
+</ul></li>
+</ul>
+<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
+<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
+<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
+<ul>
+<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
+<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
+<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
+<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
+平台工程生成方面配合 Xcode。</p></li>
+<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
+</ul>
+<p>此外，CMake
+也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
+往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
+<h3 id="就这么记住">就这么记住</h3>
+<ul>
+<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
+<li><p><strong>总在源码外构建</strong>：<code>-S</code>
+指源码，<code>-B</code> 指构建目录。</p></li>
+<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
+Make 还是 Ninja。</p></li>
+</ul>
+<h3 id="结语">结语</h3>
+<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
+就是省心的那一个。</p>
+]]></content>
+      <tags>
+        <tag>CMake</tag>
+        <tag>构建系统</tag>
+        <tag>C/C++</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
     <url>/posts/f1a2b3c4/</url>
     <content><![CDATA[<p>本文介绍
@@ -7486,185 +7665,6 @@ FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
         <tag>Serverless</tag>
         <tag>FaaS</tag>
         <tag>云原生</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>CMake 入门</title>
-    <url>/posts/233853f2/</url>
-    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
-Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
-IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
-或分别维护 VS/Xcode 工程，成本会直线上升。</p>
-<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
-需要的工程与命令。 <span id="more"></span></p>
-<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
-<ul>
-<li><p><strong>跨平台</strong>：一份
-<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
-Studio、Xcode）。</p></li>
-<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
-<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
-</ul>
-<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
-  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
-  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
-  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
-</code>
-</pre>
-<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
-<ul>
-<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
-<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
-调用本机构建器编译/链接）。</li>
-<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
-Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
-<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
-</ul>
-<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
-<ul>
-<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
-<code>.sln/.vcxproj</code>、Xcode
-<code>.xcodeproj</code>（由生成器决定）。</li>
-<li>CMake
-缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
-<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
-<code>configure_file()</code> 生成的配置头/源文件。</li>
-<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
-</ul>
-<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
-<ul>
-<li>可执行文件：如 <code>build/hello</code>（Windows 为
-<code>build/hello.exe</code>）。</li>
-<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
-<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
-<li>自定义输出：可用
-<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
-调整位置。</li>
-</ul>
-<h3 id="分钟上手">5 分钟上手</h3>
-<p>目录结构：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
-<p><code>CMakeLists.txt</code>：</p>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
-<p><code>src/main.cpp</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>构建与运行：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
-<h3 id="cmake-改变了什么一个对比例子">CMake
-改变了什么：一个对比例子</h3>
-<p>场景：两个源文件
-<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
-Linux 与 Windows 上都能构建。</p>
-<ul>
-<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
-<li><p>Linux（GCC/Clang）：</p></li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li>Windows（MSVC）：</li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li><p>维护代价：命令不通用，IDE
-工程（VS/Xcode）还要各自维护一份。</p></li>
-<li><p>有 CMake（一份脚本到处用）</p></li>
-</ul>
-<p><code>CMakeLists.txt</code>：</p>
-<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
-<p>构建命令（所有平台一致）：</p>
-<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
-<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
-VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
-<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
-<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
-<p>以 Linux 的命令为例：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
-<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
-<code>/std:c++17</code>）。</p></li>
-<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
-<li><p><strong>src/main.cpp
-src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
-<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
-<code>include</code>。</p></li>
-<li><p><strong>-o app</strong>：输出可执行文件名为
-<code>app</code>。</p></li>
-</ul>
-<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
-CMake 希望你“声明语义、自动映射细节”的原因。</p>
-<h3 id="工作原理">工作原理</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
-  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
-  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
-  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
-</code>
-</pre>
-<p>概括：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
-<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>cmake_minimum_required(VERSION
-3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
-<li><p><strong>project(app LANGUAGES
-CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
-编译器与平台特性。</p></li>
-<li><p><strong>add_executable(app …)</strong>：声明目标
-<code>app</code>；CMake
-为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
-<li><p><strong>target_compile_features(app PRIVATE
-cxx_std_17)</strong>：声明“需要 C++17”，CMake
-按编译器映射成正确开关：</p>
-<ul>
-<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
-<li><p>MSVC：<code>/std:c++17</code></p></li>
-</ul></li>
-<li><p><strong>target_include_directories(app PRIVATE
-include)</strong>：声明头文件目录，按平台生成参数：</p>
-<ul>
-<li><p>GCC/Clang：<code>-I include</code></p></li>
-<li><p>MSVC：<code>/I include</code></p></li>
-</ul></li>
-</ul>
-<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
-<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
-<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
-<ul>
-<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
-<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
-<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
-<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
-平台工程生成方面配合 Xcode。</p></li>
-<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
-</ul>
-<p>此外，CMake
-也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
-往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
-<h3 id="就这么记住">就这么记住</h3>
-<ul>
-<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
-<li><p><strong>总在源码外构建</strong>：<code>-S</code>
-指源码，<code>-B</code> 指构建目录。</p></li>
-<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
-Make 还是 Ninja。</p></li>
-</ul>
-<h3 id="结语">结语</h3>
-<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
-就是省心的那一个。</p>
-]]></content>
-      <tags>
-        <tag>CMake</tag>
-        <tag>构建系统</tag>
-        <tag>C/C++</tag>
       </tags>
   </entry>
   <entry>
@@ -13241,6 +13241,474 @@ Code，它可能会给你带来不一样的体验。</p>
       </tags>
   </entry>
   <entry>
+    <title>LLVM 入门：从编译流程到 IR 结构</title>
+    <url>/posts/18482fd9/</url>
+    <content><![CDATA[<p>编译器的职责是把高级语言翻译成机器指令，LLVM
+把这条链路拆成可复用的中间表示（IR）与后端。本文从编译流程讲起，梳理
+LLVM IR 的结构与作用。</p>
+<span id="more"></span>
+<h2 id="llvm-核心概念速读">📚 LLVM 核心概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>说明</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLVM</td>
+<td>Low Level Virtual Machine（原名），现为品牌名</td>
+<td>模块化编译器基础设施</td>
+</tr>
+<tr>
+<td>IR</td>
+<td>Intermediate Representation</td>
+<td>编译器中间表示，连接前后端</td>
+</tr>
+<tr>
+<td>SSA</td>
+<td>Static Single Assignment</td>
+<td>每个变量只赋值一次</td>
+</tr>
+<tr>
+<td>CFG</td>
+<td>Control Flow Graph</td>
+<td>控制流图，描述程序执行路径</td>
+</tr>
+<tr>
+<td>Pass</td>
+<td>编译优化/分析单元</td>
+<td>对 IR 进行变换的模块</td>
+</tr>
+<tr>
+<td>Basic Block</td>
+<td>基本块</td>
+<td>顺序执行的指令序列，只有一个入口一个出口</td>
+</tr>
+</tbody>
+</table>
+<h2 id="什么是-llvm">🧩 什么是 LLVM</h2>
+<p>LLVM
+不是某个具体编译器的名字，而是一套<strong>模块化的编译器基础设施</strong>。</p>
+<p>传统编译器（如 GCC）采用<strong>三段式设计</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Frontend → Optimizer → Backend</span><br><span class="line">  前端       优化器      后端</span><br></pre></td></tr></table></figure>
+<p>问题在于：各阶段耦合严重，想支持新语言要重写整套，想支持新架构也要改一堆。</p>
+<p>LLVM 的核心创新：<strong>统一的中间表示（IR）</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Clang (C/C++)    ──→</span><br><span class="line">Swift            ──→</span><br><span class="line">Rust             ──→  LLVM IR  ──→  x86 / ARM / RISC-V ...</span><br><span class="line">Kotlin Native    ──→</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>省流</strong>：前端把源码翻译成 IR，后端把 IR
+翻译成机器码，中间全是 IR，想加语言加前端，想加架构加后端。</p>
+</blockquote>
+<h2 id="llvm-编译流程">🔧 LLVM 编译流程</h2>
+<p>以 C 代码为例：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译流程：</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[源码 .c] --&gt; B[预处理]
+    B --&gt; C[词法&#x2F;语法分析]
+    C --&gt; D[语义分析]
+    D --&gt; E[生成 IR]
+    E --&gt; F[IR 优化]
+    F --&gt; G[指令选择]
+    G --&gt; H[寄存器分配]
+    H --&gt; I[生成机器码 .s&#x2F;.o]
+</code>
+</pre>
+<p>对应命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 查看完整流程</span></span><br><span class="line">clang -emit-llvm -S add.c -o add.ll    <span class="comment"># 生成人类可读 IR</span></span><br><span class="line">clang -emit-llvm -c add.c -o add.bc    <span class="comment"># 生成 bitcode（二进制格式）</span></span><br><span class="line">llc add.bc -o add.s                     <span class="comment"># IR → 汇编</span></span><br><span class="line">clang add.s -o add                      <span class="comment"># 汇编 → 可执行文件</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>注意</strong>：<code>.ll</code> 是文本格式，<code>.bc</code>
+是二进制格式，两者等价可互转。</p>
+</blockquote>
+<h2 id="llvm-ir-结构">📖 LLVM IR 结构</h2>
+<p>IR 文件由三部分组成：</p>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 1. 模块级信息</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">datalayout</span> <span class="operator">=</span> <span class="string">&quot;e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:64-n8:16:32:64-S128&quot;</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">triple</span> <span class="operator">=</span> <span class="string">&quot;x86_64-pc-linux-gnu&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 2. 全局变量和函数声明</span></span><br><span class="line"><span class="title">@global_var</span> <span class="operator">=</span> <span class="keyword">global</span> <span class="type">i32</span> <span class="number">42</span></span><br><span class="line"><span class="keyword">declare</span> <span class="type">i32</span> <span class="title">@printf</span>(<span class="type">i8</span>*<span class="punctuation">,</span> ...)</span><br><span class="line"></span><br><span class="line"><span class="comment">; 3. 函数定义</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@add</span>(<span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="type">i32</span> <span class="variable">%b</span>) &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%sum</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%sum</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="层级结构">层级结构</h3>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Module（模块）</span><br><span class="line">  └── GlobalVariable（全局变量）</span><br><span class="line">  └── Function（函数）</span><br><span class="line">        └── BasicBlock（基本块）</span><br><span class="line">              └── Instruction（指令）</span><br></pre></td></tr></table></figure>
+<h3 id="类型系统">类型系统</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>整数</td>
+<td><code>i1</code>, <code>i8</code>, <code>i32</code>,
+<code>i64</code></td>
+<td><code>i1</code> 是 bool</td>
+</tr>
+<tr>
+<td>浮点</td>
+<td><code>float</code>, <code>double</code></td>
+<td>32/64 位浮点</td>
+</tr>
+<tr>
+<td>指针</td>
+<td><code>i32*</code>, <code>i8**</code></td>
+<td>指向某类型的指针</td>
+</tr>
+<tr>
+<td>数组</td>
+<td><code>[10 x i32]</code></td>
+<td>固定大小数组</td>
+</tr>
+<tr>
+<td>结构体</td>
+<td><code>&#123;i32, float&#125;</code></td>
+<td>匿名结构体</td>
+</tr>
+<tr>
+<td>向量</td>
+<td><code>&lt;4 x i32&gt;</code></td>
+<td>SIMD 向量类型</td>
+</tr>
+<tr>
+<td>函数</td>
+<td><code>i32 (i32, i32)*</code></td>
+<td>函数指针</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ir-指令基础">⚡ IR 指令基础</h2>
+<h3 id="算术运算">算术运算</h3>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="variable">%a</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>      <span class="comment">; 加法</span></span><br><span class="line"><span class="variable">%b</span> <span class="operator">=</span> <span class="keyword">sub</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>      <span class="comment">; 减法</span></span><br><span class="line"><span class="variable">%c</span> <span class="operator">=</span> <span class="keyword">mul</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>      <span class="comment">; 乘法</span></span><br><span class="line"><span class="variable">%d</span> <span class="operator">=</span> <span class="keyword">sdiv</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>     <span class="comment">; 有符号除法</span></span><br><span class="line"><span class="variable">%e</span> <span class="operator">=</span> <span class="keyword">urem</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>     <span class="comment">; 无符号取余</span></span><br><span class="line"><span class="variable">%f</span> <span class="operator">=</span> <span class="keyword">and</span> <span class="type">i1</span> <span class="variable">%p</span><span class="punctuation">,</span> <span class="variable">%q</span>       <span class="comment">; 按位与</span></span><br><span class="line"><span class="variable">%g</span> <span class="operator">=</span> <span class="keyword">or</span> <span class="type">i1</span> <span class="variable">%p</span><span class="punctuation">,</span> <span class="variable">%q</span>        <span class="comment">; 按位或</span></span><br><span class="line"><span class="variable">%h</span> <span class="operator">=</span> <span class="keyword">xor</span> <span class="type">i1</span> <span class="variable">%p</span><span class="punctuation">,</span> <span class="variable">%q</span>       <span class="comment">; 按位异或</span></span><br></pre></td></tr></table></figure>
+<h3 id="内存操作">内存操作</h3>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 分配栈空间</span></span><br><span class="line"><span class="variable">%ptr</span> <span class="operator">=</span> <span class="keyword">alloca</span> <span class="type">i32</span>              <span class="comment">; 分配 4 字节，返回 i32*</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 加载</span></span><br><span class="line"><span class="variable">%val</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%ptr</span>     <span class="comment">; 从地址加载 i32</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 存储</span></span><br><span class="line"><span class="keyword">store</span> <span class="type">i32</span> <span class="number">42</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%ptr</span>        <span class="comment">; 将 42 存入地址</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 获取元素指针（GEP）</span></span><br><span class="line"><span class="variable">%arr</span> <span class="operator">=</span> <span class="keyword">alloca</span> [<span class="number">10</span> <span class="keyword">x</span> <span class="type">i32</span>]</span><br><span class="line"><span class="variable">%elem</span> <span class="operator">=</span> <span class="keyword">getelementptr</span> [<span class="number">10</span> <span class="keyword">x</span> <span class="type">i32</span>]<span class="punctuation">,</span> [<span class="number">10</span> <span class="keyword">x</span> <span class="type">i32</span>]* <span class="variable">%arr</span><span class="punctuation">,</span> <span class="type">i64</span> <span class="number">0</span><span class="punctuation">,</span> <span class="type">i64</span> <span class="number">5</span></span><br><span class="line"><span class="comment">; 第 0 个数组，第 5 个元素</span></span><br></pre></td></tr></table></figure>
+<h3 id="比较指令">比较指令</h3>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">eq</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>      <span class="comment">; 相等</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">slt</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>     <span class="comment">; 有符号小于</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sgt</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>     <span class="comment">; 有符号大于</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sle</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>     <span class="comment">; 有符号小于等于</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">ne</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>      <span class="comment">; 不等</span></span><br></pre></td></tr></table></figure>
+<h3 id="控制流">控制流</h3>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 无条件跳转</span></span><br><span class="line"><span class="keyword">br</span> <span class="type">label</span> <span class="variable">%target</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 条件跳转</span></span><br><span class="line"><span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cond</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if_true</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if_false</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 函数调用</span></span><br><span class="line"><span class="variable">%result</span> <span class="operator">=</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@func</span>(<span class="type">i32</span> <span class="variable">%arg1</span><span class="punctuation">,</span> <span class="type">i32</span> <span class="variable">%arg2</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">; 返回</span></span><br><span class="line"><span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%result</span></span><br><span class="line"><span class="keyword">ret</span> <span class="type">void</span>                       <span class="comment">; 无返回值</span></span><br></pre></td></tr></table></figure>
+<h2 id="ssa-与变量">🔄 SSA 与变量</h2>
+<p>SSA（Static Single Assignment）是 LLVM IR 的核心特性。</p>
+<p><strong>规则</strong>：每个变量只能被赋值一次。</p>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; ❌ 非 SSA 形式（不允许）</span></span><br><span class="line"><span class="variable">%x</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span></span><br><span class="line"><span class="variable">%x</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%c</span>   <span class="comment">; 错误！%x 不能再赋值</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ✅ SSA 形式</span></span><br><span class="line"><span class="variable">%x1</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span></span><br><span class="line"><span class="variable">%x2</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%x1</span><span class="punctuation">,</span> <span class="variable">%c</span></span><br></pre></td></tr></table></figure>
+<p>这有什么好处？</p>
+<ul>
+<li>简化数据流分析</li>
+<li>便于检测未定义变量</li>
+<li>优化 Pass 更容易实现</li>
+</ul>
+<blockquote>
+<p><strong>比喻</strong>：SSA
+就像一次性的便签纸，写完一张就换新的，不用擦掉重写。</p>
+</blockquote>
+<p>那循环怎么办？</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// C 代码</span></span><br><span class="line"><span class="type">int</span> sum = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">10</span>; i++) &#123;</span><br><span class="line">    sum = sum + i;  <span class="comment">// sum 被多次赋值！</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>LLVM 用 <strong>phi 指令</strong> 解决这个问题。</p>
+<h2 id="phi-指令">🔀 phi 指令</h2>
+<p><code>phi</code>
+指令根据<strong>控制流来源</strong>选择不同的值。</p>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; phi 指令语法</span></span><br><span class="line"><span class="variable">%result</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="variable">%val1</span><span class="punctuation">,</span> <span class="variable">%block1</span> ]<span class="punctuation">,</span> [ <span class="variable">%val2</span><span class="punctuation">,</span> <span class="variable">%block2</span> ]</span><br><span class="line"><span class="comment">; 如果从 block1 跳转过来，result = val1</span></span><br><span class="line"><span class="comment">; 如果从 block2 跳转过来，result = val2</span></span><br></pre></td></tr></table></figure>
+<h3 id="示例循环求和">示例：循环求和</h3>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> sum = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    sum += i;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>对应的 IR：</p>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@loop_sum</span>() &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%loop</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">loop:</span></span><br><span class="line">  <span class="variable">%i</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="number">0</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]<span class="punctuation">,</span> [ <span class="variable">%i.next</span><span class="punctuation">,</span> <span class="variable">%loop</span> ]</span><br><span class="line">  <span class="variable">%sum</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="number">0</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]<span class="punctuation">,</span> [ <span class="variable">%sum.next</span><span class="punctuation">,</span> <span class="variable">%loop</span> ]</span><br><span class="line"></span><br><span class="line">  <span class="variable">%sum.next</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%sum</span><span class="punctuation">,</span> <span class="variable">%i</span></span><br><span class="line">  <span class="variable">%i.next</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%i</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="variable">%cond</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">slt</span> <span class="type">i32</span> <span class="variable">%i.next</span><span class="punctuation">,</span> <span class="number">3</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cond</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%loop</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%exit</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">exit:</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%sum.next</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────┐</span><br><span class="line">│  entry  │</span><br><span class="line">└────┬────┘</span><br><span class="line">     ↓</span><br><span class="line">┌─────────────────────────────────────────┐</span><br><span class="line">│  loop                                   │  ← 循环头</span><br><span class="line">│  %i = phi [0, entry], [%i.next, loop]   │</span><br><span class="line">│  %sum = phi [0, entry], [%sum.next, ...]│</span><br><span class="line">│  ...                                    │  ← 循环体</span><br><span class="line">│  br %cond, loop, exit                   │</span><br><span class="line">└────┬────────────────────────────────────┘</span><br><span class="line">     ↓ cond=false</span><br><span class="line">┌─────────┐</span><br><span class="line">│  exit   │</span><br><span class="line">└─────────┘</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>省流</strong>：phi
+就是个多路选择器，根据你是从哪个块跳过来的，决定用哪个值。</p>
+</blockquote>
+<h2 id="控制流图-cfg">📊 控制流图 CFG</h2>
+<p>CFG（Control Flow Graph）描述程序可能的执行路径。</p>
+<ul>
+<li><strong>节点</strong>：基本块（Basic Block）</li>
+<li><strong>边</strong>：可能的跳转</li>
+</ul>
+<h3 id="基本块规则">基本块规则</h3>
+<ol type="1">
+<li>只有一个<strong>入口</strong>（只能从开头进入）</li>
+<li>只有一个<strong>出口</strong>（最后一条指令是终结符）</li>
+<li>内部没有分支</li>
+</ol>
+<h3 id="终结符指令">终结符指令</h3>
+<table>
+<thead>
+<tr>
+<th>指令</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ret</code></td>
+<td>函数返回</td>
+</tr>
+<tr>
+<td><code>br</code></td>
+<td>跳转（条件/无条件）</td>
+</tr>
+<tr>
+<td><code>switch</code></td>
+<td>多路分支</td>
+</tr>
+<tr>
+<td><code>unreachable</code></td>
+<td>不可达代码</td>
+</tr>
+</tbody>
+</table>
+<h3 id="可视化-cfg">可视化 CFG</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 生成 CFG 图像</span></span><br><span class="line">opt -passes=dot-cfg add.ll -disable-output</span><br><span class="line"><span class="comment"># 生成 add.dot，用 graphviz 查看</span></span><br><span class="line">dot -Tpng add.dot -o add.png</span><br></pre></td></tr></table></figure>
+<h2 id="dominator">🌳 Dominator</h2>
+<p>Dominator（支配）是控制流分析的核心概念。</p>
+<p><strong>定义</strong>：节点 A <strong>支配</strong> 节点
+B，当且仅当从入口到 B 的<strong>所有路径</strong>都经过 A。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">entry</span><br><span class="line">  │</span><br><span class="line">  A</span><br><span class="line"> ╱ ╲</span><br><span class="line">B   C</span><br><span class="line"> ╲ ╱</span><br><span class="line">  D</span><br></pre></td></tr></table></figure>
+<ul>
+<li>A 支配 B、C、D</li>
+<li>B 不支配 D（可以从 C 走）</li>
+<li>D 支配 D 自己</li>
+</ul>
+<h3 id="相关概念">相关概念</h3>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>定义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>支配者（Dominator）</td>
+<td>所有到 B 的路径都经过 A，则 A dom B</td>
+</tr>
+<tr>
+<td>直接支配者（IDom）</td>
+<td>最近的支配者</td>
+</tr>
+<tr>
+<td>支配树</td>
+<td>以 IDom 关系构建的树</td>
+</tr>
+<tr>
+<td>支配边界</td>
+<td>A 支配但 A 的支配者不支配的节点集合</td>
+</tr>
+</tbody>
+</table>
+<h3 id="用途">用途</h3>
+<ul>
+<li><strong>SSA 构建</strong>：phi 指令插入位置由支配边界决定</li>
+<li><strong>循环分析</strong>：识别循环头和循环体</li>
+<li><strong>优化</strong>：代码移动、冗余删除</li>
+</ul>
+<h2 id="llvm-pass">🔩 LLVM Pass</h2>
+<p>Pass 是对 IR 进行变换或分析的基本单元。</p>
+<h3 id="pass-类型">Pass 类型</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Analysis Pass</td>
+<td>分析 IR，不修改</td>
+<td>求支配树、活跃变量分析</td>
+</tr>
+<tr>
+<td>Transform Pass</td>
+<td>修改 IR</td>
+<td>常量折叠、死代码删除</td>
+</tr>
+<tr>
+<td>Utility Pass</td>
+<td>工具性质</td>
+<td>验证 IR 正确性</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常用优化-pass">常用优化 Pass</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 运行所有优化</span></span><br><span class="line">opt -passes=default add.ll -S -o add_opt.ll</span><br><span class="line"></span><br><span class="line"><span class="comment"># 运行特定 Pass</span></span><br><span class="line">opt -passes=mem2reg add.ll -S -o add_opt.ll    <span class="comment"># 提升 alloca 到寄存器</span></span><br><span class="line">opt -passes=dce add.ll -S -o add_opt.ll        <span class="comment"># 死代码删除</span></span><br><span class="line">opt -passes=inline add.ll -S -o add_opt.ll     <span class="comment"># 函数内联</span></span><br></pre></td></tr></table></figure>
+<h3 id="pass-管道">Pass 管道</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 组合多个 Pass</span></span><br><span class="line">opt -passes=<span class="string">&#x27;mem2reg,dce,gvn&#x27;</span> add.ll -S -o add_opt.ll</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[原始 IR] --&gt; B[mem2reg]
+    B --&gt; C[dce]
+    C --&gt; D[gvn]
+    D --&gt; E[优化后 IR]
+</code>
+</pre>
+<h2 id="metadata">🏷️ metadata</h2>
+<p>Metadata 是附加在 IR
+上的<strong>额外信息</strong>，不影响程序语义，但能指导优化和代码生成。</p>
+<h3 id="语法">语法</h3>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 附加到函数</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">void</span> <span class="title">@foo</span>() <span class="title">!dbg</span> <span class="title">!4</span> &#123;</span><br><span class="line">  <span class="comment">; 附加到指令</span></span><br><span class="line">  <span class="variable">%x</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span><span class="punctuation">,</span> <span class="title">!dbg</span> <span class="title">!7</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">void</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; 定义 metadata</span></span><br><span class="line"><span class="title">!0</span> <span class="operator">=</span> <span class="title">!DIFile</span>(filename: <span class="string">&quot;test.c&quot;</span><span class="punctuation">,</span> directory: <span class="string">&quot;/home&quot;</span>)</span><br><span class="line"><span class="title">!1</span> <span class="operator">=</span> !&#123;<span class="title">!0</span>&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="常见用途">常见用途</h3>
+<table>
+<thead>
+<tr>
+<th>Metadata</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!dbg</code></td>
+<td>调试信息</td>
+</tr>
+<tr>
+<td><code>!tbaa</code></td>
+<td>类型别名分析</td>
+</tr>
+<tr>
+<td><code>!llvm.loop</code></td>
+<td>循环优化提示</td>
+</tr>
+<tr>
+<td><code>!nontemporal</code></td>
+<td>非临时内存访问</td>
+</tr>
+</tbody>
+</table>
+<h3 id="示例循环优化提示">示例：循环优化提示</h3>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line">for.body:</span><br><span class="line">  <span class="variable">%i</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i64</span> [ <span class="number">0</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]<span class="punctuation">,</span> [ <span class="variable">%inc</span><span class="punctuation">,</span> <span class="variable">%for.body</span> ]</span><br><span class="line">  <span class="comment">; ... 循环体 ...</span></span><br><span class="line">  <span class="variable">%inc</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i64</span> <span class="variable">%i</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">ult</span> <span class="type">i64</span> <span class="variable">%inc</span><span class="punctuation">,</span> <span class="variable">%n</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cmp</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%for.body</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%for.end</span><span class="punctuation">,</span> <span class="title">!llvm.loop</span> <span class="title">!0</span></span><br><span class="line"></span><br><span class="line"><span class="title">!0</span> <span class="operator">=</span> !&#123;<span class="title">!0</span><span class="punctuation">,</span> <span class="title">!1</span>&#125;</span><br><span class="line"><span class="title">!1</span> <span class="operator">=</span> !&#123;!<span class="string">&quot;llvm.loop.unroll.count&quot;</span><span class="punctuation">,</span> <span class="type">i32</span> <span class="number">4</span>&#125;  <span class="comment">; 提示展开 4 次</span></span><br></pre></td></tr></table></figure>
+<h2 id="llvm-工具链">🛠️ LLVM 工具链</h2>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clang</code></td>
+<td>C/C++ 编译器前端</td>
+</tr>
+<tr>
+<td><code>opt</code></td>
+<td>IR 优化器</td>
+</tr>
+<tr>
+<td><code>llc</code></td>
+<td>IR → 汇编</td>
+</tr>
+<tr>
+<td><code>llvm-as</code></td>
+<td>.ll → .bc（文本转二进制）</td>
+</tr>
+<tr>
+<td><code>llvm-dis</code></td>
+<td>.bc → .ll（二进制转文本）</td>
+</tr>
+<tr>
+<td><code>llvm-link</code></td>
+<td>链接多个 bitcode</td>
+</tr>
+<tr>
+<td><code>lli</code></td>
+<td>解释执行 bitcode</td>
+</tr>
+<tr>
+<td><code>llvm-config</code></td>
+<td>查询编译选项</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常用命令速查">常用命令速查</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 查看优化级别对应的 Pass</span></span><br><span class="line">opt -passes=<span class="string">&#x27;default&lt;O2&gt;&#x27;</span> -debug-pass=Structure add.ll -o /dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 反汇编 bitcode</span></span><br><span class="line">llvm-dis add.bc -o add.ll</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接多个 bitcode</span></span><br><span class="line">llvm-link a.bc b.bc -o combined.bc</span><br><span class="line"></span><br><span class="line"><span class="comment"># 直接执行 IR</span></span><br><span class="line">lli add.bc</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查看函数属性</span></span><br><span class="line">opt -passes=print-callgraph add.ll -disable-output</span><br></pre></td></tr></table></figure>
+<h2 id="完整-ir-示例">📋 完整 IR 示例</h2>
+<p>C 源码：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// factorial.c</span></span><br><span class="line"><span class="type">int</span> <span class="title function_">factorial</span><span class="params">(<span class="type">int</span> n)</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">1</span>) <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">return</span> n * factorial(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> factorial(<span class="number">5</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>生成并查看 IR：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">clang -emit-llvm -S -O0 factorial.c -o factorial.ll</span><br></pre></td></tr></table></figure>
+<p>完整 IR：</p>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; ModuleID = &#x27;factorial.c&#x27;</span></span><br><span class="line">source_filename <span class="operator">=</span> <span class="string">&quot;factorial.c&quot;</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">datalayout</span> <span class="operator">=</span> <span class="string">&quot;e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:64-n8:16:32:64-S128&quot;</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">triple</span> <span class="operator">=</span> <span class="string">&quot;x86_64-pc-linux-gnu&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 函数声明</span></span><br><span class="line"><span class="keyword">declare</span> <span class="type">i32</span> <span class="title">@printf</span>(<span class="type">i8</span>*<span class="punctuation">,</span> ...)</span><br><span class="line"></span><br><span class="line"><span class="comment">; factorial 函数</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%n</span>) &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%n.addr</span> <span class="operator">=</span> <span class="keyword">alloca</span> <span class="type">i32</span></span><br><span class="line">  <span class="keyword">store</span> <span class="type">i32</span> <span class="variable">%n</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line"></span><br><span class="line">  <span class="variable">%0</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line">  <span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sle</span> <span class="type">i32</span> <span class="variable">%0</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cmp</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if.then</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if.else</span></span><br><span class="line"></span><br><span class="line">if.then:</span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"></span><br><span class="line">if.else:</span><br><span class="line">  <span class="variable">%1</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line">  <span class="variable">%sub</span> <span class="operator">=</span> <span class="keyword">sub</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%1</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="variable">%call</span> <span class="operator">=</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%sub</span>)</span><br><span class="line">  <span class="variable">%2</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line">  <span class="variable">%mul</span> <span class="operator">=</span> <span class="keyword">mul</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%2</span><span class="punctuation">,</span> <span class="variable">%call</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">return:</span></span><br><span class="line">  <span class="variable">%retval.0</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="number">1</span><span class="punctuation">,</span> <span class="variable">%if.then</span> ]<span class="punctuation">,</span> [ <span class="variable">%mul</span><span class="punctuation">,</span> <span class="variable">%if.else</span> ]</span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%retval.0</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; main 函数</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@main</span>() &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%call</span> <span class="operator">=</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="number">5</span>)</span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%call</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="优化后-o2">优化后（<code>-O2</code>）</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">clang -emit-llvm -S -O2 factorial.c -o factorial_opt.ll</span><br></pre></td></tr></table></figure>
+<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%n</span>) &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sgt</span> <span class="type">i32</span> <span class="variable">%n</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cmp</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if.else</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"></span><br><span class="line">if.else:</span><br><span class="line">  <span class="variable">%sub</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%n</span><span class="punctuation">,</span> <span class="number">-1</span></span><br><span class="line">  <span class="variable">%call</span> <span class="operator">=</span> <span class="keyword">tail</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%sub</span>)</span><br><span class="line">  <span class="variable">%mul</span> <span class="operator">=</span> <span class="keyword">mul</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%call</span><span class="punctuation">,</span> <span class="variable">%n</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">return:</span></span><br><span class="line">  <span class="variable">%retval.0</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="variable">%mul</span><span class="punctuation">,</span> <span class="variable">%if.else</span> ]<span class="punctuation">,</span> [ <span class="number">1</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]</span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%retval.0</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@main</span>() &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="number">120</span>  <span class="comment">; 编译期计算完成！</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>注意</strong>：<code>main()</code>
+的返回值被编译期算出来了（5! = 120），这就是常量传播 +
+函数内联的效果。</p>
+</blockquote>
+<h2 id="总结">✨ 总结</h2>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLVM 架构</td>
+<td>前端→IR→后端，IR 是核心</td>
+</tr>
+<tr>
+<td>IR 结构</td>
+<td>Module → Function → BasicBlock → Instruction</td>
+</tr>
+<tr>
+<td>SSA</td>
+<td>每个变量只赋值一次，简化分析</td>
+</tr>
+<tr>
+<td>phi</td>
+<td>根据控制流来源选择值，解决 SSA 的分支问题</td>
+</tr>
+<tr>
+<td>CFG</td>
+<td>基本块 + 跳转边，描述程序执行路径</td>
+</tr>
+<tr>
+<td>Dominator</td>
+<td>支配关系，用于 SSA 构建和优化</td>
+</tr>
+<tr>
+<td>Pass</td>
+<td>IR 变换的基本单元</td>
+</tr>
+<tr>
+<td>工具链</td>
+<td>clang、opt、llc、lli 等</td>
+</tr>
+</tbody>
+</table>
+<p>LLVM IR
+看起来繁琐，但它为编译器提供了<strong>统一的表达</strong>。理解
+IR，就拿到了编译器世界的通用护照。</p>
+<p>下一步？试试写一个 LLVM Pass，或者用 LLVM IR
+实现一个简单的语言解释器！</p>
+<p><strong>参考资源</strong>：</p>
+<ul>
+<li><a href="https://llvm.org/docs/LangRef.html">LLVM Language Reference
+Manual</a></li>
+<li><a href="https://llvm.org/docs/WritingAnLLVMPass.html">LLVM Pass
+Infra</a></li>
+<li><a href="https://llvm.org/docs/GettingStarted.html">Getting Started
+with LLVM</a></li>
+</ul>
+]]></content>
+      <tags>
+        <tag>编译原理</tag>
+        <tag>LLVM</tag>
+        <tag>编译器</tag>
+        <tag>IR</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
     <url>/posts/48c29df2/</url>
     <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
@@ -14015,474 +14483,6 @@ DHCP 服务器</h4>
         <tag>Tailscale</tag>
         <tag>路由</tag>
         <tag>DNS</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>LLVM 入门：从编译流程到 IR 结构</title>
-    <url>/posts/18482fd9/</url>
-    <content><![CDATA[<p>编译器的职责是把高级语言翻译成机器指令，LLVM
-把这条链路拆成可复用的中间表示（IR）与后端。本文从编译流程讲起，梳理
-LLVM IR 的结构与作用。</p>
-<span id="more"></span>
-<h2 id="llvm-核心概念速读">📚 LLVM 核心概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>概念</th>
-<th>说明</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>LLVM</td>
-<td>Low Level Virtual Machine（原名），现为品牌名</td>
-<td>模块化编译器基础设施</td>
-</tr>
-<tr>
-<td>IR</td>
-<td>Intermediate Representation</td>
-<td>编译器中间表示，连接前后端</td>
-</tr>
-<tr>
-<td>SSA</td>
-<td>Static Single Assignment</td>
-<td>每个变量只赋值一次</td>
-</tr>
-<tr>
-<td>CFG</td>
-<td>Control Flow Graph</td>
-<td>控制流图，描述程序执行路径</td>
-</tr>
-<tr>
-<td>Pass</td>
-<td>编译优化/分析单元</td>
-<td>对 IR 进行变换的模块</td>
-</tr>
-<tr>
-<td>Basic Block</td>
-<td>基本块</td>
-<td>顺序执行的指令序列，只有一个入口一个出口</td>
-</tr>
-</tbody>
-</table>
-<h2 id="什么是-llvm">🧩 什么是 LLVM</h2>
-<p>LLVM
-不是某个具体编译器的名字，而是一套<strong>模块化的编译器基础设施</strong>。</p>
-<p>传统编译器（如 GCC）采用<strong>三段式设计</strong>：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Frontend → Optimizer → Backend</span><br><span class="line">  前端       优化器      后端</span><br></pre></td></tr></table></figure>
-<p>问题在于：各阶段耦合严重，想支持新语言要重写整套，想支持新架构也要改一堆。</p>
-<p>LLVM 的核心创新：<strong>统一的中间表示（IR）</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Clang (C/C++)    ──→</span><br><span class="line">Swift            ──→</span><br><span class="line">Rust             ──→  LLVM IR  ──→  x86 / ARM / RISC-V ...</span><br><span class="line">Kotlin Native    ──→</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>省流</strong>：前端把源码翻译成 IR，后端把 IR
-翻译成机器码，中间全是 IR，想加语言加前端，想加架构加后端。</p>
-</blockquote>
-<h2 id="llvm-编译流程">🔧 LLVM 编译流程</h2>
-<p>以 C 代码为例：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译流程：</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[源码 .c] --&gt; B[预处理]
-    B --&gt; C[词法&#x2F;语法分析]
-    C --&gt; D[语义分析]
-    D --&gt; E[生成 IR]
-    E --&gt; F[IR 优化]
-    F --&gt; G[指令选择]
-    G --&gt; H[寄存器分配]
-    H --&gt; I[生成机器码 .s&#x2F;.o]
-</code>
-</pre>
-<p>对应命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 查看完整流程</span></span><br><span class="line">clang -emit-llvm -S add.c -o add.ll    <span class="comment"># 生成人类可读 IR</span></span><br><span class="line">clang -emit-llvm -c add.c -o add.bc    <span class="comment"># 生成 bitcode（二进制格式）</span></span><br><span class="line">llc add.bc -o add.s                     <span class="comment"># IR → 汇编</span></span><br><span class="line">clang add.s -o add                      <span class="comment"># 汇编 → 可执行文件</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>注意</strong>：<code>.ll</code> 是文本格式，<code>.bc</code>
-是二进制格式，两者等价可互转。</p>
-</blockquote>
-<h2 id="llvm-ir-结构">📖 LLVM IR 结构</h2>
-<p>IR 文件由三部分组成：</p>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 1. 模块级信息</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">datalayout</span> <span class="operator">=</span> <span class="string">&quot;e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:64-n8:16:32:64-S128&quot;</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">triple</span> <span class="operator">=</span> <span class="string">&quot;x86_64-pc-linux-gnu&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 2. 全局变量和函数声明</span></span><br><span class="line"><span class="title">@global_var</span> <span class="operator">=</span> <span class="keyword">global</span> <span class="type">i32</span> <span class="number">42</span></span><br><span class="line"><span class="keyword">declare</span> <span class="type">i32</span> <span class="title">@printf</span>(<span class="type">i8</span>*<span class="punctuation">,</span> ...)</span><br><span class="line"></span><br><span class="line"><span class="comment">; 3. 函数定义</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@add</span>(<span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="type">i32</span> <span class="variable">%b</span>) &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%sum</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%sum</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="层级结构">层级结构</h3>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Module（模块）</span><br><span class="line">  └── GlobalVariable（全局变量）</span><br><span class="line">  └── Function（函数）</span><br><span class="line">        └── BasicBlock（基本块）</span><br><span class="line">              └── Instruction（指令）</span><br></pre></td></tr></table></figure>
-<h3 id="类型系统">类型系统</h3>
-<table>
-<thead>
-<tr>
-<th>类型</th>
-<th>示例</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>整数</td>
-<td><code>i1</code>, <code>i8</code>, <code>i32</code>,
-<code>i64</code></td>
-<td><code>i1</code> 是 bool</td>
-</tr>
-<tr>
-<td>浮点</td>
-<td><code>float</code>, <code>double</code></td>
-<td>32/64 位浮点</td>
-</tr>
-<tr>
-<td>指针</td>
-<td><code>i32*</code>, <code>i8**</code></td>
-<td>指向某类型的指针</td>
-</tr>
-<tr>
-<td>数组</td>
-<td><code>[10 x i32]</code></td>
-<td>固定大小数组</td>
-</tr>
-<tr>
-<td>结构体</td>
-<td><code>&#123;i32, float&#125;</code></td>
-<td>匿名结构体</td>
-</tr>
-<tr>
-<td>向量</td>
-<td><code>&lt;4 x i32&gt;</code></td>
-<td>SIMD 向量类型</td>
-</tr>
-<tr>
-<td>函数</td>
-<td><code>i32 (i32, i32)*</code></td>
-<td>函数指针</td>
-</tr>
-</tbody>
-</table>
-<h2 id="ir-指令基础">⚡ IR 指令基础</h2>
-<h3 id="算术运算">算术运算</h3>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="variable">%a</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>      <span class="comment">; 加法</span></span><br><span class="line"><span class="variable">%b</span> <span class="operator">=</span> <span class="keyword">sub</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>      <span class="comment">; 减法</span></span><br><span class="line"><span class="variable">%c</span> <span class="operator">=</span> <span class="keyword">mul</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>      <span class="comment">; 乘法</span></span><br><span class="line"><span class="variable">%d</span> <span class="operator">=</span> <span class="keyword">sdiv</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>     <span class="comment">; 有符号除法</span></span><br><span class="line"><span class="variable">%e</span> <span class="operator">=</span> <span class="keyword">urem</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%y</span>     <span class="comment">; 无符号取余</span></span><br><span class="line"><span class="variable">%f</span> <span class="operator">=</span> <span class="keyword">and</span> <span class="type">i1</span> <span class="variable">%p</span><span class="punctuation">,</span> <span class="variable">%q</span>       <span class="comment">; 按位与</span></span><br><span class="line"><span class="variable">%g</span> <span class="operator">=</span> <span class="keyword">or</span> <span class="type">i1</span> <span class="variable">%p</span><span class="punctuation">,</span> <span class="variable">%q</span>        <span class="comment">; 按位或</span></span><br><span class="line"><span class="variable">%h</span> <span class="operator">=</span> <span class="keyword">xor</span> <span class="type">i1</span> <span class="variable">%p</span><span class="punctuation">,</span> <span class="variable">%q</span>       <span class="comment">; 按位异或</span></span><br></pre></td></tr></table></figure>
-<h3 id="内存操作">内存操作</h3>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 分配栈空间</span></span><br><span class="line"><span class="variable">%ptr</span> <span class="operator">=</span> <span class="keyword">alloca</span> <span class="type">i32</span>              <span class="comment">; 分配 4 字节，返回 i32*</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 加载</span></span><br><span class="line"><span class="variable">%val</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%ptr</span>     <span class="comment">; 从地址加载 i32</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 存储</span></span><br><span class="line"><span class="keyword">store</span> <span class="type">i32</span> <span class="number">42</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%ptr</span>        <span class="comment">; 将 42 存入地址</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 获取元素指针（GEP）</span></span><br><span class="line"><span class="variable">%arr</span> <span class="operator">=</span> <span class="keyword">alloca</span> [<span class="number">10</span> <span class="keyword">x</span> <span class="type">i32</span>]</span><br><span class="line"><span class="variable">%elem</span> <span class="operator">=</span> <span class="keyword">getelementptr</span> [<span class="number">10</span> <span class="keyword">x</span> <span class="type">i32</span>]<span class="punctuation">,</span> [<span class="number">10</span> <span class="keyword">x</span> <span class="type">i32</span>]* <span class="variable">%arr</span><span class="punctuation">,</span> <span class="type">i64</span> <span class="number">0</span><span class="punctuation">,</span> <span class="type">i64</span> <span class="number">5</span></span><br><span class="line"><span class="comment">; 第 0 个数组，第 5 个元素</span></span><br></pre></td></tr></table></figure>
-<h3 id="比较指令">比较指令</h3>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">eq</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>      <span class="comment">; 相等</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">slt</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>     <span class="comment">; 有符号小于</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sgt</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>     <span class="comment">; 有符号大于</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sle</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>     <span class="comment">; 有符号小于等于</span></span><br><span class="line"><span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">ne</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span>      <span class="comment">; 不等</span></span><br></pre></td></tr></table></figure>
-<h3 id="控制流">控制流</h3>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 无条件跳转</span></span><br><span class="line"><span class="keyword">br</span> <span class="type">label</span> <span class="variable">%target</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 条件跳转</span></span><br><span class="line"><span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cond</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if_true</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if_false</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 函数调用</span></span><br><span class="line"><span class="variable">%result</span> <span class="operator">=</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@func</span>(<span class="type">i32</span> <span class="variable">%arg1</span><span class="punctuation">,</span> <span class="type">i32</span> <span class="variable">%arg2</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">; 返回</span></span><br><span class="line"><span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%result</span></span><br><span class="line"><span class="keyword">ret</span> <span class="type">void</span>                       <span class="comment">; 无返回值</span></span><br></pre></td></tr></table></figure>
-<h2 id="ssa-与变量">🔄 SSA 与变量</h2>
-<p>SSA（Static Single Assignment）是 LLVM IR 的核心特性。</p>
-<p><strong>规则</strong>：每个变量只能被赋值一次。</p>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; ❌ 非 SSA 形式（不允许）</span></span><br><span class="line"><span class="variable">%x</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span></span><br><span class="line"><span class="variable">%x</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%x</span><span class="punctuation">,</span> <span class="variable">%c</span>   <span class="comment">; 错误！%x 不能再赋值</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; ✅ SSA 形式</span></span><br><span class="line"><span class="variable">%x1</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span></span><br><span class="line"><span class="variable">%x2</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%x1</span><span class="punctuation">,</span> <span class="variable">%c</span></span><br></pre></td></tr></table></figure>
-<p>这有什么好处？</p>
-<ul>
-<li>简化数据流分析</li>
-<li>便于检测未定义变量</li>
-<li>优化 Pass 更容易实现</li>
-</ul>
-<blockquote>
-<p><strong>比喻</strong>：SSA
-就像一次性的便签纸，写完一张就换新的，不用擦掉重写。</p>
-</blockquote>
-<p>那循环怎么办？</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// C 代码</span></span><br><span class="line"><span class="type">int</span> sum = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">10</span>; i++) &#123;</span><br><span class="line">    sum = sum + i;  <span class="comment">// sum 被多次赋值！</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>LLVM 用 <strong>phi 指令</strong> 解决这个问题。</p>
-<h2 id="phi-指令">🔀 phi 指令</h2>
-<p><code>phi</code>
-指令根据<strong>控制流来源</strong>选择不同的值。</p>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; phi 指令语法</span></span><br><span class="line"><span class="variable">%result</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="variable">%val1</span><span class="punctuation">,</span> <span class="variable">%block1</span> ]<span class="punctuation">,</span> [ <span class="variable">%val2</span><span class="punctuation">,</span> <span class="variable">%block2</span> ]</span><br><span class="line"><span class="comment">; 如果从 block1 跳转过来，result = val1</span></span><br><span class="line"><span class="comment">; 如果从 block2 跳转过来，result = val2</span></span><br></pre></td></tr></table></figure>
-<h3 id="示例循环求和">示例：循环求和</h3>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> sum = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    sum += i;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>对应的 IR：</p>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@loop_sum</span>() &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%loop</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">loop:</span></span><br><span class="line">  <span class="variable">%i</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="number">0</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]<span class="punctuation">,</span> [ <span class="variable">%i.next</span><span class="punctuation">,</span> <span class="variable">%loop</span> ]</span><br><span class="line">  <span class="variable">%sum</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="number">0</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]<span class="punctuation">,</span> [ <span class="variable">%sum.next</span><span class="punctuation">,</span> <span class="variable">%loop</span> ]</span><br><span class="line"></span><br><span class="line">  <span class="variable">%sum.next</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%sum</span><span class="punctuation">,</span> <span class="variable">%i</span></span><br><span class="line">  <span class="variable">%i.next</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%i</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="variable">%cond</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">slt</span> <span class="type">i32</span> <span class="variable">%i.next</span><span class="punctuation">,</span> <span class="number">3</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cond</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%loop</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%exit</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">exit:</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%sum.next</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────┐</span><br><span class="line">│  entry  │</span><br><span class="line">└────┬────┘</span><br><span class="line">     ↓</span><br><span class="line">┌─────────────────────────────────────────┐</span><br><span class="line">│  loop                                   │  ← 循环头</span><br><span class="line">│  %i = phi [0, entry], [%i.next, loop]   │</span><br><span class="line">│  %sum = phi [0, entry], [%sum.next, ...]│</span><br><span class="line">│  ...                                    │  ← 循环体</span><br><span class="line">│  br %cond, loop, exit                   │</span><br><span class="line">└────┬────────────────────────────────────┘</span><br><span class="line">     ↓ cond=false</span><br><span class="line">┌─────────┐</span><br><span class="line">│  exit   │</span><br><span class="line">└─────────┘</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>省流</strong>：phi
-就是个多路选择器，根据你是从哪个块跳过来的，决定用哪个值。</p>
-</blockquote>
-<h2 id="控制流图-cfg">📊 控制流图 CFG</h2>
-<p>CFG（Control Flow Graph）描述程序可能的执行路径。</p>
-<ul>
-<li><strong>节点</strong>：基本块（Basic Block）</li>
-<li><strong>边</strong>：可能的跳转</li>
-</ul>
-<h3 id="基本块规则">基本块规则</h3>
-<ol type="1">
-<li>只有一个<strong>入口</strong>（只能从开头进入）</li>
-<li>只有一个<strong>出口</strong>（最后一条指令是终结符）</li>
-<li>内部没有分支</li>
-</ol>
-<h3 id="终结符指令">终结符指令</h3>
-<table>
-<thead>
-<tr>
-<th>指令</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ret</code></td>
-<td>函数返回</td>
-</tr>
-<tr>
-<td><code>br</code></td>
-<td>跳转（条件/无条件）</td>
-</tr>
-<tr>
-<td><code>switch</code></td>
-<td>多路分支</td>
-</tr>
-<tr>
-<td><code>unreachable</code></td>
-<td>不可达代码</td>
-</tr>
-</tbody>
-</table>
-<h3 id="可视化-cfg">可视化 CFG</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 生成 CFG 图像</span></span><br><span class="line">opt -passes=dot-cfg add.ll -disable-output</span><br><span class="line"><span class="comment"># 生成 add.dot，用 graphviz 查看</span></span><br><span class="line">dot -Tpng add.dot -o add.png</span><br></pre></td></tr></table></figure>
-<h2 id="dominator">🌳 Dominator</h2>
-<p>Dominator（支配）是控制流分析的核心概念。</p>
-<p><strong>定义</strong>：节点 A <strong>支配</strong> 节点
-B，当且仅当从入口到 B 的<strong>所有路径</strong>都经过 A。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">entry</span><br><span class="line">  │</span><br><span class="line">  A</span><br><span class="line"> ╱ ╲</span><br><span class="line">B   C</span><br><span class="line"> ╲ ╱</span><br><span class="line">  D</span><br></pre></td></tr></table></figure>
-<ul>
-<li>A 支配 B、C、D</li>
-<li>B 不支配 D（可以从 C 走）</li>
-<li>D 支配 D 自己</li>
-</ul>
-<h3 id="相关概念">相关概念</h3>
-<table>
-<thead>
-<tr>
-<th>概念</th>
-<th>定义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>支配者（Dominator）</td>
-<td>所有到 B 的路径都经过 A，则 A dom B</td>
-</tr>
-<tr>
-<td>直接支配者（IDom）</td>
-<td>最近的支配者</td>
-</tr>
-<tr>
-<td>支配树</td>
-<td>以 IDom 关系构建的树</td>
-</tr>
-<tr>
-<td>支配边界</td>
-<td>A 支配但 A 的支配者不支配的节点集合</td>
-</tr>
-</tbody>
-</table>
-<h3 id="用途">用途</h3>
-<ul>
-<li><strong>SSA 构建</strong>：phi 指令插入位置由支配边界决定</li>
-<li><strong>循环分析</strong>：识别循环头和循环体</li>
-<li><strong>优化</strong>：代码移动、冗余删除</li>
-</ul>
-<h2 id="llvm-pass">🔩 LLVM Pass</h2>
-<p>Pass 是对 IR 进行变换或分析的基本单元。</p>
-<h3 id="pass-类型">Pass 类型</h3>
-<table>
-<thead>
-<tr>
-<th>类型</th>
-<th>说明</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Analysis Pass</td>
-<td>分析 IR，不修改</td>
-<td>求支配树、活跃变量分析</td>
-</tr>
-<tr>
-<td>Transform Pass</td>
-<td>修改 IR</td>
-<td>常量折叠、死代码删除</td>
-</tr>
-<tr>
-<td>Utility Pass</td>
-<td>工具性质</td>
-<td>验证 IR 正确性</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常用优化-pass">常用优化 Pass</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 运行所有优化</span></span><br><span class="line">opt -passes=default add.ll -S -o add_opt.ll</span><br><span class="line"></span><br><span class="line"><span class="comment"># 运行特定 Pass</span></span><br><span class="line">opt -passes=mem2reg add.ll -S -o add_opt.ll    <span class="comment"># 提升 alloca 到寄存器</span></span><br><span class="line">opt -passes=dce add.ll -S -o add_opt.ll        <span class="comment"># 死代码删除</span></span><br><span class="line">opt -passes=inline add.ll -S -o add_opt.ll     <span class="comment"># 函数内联</span></span><br></pre></td></tr></table></figure>
-<h3 id="pass-管道">Pass 管道</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 组合多个 Pass</span></span><br><span class="line">opt -passes=<span class="string">&#x27;mem2reg,dce,gvn&#x27;</span> add.ll -S -o add_opt.ll</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[原始 IR] --&gt; B[mem2reg]
-    B --&gt; C[dce]
-    C --&gt; D[gvn]
-    D --&gt; E[优化后 IR]
-</code>
-</pre>
-<h2 id="metadata">🏷️ metadata</h2>
-<p>Metadata 是附加在 IR
-上的<strong>额外信息</strong>，不影响程序语义，但能指导优化和代码生成。</p>
-<h3 id="语法">语法</h3>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; 附加到函数</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">void</span> <span class="title">@foo</span>() <span class="title">!dbg</span> <span class="title">!4</span> &#123;</span><br><span class="line">  <span class="comment">; 附加到指令</span></span><br><span class="line">  <span class="variable">%x</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i32</span> <span class="variable">%a</span><span class="punctuation">,</span> <span class="variable">%b</span><span class="punctuation">,</span> <span class="title">!dbg</span> <span class="title">!7</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">void</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; 定义 metadata</span></span><br><span class="line"><span class="title">!0</span> <span class="operator">=</span> <span class="title">!DIFile</span>(filename: <span class="string">&quot;test.c&quot;</span><span class="punctuation">,</span> directory: <span class="string">&quot;/home&quot;</span>)</span><br><span class="line"><span class="title">!1</span> <span class="operator">=</span> !&#123;<span class="title">!0</span>&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="常见用途">常见用途</h3>
-<table>
-<thead>
-<tr>
-<th>Metadata</th>
-<th>用途</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>!dbg</code></td>
-<td>调试信息</td>
-</tr>
-<tr>
-<td><code>!tbaa</code></td>
-<td>类型别名分析</td>
-</tr>
-<tr>
-<td><code>!llvm.loop</code></td>
-<td>循环优化提示</td>
-</tr>
-<tr>
-<td><code>!nontemporal</code></td>
-<td>非临时内存访问</td>
-</tr>
-</tbody>
-</table>
-<h3 id="示例循环优化提示">示例：循环优化提示</h3>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line">for.body:</span><br><span class="line">  <span class="variable">%i</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i64</span> [ <span class="number">0</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]<span class="punctuation">,</span> [ <span class="variable">%inc</span><span class="punctuation">,</span> <span class="variable">%for.body</span> ]</span><br><span class="line">  <span class="comment">; ... 循环体 ...</span></span><br><span class="line">  <span class="variable">%inc</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="type">i64</span> <span class="variable">%i</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">ult</span> <span class="type">i64</span> <span class="variable">%inc</span><span class="punctuation">,</span> <span class="variable">%n</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cmp</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%for.body</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%for.end</span><span class="punctuation">,</span> <span class="title">!llvm.loop</span> <span class="title">!0</span></span><br><span class="line"></span><br><span class="line"><span class="title">!0</span> <span class="operator">=</span> !&#123;<span class="title">!0</span><span class="punctuation">,</span> <span class="title">!1</span>&#125;</span><br><span class="line"><span class="title">!1</span> <span class="operator">=</span> !&#123;!<span class="string">&quot;llvm.loop.unroll.count&quot;</span><span class="punctuation">,</span> <span class="type">i32</span> <span class="number">4</span>&#125;  <span class="comment">; 提示展开 4 次</span></span><br></pre></td></tr></table></figure>
-<h2 id="llvm-工具链">🛠️ LLVM 工具链</h2>
-<table>
-<thead>
-<tr>
-<th>工具</th>
-<th>用途</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>clang</code></td>
-<td>C/C++ 编译器前端</td>
-</tr>
-<tr>
-<td><code>opt</code></td>
-<td>IR 优化器</td>
-</tr>
-<tr>
-<td><code>llc</code></td>
-<td>IR → 汇编</td>
-</tr>
-<tr>
-<td><code>llvm-as</code></td>
-<td>.ll → .bc（文本转二进制）</td>
-</tr>
-<tr>
-<td><code>llvm-dis</code></td>
-<td>.bc → .ll（二进制转文本）</td>
-</tr>
-<tr>
-<td><code>llvm-link</code></td>
-<td>链接多个 bitcode</td>
-</tr>
-<tr>
-<td><code>lli</code></td>
-<td>解释执行 bitcode</td>
-</tr>
-<tr>
-<td><code>llvm-config</code></td>
-<td>查询编译选项</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常用命令速查">常用命令速查</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 查看优化级别对应的 Pass</span></span><br><span class="line">opt -passes=<span class="string">&#x27;default&lt;O2&gt;&#x27;</span> -debug-pass=Structure add.ll -o /dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 反汇编 bitcode</span></span><br><span class="line">llvm-dis add.bc -o add.ll</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接多个 bitcode</span></span><br><span class="line">llvm-link a.bc b.bc -o combined.bc</span><br><span class="line"></span><br><span class="line"><span class="comment"># 直接执行 IR</span></span><br><span class="line">lli add.bc</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查看函数属性</span></span><br><span class="line">opt -passes=print-callgraph add.ll -disable-output</span><br></pre></td></tr></table></figure>
-<h2 id="完整-ir-示例">📋 完整 IR 示例</h2>
-<p>C 源码：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// factorial.c</span></span><br><span class="line"><span class="type">int</span> <span class="title function_">factorial</span><span class="params">(<span class="type">int</span> n)</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">1</span>) <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">return</span> n * factorial(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> factorial(<span class="number">5</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>生成并查看 IR：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">clang -emit-llvm -S -O0 factorial.c -o factorial.ll</span><br></pre></td></tr></table></figure>
-<p>完整 IR：</p>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="comment">; ModuleID = &#x27;factorial.c&#x27;</span></span><br><span class="line">source_filename <span class="operator">=</span> <span class="string">&quot;factorial.c&quot;</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">datalayout</span> <span class="operator">=</span> <span class="string">&quot;e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:64-n8:16:32:64-S128&quot;</span></span><br><span class="line"><span class="keyword">target</span> <span class="keyword">triple</span> <span class="operator">=</span> <span class="string">&quot;x86_64-pc-linux-gnu&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">; 函数声明</span></span><br><span class="line"><span class="keyword">declare</span> <span class="type">i32</span> <span class="title">@printf</span>(<span class="type">i8</span>*<span class="punctuation">,</span> ...)</span><br><span class="line"></span><br><span class="line"><span class="comment">; factorial 函数</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%n</span>) &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%n.addr</span> <span class="operator">=</span> <span class="keyword">alloca</span> <span class="type">i32</span></span><br><span class="line">  <span class="keyword">store</span> <span class="type">i32</span> <span class="variable">%n</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line"></span><br><span class="line">  <span class="variable">%0</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line">  <span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sle</span> <span class="type">i32</span> <span class="variable">%0</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cmp</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if.then</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if.else</span></span><br><span class="line"></span><br><span class="line">if.then:</span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"></span><br><span class="line">if.else:</span><br><span class="line">  <span class="variable">%1</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line">  <span class="variable">%sub</span> <span class="operator">=</span> <span class="keyword">sub</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%1</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="variable">%call</span> <span class="operator">=</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%sub</span>)</span><br><span class="line">  <span class="variable">%2</span> <span class="operator">=</span> <span class="keyword">load</span> <span class="type">i32</span><span class="punctuation">,</span> <span class="type">i32</span>* <span class="variable">%n.addr</span></span><br><span class="line">  <span class="variable">%mul</span> <span class="operator">=</span> <span class="keyword">mul</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%2</span><span class="punctuation">,</span> <span class="variable">%call</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">return:</span></span><br><span class="line">  <span class="variable">%retval.0</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="number">1</span><span class="punctuation">,</span> <span class="variable">%if.then</span> ]<span class="punctuation">,</span> [ <span class="variable">%mul</span><span class="punctuation">,</span> <span class="variable">%if.else</span> ]</span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%retval.0</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">; main 函数</span></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@main</span>() &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%call</span> <span class="operator">=</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="number">5</span>)</span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%call</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="优化后-o2">优化后（<code>-O2</code>）</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">clang -emit-llvm -S -O2 factorial.c -o factorial_opt.ll</span><br></pre></td></tr></table></figure>
-<figure class="highlight llvm"><table><tr><td class="code"><pre><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%n</span>) &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="variable">%cmp</span> <span class="operator">=</span> <span class="keyword">icmp</span> <span class="keyword">sgt</span> <span class="type">i32</span> <span class="variable">%n</span><span class="punctuation">,</span> <span class="number">1</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">i1</span> <span class="variable">%cmp</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%if.else</span><span class="punctuation">,</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"></span><br><span class="line">if.else:</span><br><span class="line">  <span class="variable">%sub</span> <span class="operator">=</span> <span class="keyword">add</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%n</span><span class="punctuation">,</span> <span class="number">-1</span></span><br><span class="line">  <span class="variable">%call</span> <span class="operator">=</span> <span class="keyword">tail</span> <span class="keyword">call</span> <span class="type">i32</span> <span class="title">@factorial</span>(<span class="type">i32</span> <span class="variable">%sub</span>)</span><br><span class="line">  <span class="variable">%mul</span> <span class="operator">=</span> <span class="keyword">mul</span> <span class="keyword">nsw</span> <span class="type">i32</span> <span class="variable">%call</span><span class="punctuation">,</span> <span class="variable">%n</span></span><br><span class="line">  <span class="keyword">br</span> <span class="type">label</span> <span class="variable">%return</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">return:</span></span><br><span class="line">  <span class="variable">%retval.0</span> <span class="operator">=</span> <span class="keyword">phi</span> <span class="type">i32</span> [ <span class="variable">%mul</span><span class="punctuation">,</span> <span class="variable">%if.else</span> ]<span class="punctuation">,</span> [ <span class="number">1</span><span class="punctuation">,</span> <span class="variable">%entry</span> ]</span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="variable">%retval.0</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">define</span> <span class="type">i32</span> <span class="title">@main</span>() &#123;</span><br><span class="line"><span class="symbol">entry:</span></span><br><span class="line">  <span class="keyword">ret</span> <span class="type">i32</span> <span class="number">120</span>  <span class="comment">; 编译期计算完成！</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>注意</strong>：<code>main()</code>
-的返回值被编译期算出来了（5! = 120），这就是常量传播 +
-函数内联的效果。</p>
-</blockquote>
-<h2 id="总结">✨ 总结</h2>
-<table>
-<thead>
-<tr>
-<th>主题</th>
-<th>要点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>LLVM 架构</td>
-<td>前端→IR→后端，IR 是核心</td>
-</tr>
-<tr>
-<td>IR 结构</td>
-<td>Module → Function → BasicBlock → Instruction</td>
-</tr>
-<tr>
-<td>SSA</td>
-<td>每个变量只赋值一次，简化分析</td>
-</tr>
-<tr>
-<td>phi</td>
-<td>根据控制流来源选择值，解决 SSA 的分支问题</td>
-</tr>
-<tr>
-<td>CFG</td>
-<td>基本块 + 跳转边，描述程序执行路径</td>
-</tr>
-<tr>
-<td>Dominator</td>
-<td>支配关系，用于 SSA 构建和优化</td>
-</tr>
-<tr>
-<td>Pass</td>
-<td>IR 变换的基本单元</td>
-</tr>
-<tr>
-<td>工具链</td>
-<td>clang、opt、llc、lli 等</td>
-</tr>
-</tbody>
-</table>
-<p>LLVM IR
-看起来繁琐，但它为编译器提供了<strong>统一的表达</strong>。理解
-IR，就拿到了编译器世界的通用护照。</p>
-<p>下一步？试试写一个 LLVM Pass，或者用 LLVM IR
-实现一个简单的语言解释器！</p>
-<p><strong>参考资源</strong>：</p>
-<ul>
-<li><a href="https://llvm.org/docs/LangRef.html">LLVM Language Reference
-Manual</a></li>
-<li><a href="https://llvm.org/docs/WritingAnLLVMPass.html">LLVM Pass
-Infra</a></li>
-<li><a href="https://llvm.org/docs/GettingStarted.html">Getting Started
-with LLVM</a></li>
-</ul>
-]]></content>
-      <tags>
-        <tag>编译原理</tag>
-        <tag>LLVM</tag>
-        <tag>编译器</tag>
-        <tag>IR</tag>
       </tags>
   </entry>
   <entry>
@@ -19828,335 +19828,6 @@ guard、保持最小包含，警惕重复定义和循环包含。</p>
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：文件 IO 流</title>
-    <url>/posts/a7c2e9d4/</url>
-    <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
-stream）就是 C++ 读写文件的通道。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>文件流（file stream）</td>
-<td>把文件当成数据流的输入输出对象</td>
-<td>读写文件的通道</td>
-</tr>
-<tr>
-<td><code>ifstream</code></td>
-<td>输入文件流，从文件读数据</td>
-<td>读</td>
-</tr>
-<tr>
-<td><code>ofstream</code></td>
-<td>输出文件流，向文件写数据</td>
-<td>写</td>
-</tr>
-<tr>
-<td><code>fstream</code></td>
-<td>可读可写的文件流</td>
-<td>读写</td>
-</tr>
-<tr>
-<td>文本文件</td>
-<td>以字符形式存储，人能直接阅读</td>
-<td>记事本能打开</td>
-</tr>
-<tr>
-<td>二进制文件</td>
-<td>按内存中的字节原样存储</td>
-<td>紧凑、机器可读</td>
-</tr>
-<tr>
-<td>序列化（serialization）</td>
-<td>把对象转成可存储/传输的字节序列</td>
-<td>对象存盘</td>
-</tr>
-<tr>
-<td>反序列化（deserialization）</td>
-<td>从字节序列恢复出对象</td>
-<td>从盘恢复对象</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
-<p>之前用的 <code>cout</code>、<code>cin</code>
-是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[程序] --&gt; B[ofstream 输出流]
-    B --&gt; C[文件]
-    C --&gt; D[ifstream 输入流]
-    D --&gt; A
-</code>
-</pre>
-<table>
-<thead>
-<tr>
-<th>流对象</th>
-<th>头文件</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ifstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>从文件读</td>
-</tr>
-<tr>
-<td><code>ofstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>向文件写</td>
-</tr>
-<tr>
-<td><code>fstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>既读又写</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
-<h4 id="写文件ofstream">写文件：ofstream</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>ofstream</code>
-默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
-<h4 id="读文件ifstream">读文件：ifstream</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>close()</code>
-也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
-<code>close()</code>
-能让文件何时关闭更清晰，也方便在同一个作用域里重新打开别的文件。</p>
-</blockquote>
-<h4 id="常用打开模式">常用打开模式</h4>
-<table>
-<thead>
-<tr>
-<th>模式</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ios::in</code></td>
-<td>读模式（<code>ifstream</code> 默认）</td>
-</tr>
-<tr>
-<td><code>ios::out</code></td>
-<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
-</tr>
-<tr>
-<td><code>ios::app</code></td>
-<td>追加写</td>
-</tr>
-<tr>
-<td><code>ios::binary</code></td>
-<td>二进制模式</td>
-</tr>
-<tr>
-<td><code>ios::trunc</code></td>
-<td>打开即清空文件</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文本文件读写">📝 文本文件读写</h3>
-<h4 id="逐行读取">逐行读取</h4>
-<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>getline</code>
-读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
-<h4 id="格式化写入">格式化写入</h4>
-<p>文本写入就是把要保存的字段拼成可读文本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>写出的文件内容：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
-<p>反过来读回时，用 <code>getline</code> 按行读，再用
-<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
-<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
-<h4 id="基本用法">基本用法</h4>
-<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
-<code>read</code>/<code>write</code> 操作：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>write</code>/<code>read</code> 的参数都是字符指针 +
-字节数，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
-转换。</p>
-<h4 id="重要限制">重要限制</h4>
-<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
-<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p><code>string</code>、<code>vector</code>
-内部管理堆内存，把整个对象字节写进文件，存进去的是指针地址，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
-<table>
-<thead>
-<tr>
-<th>数据</th>
-<th>二进制直接读写</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int</code>、<code>double</code>、POD 结构体</td>
-<td>可以</td>
-<td>字节布局稳定</td>
-</tr>
-<tr>
-<td><code>string</code>、<code>vector</code></td>
-<td>不行</td>
-<td>内部有指针，要序列化</td>
-</tr>
-</tbody>
-</table>
-<h3 id="对象持久化">💾 对象持久化</h3>
-<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
-<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
-<p>把对象的每个字段转成文本，逐字段保存：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
-<h4 id="版本兼容意识">版本兼容意识</h4>
-<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是老文件还能被新程序读的基础意识。</p>
-<blockquote>
-<p>序列化是很大的话题，工程里常用 JSON、protobuf
-等现成格式。入门阶段先理解把字段存下来、再读回来这件事本身。</p>
-</blockquote>
-<h3 id="错误处理">⚠️ 错误处理</h3>
-<h4 id="打开失败">打开失败</h4>
-<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="读写状态">读写状态</h4>
-<p>流对象内部记录着状态标志：</p>
-<table>
-<thead>
-<tr>
-<th>状态</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>good()</code></td>
-<td>一切正常</td>
-</tr>
-<tr>
-<td><code>eof()</code></td>
-<td>读到文件末尾（正常情况）</td>
-</tr>
-<tr>
-<td><code>fail()</code></td>
-<td>操作失败，比如类型不匹配、打开失败</td>
-</tr>
-<tr>
-<td><code>bad()</code></td>
-<td>严重错误，比如底层 IO 故障</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>把读取操作本身当作判断条件，是最稳妥的写法。</p>
-<h4 id="路径问题">路径问题</h4>
-<table>
-<thead>
-<tr>
-<th>问题</th>
-<th>建议</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>相对路径</td>
-<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
-</tr>
-<tr>
-<td>绝对路径</td>
-<td>最稳妥，但换机器要改</td>
-</tr>
-<tr>
-<td>目录不存在</td>
-<td>文件流不会自动创建目录，先建目录再打开</td>
-</tr>
-<tr>
-<td>权限不足</td>
-<td>只读文件用写模式打开会失败，先检查权限</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>文件一定能打开成功</td>
-<td>路径、权限、目录都可能失败，必须检查打开结果</td>
-</tr>
-<tr>
-<td><code>string</code> 可以直接二进制 <code>write</code></td>
-<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
-</tr>
-<tr>
-<td>忘写 <code>close()</code> 会立刻出问题</td>
-<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
-</tr>
-<tr>
-<td>读到 EOF 是错误</td>
-<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
-</tr>
-<tr>
-<td>二进制数据用文本模式读写没关系</td>
-<td>二进制文件要加
-<code>ios::binary</code>，否则可能被换行符转换破坏</td>
-</tr>
-<tr>
-<td>文件格式随便定，反正自己用</td>
-<td>加版本号，为以后格式变更留余地</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
-写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
-POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
-</blockquote>
-<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
-的又一次体现；配合第 10 章的
-<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>文件</tag>
-        <tag>文件流</tag>
-        <tag>序列化</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：拓展选学</title>
     <url>/posts/c6e1a9f2/</url>
     <content><![CDATA[<p>入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、<code>shared_ptr</code>
@@ -20656,6 +20327,335 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
         <tag>智能指针</tag>
         <tag>模板</tag>
         <tag>异常</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：文件 IO 流</title>
+    <url>/posts/a7c2e9d4/</url>
+    <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
+stream）就是 C++ 读写文件的通道。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件流（file stream）</td>
+<td>把文件当成数据流的输入输出对象</td>
+<td>读写文件的通道</td>
+</tr>
+<tr>
+<td><code>ifstream</code></td>
+<td>输入文件流，从文件读数据</td>
+<td>读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td>输出文件流，向文件写数据</td>
+<td>写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td>可读可写的文件流</td>
+<td>读写</td>
+</tr>
+<tr>
+<td>文本文件</td>
+<td>以字符形式存储，人能直接阅读</td>
+<td>记事本能打开</td>
+</tr>
+<tr>
+<td>二进制文件</td>
+<td>按内存中的字节原样存储</td>
+<td>紧凑、机器可读</td>
+</tr>
+<tr>
+<td>序列化（serialization）</td>
+<td>把对象转成可存储/传输的字节序列</td>
+<td>对象存盘</td>
+</tr>
+<tr>
+<td>反序列化（deserialization）</td>
+<td>从字节序列恢复出对象</td>
+<td>从盘恢复对象</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
+<p>之前用的 <code>cout</code>、<code>cin</code>
+是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[程序] --&gt; B[ofstream 输出流]
+    B --&gt; C[文件]
+    C --&gt; D[ifstream 输入流]
+    D --&gt; A
+</code>
+</pre>
+<table>
+<thead>
+<tr>
+<th>流对象</th>
+<th>头文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ifstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>从文件读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>向文件写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>既读又写</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
+<h4 id="写文件ofstream">写文件：ofstream</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>ofstream</code>
+默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
+<h4 id="读文件ifstream">读文件：ifstream</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>close()</code>
+也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
+<code>close()</code>
+能让文件何时关闭更清晰，也方便在同一个作用域里重新打开别的文件。</p>
+</blockquote>
+<h4 id="常用打开模式">常用打开模式</h4>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ios::in</code></td>
+<td>读模式（<code>ifstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::out</code></td>
+<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::app</code></td>
+<td>追加写</td>
+</tr>
+<tr>
+<td><code>ios::binary</code></td>
+<td>二进制模式</td>
+</tr>
+<tr>
+<td><code>ios::trunc</code></td>
+<td>打开即清空文件</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文本文件读写">📝 文本文件读写</h3>
+<h4 id="逐行读取">逐行读取</h4>
+<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>getline</code>
+读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
+<h4 id="格式化写入">格式化写入</h4>
+<p>文本写入就是把要保存的字段拼成可读文本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>写出的文件内容：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
+<p>反过来读回时，用 <code>getline</code> 按行读，再用
+<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
+<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
+<h4 id="基本用法">基本用法</h4>
+<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
+<code>read</code>/<code>write</code> 操作：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>write</code>/<code>read</code> 的参数都是字符指针 +
+字节数，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
+转换。</p>
+<h4 id="重要限制">重要限制</h4>
+<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
+<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><code>string</code>、<code>vector</code>
+内部管理堆内存，把整个对象字节写进文件，存进去的是指针地址，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
+<table>
+<thead>
+<tr>
+<th>数据</th>
+<th>二进制直接读写</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code>、<code>double</code>、POD 结构体</td>
+<td>可以</td>
+<td>字节布局稳定</td>
+</tr>
+<tr>
+<td><code>string</code>、<code>vector</code></td>
+<td>不行</td>
+<td>内部有指针，要序列化</td>
+</tr>
+</tbody>
+</table>
+<h3 id="对象持久化">💾 对象持久化</h3>
+<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
+<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
+<p>把对象的每个字段转成文本，逐字段保存：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
+<h4 id="版本兼容意识">版本兼容意识</h4>
+<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是老文件还能被新程序读的基础意识。</p>
+<blockquote>
+<p>序列化是很大的话题，工程里常用 JSON、protobuf
+等现成格式。入门阶段先理解把字段存下来、再读回来这件事本身。</p>
+</blockquote>
+<h3 id="错误处理">⚠️ 错误处理</h3>
+<h4 id="打开失败">打开失败</h4>
+<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="读写状态">读写状态</h4>
+<p>流对象内部记录着状态标志：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>good()</code></td>
+<td>一切正常</td>
+</tr>
+<tr>
+<td><code>eof()</code></td>
+<td>读到文件末尾（正常情况）</td>
+</tr>
+<tr>
+<td><code>fail()</code></td>
+<td>操作失败，比如类型不匹配、打开失败</td>
+</tr>
+<tr>
+<td><code>bad()</code></td>
+<td>严重错误，比如底层 IO 故障</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>把读取操作本身当作判断条件，是最稳妥的写法。</p>
+<h4 id="路径问题">路径问题</h4>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>相对路径</td>
+<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
+</tr>
+<tr>
+<td>绝对路径</td>
+<td>最稳妥，但换机器要改</td>
+</tr>
+<tr>
+<td>目录不存在</td>
+<td>文件流不会自动创建目录，先建目录再打开</td>
+</tr>
+<tr>
+<td>权限不足</td>
+<td>只读文件用写模式打开会失败，先检查权限</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件一定能打开成功</td>
+<td>路径、权限、目录都可能失败，必须检查打开结果</td>
+</tr>
+<tr>
+<td><code>string</code> 可以直接二进制 <code>write</code></td>
+<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
+</tr>
+<tr>
+<td>忘写 <code>close()</code> 会立刻出问题</td>
+<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
+</tr>
+<tr>
+<td>读到 EOF 是错误</td>
+<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
+</tr>
+<tr>
+<td>二进制数据用文本模式读写没关系</td>
+<td>二进制文件要加
+<code>ios::binary</code>，否则可能被换行符转换破坏</td>
+</tr>
+<tr>
+<td>文件格式随便定，反正自己用</td>
+<td>加版本号，为以后格式变更留余地</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
+写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
+POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
+</blockquote>
+<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
+的又一次体现；配合第 10 章的
+<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>文件</tag>
+        <tag>文件流</tag>
+        <tag>序列化</tag>
       </tags>
   </entry>
   <entry>
@@ -26026,10 +26026,13 @@ Packet）。本文讲清一个 TLP
 <p>本文只讨论第二种情况：手上已经有一个完整 TLP，怎么把它读明白。</p>
 <h2 id="一个-tlp-的解剖">📦 一个 TLP 的解剖</h2>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌─────────────┬──────────────┬───────────────┬──────────────┐</span><br><span class="line">│ TLP Prefix  │ TLP Header   │ Data Payload  │ TLP Digest   │</span><br><span class="line">│ (optional)  │ 3DW or 4DW   │ (optional)    │ TD=1 only    │</span><br><span class="line">└─────────────┴──────────────┴───────────────┴──────────────┘</span><br><span class="line">     4B each      12B / 16B     Length x 4B         4B</span><br></pre></td></tr></table></figure>
+<p>图里的 DW 是 <strong>Double Word</strong>，1 DW = 4 字节。这是 PCIe
+沿用的 x86 字长命名：Byte 8 位、Word 16 位、Double Word 32 位。后文的
+Header 长度、Length 字段、Byte Enables 都以它为单位。</p>
 <p>三个要点：</p>
 <ul>
 <li><strong>Header 有两种长度</strong>：3 DW（12 字节）或 4 DW（16
-字节），1 DW = 4 字节</li>
+字节）</li>
 <li><strong>Payload 长度 = Length 字段 x 4 字节</strong>，且 4
 字节对齐</li>
 <li><strong>TLP Prefix 每个占 4
