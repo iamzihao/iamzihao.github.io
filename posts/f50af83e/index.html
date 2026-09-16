@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="PCIe 链路上跑的 AI 推理数据、模型权重、SSD 读写、网卡收包，拆到最底层都是一串 TLP（Transaction Layer Packet）。本文讲清一个 TLP 长什么样、字段怎么读、四类核心事务怎么区分，最后给出一个能跑通的解析器。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包">
+<meta property="og:url" content="https://iamzihao.github.io/posts/f50af83e/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="PCIe 链路上跑的 AI 推理数据、模型权重、SSD 读写、网卡收包，拆到最底层都是一串 TLP（Transaction Layer Packet）。本文讲清一个 TLP 长什么样、字段怎么读、四类核心事务怎么区分，最后给出一个能跑通的解析器。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-16T03:20:00.000Z">
+<meta property="article:modified_time" content="2026-09-16T02:54:13.389Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="TLP">
+<meta property="article:tag" content="硬件">
+<meta property="article:tag" content="DMA">
+<meta property="article:tag" content="抓包分析">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/f50af83e/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/f50af83e/","path":"posts/f50af83e/","title":"PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E7%9C%8B%E6%B8%85%E6%A5%9A%E5%8C%85%E4%BB%8E%E5%93%AA%E6%9D%A5%E5%BE%80%E5%93%AA%E5%8E%BB"><span class="nav-number"></span> <span class="nav-text">🔌 先看清楚：包从哪来、往哪去</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8A%93%E5%8C%85%E4%BD%8D%E7%BD%AE%E5%86%B3%E5%AE%9A%E4%BD%A0%E8%83%BD%E7%9C%8B%E5%88%B0%E4%BB%80%E4%B9%88"><span class="nav-number">1.</span> <span class="nav-text">抓包位置决定你能看到什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA-tlp-%E7%9A%84%E8%A7%A3%E5%89%96"><span class="nav-number"></span> <span class="nav-text">📦 一个 TLP 的解剖</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A4%B4-4-%E4%B8%AA%E5%AD%97%E8%8A%82%E6%89%80%E6%9C%89-tlp-%E5%85%B1%E6%9C%89%E7%9A%84%E5%AD%97%E6%AE%B5"><span class="nav-number"></span> <span class="nav-text">🔤 头 4 个字节：所有 TLP
+共有的字段</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AD%97%E5%85%B8%E6%8A%8A-fmt-%E5%92%8C-type-%E7%BF%BB%E6%88%90%E4%BA%8B%E5%8A%A1%E5%90%8D"><span class="nav-number"></span> <span class="nav-text">📖 字典：把 Fmt 和 Type
+翻成事务名</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#fmt-%E7%BC%96%E7%A0%81"><span class="nav-number">1.</span> <span class="nav-text">Fmt 编码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#fmt-type-%E8%81%94%E5%90%88%E7%BC%96%E7%A0%81"><span class="nav-number">2.</span> <span class="nav-text">Fmt + Type 联合编码</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E7%B1%BB%E6%A0%B8%E5%BF%83%E4%BA%8B%E5%8A%A1"><span class="nav-number"></span> <span class="nav-text">🚚 四类核心事务</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E8%A6%81%E7%82%B9"><span class="nav-number">1.</span> <span class="nav-text">三个要点</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA%E8%AF%BB%E8%AF%B7%E6%B1%82%E4%BC%9A%E6%8B%86%E6%88%90%E5%A4%9A%E4%B8%AA-completion"><span class="nav-number">2.</span> <span class="nav-text">一个读请求会拆成多个
+Completion</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#header-%E9%80%90%E5%AD%97%E6%AE%B5%E8%AF%A6%E8%A7%A3"><span class="nav-number"></span> <span class="nav-text">🔍 Header 逐字段详解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#request-%E5%A4%B4%E9%83%A8mrd-mwr"><span class="nav-number">1.</span> <span class="nav-text">Request 头部（MRd &#x2F; MWr）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#completion-%E5%A4%B4%E9%83%A8cpl-cpld"><span class="nav-number">2.</span> <span class="nav-text">Completion 头部（Cpl &#x2F; CplD）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#requester-id-%E7%9A%84%E6%9E%84%E6%88%90"><span class="nav-number">3.</span> <span class="nav-text">Requester ID 的构成</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#byte-enables"><span class="nav-number">4.</span> <span class="nav-text">Byte Enables</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%99%E4%B8%80%E4%B8%AA%E8%A7%A3%E6%9E%90%E5%99%A8"><span class="nav-number"></span> <span class="nav-text">🧪 写一个解析器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%B9%E6%98%93%E8%B8%A9%E7%9A%84%E5%9D%91"><span class="nav-number"></span> <span class="nav-text">⚠️ 容易踩的坑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number"></span> <span class="nav-text">📌 小结</span></a></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">84</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">208</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/f50af83e/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-16 11:20:00 / Modified: 10:54:13" itemprop="dateCreated datePublished" datetime="2026-09-16T11:20:00+08:00">2026-09-16</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>7.3k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>13 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>PCIe 链路上跑的 AI 推理数据、模型权重、SSD
+读写、网卡收包，拆到最底层都是一串 TLP（Transaction Layer
+Packet）。本文讲清一个 TLP
+长什么样、字段怎么读、四类核心事务怎么区分，最后给出一个能跑通的解析器。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TLP</strong></td>
+<td>Transaction Layer Packet，事务层包</td>
+<td>PCIe 上数据传输的基本单位</td>
+</tr>
+<tr>
+<td><strong>Header</strong></td>
+<td>TLP 头部，12 或 16 字节</td>
+<td>物流单：谁发的、发给谁、访问哪、多长</td>
+</tr>
+<tr>
+<td><strong>Payload</strong></td>
+<td>数据载荷</td>
+<td>真正的货</td>
+</tr>
+<tr>
+<td><strong>MWr / MRd</strong></td>
+<td>Memory Write / Memory Read Request</td>
+<td>写请求 / 读请求</td>
+</tr>
+<tr>
+<td><strong>Cpl / CplD</strong></td>
+<td>Completion（不带 / 带数据）</td>
+<td>读请求的回应</td>
+</tr>
+<tr>
+<td><strong>Requester ID</strong></td>
+<td>发起者的身份编号</td>
+<td>Bus + Device + Function，共 16 位</td>
+</tr>
+</tbody>
+</table>
+<h2 id="先看清楚包从哪来往哪去">🔌 先看清楚：包从哪来、往哪去</h2>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">CPU ── Root Complex ──┬── GPU / NPU    (Endpoint)</span><br><span class="line">                      ├── NIC / SSD    (Endpoint)</span><br><span class="line">                      └── PCIe Switch ── 更多 Endpoint</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>位置</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Root Complex</strong></td>
+<td>CPU 侧</td>
+<td>代 CPU 发起和接收 TLP</td>
+</tr>
+<tr>
+<td><strong>Endpoint</strong></td>
+<td>链路末端</td>
+<td>GPU、NPU、网卡、SSD 等设备</td>
+</tr>
+<tr>
+<td><strong>Switch</strong></td>
+<td>链路中间</td>
+<td>扩展端口，让多个设备共享上游链路</td>
+</tr>
+</tbody>
+</table>
+<p>设备与主机之间只有两种交互方式：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>交互方式</th>
+<th>谁发起</th>
+<th>做什么</th>
+<th>链路特征</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MMIO</strong></td>
+<td>CPU → 设备</td>
+<td>读写设备 BAR 寄存器：下命令、读状态、写 doorbell</td>
+<td>小包为主，量少</td>
+</tr>
+<tr>
+<td><strong>DMA</strong></td>
+<td>设备 → 主机内存</td>
+<td>设备自己读写主机 DRAM：搬数据、读命令队列</td>
+<td>大包，量大</td>
+</tr>
+</tbody>
+</table>
+<p>要分析链路上真正传输的业务数据，盯的是 <strong>DMA</strong>：GPU
+把推理结果写回主机内存、网卡把收到的包写进内存、SSD
+把读到的数据吐给内存，走的都是 DMA 路径。</p>
+<h3 id="抓包位置决定你能看到什么">抓包位置决定你能看到什么</h3>
+<table>
+<thead>
+<tr>
+<th>抓包位置</th>
+<th>能拿到的东西</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理层 / 链路层原始数据</td>
+<td>Framing 标记 + DLLP 序号 + TLP + LCRC</td>
+</tr>
+<tr>
+<td>事务层</td>
+<td>干净的 TLP：Prefix + Header + Payload + Digest</td>
+</tr>
+<tr>
+<td>仅统计或镜像端口</td>
+<td>只有包长、方向、时序，看不到内容</td>
+</tr>
+</tbody>
+</table>
+<p>本文只讨论第二种情况：手上已经有一个完整 TLP，怎么把它读明白。</p>
+<h2 id="一个-tlp-的解剖">📦 一个 TLP 的解剖</h2>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">┌─────────────┬──────────────┬───────────────┬──────────────┐</span><br><span class="line">│ TLP Prefix  │ TLP Header   │ Data Payload  │ TLP Digest   │</span><br><span class="line">│ (optional)  │ 3DW or 4DW   │ (optional)    │ TD=1 only    │</span><br><span class="line">└─────────────┴──────────────┴───────────────┴──────────────┘</span><br><span class="line">     4B each      12B / 16B     Length x 4B         4B</span><br></pre></td></tr></table></figure>
+<p>三个要点：</p>
+<ul>
+<li><strong>Header 有两种长度</strong>：3 DW（12 字节）或 4 DW（16
+字节），1 DW = 4 字节</li>
+<li><strong>Payload 长度 = Length 字段 x 4 字节</strong>，且 4
+字节对齐</li>
+<li><strong>TLP Prefix 每个占 4
+字节</strong>，可能叠加多个，解析时要先循环跳过</li>
+</ul>
+<h2 id="头-4-个字节所有-tlp-共有的字段">🔤 头 4 个字节：所有 TLP
+共有的字段</h2>
+<p>不管什么类型，TLP 的前 4 个字节布局都一样：</p>
+<table>
+<thead>
+<tr>
+<th>字节</th>
+<th>位</th>
+<th>字段</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Byte 0</strong></td>
+<td>7:5</td>
+<td><code>Fmt[2:0]</code></td>
+<td>包的格式</td>
+</tr>
+<tr>
+<td></td>
+<td>4:0</td>
+<td><code>Type[4:0]</code></td>
+<td>包的类型</td>
+</tr>
+<tr>
+<td><strong>Byte 1</strong></td>
+<td>7</td>
+<td><code>T9</code></td>
+<td>Tag 扩展位，PCIe 4.0 起</td>
+</tr>
+<tr>
+<td></td>
+<td>6:4</td>
+<td><code>TC[2:0]</code></td>
+<td>Traffic Class，QoS 分级</td>
+</tr>
+<tr>
+<td></td>
+<td>3</td>
+<td><code>T8</code></td>
+<td>Tag 扩展位，同 T9</td>
+</tr>
+<tr>
+<td></td>
+<td>2</td>
+<td><code>Attr[2]</code></td>
+<td>ID-Based Ordering</td>
+</tr>
+<tr>
+<td></td>
+<td>1</td>
+<td><code>LN</code></td>
+<td>Lightweight Notification</td>
+</tr>
+<tr>
+<td></td>
+<td>0</td>
+<td><code>TH</code></td>
+<td>TLP Hints</td>
+</tr>
+<tr>
+<td><strong>Byte 2</strong></td>
+<td>7</td>
+<td><code>TD</code></td>
+<td>1 表示末尾带 TLP Digest（ECRC）</td>
+</tr>
+<tr>
+<td></td>
+<td>6</td>
+<td><code>EP</code></td>
+<td>Error Poisoned，1 表示该包已被标记为坏</td>
+</tr>
+<tr>
+<td></td>
+<td>5:4</td>
+<td><code>Attr[1:0]</code></td>
+<td>Relaxed Ordering / No Snoop</td>
+</tr>
+<tr>
+<td></td>
+<td>3:2</td>
+<td><code>AT[1:0]</code></td>
+<td>Address Type，地址翻译相关</td>
+</tr>
+<tr>
+<td></td>
+<td>1:0</td>
+<td><code>Length[9:8]</code></td>
+<td>长度高位</td>
+</tr>
+<tr>
+<td><strong>Byte 3</strong></td>
+<td>7:0</td>
+<td><code>Length[7:0]</code></td>
+<td>长度低位</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Length 的单位是 DW，不是字节</strong>，而且
+<code>Length == 0</code> 表示 1024 DW：10 位字段里 1 到 1023
+按原值编码，上界 1024 落在 0 上。</p>
+<blockquote>
+<p>版本提醒：<code>Fmt</code> 从 PCIe 3.0 起才占 3 位（Byte 0 的
+7:5）。PCIe 2.x 及更早只有 2 位，Byte 0 的 bit 5
+是保留位。<code>T8</code> / <code>T9</code> 是 4.0
+起才有的位。如果手头规范是 2.x 版本，位图和本文会有出入。</p>
+</blockquote>
+<h2 id="字典把-fmt-和-type-翻成事务名">📖 字典：把 Fmt 和 Type
+翻成事务名</h2>
+<h3 id="fmt-编码">Fmt 编码</h3>
+<table>
+<thead>
+<tr>
+<th><code>Fmt[2:0]</code></th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>000b</code></td>
+<td>3 DW header，无 payload</td>
+</tr>
+<tr>
+<td><code>001b</code></td>
+<td>4 DW header，无 payload</td>
+</tr>
+<tr>
+<td><code>010b</code></td>
+<td>3 DW header，有 payload</td>
+</tr>
+<tr>
+<td><code>011b</code></td>
+<td>4 DW header，有 payload</td>
+</tr>
+<tr>
+<td><code>100b</code></td>
+<td>TLP Prefix，后面还跟着真正的 TLP</td>
+</tr>
+</tbody>
+</table>
+<p>这三位各有含义，记住拆位规则就能免去查表：</p>
+<table>
+<thead>
+<tr>
+<th>位</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Fmt[2]</code></td>
+<td>1 表示这是 TLP Prefix，不是普通 TLP</td>
+</tr>
+<tr>
+<td><code>Fmt[1]</code></td>
+<td>1 表示带 payload</td>
+</tr>
+<tr>
+<td><code>Fmt[0]</code></td>
+<td>1 表示 4 DW header（64 位地址），0 表示 3 DW（32 位地址）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="fmt-type-联合编码">Fmt + Type 联合编码</h3>
+<p>解析时会遇到的类型基本都在这里：</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>事务</th>
+<th><code>Fmt[2:0]</code></th>
+<th><code>Type[4:0]</code></th>
+<th>payload</th>
+<th>Header</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MRd</strong></td>
+<td><code>000</code> / <code>001</code></td>
+<td><code>0 0000</code></td>
+<td>无</td>
+<td>3DW / 4DW</td>
+</tr>
+<tr>
+<td><strong>MWr</strong></td>
+<td><code>010</code> / <code>011</code></td>
+<td><code>0 0000</code></td>
+<td>有</td>
+<td>3DW / 4DW</td>
+</tr>
+<tr>
+<td><strong>Cpl</strong></td>
+<td><code>000</code></td>
+<td><code>0 1010</code></td>
+<td>无</td>
+<td>3DW</td>
+</tr>
+<tr>
+<td><strong>CplD</strong></td>
+<td><code>010</code></td>
+<td><code>0 1010</code></td>
+<td>有</td>
+<td>3DW</td>
+</tr>
+<tr>
+<td>CfgRd0 / CfgWr0</td>
+<td><code>000</code> / <code>010</code></td>
+<td><code>0 0100</code></td>
+<td>无 / 有</td>
+<td>3DW</td>
+</tr>
+<tr>
+<td>CfgRd1 / CfgWr1</td>
+<td><code>000</code> / <code>010</code></td>
+<td><code>0 0101</code></td>
+<td>无 / 有</td>
+<td>3DW</td>
+</tr>
+<tr>
+<td>Msg / MsgD</td>
+<td><code>001</code> / <code>011</code></td>
+<td><code>1 0rrr</code></td>
+<td>无 / 有</td>
+<td>4DW</td>
+</tr>
+<tr>
+<td>MRdLk</td>
+<td><code>000</code> / <code>001</code></td>
+<td><code>0 0001</code></td>
+<td>无</td>
+<td>3DW / 4DW</td>
+</tr>
+<tr>
+<td>FetchAdd / Swap / CAS</td>
+<td><code>010</code> / <code>011</code></td>
+<td><code>0 1100</code> / <code>0 1101</code> / <code>0 1110</code></td>
+<td>有</td>
+<td>3DW / 4DW</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>MRd 和 MWr 的 <code>Type</code> 完全相同</strong>（都是
+<code>0 0000</code>），Cpl 和 CplD
+也完全相同（<code>0 1010</code>）。区分读还是写、有没有数据，<strong>只能靠
+<code>Fmt</code></strong>。只看 Type 就下判断，是最常见的错误。</p>
+</blockquote>
+<h2 id="四类核心事务">🚚 四类核心事务</h2>
+<p>日常解析中绝大多数包都是这四种，它们两两配对：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>方向</th>
+<th>事务</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Host → GPU</td>
+<td><strong>MWr</strong></td>
+<td>主机把数据写进设备</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Host → GPU</td>
+<td><strong>MRd</strong></td>
+<td>主机读设备，发出读请求</td>
+</tr>
+<tr>
+<td>3</td>
+<td>GPU → Host</td>
+<td><strong>CplD</strong></td>
+<td>设备把读到的数据带回来</td>
+</tr>
+<tr>
+<td>4</td>
+<td>GPU → Host</td>
+<td><strong>MWr</strong></td>
+<td>设备 DMA 写回主机内存</td>
+</tr>
+</tbody>
+</table>
+<p>一个读操作的完整往返：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Host                                 GPU</span><br><span class="line">  │                                   │</span><br><span class="line">  ├── MRd ──────────────────────────► │  ← 读请求</span><br><span class="line">  │                                   │</span><br><span class="line">  │ ◄──────────────────────────── CplD┤  ← 带数据</span><br><span class="line">  │                                   │</span><br></pre></td></tr></table></figure>
+<h3 id="三个要点">三个要点</h3>
+<ul>
+<li><strong>MWr 是 Posted 请求</strong>，不要求回应。链路上出现 MWr
+之后不会跟着一个对应的 Cpl，不要傻等</li>
+<li><strong>方向不等于发起方</strong>。MWr
+既可能是主机写给设备，也可能是设备 DMA 写回主机内存（上表步骤
+4）。判断方向要看 <strong>Requester ID</strong>，不是看包类型</li>
+<li><strong>设备到主机的大数据流走的是步骤 4</strong>。GPU
+把计算结果写回主机内存，就是一连串 MWr，payload 里就是结果本身</li>
+</ul>
+<h3 id="一个读请求会拆成多个-completion">一个读请求会拆成多个
+Completion</h3>
+<p>一次 MRd 返回的数据经常被拆成多个 CplD，每个不超过
+<code>Max_Payload_Size</code>。拼回去的关键在两个字段：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+<th>陷阱</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Byte Count[11:0]</code></td>
+<td><strong>还剩多少字节没返回</strong></td>
+<td>不是本包长度</td>
+</tr>
+<tr>
+<td><code>Lower Address[6:0]</code></td>
+<td>本包数据在目标地址里的起始字节偏移</td>
+<td>用于定位拼接位置</td>
+</tr>
+</tbody>
+</table>
+<p>所以正确做法是：<strong>按 <code>Requester ID + Tag</code> 归组，再看
+<code>Byte Count</code>
+是否归零</strong>。少了这一步，大块数据必然拼错。</p>
+<h2 id="header-逐字段详解">🔍 Header 逐字段详解</h2>
+<h3 id="request-头部mrd-mwr">Request 头部（MRd / MWr）</h3>
+<p><strong>4 DW，64 位地址</strong>（<code>Fmt[0] = 1</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>字节</th>
+<th>字段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–3</td>
+<td>公共头（见上一节）</td>
+</tr>
+<tr>
+<td>4–5</td>
+<td><strong>Requester ID[15:0]</strong></td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Tag[7:0]</strong>（T8 / T9 在 Byte 1）</td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Last DW BE[3:0]</strong> (7:4) | <strong>First DW
+BE[3:0]</strong> (3:0)</td>
+</tr>
+<tr>
+<td>8–11</td>
+<td><strong>Address[63:32]</strong></td>
+</tr>
+<tr>
+<td>12–15</td>
+<td><strong>Address[31:2]</strong></td>
+</tr>
+<tr>
+<td>16…</td>
+<td><strong>Payload</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>3 DW，32 位地址</strong>（<code>Fmt[0] = 0</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>字节</th>
+<th>字段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–3</td>
+<td>公共头</td>
+</tr>
+<tr>
+<td>4–5</td>
+<td>Requester ID[15:0]</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Tag[7:0]</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Last DW BE | First DW BE</td>
+</tr>
+<tr>
+<td>8–11</td>
+<td><strong>Address[31:2]</strong></td>
+</tr>
+<tr>
+<td>12…</td>
+<td><strong>Payload</strong></td>
+</tr>
+</tbody>
+</table>
+<p>地址位到字节的对应关系：32 位格式下 <code>Address[31:24]</code> 在
+Byte 8，<code>Address[23:16]</code> 在 Byte
+9，<code>Address[15:8]</code> 在 Byte 10，<code>Address[7:2]</code> 在
+Byte 11 的高 6 位。</p>
+<h3 id="completion-头部cpl-cpld">Completion 头部（Cpl / CplD）</h3>
+<p>Completion 固定使用 3 DW header，并且走 ID 路由：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>字节</th>
+<th>字段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–3</td>
+<td>公共头（此处的 <code>AT</code> 为 <code>00b</code>）</td>
+</tr>
+<tr>
+<td>4–5</td>
+<td><strong>Completer ID[15:0]</strong>，谁回的</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Cpl Status[2:0]</strong> (7:5) | <strong>BCM</strong> (4) |
+<strong>Byte Count[11:8]</strong> (3:0)</td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Byte Count[7:0]</strong></td>
+</tr>
+<tr>
+<td>8–9</td>
+<td><strong>Requester ID[15:0]</strong>，回给谁，与请求里的值相同</td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong>Tag[7:0]</strong>，与请求里的值相同</td>
+</tr>
+<tr>
+<td>11</td>
+<td>R (7) | <strong>Lower Address[6:0]</strong> (6:0)</td>
+</tr>
+<tr>
+<td>12…</td>
+<td><strong>Payload</strong>，仅 CplD 有</td>
+</tr>
+</tbody>
+</table>
+<p>两个解析要点：</p>
+<ul>
+<li><code>Byte Count</code> 编码：<code>0000 0000 0001b</code> 表示 1
+字节，<code>0000 0000 0000b</code> 表示 4096 字节</li>
+<li><code>Cpl Status</code> 为 <code>000b</code>
+时是成功（SC）。<strong>先判 Status，非 0 的包没有有效数据</strong></li>
+</ul>
+<h3 id="requester-id-的构成">Requester ID 的构成</h3>
+<p><code>Requester ID</code> 是 16 位，唯一标识一个 Function，编码由
+Bus、Device、Function 三段拼成：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位置（非 ARI）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Bus[7:0]</code></td>
+<td>ID 的第 1 个字节，即 Request 头的 Byte 4</td>
+</tr>
+<tr>
+<td><code>Device[4:0]</code></td>
+<td>第 2 个字节的高 5 位（Byte 5 的 7:3）</td>
+</tr>
+<tr>
+<td><code>Function[2:0]</code></td>
+<td>第 2 个字节的低 3 位（Byte 5 的 2:0）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ 常见踩坑：<code>Bus</code>
+在低地址字节，<code>Device / Function</code> 在高地址字节。用
+<code>struct.unpack("&lt;H")</code> 读出来的整数，<strong>低 8 位是
+Bus，高 8 位是 Device 和 Function</strong>，搞反了会把设备认错。ARI
+设备没有 Device 字段，Function 占满 8 位。</p>
+</blockquote>
+<h3 id="byte-enables">Byte Enables</h3>
+<p>Byte Enables 固定在 <strong>Byte 7</strong>，指示 payload
+里哪些字节是有效数据：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位置</th>
+<th>影响的 payload 字节</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>First DW BE[0..3]</code></td>
+<td>Byte 7 的 bits 3:0</td>
+<td>Byte 0 / 1 / 2 / 3</td>
+</tr>
+<tr>
+<td><code>Last DW BE[0..3]</code></td>
+<td>Byte 7 的 bits 7:4</td>
+<td>Byte N-4 / N-3 / N-2 / N-1</td>
+</tr>
+</tbody>
+</table>
+<p>使用规则有强度之分：</p>
+<ul>
+<li><code>Last DW BE</code> <strong>只在数据长度大于 1 DW
+时才使用</strong></li>
+<li>对 I/O 与 Configuration 请求，规范强制要求
+<code>Last DW BE[3:0] = 0000b</code></li>
+<li>对 <code>TH</code> 置位的 Memory Read，BE 字段被挪作
+<code>ST[7:0]</code>（Steering Tag）使用</li>
+</ul>
+<p>DMA 传输经常不对齐，BE
+就是用来告诉你哪些字节是真实数据、哪些是补齐填充。<strong>丢掉 BE
+会得到错位的字节流。</strong></p>
+<h2 id="写一个解析器">🧪 写一个解析器</h2>
+<p>把上面这些字段落成代码，覆盖 Mrd / MWr / Cpl / CplD 四类：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> struct</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">parse_tlp</span>(<span class="params">buf: <span class="built_in">bytes</span></span>) -&gt; <span class="built_in">dict</span>:</span><br><span class="line">    <span class="string">&quot;&quot;&quot;buf 从 TLP 起点开始，不含 DLLP 的序号和 LCRC。&quot;&quot;&quot;</span></span><br><span class="line">    off = <span class="number">0</span></span><br><span class="line">    <span class="comment"># 跳过 TLP Prefix（Fmt == 100b，每个 4 字节）</span></span><br><span class="line">    <span class="keyword">while</span> ((buf[off] &gt;&gt; <span class="number">5</span>) &amp; <span class="number">0b111</span>) == <span class="number">0b100</span>:</span><br><span class="line">        off += <span class="number">4</span></span><br><span class="line"></span><br><span class="line">    h = off</span><br><span class="line">    b0, b1, b2, b3 = buf[h], buf[h + <span class="number">1</span>], buf[h + <span class="number">2</span>], buf[h + <span class="number">3</span>]</span><br><span class="line">    fmt = (b0 &gt;&gt; <span class="number">5</span>) &amp; <span class="number">0b111</span>          <span class="comment"># bits 7:5</span></span><br><span class="line">    typ = b0 &amp; <span class="number">0b1_1111</span>              <span class="comment"># bits 4:0</span></span><br><span class="line">    tc = (b1 &gt;&gt; <span class="number">4</span>) &amp; <span class="number">0b111</span>           <span class="comment"># bits 6:4 of byte 1</span></span><br><span class="line">    td = (b2 &gt;&gt; <span class="number">7</span>) &amp; <span class="number">1</span></span><br><span class="line">    ep = (b2 &gt;&gt; <span class="number">6</span>) &amp; <span class="number">1</span></span><br><span class="line">    length_dw = ((b2 &amp; <span class="number">0b11</span>) &lt;&lt; <span class="number">8</span>) | b3</span><br><span class="line">    <span class="keyword">if</span> length_dw == <span class="number">0</span>:</span><br><span class="line">        length_dw = <span class="number">1024</span>             <span class="comment"># 规范定义的特例</span></span><br><span class="line"></span><br><span class="line">    has_data = <span class="built_in">bool</span>(fmt &amp; <span class="number">0b010</span>)     <span class="comment"># Fmt[1]</span></span><br><span class="line">    four_dw = <span class="built_in">bool</span>(fmt &amp; <span class="number">0b001</span>)      <span class="comment"># Fmt[0]</span></span><br><span class="line">    hdr_len = <span class="number">16</span> <span class="keyword">if</span> four_dw <span class="keyword">else</span> <span class="number">12</span></span><br><span class="line">    payload_len = length_dw * <span class="number">4</span></span><br><span class="line"></span><br><span class="line">    out = &#123;<span class="string">&quot;fmt&quot;</span>: fmt, <span class="string">&quot;type&quot;</span>: typ, <span class="string">&quot;tc&quot;</span>: tc, <span class="string">&quot;td&quot;</span>: td, <span class="string">&quot;ep&quot;</span>: ep,</span><br><span class="line">           <span class="string">&quot;length_dw&quot;</span>: length_dw, <span class="string">&quot;has_data&quot;</span>: has_data,</span><br><span class="line">           <span class="string">&quot;header_bytes&quot;</span>: hdr_len, <span class="string">&quot;payload_len&quot;</span>: payload_len&#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> typ == <span class="number">0b0_0000</span>:              <span class="comment"># Memory Read / Write，靠 Fmt 区分</span></span><br><span class="line">        lb = buf[h + <span class="number">7</span>]</span><br><span class="line">        out[<span class="string">&quot;kind&quot;</span>] = <span class="string">&quot;MWr&quot;</span> <span class="keyword">if</span> has_data <span class="keyword">else</span> <span class="string">&quot;MRd&quot;</span></span><br><span class="line">        out[<span class="string">&quot;requester_id&quot;</span>] = buf[h + <span class="number">4</span>] | (buf[h + <span class="number">5</span>] &lt;&lt; <span class="number">8</span>)  <span class="comment"># 低字节是 Bus</span></span><br><span class="line">        out[<span class="string">&quot;tag&quot;</span>] = buf[h + <span class="number">6</span>]</span><br><span class="line">        out[<span class="string">&quot;last_dw_be&quot;</span>] = (lb &gt;&gt; <span class="number">4</span>) &amp; <span class="number">0b1111</span></span><br><span class="line">        out[<span class="string">&quot;first_dw_be&quot;</span>] = lb &amp; <span class="number">0b1111</span></span><br><span class="line">        <span class="keyword">if</span> four_dw:</span><br><span class="line">            out[<span class="string">&quot;address&quot;</span>] = struct.unpack_from(<span class="string">&quot;&lt;Q&quot;</span>, buf, h + <span class="number">8</span>)[<span class="number">0</span>] &amp; ~<span class="number">0b11</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            out[<span class="string">&quot;address&quot;</span>] = struct.unpack_from(<span class="string">&quot;&lt;I&quot;</span>, buf, h + <span class="number">8</span>)[<span class="number">0</span>] &amp; ~<span class="number">0b11</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">elif</span> typ == <span class="number">0b0_1010</span>:            <span class="comment"># Completion</span></span><br><span class="line">        out[<span class="string">&quot;kind&quot;</span>] = <span class="string">&quot;CplD&quot;</span> <span class="keyword">if</span> has_data <span class="keyword">else</span> <span class="string">&quot;Cpl&quot;</span></span><br><span class="line">        out[<span class="string">&quot;completer_id&quot;</span>] = buf[h + <span class="number">4</span>] | (buf[h + <span class="number">5</span>] &lt;&lt; <span class="number">8</span>)</span><br><span class="line">        out[<span class="string">&quot;cpl_status&quot;</span>] = (buf[h + <span class="number">6</span>] &gt;&gt; <span class="number">5</span>) &amp; <span class="number">0b111</span></span><br><span class="line">        out[<span class="string">&quot;byte_count&quot;</span>] = ((buf[h + <span class="number">6</span>] &amp; <span class="number">0b1111</span>) &lt;&lt; <span class="number">8</span>) | buf[h + <span class="number">7</span>]</span><br><span class="line">        <span class="keyword">if</span> out[<span class="string">&quot;byte_count&quot;</span>] == <span class="number">0</span>:</span><br><span class="line">            out[<span class="string">&quot;byte_count&quot;</span>] = <span class="number">4096</span></span><br><span class="line">        out[<span class="string">&quot;requester_id&quot;</span>] = buf[h + <span class="number">8</span>] | (buf[h + <span class="number">9</span>] &lt;&lt; <span class="number">8</span>)</span><br><span class="line">        out[<span class="string">&quot;tag&quot;</span>] = buf[h + <span class="number">10</span>]</span><br><span class="line">        out[<span class="string">&quot;lower_address&quot;</span>] = buf[h + <span class="number">11</span>] &amp; <span class="number">0b111_1111</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> has_data:</span><br><span class="line">        out[<span class="string">&quot;payload&quot;</span>] = buf[h + hdr_len:h + hdr_len + payload_len]</span><br><span class="line">    <span class="keyword">return</span> out</span><br></pre></td></tr></table></figure>
+<p>这段代码用构造的合成 TLP
+跑过一组用例，覆盖四类事务识别、<code>Length = 0</code> 转 1024
+DW、<code>Byte Count = 0</code> 转 4096 字节、TLP Prefix 跳过、payload
+切分和地址解析。<strong>它没有在真实抓包上回归过</strong>，落地前建议拿一次已知内容的传输反查
+payload 是否与预期字节流一致。</p>
+<p>尚未处理的部分：<code>EP</code> 坏包、TLP Digest（<code>TD=1</code>
+时末尾多 4 字节 ECRC）、<code>AT</code> 非 0 的地址翻译场景。</p>
+<h2 id="容易踩的坑">⚠️ 容易踩的坑</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>只看 <code>Type</code> 判断读写</td>
+<td>MRd 和 MWr 的 Type 相同，必须结合 <code>Fmt</code></td>
+</tr>
+<tr>
+<td>把 <code>Length</code> 当字节数</td>
+<td>单位是 DW，要乘以 4；<code>0</code> 表示 1024 DW</td>
+</tr>
+<tr>
+<td>把 <code>Byte Count</code> 当本包长度</td>
+<td>它是<strong>剩余</strong>字节数，用于判断读取是否收齐</td>
+</tr>
+<tr>
+<td>认为 MWr 会有回应</td>
+<td>MWr 是 Posted 请求，正常情况下不产生 Completion</td>
+</tr>
+<tr>
+<td>按抓包顺序拼接数据</td>
+<td>必须按 <code>Requester ID + Tag</code> 归组，再看地址和 Byte
+Count</td>
+</tr>
+<tr>
+<td>忽略 Byte Enables</td>
+<td>不对齐传输靠 BE 定位有效字节，丢掉会错位</td>
+</tr>
+<tr>
+<td>认为链路上一定是明文</td>
+<td>链路若启用 IDE（Integrity and Data Encryption），payload
+是密文，解析出来是高熵数据</td>
+</tr>
+</tbody>
+</table>
+<h2 id="小结">📌 小结</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TLP 结构</strong></td>
+<td>Prefix + Header（12 或 16 字节）+ Payload + Digest</td>
+</tr>
+<tr>
+<td><strong>公共头</strong></td>
+<td>前 4 字节定格式与长度，<code>Length</code> 单位是 DW</td>
+</tr>
+<tr>
+<td><strong>类型判定</strong></td>
+<td><code>Fmt[2:0]</code> 与 <code>Type[4:0]</code> 联合决定，Type
+单独不够用</td>
+</tr>
+<tr>
+<td><strong>四类事务</strong></td>
+<td>MRd 问、CplD 答、MWr 单向写，判断方向看 Requester ID</td>
+</tr>
+<tr>
+<td><strong>数据拼接</strong></td>
+<td>按 <code>Requester ID + Tag</code> 归组，用 <code>Byte Count</code>
+判断收齐</td>
+</tr>
+<tr>
+<td><strong>字段定位</strong></td>
+<td>Requester ID 的 Bus 在低字节，BE 固定在 Byte 7</td>
+</tr>
+</tbody>
+</table>
+<p>下一步可以顺着两个方向深入：一是把 TLP
+放回整个协议栈，看数据链路层的序号与 LCRC
+怎么保证可靠传输；二是往上看设备驱动如何编排这些事务，理解一次 DMA
+在软件侧长什么样。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/TLP/" rel="tag"># TLP</a>
+              <a href="/tags/%E7%A1%AC%E4%BB%B6/" rel="tag"># 硬件</a>
+              <a href="/tags/DMA/" rel="tag"># DMA</a>
+              <a href="/tags/%E6%8A%93%E5%8C%85%E5%88%86%E6%9E%90/" rel="tag"># 抓包分析</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/9f387285/" rel="prev" title="ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结">
+                  <i class="fa fa-angle-left"></i> ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">434k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">13:09</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
