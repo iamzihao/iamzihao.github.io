@@ -2145,6 +2145,216 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
       </tags>
   </entry>
   <entry>
+    <title>DeepSeek本地部署</title>
+    <url>/posts/4f6ed32b/</url>
+    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
+<span id="more"></span>
+<h2 id="下载ollama">下载Ollama</h2>
+<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
+<p>下载地址：https://ollama.com/download/windows</p>
+<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
+<p>如下图所示</p>
+<p><img src="/assets/deepseek部署01.png" /></p>
+<blockquote>
+<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
+</blockquote>
+<p>上述步骤完成后，我们可以打开CMD，输入ollama
+-v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
+<p><img src="/assets/deepseek部署02.png" /></p>
+<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
+<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
+<h2 id="下载deepseek">下载DeepSeek</h2>
+<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
+<p><img src="/assets/deepseek部署03.png" /></p>
+<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
+<p>如下图所示：</p>
+<p><img src="/assets/deepseek部署04.png" /></p>
+<p>最终效果如下图所示：</p>
+<p><img src="/assets/deepseek部署05.png" /></p>
+]]></content>
+      <tags>
+        <tag>大语言模型</tag>
+        <tag>人工智能</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>关于Intel TDX的深度思考与技术剖析</title>
+    <url>/posts/b63e909c/</url>
+    <content><![CDATA[<p>本文深入探讨了可信执行环境（TEE）的核心技术，特别是Intel的Trust
+Domain Extensions
+(TDX)。我们从TEE的基本概念出发，逐步解析了其信任模型从传统虚拟化到机密虚拟机的演进历程。文章重点剖析了TDX的几大核心安全机制，包括远程证明、安全数据处理模式（内存计算与Sealing）、以及安全的密钥生命周期管理。通过对“代码修改”、“自我泄露”和“证明瞬时性”等关键问题的思辨，本文旨在为理解和应用TEE/TDX技术解决实际信任问题，提供一个完整而深入的框架。</p>
+<span id="more"></span>
+<h3 id="引言云时代的信任难题">引言：云时代的信任难题</h3>
+<p>在当前的云计算和联邦学习场景下，数据隐私和计算过程的保密性至关重要。我们常常面临一个核心的信任悖论：我们希望利用云服务商强大的计算能力处理敏感数据，却又不能完全信任服务所在的平台，包括云厂商、甚至是拥有最高权限的租户管理员。如何确保我们的代码和数据在“别人”的服务器上，能够不被窥探、不被篡改地安全运行？可信执行环境（TEE）技术，特别是Intel
+TDX，为我们提供了破解这一难题的钥匙。</p>
+<h3 id="第一章tee与intel-tdx核心概念">第一章：TEE与Intel
+TDX核心概念</h3>
+<p>您可以将TEE想象成CPU内部一个被硬件强制隔离的“安全保险库”或“黑盒”。它主要提供以下四种核心保障：</p>
+<ul>
+<li><strong>隔离性 (Isolation)</strong>: 在TEE（Intel TDX中称为Trust
+Domain）内部运行的代码和数据，与服务器上运行的其他所有软件（包括操作系统、Hypervisor/虚拟机管理器，甚至是拥有物理访问权限的管理员）都是<strong>完全隔离的</strong>。</li>
+<li><strong>机密性 (Confidentiality)</strong>:
+TEE内的数据在CPU外部（例如在内存条DRAM上）始终是加密的。即使有人用逻辑分析仪去嗅探内存总线，也拿不到明文。</li>
+<li><strong>完整性 (Integrity)</strong>:
+TEE会确保加载到其内部的代码没有被篡改。</li>
+<li><strong>远程证明 (Remote Attestation)</strong>:
+这是TEE的“杀手级特性”。客户端可以在与服务器通信之前，通过一个密码学协议，要求服务器上的TEE
+证明自己的身份。这个证明可以告诉客户端：“我是一个货真价实的、由Intel制造的CPU中的TEE，我正在运行的代码就是你期望的那个版本（通过代码哈希值验证），并且我没有被篡改过。”</li>
+</ul>
+<h3
+id="第二章信任模型的演进从完全信任到零信任">第二章：信任模型的演进：从完全信任到零信任</h3>
+<p>TEE的出现并非一蹴而就，它的价值体现在计算信任模型的不断演进中。</p>
+<h4 id="传统虚拟化-传统vm">传统虚拟化 (传统VM)</h4>
+<ul>
+<li><strong>层次结构</strong>:
+<code>硬件 -&gt; Hypervisor -&gt; 虚拟机(VM)</code>。Hypervisor运行在最高权限，完全控制硬件。</li>
+<li><strong>信任模型</strong>:
+Hypervisor是全能的上帝。它可以随时暂停VM，检查其完整的内存状态，看到所有明文。租户必须<strong>完全信任</strong>云服务商。</li>
+</ul>
+<h4 id="sgx时代-enclave模型">SGX时代 (Enclave模型)</h4>
+<p>为了解决对Hypervisor的信任问题，Intel推出了SGX。</p>
+<ul>
+<li><strong>层次结构</strong>:
+<code>硬件 -&gt; OS/Hypervisor -&gt; 应用程序 -&gt; Enclave</code>。Enclave是从应用程序的地址空间中“挖”出来的一块受硬件保护的内存区域。</li>
+<li><strong>信任模型</strong>:
+信任边界缩小到Enclave内部。Hypervisor/OS无法窥探Enclave，但它仍然管理着整个应用程序和操作系统。这种模型对应用改造要求高，且与外部世界交互繁琐。</li>
+</ul>
+<h4 id="tdx时代-机密虚拟机模型">TDX时代 (机密虚拟机模型)</h4>
+<p>TDX吸取了SGX的教训，旨在提供一种更简单、更全面的保护模型，能够轻松地“兜住”一整个未经修改的虚拟机。</p>
+<ul>
+<li><p><strong>层次结构</strong>:
+<code>硬件(含TDX Module) -&gt; Hypervisor(被降权) + 机密虚拟机(TD)</code>。</p></li>
+<li><p><strong>信任模型的革命性变化</strong>：</p>
+<ul>
+<li><strong>Hypervisor不再是上帝</strong>：Hypervisor
+从全知的管理者变成了一个被蒙上眼睛的调度员。它负责调度TD，但CPU硬件会阻止它访问TD的明文内存。</li>
+<li><strong>新的信任根</strong>：管理TDX安全策略的不再是Hypervisor，而是CPU内部那个可信的<strong>TDX
+Module</strong>。TD的整个内存状态由CPU硬件的内存加密引擎（MKTME）自动进行加解密，密钥对Hypervisor不可见。</li>
+</ul></li>
+</ul>
+<h3 id="第三章tee中的信任边界剖析">第三章：TEE中的信任边界剖析</h3>
+<p>当我们采用TEE后，信任链条发生了根本性的变化。我们可以将信任关系拆解成三个层次来看：</p>
+<ul>
+<li><p><strong>层次一：信任代码逻辑 (Trust in the Code
+Logic)</strong></p>
+<ul>
+<li><strong>核心</strong>：客户端必须相信我们编写的聚合算法本身是公平、无害、没有后门的。</li>
+<li><strong>如何建立</strong>：通过代码审计和开源。</li>
+<li><strong>TEE的角色</strong>：将这种纸面信任变为现实。远程证明可以<strong>密码学地验证</strong>服务器上运行的，就是那个经过共同审计的代码版本。信任的对象从人转移到了代码。</li>
+</ul></li>
+<li><p><strong>层次二：信任执行过程 (Trust in the Execution
+Process)</strong></p>
+<ul>
+<li><strong>核心</strong>：相信代码在执行过程中不会被篡改或窥探。</li>
+<li><strong>没有TEE</strong>：这是最大的信任鸿沟。租户（root用户）或云服务商可以随时dump内存，附加调试器。</li>
+<li><strong>有了TEE</strong>：TEE的硬件隔离特性使得租户和云服务商失去了窥探和篡改运行时状态的能力。信任的对象从租户或云服务商转移到了
+CPU 硬件（如 Intel）。</li>
+</ul></li>
+<li><p><strong>层次三：信任服务运维 (Trust in the
+Operation)</strong></p>
+<ul>
+<li><strong>核心</strong>：这是TEE也无法完全消除的、最后残留的信任层。</li>
+<li><strong>需要信任什么</strong>：客户端仍然需要信任租户会保证服务的<strong>可用性</strong>（不关机、不断网）和<strong>公平性</strong>（不恶意屏蔽某些客户端）。</li>
+<li><strong>结论</strong>：租户最多只能做到不让你玩（破坏可用性），而无法做到偷你的东西（破坏机密性）。在商业合作中，这是一个可以通过服务等级协议（SLA）来约束的可接受风险。</li>
+</ul></li>
+</ul>
+<h3 id="第四章tee安全编程核心实践">第四章：TEE安全编程核心实践</h3>
+<p>仅仅将应用放入TEE环境是不足以保证安全的，开发者必须遵循特定的安全编程模式来管理所有进出TEE的数据流。</p>
+<h4 id="数据处理如何避免明文泄露">4.1 数据处理：如何避免明文泄露</h4>
+<p>一个关键问题是：数据一旦在TEE/TD内部变成明文，租户（作为root用户）是否能在此期间访问到它？答案是：<strong>设计良好的TEE应用会确保租户无法接触到任何阶段的明文数据。</strong></p>
+<ul>
+<li><p><strong>错误（不安全）的设计模式</strong>:
+TEE应用为了方便处理，执行了<code>file.write(plaintext_data)</code>，将明文数据直接写入到了Guest
+OS的文件系统中。此时，由于文件系统由不受信的Guest
+OS管理，租户可以轻松登录并读取该明文文件。</p></li>
+<li><p><strong>正确（安全）的设计模式</strong>：</p>
+<ul>
+<li><strong>方案1：端到端加密，仅在内存中处理
+(最常用)</strong>：客户端发送密文，TEE应用在<strong>受保护的内存中</strong>完成解密、计算、聚合的全过程。明文数据从不落盘，始终不离开TEE的硬件保护边界。租户无法dump进程内存，因此无法获取明文。</li>
+<li><strong>方案2：利用TEE的安全存储
+(Sealing)</strong>：如果数据需要持久化，TEE应用不应直接写入文件，而是调用<code>seal()</code>函数。该函数会使用一个与平台和应用身份绑定的、只有当前TEE实例才能访问的硬件密钥，对明文数据进行加密。加密后的数据块（Sealed
+Blob）可以安全地存放在不受信的文件系统上。租户只能看到一堆加密乱码，无法解密。当TEE需要再次使用时，再调用<code>unseal()</code>在内存中解封。</li>
+</ul></li>
+</ul>
+<h4 id="密钥生命周期管理从诞生到休眠">4.2
+密钥生命周期管理：从诞生到休眠</h4>
+<p>既然TEE是黑盒，那作为最关键秘密的<strong>密钥，最初是如何安全地进入这个黑盒的？</strong>
+这需要通过远程证明和密钥提供（Secret
+Provisioning）的协同过程来完成。</p>
+<h5 id="密钥的提供-secret-provisioning">密钥的提供 (Secret
+Provisioning)</h5>
+<p>这个过程就像一次高度安全的、经过身份验证的“隔空投送”。</p>
+<ol type="1">
+<li><strong>TEE发起证明</strong>:
+TEE应用启动后，请求CPU硬件生成一份包含其代码身份指纹（MRENCLAVE）、开发者身份（MRSIGNER）和临时公钥的<strong>证明报告（Quote）</strong>，并由CPU内嵌的硬件私钥签名。</li>
+<li><strong>密钥所有者验证证明</strong>:
+密钥所有者收到Quote后，会进行双重验证：
+<ul>
+<li><strong>硬件验证</strong>:
+请求Intel的证明服务器，验证Quote的硬件签名，确保它来自真实的Intel
+CPU。</li>
+<li><strong>软件验证</strong>:
+比对自己手中经过审计的代码哈希值与Quote中的MRENCLAVE，确保TEE中运行的是未经篡改的、正确的代码版本。</li>
+</ul></li>
+<li><strong>安全“投送”密钥</strong>:
+验证通过后，密钥所有者完全信任了远端的TEE。它会从Quote中提取出TEE的临时公钥，用它加密真正的私钥，然后将这个加密的“密钥包裹”发回给TEE。</li>
+<li><strong>TEE内部拆解</strong>:
+TEE应用收到“密钥包裹”后，用自己对应的临时私钥在受保护的内存中解密，安全地获得真实私钥。</li>
+</ol>
+<h5 id="密钥的持久化-sealing">密钥的持久化 (Sealing)</h5>
+<p>为了避免每次重启都重复上述复杂的提供流程，TEE应用在首次获取密钥后，可以利用前述的<strong>Sealing机制</strong>，将其用硬件绑定的密钥加密后，安全地保存在外部磁盘上。重启后，只有在同一台机器上、运行着同样代码的TEE应用，才能成功解封（unseal），将密钥重新加载到内存中。</p>
+<h4 id="io安全警惕自我泄露">4.3 I/O安全：警惕“自我泄露”</h4>
+<p>TEE保护的是计算过程，但它不会自动保护应用的I/O。如果开发者在代码里写了<code>print(private_key)</code>，TEE会忠实地执行，并将这个秘密通过标准输出（stdout）泄露给不受信的Guest
+OS，最终被租户看到。</p>
+<p>这揭示了TEE安全编程的关键原则：<strong>开发者必须有意识地管理所有进出TEE的信道，视之为潜在的泄露风险。</strong></p>
+<ul>
+<li><p><strong>防御措施1：代码审计（最重要）</strong>:
+任何敏感数据变量，绝不能传递给任何执行I/O操作的函数（如<code>print()</code>,
+<code>log.info()</code>,
+<code>file.write()</code>）。客户端信任的，正是那个经过审计、确认没有此类行为的代码版本。</p></li>
+<li><p><strong>防御措施2：安全日志系统</strong>:
+对日志进行过滤或加密，或在生产环境中完全禁用高风险的日志级别。</p></li>
+<li><p><strong>防御措施3：运行时配置</strong>:
+将应用的stdout和stderr重定向到<code>/dev/null</code>，作为一种兜底措施。</p></li>
+</ul>
+<h3
+id="第五章tee安全模型的动态性与挑战">第五章：TEE安全模型的动态性与挑战</h3>
+<h4 id="代码篡改不可能完成的任务">5.1 代码篡改：不可能完成的任务</h4>
+<p>从系统管理员的角度看，修改磁盘上的一个脚本文件非常简单。但对于TEE来说，要在不被发现的情况下恶意修改代码，却几乎不可能。</p>
+<p>这里的关键在于区分两个概念：</p>
+<ul>
+<li><p><strong>修改文件内容的能力</strong>: 租户拥有。</p></li>
+<li><p><strong>伪造程序身份的能力</strong>: 租户没有。</p></li>
+</ul>
+<p>TEE安全模型的核心基石是：<strong>代码的任何一丝一毫的改变，都会导致其身份指纹(MRENCLAVE)发生雪崩式的、不可预测的变化。</strong>
+当客户端进行远程证明时，它会立刻发现代码指纹与预期的不匹配，从而拒绝信任、中止连接。同样，被修改后的代码也无法解封（unseal）由旧版本代码封存（seal）的秘密。</p>
+<p>因此，租户可以“作恶”，但他无法“隐藏作恶的意图”。在他试图运行恶意代码的那一刻，他就在远程证明的照妖镜下原形毕露了。</p>
+<h4 id="证明的瞬时性与对策">5.2 证明的“瞬时性”与对策</h4>
+<p>远程证明本质上是一个“瞬时快照”，它只证明TEE在生成报告那一刻的身份和状态，本身无法记录历史变化。这带来了潜在的“作恶后改回”的攻击窗口。</p>
+<p>在实践中，必须将远程证明与持续的、有状态的安全协议结合起来，弥补“瞬时性”带来的缺口：</p>
+<ul>
+<li><strong>方案1：会话绑定 (Session Binding)</strong>:
+将瞬时证明与当前会话（如TLS会话）的关键信息（如临时公key）绑定。对“瞬时”TEE的信任，被安全地传递给了对“当前整个会话”的信任。任何导致TEE重启或代码变更的行为都会破坏会话，客户端会立刻发现。这足以防止“先证明后作恶”的攻击。</li>
+<li><strong>方案2：可信日志/区块链</strong>:
+对于需要更强审计性的场景，可以将TEE每次执行的关键操作（如模型聚合）生成日志条目，并用其身份密钥签名，发布到只能追加、无法修改的存储系统（如区块链）上。这为TEE的瞬时行为提供了不可篡改的历史记录和持久化信任。</li>
+</ul>
+<h3 id="结论">结论</h3>
+<p>Intel
+TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和远程证明能力，从根本上重塑了云环境下的信任模型。它将信任的根基从对“人”或“软件供应商”的主观信任，转移到了对“开源审计过的代码”和“CPU硬件设计”的客观、可验证的信任。</p>
+<p>然而，TEE并非一个能让不安全的代码自动变得安全的“魔法棒”。它提供的是一个<strong>可信的执行环境</strong>，而非一个<strong>可信的应用</strong>。要真正发挥TEE的威力，开发者必须承担起<strong>编写安全代码的责任</strong>，遵循严格的安全编程范式，谨慎管理所有的数据I/O、密钥生命周期和会话状态。</p>
+<p>通过将强大的硬件保障与严谨的软件开发实践相结合，我们才能真正构建出端到端的、能抵御来自特权软件甚至物理攻击的机密计算解决方案。</p>
+<p>以上为个人理解，敬请批评指正。</p>
+]]></content>
+      <tags>
+        <tag>TDX</tag>
+        <tag>TEE</tag>
+        <tag>Intel</tag>
+        <tag>安全</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Understanding the Linux Kernel Lecture 1 Note</title>
     <url>/posts/b1b647fa/</url>
     <content><![CDATA[<h2 id="引言">引言</h2>
@@ -2886,216 +3096,6 @@ ID)，及sticky用来定义文件的模式。当这些标记位应用到可执�
         <tag>Linux</tag>
         <tag>操作系统</tag>
         <tag>内核</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>DeepSeek本地部署</title>
-    <url>/posts/4f6ed32b/</url>
-    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
-<span id="more"></span>
-<h2 id="下载ollama">下载Ollama</h2>
-<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
-<p>下载地址：https://ollama.com/download/windows</p>
-<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
-<p>如下图所示</p>
-<p><img src="/assets/deepseek部署01.png" /></p>
-<blockquote>
-<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
-</blockquote>
-<p>上述步骤完成后，我们可以打开CMD，输入ollama
--v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
-<p><img src="/assets/deepseek部署02.png" /></p>
-<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
-<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
-<h2 id="下载deepseek">下载DeepSeek</h2>
-<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
-<p><img src="/assets/deepseek部署03.png" /></p>
-<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
-<p>如下图所示：</p>
-<p><img src="/assets/deepseek部署04.png" /></p>
-<p>最终效果如下图所示：</p>
-<p><img src="/assets/deepseek部署05.png" /></p>
-]]></content>
-      <tags>
-        <tag>大语言模型</tag>
-        <tag>人工智能</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>关于Intel TDX的深度思考与技术剖析</title>
-    <url>/posts/b63e909c/</url>
-    <content><![CDATA[<p>本文深入探讨了可信执行环境（TEE）的核心技术，特别是Intel的Trust
-Domain Extensions
-(TDX)。我们从TEE的基本概念出发，逐步解析了其信任模型从传统虚拟化到机密虚拟机的演进历程。文章重点剖析了TDX的几大核心安全机制，包括远程证明、安全数据处理模式（内存计算与Sealing）、以及安全的密钥生命周期管理。通过对“代码修改”、“自我泄露”和“证明瞬时性”等关键问题的思辨，本文旨在为理解和应用TEE/TDX技术解决实际信任问题，提供一个完整而深入的框架。</p>
-<span id="more"></span>
-<h3 id="引言云时代的信任难题">引言：云时代的信任难题</h3>
-<p>在当前的云计算和联邦学习场景下，数据隐私和计算过程的保密性至关重要。我们常常面临一个核心的信任悖论：我们希望利用云服务商强大的计算能力处理敏感数据，却又不能完全信任服务所在的平台，包括云厂商、甚至是拥有最高权限的租户管理员。如何确保我们的代码和数据在“别人”的服务器上，能够不被窥探、不被篡改地安全运行？可信执行环境（TEE）技术，特别是Intel
-TDX，为我们提供了破解这一难题的钥匙。</p>
-<h3 id="第一章tee与intel-tdx核心概念">第一章：TEE与Intel
-TDX核心概念</h3>
-<p>您可以将TEE想象成CPU内部一个被硬件强制隔离的“安全保险库”或“黑盒”。它主要提供以下四种核心保障：</p>
-<ul>
-<li><strong>隔离性 (Isolation)</strong>: 在TEE（Intel TDX中称为Trust
-Domain）内部运行的代码和数据，与服务器上运行的其他所有软件（包括操作系统、Hypervisor/虚拟机管理器，甚至是拥有物理访问权限的管理员）都是<strong>完全隔离的</strong>。</li>
-<li><strong>机密性 (Confidentiality)</strong>:
-TEE内的数据在CPU外部（例如在内存条DRAM上）始终是加密的。即使有人用逻辑分析仪去嗅探内存总线，也拿不到明文。</li>
-<li><strong>完整性 (Integrity)</strong>:
-TEE会确保加载到其内部的代码没有被篡改。</li>
-<li><strong>远程证明 (Remote Attestation)</strong>:
-这是TEE的“杀手级特性”。客户端可以在与服务器通信之前，通过一个密码学协议，要求服务器上的TEE
-证明自己的身份。这个证明可以告诉客户端：“我是一个货真价实的、由Intel制造的CPU中的TEE，我正在运行的代码就是你期望的那个版本（通过代码哈希值验证），并且我没有被篡改过。”</li>
-</ul>
-<h3
-id="第二章信任模型的演进从完全信任到零信任">第二章：信任模型的演进：从完全信任到零信任</h3>
-<p>TEE的出现并非一蹴而就，它的价值体现在计算信任模型的不断演进中。</p>
-<h4 id="传统虚拟化-传统vm">传统虚拟化 (传统VM)</h4>
-<ul>
-<li><strong>层次结构</strong>:
-<code>硬件 -&gt; Hypervisor -&gt; 虚拟机(VM)</code>。Hypervisor运行在最高权限，完全控制硬件。</li>
-<li><strong>信任模型</strong>:
-Hypervisor是全能的上帝。它可以随时暂停VM，检查其完整的内存状态，看到所有明文。租户必须<strong>完全信任</strong>云服务商。</li>
-</ul>
-<h4 id="sgx时代-enclave模型">SGX时代 (Enclave模型)</h4>
-<p>为了解决对Hypervisor的信任问题，Intel推出了SGX。</p>
-<ul>
-<li><strong>层次结构</strong>:
-<code>硬件 -&gt; OS/Hypervisor -&gt; 应用程序 -&gt; Enclave</code>。Enclave是从应用程序的地址空间中“挖”出来的一块受硬件保护的内存区域。</li>
-<li><strong>信任模型</strong>:
-信任边界缩小到Enclave内部。Hypervisor/OS无法窥探Enclave，但它仍然管理着整个应用程序和操作系统。这种模型对应用改造要求高，且与外部世界交互繁琐。</li>
-</ul>
-<h4 id="tdx时代-机密虚拟机模型">TDX时代 (机密虚拟机模型)</h4>
-<p>TDX吸取了SGX的教训，旨在提供一种更简单、更全面的保护模型，能够轻松地“兜住”一整个未经修改的虚拟机。</p>
-<ul>
-<li><p><strong>层次结构</strong>:
-<code>硬件(含TDX Module) -&gt; Hypervisor(被降权) + 机密虚拟机(TD)</code>。</p></li>
-<li><p><strong>信任模型的革命性变化</strong>：</p>
-<ul>
-<li><strong>Hypervisor不再是上帝</strong>：Hypervisor
-从全知的管理者变成了一个被蒙上眼睛的调度员。它负责调度TD，但CPU硬件会阻止它访问TD的明文内存。</li>
-<li><strong>新的信任根</strong>：管理TDX安全策略的不再是Hypervisor，而是CPU内部那个可信的<strong>TDX
-Module</strong>。TD的整个内存状态由CPU硬件的内存加密引擎（MKTME）自动进行加解密，密钥对Hypervisor不可见。</li>
-</ul></li>
-</ul>
-<h3 id="第三章tee中的信任边界剖析">第三章：TEE中的信任边界剖析</h3>
-<p>当我们采用TEE后，信任链条发生了根本性的变化。我们可以将信任关系拆解成三个层次来看：</p>
-<ul>
-<li><p><strong>层次一：信任代码逻辑 (Trust in the Code
-Logic)</strong></p>
-<ul>
-<li><strong>核心</strong>：客户端必须相信我们编写的聚合算法本身是公平、无害、没有后门的。</li>
-<li><strong>如何建立</strong>：通过代码审计和开源。</li>
-<li><strong>TEE的角色</strong>：将这种纸面信任变为现实。远程证明可以<strong>密码学地验证</strong>服务器上运行的，就是那个经过共同审计的代码版本。信任的对象从人转移到了代码。</li>
-</ul></li>
-<li><p><strong>层次二：信任执行过程 (Trust in the Execution
-Process)</strong></p>
-<ul>
-<li><strong>核心</strong>：相信代码在执行过程中不会被篡改或窥探。</li>
-<li><strong>没有TEE</strong>：这是最大的信任鸿沟。租户（root用户）或云服务商可以随时dump内存，附加调试器。</li>
-<li><strong>有了TEE</strong>：TEE的硬件隔离特性使得租户和云服务商失去了窥探和篡改运行时状态的能力。信任的对象从租户或云服务商转移到了
-CPU 硬件（如 Intel）。</li>
-</ul></li>
-<li><p><strong>层次三：信任服务运维 (Trust in the
-Operation)</strong></p>
-<ul>
-<li><strong>核心</strong>：这是TEE也无法完全消除的、最后残留的信任层。</li>
-<li><strong>需要信任什么</strong>：客户端仍然需要信任租户会保证服务的<strong>可用性</strong>（不关机、不断网）和<strong>公平性</strong>（不恶意屏蔽某些客户端）。</li>
-<li><strong>结论</strong>：租户最多只能做到不让你玩（破坏可用性），而无法做到偷你的东西（破坏机密性）。在商业合作中，这是一个可以通过服务等级协议（SLA）来约束的可接受风险。</li>
-</ul></li>
-</ul>
-<h3 id="第四章tee安全编程核心实践">第四章：TEE安全编程核心实践</h3>
-<p>仅仅将应用放入TEE环境是不足以保证安全的，开发者必须遵循特定的安全编程模式来管理所有进出TEE的数据流。</p>
-<h4 id="数据处理如何避免明文泄露">4.1 数据处理：如何避免明文泄露</h4>
-<p>一个关键问题是：数据一旦在TEE/TD内部变成明文，租户（作为root用户）是否能在此期间访问到它？答案是：<strong>设计良好的TEE应用会确保租户无法接触到任何阶段的明文数据。</strong></p>
-<ul>
-<li><p><strong>错误（不安全）的设计模式</strong>:
-TEE应用为了方便处理，执行了<code>file.write(plaintext_data)</code>，将明文数据直接写入到了Guest
-OS的文件系统中。此时，由于文件系统由不受信的Guest
-OS管理，租户可以轻松登录并读取该明文文件。</p></li>
-<li><p><strong>正确（安全）的设计模式</strong>：</p>
-<ul>
-<li><strong>方案1：端到端加密，仅在内存中处理
-(最常用)</strong>：客户端发送密文，TEE应用在<strong>受保护的内存中</strong>完成解密、计算、聚合的全过程。明文数据从不落盘，始终不离开TEE的硬件保护边界。租户无法dump进程内存，因此无法获取明文。</li>
-<li><strong>方案2：利用TEE的安全存储
-(Sealing)</strong>：如果数据需要持久化，TEE应用不应直接写入文件，而是调用<code>seal()</code>函数。该函数会使用一个与平台和应用身份绑定的、只有当前TEE实例才能访问的硬件密钥，对明文数据进行加密。加密后的数据块（Sealed
-Blob）可以安全地存放在不受信的文件系统上。租户只能看到一堆加密乱码，无法解密。当TEE需要再次使用时，再调用<code>unseal()</code>在内存中解封。</li>
-</ul></li>
-</ul>
-<h4 id="密钥生命周期管理从诞生到休眠">4.2
-密钥生命周期管理：从诞生到休眠</h4>
-<p>既然TEE是黑盒，那作为最关键秘密的<strong>密钥，最初是如何安全地进入这个黑盒的？</strong>
-这需要通过远程证明和密钥提供（Secret
-Provisioning）的协同过程来完成。</p>
-<h5 id="密钥的提供-secret-provisioning">密钥的提供 (Secret
-Provisioning)</h5>
-<p>这个过程就像一次高度安全的、经过身份验证的“隔空投送”。</p>
-<ol type="1">
-<li><strong>TEE发起证明</strong>:
-TEE应用启动后，请求CPU硬件生成一份包含其代码身份指纹（MRENCLAVE）、开发者身份（MRSIGNER）和临时公钥的<strong>证明报告（Quote）</strong>，并由CPU内嵌的硬件私钥签名。</li>
-<li><strong>密钥所有者验证证明</strong>:
-密钥所有者收到Quote后，会进行双重验证：
-<ul>
-<li><strong>硬件验证</strong>:
-请求Intel的证明服务器，验证Quote的硬件签名，确保它来自真实的Intel
-CPU。</li>
-<li><strong>软件验证</strong>:
-比对自己手中经过审计的代码哈希值与Quote中的MRENCLAVE，确保TEE中运行的是未经篡改的、正确的代码版本。</li>
-</ul></li>
-<li><strong>安全“投送”密钥</strong>:
-验证通过后，密钥所有者完全信任了远端的TEE。它会从Quote中提取出TEE的临时公钥，用它加密真正的私钥，然后将这个加密的“密钥包裹”发回给TEE。</li>
-<li><strong>TEE内部拆解</strong>:
-TEE应用收到“密钥包裹”后，用自己对应的临时私钥在受保护的内存中解密，安全地获得真实私钥。</li>
-</ol>
-<h5 id="密钥的持久化-sealing">密钥的持久化 (Sealing)</h5>
-<p>为了避免每次重启都重复上述复杂的提供流程，TEE应用在首次获取密钥后，可以利用前述的<strong>Sealing机制</strong>，将其用硬件绑定的密钥加密后，安全地保存在外部磁盘上。重启后，只有在同一台机器上、运行着同样代码的TEE应用，才能成功解封（unseal），将密钥重新加载到内存中。</p>
-<h4 id="io安全警惕自我泄露">4.3 I/O安全：警惕“自我泄露”</h4>
-<p>TEE保护的是计算过程，但它不会自动保护应用的I/O。如果开发者在代码里写了<code>print(private_key)</code>，TEE会忠实地执行，并将这个秘密通过标准输出（stdout）泄露给不受信的Guest
-OS，最终被租户看到。</p>
-<p>这揭示了TEE安全编程的关键原则：<strong>开发者必须有意识地管理所有进出TEE的信道，视之为潜在的泄露风险。</strong></p>
-<ul>
-<li><p><strong>防御措施1：代码审计（最重要）</strong>:
-任何敏感数据变量，绝不能传递给任何执行I/O操作的函数（如<code>print()</code>,
-<code>log.info()</code>,
-<code>file.write()</code>）。客户端信任的，正是那个经过审计、确认没有此类行为的代码版本。</p></li>
-<li><p><strong>防御措施2：安全日志系统</strong>:
-对日志进行过滤或加密，或在生产环境中完全禁用高风险的日志级别。</p></li>
-<li><p><strong>防御措施3：运行时配置</strong>:
-将应用的stdout和stderr重定向到<code>/dev/null</code>，作为一种兜底措施。</p></li>
-</ul>
-<h3
-id="第五章tee安全模型的动态性与挑战">第五章：TEE安全模型的动态性与挑战</h3>
-<h4 id="代码篡改不可能完成的任务">5.1 代码篡改：不可能完成的任务</h4>
-<p>从系统管理员的角度看，修改磁盘上的一个脚本文件非常简单。但对于TEE来说，要在不被发现的情况下恶意修改代码，却几乎不可能。</p>
-<p>这里的关键在于区分两个概念：</p>
-<ul>
-<li><p><strong>修改文件内容的能力</strong>: 租户拥有。</p></li>
-<li><p><strong>伪造程序身份的能力</strong>: 租户没有。</p></li>
-</ul>
-<p>TEE安全模型的核心基石是：<strong>代码的任何一丝一毫的改变，都会导致其身份指纹(MRENCLAVE)发生雪崩式的、不可预测的变化。</strong>
-当客户端进行远程证明时，它会立刻发现代码指纹与预期的不匹配，从而拒绝信任、中止连接。同样，被修改后的代码也无法解封（unseal）由旧版本代码封存（seal）的秘密。</p>
-<p>因此，租户可以“作恶”，但他无法“隐藏作恶的意图”。在他试图运行恶意代码的那一刻，他就在远程证明的照妖镜下原形毕露了。</p>
-<h4 id="证明的瞬时性与对策">5.2 证明的“瞬时性”与对策</h4>
-<p>远程证明本质上是一个“瞬时快照”，它只证明TEE在生成报告那一刻的身份和状态，本身无法记录历史变化。这带来了潜在的“作恶后改回”的攻击窗口。</p>
-<p>在实践中，必须将远程证明与持续的、有状态的安全协议结合起来，弥补“瞬时性”带来的缺口：</p>
-<ul>
-<li><strong>方案1：会话绑定 (Session Binding)</strong>:
-将瞬时证明与当前会话（如TLS会话）的关键信息（如临时公key）绑定。对“瞬时”TEE的信任，被安全地传递给了对“当前整个会话”的信任。任何导致TEE重启或代码变更的行为都会破坏会话，客户端会立刻发现。这足以防止“先证明后作恶”的攻击。</li>
-<li><strong>方案2：可信日志/区块链</strong>:
-对于需要更强审计性的场景，可以将TEE每次执行的关键操作（如模型聚合）生成日志条目，并用其身份密钥签名，发布到只能追加、无法修改的存储系统（如区块链）上。这为TEE的瞬时行为提供了不可篡改的历史记录和持久化信任。</li>
-</ul>
-<h3 id="结论">结论</h3>
-<p>Intel
-TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和远程证明能力，从根本上重塑了云环境下的信任模型。它将信任的根基从对“人”或“软件供应商”的主观信任，转移到了对“开源审计过的代码”和“CPU硬件设计”的客观、可验证的信任。</p>
-<p>然而，TEE并非一个能让不安全的代码自动变得安全的“魔法棒”。它提供的是一个<strong>可信的执行环境</strong>，而非一个<strong>可信的应用</strong>。要真正发挥TEE的威力，开发者必须承担起<strong>编写安全代码的责任</strong>，遵循严格的安全编程范式，谨慎管理所有的数据I/O、密钥生命周期和会话状态。</p>
-<p>通过将强大的硬件保障与严谨的软件开发实践相结合，我们才能真正构建出端到端的、能抵御来自特权软件甚至物理攻击的机密计算解决方案。</p>
-<p>以上为个人理解，敬请批评指正。</p>
-]]></content>
-      <tags>
-        <tag>TDX</tag>
-        <tag>TEE</tag>
-        <tag>Intel</tag>
-        <tag>安全</tag>
       </tags>
   </entry>
   <entry>
@@ -6777,6 +6777,279 @@ kernel，开 Debug 构建 + 小输入，定位报文 → 回溯源码 → 修复
       </tags>
   </entry>
   <entry>
+    <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
+    <url>/posts/f1a2b3c4/</url>
+    <content><![CDATA[<p>本文介绍
+FaaS（函数即服务）的诞生背景、核心概念与应用场景，并演示如何部署第一个云函数。</p>
+<span id="more"></span>
+<h3 id="一faas-的诞生我们为何需要它">一、FaaS
+的诞生：我们为何需要它？</h3>
+<p>要理解 FaaS
+为何会横空出世，我们得先坐上时光机，回顾一下应用部署方式的“进化史”。</p>
+<p><strong>第一站：物理服务器时代</strong></p>
+<p>在遥远的“刀耕火种”年代，我们要部署一个网站，得先去机房买一台（或几台）物理服务器。这意味着漫长的采购周期、高昂的硬件成本，以及复杂的机器运维。最头疼的是，为了应对业务高峰，我们必须按最高标准购买硬件，导致服务器在大部分时间里都处于“摸鱼”状态，造成了巨大的资源浪费。</p>
+<p><strong>第二站：虚拟机 (IaaS) 时代</strong></p>
+<p>云计算的出现带来了转机。以 AWS EC2
+为代表的虚拟机服务，让我们告别了实体硬件，可以在云端“租”服务器。这极大地提高了灵活性，几分钟内就能创建一台虚拟机。但问题并没有完全解决：我们依然要为整台虚拟机买单，哪怕上面的应用空闲着。同时，操作系统的维护、安全补丁的更新，这些运维工作一样也没少。</p>
+<p><strong>第三站：容器 (PaaS/CaaS) 时代</strong></p>
+<p>Docker 和 Kubernetes
+的风靡，让部署进入了容器化时代。我们将应用和它的依赖打包成一个轻量的“集装箱”，实现了环境的标准化和交付的敏捷性。但新的“烦恼”也随之而来：为了运行这些容器，我们得维护一个庞大而复杂的
+Kubernetes 集群。容量规划、节点扩容、网络配置…
+我们似乎从“应用运维”的坑，跳进了“集群运维”的坑。</p>
+<p>兜兜转转，开发者们始终有一个终极梦想：<strong>我们能只关心业务代码，而彻底不用管服务器吗？</strong></p>
+<p>FaaS 响亮地回答了：“能！”</p>
+<p>它的核心思想简单而彻底：<strong>让开发者回归最纯粹的编程，将服务器及相关的一切运维工作，都交给云平台</strong>。无论是操作系统、运行时环境，还是弹性伸缩、高可用，你通通不用管。你的世界里，只剩下你的“函数”——那段实现核心业务逻辑的代码。</p>
+<p>简单来说，FaaS
+将付费模式从“为服务器资源付费”，进化到了“<strong>为代码的实际执行付费</strong>”。这不只是一次技术升级，更是一场开发思想的革命。</p>
+<h3 id="二拨开云雾faas-核心概念详解">二、拨开云雾：FaaS
+核心概念详解</h3>
+<p>理解了 FaaS 的“初心”，我们再来拆解几个围绕着它的核心概念。</p>
+<ul>
+<li><p><strong>FaaS (Function-as-a-Service, 函数即服务)</strong>
+这是我们要掌握的核心。我喜欢用一个比喻：<strong>租厨房，而不是租公寓</strong>。
+在传统模式下，为了做顿饭，你得先租下一整套公寓（服务器），自己装修（配环境）、打扫（运维）。而
+FaaS
+就像一个共享厨房，你只需带着菜谱（代码）进去，锅碗瓢盆（运行环境）一应俱全。你只为炒菜的几分钟付费，完事就走，绝不为厨房的闲置时间买单。</p></li>
+<li><p><strong>Serverless (无服务器架构)</strong>
+这是一个更宏大的理念，FaaS 只是它最广为人知的“代言人”。Serverless
+并非真的没有服务器，而是强调一种<strong>开发者无需关心服务器</strong>的架构思想。
+如果说 FaaS 是共享厨房，那 Serverless
+就是整个美食广场。这个广场里除了厨房（FaaS），还有现成的食材超市（BaaS -
+数据库服务）、统一的安保系统（BaaS - 身份验证服务）等等。Serverless
+的目标，就是让你作为大厨，能心无旁骛地专注于“炒菜”这一件事上。</p></li>
+<li><p><strong>事件驱动 (Event-Driven)</strong> 这是 FaaS
+的灵魂。你的函数并非 24
+小时待命，而是像个“懒汉”，<strong>“有事才干，没事歇着”</strong>。
+你可以把函数想象成一个装了门铃的房间。只有当“事件”发生时——比如有人按门铃（HTTP
+请求）、信箱里有新信件（文件上传）、手机闹钟响了（定时任务）——它才会被唤醒去开门（执行函数）。这种模式确保了资源不会被空耗。</p></li>
+<li><p><strong>冷启动 (Cold Start)</strong> 这是 FaaS
+的一个独特挑战。如果你的函数长时间没被调用（没人按门铃），平台为了节约资源，会把它“请回家休息”（回收实例）。当下一个请求突然到来时，平台需要重新给它分配资源、加载代码、初始化环境…
+这个过程就像大冬天里发动一台冷了很久的汽车，会有一个明显的延迟，这就是“冷启动”。
+一旦启动完毕，后续的连续请求就会非常快（这叫“热启动”），直到它再次因为“没人理”而进入休眠。</p></li>
+<li><p><strong>BaaS (Backend-as-a-Service, 后端即服务)</strong>
+前面提到，这是 Serverless
+美食广场的另一半。它提供了各种开箱即用的后端能力，比如数据库
+(<code>Firebase</code>)、对象存储 (<code>AWS S3</code>)、用户认证
+(<code>Auth0</code>) 等。FaaS 函数通常和 BaaS
+服务配合，一个主内（负责无状态的计算逻辑），一个主外（负责有状态的数据存储），共同构建出一个完整的
+Serverless 应用。</p></li>
+</ul>
+<h3 id="三身手初试faas-的真实应用场景">三、身手初试：FaaS
+的真实应用场景</h3>
+<p>理论听起来很棒，那 FaaS 在实际工作中到底能用来做什么呢？</p>
+<h4 id="场景一网站或小程序的后端-api">场景一：网站或小程序的后端
+API</h4>
+<p>这是 FaaS
+最经典的用法。假设你要为个人博客或小程序开发一个后端，但又不想为了偶尔的访问量，而去维护一台
+24 小时开机的服务器。</p>
+<ul>
+<li><strong>实例</strong>：一个“用户注册”接口。当用户在前端页面提交注册信息后，会调用一个
+API 网关，这个网关会触发我们的 FaaS
+函数。函数接收到用户信息，执行数据校验、写入数据库等操作，然后返回结果。整个过程可能只花费几百毫秒，你就只需要为这短暂的计算付费，经济又省心。</li>
+</ul>
+<h4 id="场景二自动化的数据处理">场景二：自动化的数据处理</h4>
+<p>FaaS 的事件驱动特性，让它成为自动化工作流的“神器”，尤其适合“当 A
+发生时，自动执行 B”这类任务。</p>
+<ul>
+<li><strong>实例</strong>：图片自动生成缩略图。在社交或电商网站，用户上传一张高清原图后，我们往往需要大、中、小等不同尺寸的缩略图。通过
+FaaS，我们可以设定一个规则：每当有图片上传到指定的存储桶（如 AWS
+S3），就自动触发一个函数。这个函数会读取原图，批量生成所需的缩略图，再存回存储桶。整个流程全自动，无需人工干预。</li>
+</ul>
+<h4 id="场景三轻量级的定时任务-cron-job">场景三：轻量级的定时任务 (Cron
+Job)</h4>
+<p>几乎每个系统都需要一些定期执行的任务，比如每日数据备份、定时发送报表等。</p>
+<ul>
+<li><strong>实例</strong>：生成每日运营报表。你可以设置一个定时触发器，比如每天凌晨
+2 点，准时调用一个 FaaS
+函数。这个函数会自动连接数据库，抓取前一天的用户增长、订单量等数据，生成一份精美的报表，并通过邮件发送给相关同事。</li>
+</ul>
+<h4 id="场景四物联网-iot-数据处理">场景四：物联网 (IoT) 数据处理</h4>
+<p>在物联网场景中，成千上万的设备可能会在瞬间产生海量数据，对后端的弹性伸缩能力是极大的考验。</p>
+<ul>
+<li><strong>实例</strong>：共享单车位置上报。每辆单车上的 GPS
+设备会定时将位置信息发送到一个消息队列中。FaaS
+函数可以订阅这个队列，每当有新消息进入，就触发一次执行，将最新的单车位置解析并更新到地图数据库中。FaaS
+的自动伸缩能力，能完美应对早晚高峰期的并发洪流。</li>
+</ul>
+<p>通过这些场景，不难发现 FaaS
+特别适合那些<strong>无状态、短执行、事件触发</strong>类型的任务。</p>
+<h3 id="四庖丁解牛faas-架构与上线实战">四、庖丁解牛：FaaS
+架构与上线实战</h3>
+<p>理论和场景都清楚了，是时候深入 FaaS
+平台的内部，看看它究竟是如何工作的，并亲手上线一个函数了。</p>
+<h4 id="架构解剖以-aws-lambda-为例">架构解剖（以 AWS Lambda 为例）</h4>
+<p>我们以目前最流行的 FaaS 平台 AWS Lambda 为例，看看一个典型的 FaaS
+调用流程包含哪些组件。 <pre>
+<code class="mermaid">
+
+graph LR
+EVT[&quot;事件源&lt;br&#x2F;&gt;S3 &#x2F; API Gateway &#x2F; MQ&quot;] --&gt; TRG(&quot;触发器&quot;)
+TRG --&gt; LBD[&quot;Lambda 托管 Runtime&quot;]
+LBD --&gt; ENI[(&quot;弹性网络&quot;)]
+LBD --&gt; LOG[&quot;CloudWatch Logs&quot;]
+LBD --&gt; DLQ[&quot;死信队列&lt;br&#x2F;&gt;(可选)&quot;]
+</code>
+</pre></p>
+<ul>
+<li><strong>事件源</strong>：触发函数执行的“扳机”，可以是 S3
+的文件上传、API Gateway 的 HTTP 请求，或是消息队列里的新消息。</li>
+<li><strong>触发器</strong>：连接事件源和函数的“遥控器”，负责监听事件并调用目标函数。</li>
+<li><strong>Runtime</strong>：函数的运行环境，平台内置了 Node.js,
+Python, Go 等多种语言环境，也支持通过自定义镜像（Custom
+Runtime）运行任何语言。</li>
+<li><strong>弹性网络
+(ENI)</strong>：如果函数需要访问你私有网络（VPC）里的数据库等资源，平台会为其挂载一个弹性网络接口。</li>
+<li><strong>监控与日志 (CloudWatch
+Logs)</strong>：函数运行期间产生的日志（比如
+<code>console.log</code>）和各项指标（调用次数、执行时长等）会被自动收集起来，方便排查问题。</li>
+</ul>
+<blockquote>
+<p><strong>解密冷启动</strong>：从上面的流程可以看出，一次冷启动的耗时主要来自：拉取代码镜像
+→ 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
+</blockquote>
+<h4 id="开发到上线五步法">开发到上线：五步法</h4>
+<p>接下来，我们用一个经典的 Hello World
+示例，走完从开发到上线的完整流程。</p>
+<ol type="1">
+<li><p><strong>初始化工程</strong>
+首先，在本地创建一个项目目录，并编写一个简单的 Node.js 函数。
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> hello-faas &amp;&amp; <span class="built_in">cd</span> <span class="variable">$_</span></span><br><span class="line"><span class="comment"># 创建一个 index.js 文件，内容如下</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;exports.handler = async (event) =&gt; &quot;Hello from FaaS!&quot;;&#x27;</span> &gt; index.js</span><br><span class="line"><span class="comment"># 将项目打包成 zip 文件</span></span><br><span class="line">zip -r function.zip .</span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>创建函数</strong>
+登录云厂商控制台（或使用命令行工具），创建一个新函数。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS CLI 为例</span></span><br><span class="line">aws lambda create-function \</span><br><span class="line">    --function-name hello-world \</span><br><span class="line">    --runtime nodejs20.x \</span><br><span class="line">    --handler index.handler \</span><br><span class="line">    --zip-file fileb://function.zip \</span><br><span class="line">    --role &lt;your-lambda-execution-role-arn&gt;</span><br></pre></td></tr></table></figure>
+这里需要指定函数名、运行时、入口文件
+(<code>index.js</code>里的<code>handler</code>方法)，并上传代码包。</p></li>
+<li><p><strong>配置触发器</strong>
+函数创建好了，但还不知道“听谁的号令”。我们需要为它配置一个触发器，比如一个公开的
+HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS API Gateway v2 为例，此步骤在控制台操作更直观</span></span><br><span class="line">aws apigatewayv2 create-api --name hello-api --protocol-type HTTP</span><br><span class="line"><span class="comment"># ... 此处省略若干步骤，建议在控制台界面完成 API Gateway 与 Lambda 的集成</span></span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>版本与灰度</strong>
+在生产环境中，直接更新线上代码是危险的。FaaS
+平台通常支持版本管理和别名（Alias）功能，你可以先发布一个新版本，然后让
+10% 的流量指向新版本，90%
+的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
+<li><p><strong>监控与告警</strong>
+函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
+5 分钟超过 1% 时，立即发短信通知我。</p></li>
+</ol>
+<h3
+id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h3>
+<p>FaaS
+的一大魅力在于其极致的成本效益，让我们来看看它是如何计费的，以及在使用中会遇到哪些“坑”。</p>
+<h4 id="计费模型对比">计费模型对比</h4>
+<p>各大云厂商的 FaaS 计费方式大同小异，通常都包含两个维度：</p>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 20%" />
+<col style="width: 24%" />
+<col style="width: 13%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr>
+<th>厂商</th>
+<th>最小计量（时长/内存）</th>
+<th>每月免费额度（调用/资源）</th>
+<th>计费维度</th>
+<th>关键备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWS Lambda</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 GB-秒</td>
+<td>调用次数 + GB-秒</td>
+<td>ARM 架构单价更低</td>
+</tr>
+<tr>
+<td>Azure Functions</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 GB-秒</td>
+<td>同上</td>
+<td>分为多种计划 (Plan)</td>
+</tr>
+<tr>
+<td>GCP Cloud Functions</td>
+<td>100 ms / 256 MB</td>
+<td>200 万次 / 40 万 GB-秒</td>
+<td>同上</td>
+<td>Gen2 冷启动优化明显</td>
+</tr>
+<tr>
+<td>阿里云函数计算</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 CU-秒</td>
+<td>调用次数 + CU-秒</td>
+<td>CU 是资源的综合单位</td>
+</tr>
+</tbody>
+</table>
+<p><strong>通用计费公式</strong>：<code>总费用 = 调用次数 × 次数单价 + (函数执行总时长 × 内存配置) × 资源单价</code></p>
+<p>可以看出，厂商们都在用慷慨的免费额度吸引开发者，对于个人项目或小型应用来说，很可能一个月都花不了几块钱。</p>
+<h4 id="常见坑与对策">常见“坑”与对策</h4>
+<p>在享受 FaaS 带来的便利时，也要小心避开下面这些常见的“坑”。</p>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 29%" />
+<col style="width: 54%" />
+</colgroup>
+<thead>
+<tr>
+<th>症状</th>
+<th>可能根因</th>
+<th>应对策略</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>冷启动太慢</strong> (1-3s)</td>
+<td>代码包过大、依赖库复杂、VPC 网络挂载</td>
+<td>1. <strong>瘦身</strong>：精简代码和依赖。 <br> 2.
+<strong>选型</strong>：选择 Go, Rust 等编译型语言。<br> 3.
+<strong>预热</strong>：开启预置并发（Provisioned Concurrency）。</td>
+</tr>
+<tr>
+<td><strong>并发被限流</strong></td>
+<td>达到账户并发上限或突发流量过大</td>
+<td>1. <strong>提额</strong>：联系云厂商提高并发额度。<br> 2.
+<strong>预留</strong>：为核心函数配置“预留并发”（Reserved
+Concurrency）。</td>
+</tr>
+<tr>
+<td><strong>本地调试困难</strong></td>
+<td>依赖云端服务，难以模拟触发事件</td>
+<td>使用官方模拟工具，如 AWS SAM, LocalStack, Midway FaaS 等。</td>
+</tr>
+<tr>
+<td><strong>配置管理混乱</strong></td>
+<td>多函数间配置散落，难以维护</td>
+<td>1. <strong>IaC</strong>：使用 Terraform, CDK
+等工具进行“基础设施即代码”管理。<br> 2.
+<strong>环境变量</strong>：将配置统一存储在环境变量或配置中心。</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>友情提示</strong>：FaaS
+虽好，但非万能。它特别适合短平快、无状态的计算任务。对于需要长连接（如
+WebSocket）、或对延迟极其敏感（如实时对战游戏）的应用，传统的容器或虚拟机方案可能依然是更好的选择。</p>
+</blockquote>
+<h3 id="小结">✨ 小结</h3>
+<p>让我们回到最初的问题：FaaS 究竟是什么？</p>
+<p>现在，我们可以更自信地回答：它是一种<strong>将应用拆解为微小、独立的函数，并由云平台全权负责其运行、伸缩和计费的现代化架构模式</strong>。</p>
+<p>它继承了 Serverless
+的核心思想，让开发者从繁重的服务器运维中彻底解放出来，将宝贵的精力聚焦于业务创新本身。</p>
+<p>当然，它也有冷启动这样的挑战，但通过合理的架构设计和优化手段，我们完全可以扬长避短。如果你正准备开启一个新项目，或希望重构一个老旧的单体应用，不妨给
+FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
+]]></content>
+      <tags>
+        <tag>Serverless</tag>
+        <tag>FaaS</tag>
+        <tag>云原生</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>NVBit 插桩：从 0 到可用</title>
     <url>/posts/d4c3b2a1/</url>
     <content><![CDATA[<p>NVBit 是 NVIDIA 开源的 CUDA
@@ -7216,276 +7489,182 @@ NVBit“在哪些指令前，插入哪些函数调用”。</p>
       </tags>
   </entry>
   <entry>
-    <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
-    <url>/posts/f1a2b3c4/</url>
-    <content><![CDATA[<p>本文介绍
-FaaS（函数即服务）的诞生背景、核心概念与应用场景，并演示如何部署第一个云函数。</p>
-<span id="more"></span>
-<h3 id="一faas-的诞生我们为何需要它">一、FaaS
-的诞生：我们为何需要它？</h3>
-<p>要理解 FaaS
-为何会横空出世，我们得先坐上时光机，回顾一下应用部署方式的“进化史”。</p>
-<p><strong>第一站：物理服务器时代</strong></p>
-<p>在遥远的“刀耕火种”年代，我们要部署一个网站，得先去机房买一台（或几台）物理服务器。这意味着漫长的采购周期、高昂的硬件成本，以及复杂的机器运维。最头疼的是，为了应对业务高峰，我们必须按最高标准购买硬件，导致服务器在大部分时间里都处于“摸鱼”状态，造成了巨大的资源浪费。</p>
-<p><strong>第二站：虚拟机 (IaaS) 时代</strong></p>
-<p>云计算的出现带来了转机。以 AWS EC2
-为代表的虚拟机服务，让我们告别了实体硬件，可以在云端“租”服务器。这极大地提高了灵活性，几分钟内就能创建一台虚拟机。但问题并没有完全解决：我们依然要为整台虚拟机买单，哪怕上面的应用空闲着。同时，操作系统的维护、安全补丁的更新，这些运维工作一样也没少。</p>
-<p><strong>第三站：容器 (PaaS/CaaS) 时代</strong></p>
-<p>Docker 和 Kubernetes
-的风靡，让部署进入了容器化时代。我们将应用和它的依赖打包成一个轻量的“集装箱”，实现了环境的标准化和交付的敏捷性。但新的“烦恼”也随之而来：为了运行这些容器，我们得维护一个庞大而复杂的
-Kubernetes 集群。容量规划、节点扩容、网络配置…
-我们似乎从“应用运维”的坑，跳进了“集群运维”的坑。</p>
-<p>兜兜转转，开发者们始终有一个终极梦想：<strong>我们能只关心业务代码，而彻底不用管服务器吗？</strong></p>
-<p>FaaS 响亮地回答了：“能！”</p>
-<p>它的核心思想简单而彻底：<strong>让开发者回归最纯粹的编程，将服务器及相关的一切运维工作，都交给云平台</strong>。无论是操作系统、运行时环境，还是弹性伸缩、高可用，你通通不用管。你的世界里，只剩下你的“函数”——那段实现核心业务逻辑的代码。</p>
-<p>简单来说，FaaS
-将付费模式从“为服务器资源付费”，进化到了“<strong>为代码的实际执行付费</strong>”。这不只是一次技术升级，更是一场开发思想的革命。</p>
-<h3 id="二拨开云雾faas-核心概念详解">二、拨开云雾：FaaS
-核心概念详解</h3>
-<p>理解了 FaaS 的“初心”，我们再来拆解几个围绕着它的核心概念。</p>
+    <title>CMake 入门</title>
+    <url>/posts/233853f2/</url>
+    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
+Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
+IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
+或分别维护 VS/Xcode 工程，成本会直线上升。</p>
+<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
+需要的工程与命令。 <span id="more"></span></p>
+<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
 <ul>
-<li><p><strong>FaaS (Function-as-a-Service, 函数即服务)</strong>
-这是我们要掌握的核心。我喜欢用一个比喻：<strong>租厨房，而不是租公寓</strong>。
-在传统模式下，为了做顿饭，你得先租下一整套公寓（服务器），自己装修（配环境）、打扫（运维）。而
-FaaS
-就像一个共享厨房，你只需带着菜谱（代码）进去，锅碗瓢盆（运行环境）一应俱全。你只为炒菜的几分钟付费，完事就走，绝不为厨房的闲置时间买单。</p></li>
-<li><p><strong>Serverless (无服务器架构)</strong>
-这是一个更宏大的理念，FaaS 只是它最广为人知的“代言人”。Serverless
-并非真的没有服务器，而是强调一种<strong>开发者无需关心服务器</strong>的架构思想。
-如果说 FaaS 是共享厨房，那 Serverless
-就是整个美食广场。这个广场里除了厨房（FaaS），还有现成的食材超市（BaaS -
-数据库服务）、统一的安保系统（BaaS - 身份验证服务）等等。Serverless
-的目标，就是让你作为大厨，能心无旁骛地专注于“炒菜”这一件事上。</p></li>
-<li><p><strong>事件驱动 (Event-Driven)</strong> 这是 FaaS
-的灵魂。你的函数并非 24
-小时待命，而是像个“懒汉”，<strong>“有事才干，没事歇着”</strong>。
-你可以把函数想象成一个装了门铃的房间。只有当“事件”发生时——比如有人按门铃（HTTP
-请求）、信箱里有新信件（文件上传）、手机闹钟响了（定时任务）——它才会被唤醒去开门（执行函数）。这种模式确保了资源不会被空耗。</p></li>
-<li><p><strong>冷启动 (Cold Start)</strong> 这是 FaaS
-的一个独特挑战。如果你的函数长时间没被调用（没人按门铃），平台为了节约资源，会把它“请回家休息”（回收实例）。当下一个请求突然到来时，平台需要重新给它分配资源、加载代码、初始化环境…
-这个过程就像大冬天里发动一台冷了很久的汽车，会有一个明显的延迟，这就是“冷启动”。
-一旦启动完毕，后续的连续请求就会非常快（这叫“热启动”），直到它再次因为“没人理”而进入休眠。</p></li>
-<li><p><strong>BaaS (Backend-as-a-Service, 后端即服务)</strong>
-前面提到，这是 Serverless
-美食广场的另一半。它提供了各种开箱即用的后端能力，比如数据库
-(<code>Firebase</code>)、对象存储 (<code>AWS S3</code>)、用户认证
-(<code>Auth0</code>) 等。FaaS 函数通常和 BaaS
-服务配合，一个主内（负责无状态的计算逻辑），一个主外（负责有状态的数据存储），共同构建出一个完整的
-Serverless 应用。</p></li>
+<li><p><strong>跨平台</strong>：一份
+<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
+Studio、Xcode）。</p></li>
+<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
+<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
 </ul>
-<h3 id="三身手初试faas-的真实应用场景">三、身手初试：FaaS
-的真实应用场景</h3>
-<p>理论听起来很棒，那 FaaS 在实际工作中到底能用来做什么呢？</p>
-<h4 id="场景一网站或小程序的后端-api">场景一：网站或小程序的后端
-API</h4>
-<p>这是 FaaS
-最经典的用法。假设你要为个人博客或小程序开发一个后端，但又不想为了偶尔的访问量，而去维护一台
-24 小时开机的服务器。</p>
-<ul>
-<li><strong>实例</strong>：一个“用户注册”接口。当用户在前端页面提交注册信息后，会调用一个
-API 网关，这个网关会触发我们的 FaaS
-函数。函数接收到用户信息，执行数据校验、写入数据库等操作，然后返回结果。整个过程可能只花费几百毫秒，你就只需要为这短暂的计算付费，经济又省心。</li>
-</ul>
-<h4 id="场景二自动化的数据处理">场景二：自动化的数据处理</h4>
-<p>FaaS 的事件驱动特性，让它成为自动化工作流的“神器”，尤其适合“当 A
-发生时，自动执行 B”这类任务。</p>
-<ul>
-<li><strong>实例</strong>：图片自动生成缩略图。在社交或电商网站，用户上传一张高清原图后，我们往往需要大、中、小等不同尺寸的缩略图。通过
-FaaS，我们可以设定一个规则：每当有图片上传到指定的存储桶（如 AWS
-S3），就自动触发一个函数。这个函数会读取原图，批量生成所需的缩略图，再存回存储桶。整个流程全自动，无需人工干预。</li>
-</ul>
-<h4 id="场景三轻量级的定时任务-cron-job">场景三：轻量级的定时任务 (Cron
-Job)</h4>
-<p>几乎每个系统都需要一些定期执行的任务，比如每日数据备份、定时发送报表等。</p>
-<ul>
-<li><strong>实例</strong>：生成每日运营报表。你可以设置一个定时触发器，比如每天凌晨
-2 点，准时调用一个 FaaS
-函数。这个函数会自动连接数据库，抓取前一天的用户增长、订单量等数据，生成一份精美的报表，并通过邮件发送给相关同事。</li>
-</ul>
-<h4 id="场景四物联网-iot-数据处理">场景四：物联网 (IoT) 数据处理</h4>
-<p>在物联网场景中，成千上万的设备可能会在瞬间产生海量数据，对后端的弹性伸缩能力是极大的考验。</p>
-<ul>
-<li><strong>实例</strong>：共享单车位置上报。每辆单车上的 GPS
-设备会定时将位置信息发送到一个消息队列中。FaaS
-函数可以订阅这个队列，每当有新消息进入，就触发一次执行，将最新的单车位置解析并更新到地图数据库中。FaaS
-的自动伸缩能力，能完美应对早晚高峰期的并发洪流。</li>
-</ul>
-<p>通过这些场景，不难发现 FaaS
-特别适合那些<strong>无状态、短执行、事件触发</strong>类型的任务。</p>
-<h3 id="四庖丁解牛faas-架构与上线实战">四、庖丁解牛：FaaS
-架构与上线实战</h3>
-<p>理论和场景都清楚了，是时候深入 FaaS
-平台的内部，看看它究竟是如何工作的，并亲手上线一个函数了。</p>
-<h4 id="架构解剖以-aws-lambda-为例">架构解剖（以 AWS Lambda 为例）</h4>
-<p>我们以目前最流行的 FaaS 平台 AWS Lambda 为例，看看一个典型的 FaaS
-调用流程包含哪些组件。 <pre>
+<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
+<pre>
 <code class="mermaid">
 
-graph LR
-EVT[&quot;事件源&lt;br&#x2F;&gt;S3 &#x2F; API Gateway &#x2F; MQ&quot;] --&gt; TRG(&quot;触发器&quot;)
-TRG --&gt; LBD[&quot;Lambda 托管 Runtime&quot;]
-LBD --&gt; ENI[(&quot;弹性网络&quot;)]
-LBD --&gt; LOG[&quot;CloudWatch Logs&quot;]
-LBD --&gt; DLQ[&quot;死信队列&lt;br&#x2F;&gt;(可选)&quot;]
+graph TD;
+  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
+  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
+  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
+  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
 </code>
-</pre></p>
+</pre>
+<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
 <ul>
-<li><strong>事件源</strong>：触发函数执行的“扳机”，可以是 S3
-的文件上传、API Gateway 的 HTTP 请求，或是消息队列里的新消息。</li>
-<li><strong>触发器</strong>：连接事件源和函数的“遥控器”，负责监听事件并调用目标函数。</li>
-<li><strong>Runtime</strong>：函数的运行环境，平台内置了 Node.js,
-Python, Go 等多种语言环境，也支持通过自定义镜像（Custom
-Runtime）运行任何语言。</li>
-<li><strong>弹性网络
-(ENI)</strong>：如果函数需要访问你私有网络（VPC）里的数据库等资源，平台会为其挂载一个弹性网络接口。</li>
-<li><strong>监控与日志 (CloudWatch
-Logs)</strong>：函数运行期间产生的日志（比如
-<code>console.log</code>）和各项指标（调用次数、执行时长等）会被自动收集起来，方便排查问题。</li>
+<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
+<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
+调用本机构建器编译/链接）。</li>
+<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
+Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
+<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
 </ul>
-<blockquote>
-<p><strong>解密冷启动</strong>：从上面的流程可以看出，一次冷启动的耗时主要来自：拉取代码镜像
-→ 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
-</blockquote>
-<h4 id="开发到上线五步法">开发到上线：五步法</h4>
-<p>接下来，我们用一个经典的 Hello World
-示例，走完从开发到上线的完整流程。</p>
-<ol type="1">
-<li><p><strong>初始化工程</strong>
-首先，在本地创建一个项目目录，并编写一个简单的 Node.js 函数。
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> hello-faas &amp;&amp; <span class="built_in">cd</span> <span class="variable">$_</span></span><br><span class="line"><span class="comment"># 创建一个 index.js 文件，内容如下</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;exports.handler = async (event) =&gt; &quot;Hello from FaaS!&quot;;&#x27;</span> &gt; index.js</span><br><span class="line"><span class="comment"># 将项目打包成 zip 文件</span></span><br><span class="line">zip -r function.zip .</span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>创建函数</strong>
-登录云厂商控制台（或使用命令行工具），创建一个新函数。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS CLI 为例</span></span><br><span class="line">aws lambda create-function \</span><br><span class="line">    --function-name hello-world \</span><br><span class="line">    --runtime nodejs20.x \</span><br><span class="line">    --handler index.handler \</span><br><span class="line">    --zip-file fileb://function.zip \</span><br><span class="line">    --role &lt;your-lambda-execution-role-arn&gt;</span><br></pre></td></tr></table></figure>
-这里需要指定函数名、运行时、入口文件
-(<code>index.js</code>里的<code>handler</code>方法)，并上传代码包。</p></li>
-<li><p><strong>配置触发器</strong>
-函数创建好了，但还不知道“听谁的号令”。我们需要为它配置一个触发器，比如一个公开的
-HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS API Gateway v2 为例，此步骤在控制台操作更直观</span></span><br><span class="line">aws apigatewayv2 create-api --name hello-api --protocol-type HTTP</span><br><span class="line"><span class="comment"># ... 此处省略若干步骤，建议在控制台界面完成 API Gateway 与 Lambda 的集成</span></span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>版本与灰度</strong>
-在生产环境中，直接更新线上代码是危险的。FaaS
-平台通常支持版本管理和别名（Alias）功能，你可以先发布一个新版本，然后让
-10% 的流量指向新版本，90%
-的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
-<li><p><strong>监控与告警</strong>
-函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
-5 分钟超过 1% 时，立即发短信通知我。</p></li>
-</ol>
-<h3
-id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h3>
-<p>FaaS
-的一大魅力在于其极致的成本效益，让我们来看看它是如何计费的，以及在使用中会遇到哪些“坑”。</p>
-<h4 id="计费模型对比">计费模型对比</h4>
-<p>各大云厂商的 FaaS 计费方式大同小异，通常都包含两个维度：</p>
-<table>
-<colgroup>
-<col style="width: 18%" />
-<col style="width: 20%" />
-<col style="width: 24%" />
-<col style="width: 13%" />
-<col style="width: 21%" />
-</colgroup>
-<thead>
-<tr>
-<th>厂商</th>
-<th>最小计量（时长/内存）</th>
-<th>每月免费额度（调用/资源）</th>
-<th>计费维度</th>
-<th>关键备注</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AWS Lambda</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 GB-秒</td>
-<td>调用次数 + GB-秒</td>
-<td>ARM 架构单价更低</td>
-</tr>
-<tr>
-<td>Azure Functions</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 GB-秒</td>
-<td>同上</td>
-<td>分为多种计划 (Plan)</td>
-</tr>
-<tr>
-<td>GCP Cloud Functions</td>
-<td>100 ms / 256 MB</td>
-<td>200 万次 / 40 万 GB-秒</td>
-<td>同上</td>
-<td>Gen2 冷启动优化明显</td>
-</tr>
-<tr>
-<td>阿里云函数计算</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 CU-秒</td>
-<td>调用次数 + CU-秒</td>
-<td>CU 是资源的综合单位</td>
-</tr>
-</tbody>
-</table>
-<p><strong>通用计费公式</strong>：<code>总费用 = 调用次数 × 次数单价 + (函数执行总时长 × 内存配置) × 资源单价</code></p>
-<p>可以看出，厂商们都在用慷慨的免费额度吸引开发者，对于个人项目或小型应用来说，很可能一个月都花不了几块钱。</p>
-<h4 id="常见坑与对策">常见“坑”与对策</h4>
-<p>在享受 FaaS 带来的便利时，也要小心避开下面这些常见的“坑”。</p>
-<table>
-<colgroup>
-<col style="width: 16%" />
-<col style="width: 29%" />
-<col style="width: 54%" />
-</colgroup>
-<thead>
-<tr>
-<th>症状</th>
-<th>可能根因</th>
-<th>应对策略</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>冷启动太慢</strong> (1-3s)</td>
-<td>代码包过大、依赖库复杂、VPC 网络挂载</td>
-<td>1. <strong>瘦身</strong>：精简代码和依赖。 <br> 2.
-<strong>选型</strong>：选择 Go, Rust 等编译型语言。<br> 3.
-<strong>预热</strong>：开启预置并发（Provisioned Concurrency）。</td>
-</tr>
-<tr>
-<td><strong>并发被限流</strong></td>
-<td>达到账户并发上限或突发流量过大</td>
-<td>1. <strong>提额</strong>：联系云厂商提高并发额度。<br> 2.
-<strong>预留</strong>：为核心函数配置“预留并发”（Reserved
-Concurrency）。</td>
-</tr>
-<tr>
-<td><strong>本地调试困难</strong></td>
-<td>依赖云端服务，难以模拟触发事件</td>
-<td>使用官方模拟工具，如 AWS SAM, LocalStack, Midway FaaS 等。</td>
-</tr>
-<tr>
-<td><strong>配置管理混乱</strong></td>
-<td>多函数间配置散落，难以维护</td>
-<td>1. <strong>IaC</strong>：使用 Terraform, CDK
-等工具进行“基础设施即代码”管理。<br> 2.
-<strong>环境变量</strong>：将配置统一存储在环境变量或配置中心。</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>友情提示</strong>：FaaS
-虽好，但非万能。它特别适合短平快、无状态的计算任务。对于需要长连接（如
-WebSocket）、或对延迟极其敏感（如实时对战游戏）的应用，传统的容器或虚拟机方案可能依然是更好的选择。</p>
-</blockquote>
-<h3 id="小结">✨ 小结</h3>
-<p>让我们回到最初的问题：FaaS 究竟是什么？</p>
-<p>现在，我们可以更自信地回答：它是一种<strong>将应用拆解为微小、独立的函数，并由云平台全权负责其运行、伸缩和计费的现代化架构模式</strong>。</p>
-<p>它继承了 Serverless
-的核心思想，让开发者从繁重的服务器运维中彻底解放出来，将宝贵的精力聚焦于业务创新本身。</p>
-<p>当然，它也有冷启动这样的挑战，但通过合理的架构设计和优化手段，我们完全可以扬长避短。如果你正准备开启一个新项目，或希望重构一个老旧的单体应用，不妨给
-FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
+<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
+<ul>
+<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
+<code>.sln/.vcxproj</code>、Xcode
+<code>.xcodeproj</code>（由生成器决定）。</li>
+<li>CMake
+缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
+<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
+<code>configure_file()</code> 生成的配置头/源文件。</li>
+<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
+</ul>
+<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
+<ul>
+<li>可执行文件：如 <code>build/hello</code>（Windows 为
+<code>build/hello.exe</code>）。</li>
+<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
+<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
+<li>自定义输出：可用
+<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
+调整位置。</li>
+</ul>
+<h3 id="分钟上手">5 分钟上手</h3>
+<p>目录结构：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
+<p><code>CMakeLists.txt</code>：</p>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
+<p><code>src/main.cpp</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>构建与运行：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
+<h3 id="cmake-改变了什么一个对比例子">CMake
+改变了什么：一个对比例子</h3>
+<p>场景：两个源文件
+<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
+Linux 与 Windows 上都能构建。</p>
+<ul>
+<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
+<li><p>Linux（GCC/Clang）：</p></li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li>Windows（MSVC）：</li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li><p>维护代价：命令不通用，IDE
+工程（VS/Xcode）还要各自维护一份。</p></li>
+<li><p>有 CMake（一份脚本到处用）</p></li>
+</ul>
+<p><code>CMakeLists.txt</code>：</p>
+<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
+<p>构建命令（所有平台一致）：</p>
+<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
+<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
+VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
+<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
+<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
+<p>以 Linux 的命令为例：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
+<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
+<code>/std:c++17</code>）。</p></li>
+<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
+<li><p><strong>src/main.cpp
+src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
+<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
+<code>include</code>。</p></li>
+<li><p><strong>-o app</strong>：输出可执行文件名为
+<code>app</code>。</p></li>
+</ul>
+<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
+CMake 希望你“声明语义、自动映射细节”的原因。</p>
+<h3 id="工作原理">工作原理</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
+  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
+  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
+  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
+</code>
+</pre>
+<p>概括：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
+<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>cmake_minimum_required(VERSION
+3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
+<li><p><strong>project(app LANGUAGES
+CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
+编译器与平台特性。</p></li>
+<li><p><strong>add_executable(app …)</strong>：声明目标
+<code>app</code>；CMake
+为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
+<li><p><strong>target_compile_features(app PRIVATE
+cxx_std_17)</strong>：声明“需要 C++17”，CMake
+按编译器映射成正确开关：</p>
+<ul>
+<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
+<li><p>MSVC：<code>/std:c++17</code></p></li>
+</ul></li>
+<li><p><strong>target_include_directories(app PRIVATE
+include)</strong>：声明头文件目录，按平台生成参数：</p>
+<ul>
+<li><p>GCC/Clang：<code>-I include</code></p></li>
+<li><p>MSVC：<code>/I include</code></p></li>
+</ul></li>
+</ul>
+<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
+<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
+<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
+<ul>
+<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
+<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
+<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
+<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
+平台工程生成方面配合 Xcode。</p></li>
+<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
+</ul>
+<p>此外，CMake
+也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
+往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
+<h3 id="就这么记住">就这么记住</h3>
+<ul>
+<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
+<li><p><strong>总在源码外构建</strong>：<code>-S</code>
+指源码，<code>-B</code> 指构建目录。</p></li>
+<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
+Make 还是 Ninja。</p></li>
+</ul>
+<h3 id="结语">结语</h3>
+<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
+就是省心的那一个。</p>
 ]]></content>
       <tags>
-        <tag>Serverless</tag>
-        <tag>FaaS</tag>
-        <tag>云原生</tag>
+        <tag>CMake</tag>
+        <tag>构建系统</tag>
+        <tag>C/C++</tag>
       </tags>
   </entry>
   <entry>
@@ -7790,185 +7969,6 @@ bpffs，并采用“双程序切换”减少流量抖动。</li>
         <tag>Linux</tag>
         <tag>eBPF</tag>
         <tag>计算机网络</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>CMake 入门</title>
-    <url>/posts/233853f2/</url>
-    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
-Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
-IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
-或分别维护 VS/Xcode 工程，成本会直线上升。</p>
-<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
-需要的工程与命令。 <span id="more"></span></p>
-<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
-<ul>
-<li><p><strong>跨平台</strong>：一份
-<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
-Studio、Xcode）。</p></li>
-<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
-<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
-</ul>
-<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
-  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
-  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
-  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
-</code>
-</pre>
-<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
-<ul>
-<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
-<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
-调用本机构建器编译/链接）。</li>
-<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
-Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
-<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
-</ul>
-<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
-<ul>
-<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
-<code>.sln/.vcxproj</code>、Xcode
-<code>.xcodeproj</code>（由生成器决定）。</li>
-<li>CMake
-缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
-<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
-<code>configure_file()</code> 生成的配置头/源文件。</li>
-<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
-</ul>
-<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
-<ul>
-<li>可执行文件：如 <code>build/hello</code>（Windows 为
-<code>build/hello.exe</code>）。</li>
-<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
-<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
-<li>自定义输出：可用
-<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
-调整位置。</li>
-</ul>
-<h3 id="分钟上手">5 分钟上手</h3>
-<p>目录结构：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
-<p><code>CMakeLists.txt</code>：</p>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
-<p><code>src/main.cpp</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>构建与运行：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
-<h3 id="cmake-改变了什么一个对比例子">CMake
-改变了什么：一个对比例子</h3>
-<p>场景：两个源文件
-<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
-Linux 与 Windows 上都能构建。</p>
-<ul>
-<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
-<li><p>Linux（GCC/Clang）：</p></li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li>Windows（MSVC）：</li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li><p>维护代价：命令不通用，IDE
-工程（VS/Xcode）还要各自维护一份。</p></li>
-<li><p>有 CMake（一份脚本到处用）</p></li>
-</ul>
-<p><code>CMakeLists.txt</code>：</p>
-<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
-<p>构建命令（所有平台一致）：</p>
-<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
-<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
-VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
-<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
-<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
-<p>以 Linux 的命令为例：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
-<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
-<code>/std:c++17</code>）。</p></li>
-<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
-<li><p><strong>src/main.cpp
-src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
-<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
-<code>include</code>。</p></li>
-<li><p><strong>-o app</strong>：输出可执行文件名为
-<code>app</code>。</p></li>
-</ul>
-<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
-CMake 希望你“声明语义、自动映射细节”的原因。</p>
-<h3 id="工作原理">工作原理</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
-  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
-  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
-  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
-</code>
-</pre>
-<p>概括：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
-<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>cmake_minimum_required(VERSION
-3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
-<li><p><strong>project(app LANGUAGES
-CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
-编译器与平台特性。</p></li>
-<li><p><strong>add_executable(app …)</strong>：声明目标
-<code>app</code>；CMake
-为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
-<li><p><strong>target_compile_features(app PRIVATE
-cxx_std_17)</strong>：声明“需要 C++17”，CMake
-按编译器映射成正确开关：</p>
-<ul>
-<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
-<li><p>MSVC：<code>/std:c++17</code></p></li>
-</ul></li>
-<li><p><strong>target_include_directories(app PRIVATE
-include)</strong>：声明头文件目录，按平台生成参数：</p>
-<ul>
-<li><p>GCC/Clang：<code>-I include</code></p></li>
-<li><p>MSVC：<code>/I include</code></p></li>
-</ul></li>
-</ul>
-<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
-<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
-<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
-<ul>
-<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
-<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
-<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
-<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
-平台工程生成方面配合 Xcode。</p></li>
-<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
-</ul>
-<p>此外，CMake
-也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
-往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
-<h3 id="就这么记住">就这么记住</h3>
-<ul>
-<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
-<li><p><strong>总在源码外构建</strong>：<code>-S</code>
-指源码，<code>-B</code> 指构建目录。</p></li>
-<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
-Make 还是 Ninja。</p></li>
-</ul>
-<h3 id="结语">结语</h3>
-<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
-就是省心的那一个。</p>
-]]></content>
-      <tags>
-        <tag>CMake</tag>
-        <tag>构建系统</tag>
-        <tag>C/C++</tag>
       </tags>
   </entry>
   <entry>
@@ -13709,389 +13709,6 @@ with LLVM</a></li>
       </tags>
   </entry>
   <entry>
-    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
-    <url>/posts/48c29df2/</url>
-    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
-<span id="more"></span></p>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Port（端口）</strong></td>
-<td>操作系统给网络程序分配的逻辑入口编号。</td>
-<td>一台机器里不同网络服务的门牌号</td>
-</tr>
-<tr>
-<td><strong>SSH</strong></td>
-<td>Secure Shell，远程登录与加密隧道工具。</td>
-<td>远程终端 + 隧道</td>
-</tr>
-<tr>
-<td><strong>RemoteForward</strong></td>
-<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
-<td>让服务器“借用”你本机端口</td>
-</tr>
-<tr>
-<td><strong>LocalForward</strong></td>
-<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
-<td>让本机访问远端服务</td>
-</tr>
-<tr>
-<td><strong>Proxy（代理）</strong></td>
-<td>代理服务，代替客户端向目标站点发请求。</td>
-<td>中间人转发流量</td>
-</tr>
-<tr>
-<td><strong>VS Code Port Forwarding</strong></td>
-<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
-<td>帮你转发，但有时会帮倒忙</td>
-</tr>
-</tbody>
-</table>
-<p>如果用更白话的话说：</p>
-<ul>
-<li><code>SSH</code>
-不只是远程登录工具，本质上还能顺手带一条加密管道</li>
-<li><code>RemoteForward</code>
-是让远端机器“借用”当前客户端上的某个端口</li>
-<li><code>LocalForward</code>
-是让本地机器“借道”去访问远端的某个端口</li>
-<li><code>Proxy</code>
-不是目标服务本身，而是一个代你转发请求的中间层</li>
-<li><code>VS Code 自动端口转发</code>
-则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
-</ul>
-<h3 id="程序program端口port套接字socket到底是什么关系">🧱
-程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
-<ul>
-<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
-<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
-<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
-<code>7897</code>，可以理解成网络入口的门牌号</li>
-<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
-IP:端口”之后形成的那个网络端点</li>
-</ul>
-<p>放到这次问题里看，会更容易理解：</p>
-<ul>
-<li>不是“端口自己在工作”，而是某个程序（program /
-process）创建了套接字（socket）并监听（listen）这个端口</li>
-<li>更准确地说，通常是同一个 <code>IP:端口</code>
-组合的监听套接字，只能被一个程序成功持有，比如
-<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
-<li>所以看到 <code>7897</code>
-在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
-<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
-这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
-</ul>
-<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
-<ul>
-<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
-<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
-<code>VS Code</code> 或 <code>ssh</code> helper</li>
-</ul>
-<p>一旦监听者变了，流量路径就会跟着变。</p>
-<p>这也是为什么这次故障排查不能只看“<code>7897</code>
-通不通”，还得看：</p>
-<ul>
-<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
-<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
-<code>7897</code></li>
-<li>或者两边是否在不同阶段都试图接管这个端口</li>
-</ul>
-<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
-自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
-<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
-<p>我使用的设备如下：</p>
-<ul>
-<li>macbook pro 2020</li>
-<li>win xiaoxin 14pro 2021</li>
-<li>linux 实验室的高性能服务器 atlanta</li>
-</ul>
-<p>当时的 SSH 配置如下：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<ul>
-<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
-<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
-<code>7897</code></li>
-<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
-隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
-<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
-的代理入口</li>
-</ul>
-<p>也就是说，<code>atlanta</code>
-并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
-<p>可以看这张链路拓扑图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
-<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
-<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
-<p>这意味着：</p>
-<ul>
-<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
-<li><code>atlanta</code> 也可以有一个自己的
-<code>127.0.0.1:7897</code></li>
-<li>SSH 的
-<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
-</ul>
-<p>问题在于，<strong>VS Code Remote SSH
-还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
-<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
-在监听，它可能会再做一层类似这样的映射：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>不过这里要注意一件事：<strong>这不是 VS Code
-的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
-<p>而 <code>atlanta 7897</code> 本来又是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
-<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
-<p>按当时的现象，最合理的解释是：</p>
-<ol type="1">
-<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
-<li>SSH 按配置建立了 <code>RemoteForward</code>，使
-<code>atlanta:7897 -&gt; Win本地:7897</code></li>
-<li>VS Code 又检测到远端 <code>7897</code>
-正在监听，于是自动做了端口转发</li>
-<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
-占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
-<li>因此，真正危险的情况更像是：VS Code
-因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
-本地 <code>7897</code></strong></li>
-<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
-的入口，还会被 VS Code 的转发链路卷进去</li>
-<li>最终结果就是：本地代理流量绕回
-SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
-</ol>
-<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
-<p>当时观察到的两个现象正好支持这个推断：</p>
-<ul>
-<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
-<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
-</ul>
-<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
-端口转发到底是怎么工作的</h3>
-<h4 id="remoteforward">RemoteForward</h4>
-<p><code>RemoteForward A B:C</code></p>
-<p>意思是：</p>
-<ul>
-<li>在远端机器监听 <code>A</code></li>
-<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
-</ul>
-<p>这里的配置：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>等价于：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这里很容易混淆的一点是：</p>
-<ul>
-<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
-<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
-</ul>
-<p>它真正表达的是：</p>
-<ul>
-<li>由远端程序去连接 <code>atlanta:7897</code></li>
-<li>SSH 再把这条连接转交给当前客户端本机的
-<code>127.0.0.1:7897</code></li>
-</ul>
-<p>所以更准确的理解应该是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
-<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
-连接里双向流动。也就是说：</p>
-<ul>
-<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
-的请求，会被送到当前客户端的 <code>7897</code></li>
-<li>当前客户端上的代理再去访问外网</li>
-<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
-</ul>
-<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
-<code>atlanta:7897</code>”。<code>RemoteForward</code>
-解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
-<p>因此，只要在 <code>atlanta</code> 上配置：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
-<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
-<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
-<p>VS Code Remote SSH 会做另一件事：</p>
-<ul>
-<li>发现远端某个端口在监听</li>
-<li>自动把它映射到本机</li>
-<li>让你本机直接访问远端服务</li>
-</ul>
-<p>这个功能本来是给
-<code>3000</code>、<code>8080</code>、<code>8888</code>
-这类开发服务准备的，比如远端起了 Web
-服务，你本机浏览器可以直接打开。</p>
-<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
-SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
-<p>典型应用场景一般有这些：</p>
-<ul>
-<li>远端跑了前端开发服务器，比如
-Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
-<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
-面板，本机可以直接点开预览</li>
-<li>远端临时起了一个调试
-API、管理后台或文档站，不想专门手敲隧道命令</li>
-<li>容器、跳板机或云主机里的服务只监听
-<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
-</ul>
-<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
-<ul>
-<li>端口是给人看的</li>
-<li>访问方向通常是“本机去看远端”</li>
-<li>即使换一个本地端口也无所谓，只要能打开就行</li>
-</ul>
-<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
-<ul>
-<li><code>process</code>：轮询远端
-<code>/proc</code>，找哪些进程正在监听端口</li>
-<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
-</ul>
-<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
-Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
-<code>4123</code>。</p>
-<p>所以对这次故障，更严谨的表述应该是：</p>
-<ul>
-<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
-<code>7897</code>”</li>
-<li>而是“VS Code 会自动转发远端
-<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
-<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
-</ul>
-<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
-隧道的代理口，确实属于“不该自动转发的端口”。</p>
-<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
-<ul>
-<li>开发端口通常是“给你打开页面用的”</li>
-<li>代理端口则是“给别的流量继续转发用的”</li>
-</ul>
-<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
-接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
-<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
-<p>因为它会同时制造两种错觉：</p>
-<table>
-<colgroup>
-<col style="width: 15%" />
-<col style="width: 40%" />
-<col style="width: 45%" />
-</colgroup>
-<thead>
-<tr>
-<th>现象</th>
-<th>容易误判成什么</th>
-<th>实际更可能是什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>atlanta curl</code> 无响应</td>
-<td>远端没网、机场挂了</td>
-<td>远端代理口被错误转发</td>
-</tr>
-<tr>
-<td>Win 本地机场节点看起来正常</td>
-<td>机场没问题</td>
-<td>但本地代理出口发生环路</td>
-</tr>
-<tr>
-<td>断开 VS Code SSH 后马上恢复</td>
-<td>偶发网络波动</td>
-<td>SSH/VS Code 转发链路有问题</td>
-</tr>
-<tr>
-<td>删除自动转发 <code>7897</code> 后恢复</td>
-<td>临时玄学</td>
-<td>端口冲突被解除</td>
-</tr>
-</tbody>
-</table>
-<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
-<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
-<p>下次再遇到类似问题，可以按这个顺序排查。</p>
-<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
-到底谁在监听</h4>
-<p>Windows 可以看：</p>
-<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
-<p>macOS / Linux 可以看：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>重点不是只看“有没有监听”，而是看：</p>
-<ul>
-<li>是 Clash 在监听</li>
-<li>还是 VS Code helper / SSH client 在监听</li>
-<li>还是两边都试图占这个端口</li>
-</ul>
-<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
-<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
-的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
-<h3 id="常见误区">🚫 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
-<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
-会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
-</tr>
-<tr>
-<td>看到节点正常，就说明代理没问题</td>
-<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
-</tr>
-<tr>
-<td><code>curl</code> 没输出一定是目标网站挂了</td>
-<td>不对。端口回环、代理黑洞、DNS
-被错误接管都可能表现成“卡死没输出”。</td>
-</tr>
-<tr>
-<td>VS Code 自动转发一定是好事</td>
-<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
-SSH 的 <code>RemoteForward</code>，又被 VS Code
-自动纳入端口转发候选；一旦 VS Code
-因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
-</blockquote>
-<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
-Clash，最稳的策略就三条：</p>
-<ul>
-<li>禁掉 VS Code 对代理端口的自动转发</li>
-<li>让远端端口和本地代理端口不要同号</li>
-<li>把不同设备的远端代理端口编号分开</li>
-</ul>
-<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>SSH</tag>
-        <tag>VS Code</tag>
-        <tag>端口转发</tag>
-        <tag>Proxy</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>从 ipconfig 出发，彻底搞懂 Windows 网络栈、网卡、路由、DNS 和 Tailscale</title>
     <url>/posts/7b5d2e9a/</url>
     <content><![CDATA[<p>一台电脑可能同时有多个网卡，不同网络的连接状态也各不相同。本文从
@@ -15932,6 +15549,389 @@ flowchart LR
         <tag>C/C++</tag>
         <tag>函数</tag>
         <tag>编程入门</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>SSH RemoteForward 踩坑：为什么 VS Code 自动转发会把本地代理绕死</title>
+    <url>/posts/48c29df2/</url>
+    <content><![CDATA[<p>昨天遇到一个奇怪的问题，我一连服务器，本地的代理就挂掉，国内的网站也进不去，一断开服务器，本地的网络就恢复正常。最后发现是端口转发出了问题。于是记录一下整个过程。
+<span id="more"></span></p>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Port（端口）</strong></td>
+<td>操作系统给网络程序分配的逻辑入口编号。</td>
+<td>一台机器里不同网络服务的门牌号</td>
+</tr>
+<tr>
+<td><strong>SSH</strong></td>
+<td>Secure Shell，远程登录与加密隧道工具。</td>
+<td>远程终端 + 隧道</td>
+</tr>
+<tr>
+<td><strong>RemoteForward</strong></td>
+<td>SSH 的远程端口转发，把远端某个端口的流量送回本地。</td>
+<td>让服务器“借用”你本机端口</td>
+</tr>
+<tr>
+<td><strong>LocalForward</strong></td>
+<td>SSH 的本地端口转发，把本地某个端口送到远端。</td>
+<td>让本机访问远端服务</td>
+</tr>
+<tr>
+<td><strong>Proxy（代理）</strong></td>
+<td>代理服务，代替客户端向目标站点发请求。</td>
+<td>中间人转发流量</td>
+</tr>
+<tr>
+<td><strong>VS Code Port Forwarding</strong></td>
+<td>VS Code Remote SSH 自动探测并映射端口的功能。</td>
+<td>帮你转发，但有时会帮倒忙</td>
+</tr>
+</tbody>
+</table>
+<p>如果用更白话的话说：</p>
+<ul>
+<li><code>SSH</code>
+不只是远程登录工具，本质上还能顺手带一条加密管道</li>
+<li><code>RemoteForward</code>
+是让远端机器“借用”当前客户端上的某个端口</li>
+<li><code>LocalForward</code>
+是让本地机器“借道”去访问远端的某个端口</li>
+<li><code>Proxy</code>
+不是目标服务本身，而是一个代你转发请求的中间层</li>
+<li><code>VS Code 自动端口转发</code>
+则是在远端发现服务后，顺手帮你把访问入口搬回本机</li>
+</ul>
+<h3 id="程序program端口port套接字socket到底是什么关系">🧱
+程序（program）、端口（port）、套接字（socket）到底是什么关系</h3>
+<ul>
+<li><strong>程序（program）</strong>：真正运行中的进程（process），比如
+<code>Clash Verge</code>、<code>curl</code>、<code>npm dev</code>、<code>sshd</code></li>
+<li><strong>端口（port）</strong>：操作系统上的一个编号，比如
+<code>7897</code>，可以理解成网络入口的门牌号</li>
+<li><strong>套接字（socket）</strong>：程序真正拿来监听（listen）或通信的对象，可以粗略理解成“某个程序占住了某个
+IP:端口”之后形成的那个网络端点</li>
+</ul>
+<p>放到这次问题里看，会更容易理解：</p>
+<ul>
+<li>不是“端口自己在工作”，而是某个程序（program /
+process）创建了套接字（socket）并监听（listen）这个端口</li>
+<li>更准确地说，通常是同一个 <code>IP:端口</code>
+组合的监听套接字，只能被一个程序成功持有，比如
+<code>127.0.0.1:7897</code> 正常情况下只能有一个监听者</li>
+<li>所以看到 <code>7897</code>
+在监听，只能说明“有程序占了这个门牌号”，不能直接说明是谁在处理流量</li>
+<li><code>lsof</code>、<code>ss</code>、<code>netstat</code>
+这类命令的意义，就是帮你把“端口”反查回“哪个程序持有了对应套接字”</li>
+</ul>
+<p>这也是为什么排障时不能只盯着“端口号是不是一样”，而要盯着：</p>
+<ul>
+<li>当前到底是谁持有了这个 <code>IP:端口</code> 的监听套接字</li>
+<li>是不是本来该由 <code>Clash</code> 持有，后来却变成了
+<code>VS Code</code> 或 <code>ssh</code> helper</li>
+</ul>
+<p>一旦监听者变了，流量路径就会跟着变。</p>
+<p>这也是为什么这次故障排查不能只看“<code>7897</code>
+通不通”，还得看：</p>
+<ul>
+<li>是 <code>Clash</code> 持有本地 <code>7897</code></li>
+<li>还是 <code>VS Code</code> / <code>ssh</code> helper 持有本地
+<code>7897</code></li>
+<li>或者两边是否在不同阶段都试图接管这个端口</li>
+</ul>
+<p>从这个角度说，<code>RemoteForward</code> 和 VS Code
+自动端口转发，本质上都是在安排“由哪个程序持有哪个套接字，并把流量交给谁继续处理”。</p>
+<h3 id="网络拓扑到底长什么样">🧩 网络拓扑到底长什么样</h3>
+<p>我使用的设备如下：</p>
+<ul>
+<li>macbook pro 2020</li>
+<li>win xiaoxin 14pro 2021</li>
+<li>linux 实验室的高性能服务器 atlanta</li>
+</ul>
+<p>当时的 SSH 配置如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Host Atlanta</span><br><span class="line">  HostName 10.16.98.45</span><br><span class="line">  User lzh</span><br><span class="line">  RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<ul>
+<li>从 Win 或 Mac SSH 到 <code>atlanta</code></li>
+<li>SSH 连接建立后，会让 <code>atlanta</code> 打开一个本地监听端口
+<code>7897</code></li>
+<li>任何打到 <code>atlanta:7897</code> 的流量，都会沿着 SSH
+隧道回到当前客户端的 <code>127.0.0.1:7897</code></li>
+<li>而客户端本机的 <code>127.0.0.1:7897</code>，正好是 Clash Verge
+的代理入口</li>
+</ul>
+<p>也就是说，<code>atlanta</code>
+并没有真正部署代理，只是“借用了当前登录机器上的本地代理”。</p>
+<p>可以看这张链路拓扑图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+------------------------+    SSH 连接 / 隧道     +------------------------+</span><br><span class="line">| Win / Mac              | &lt;-------------------&gt; | atlanta                |</span><br><span class="line">|                        |                       |                        |</span><br><span class="line">| Clash Verge :7897      |                       | localhost:7897         |</span><br><span class="line">| 本地代理监听             |                       | RemoteForward 监听口    |</span><br><span class="line">+-----------+------------+                       +-----------+------------+</span><br><span class="line">            ^                                                |</span><br><span class="line">            | RemoteForward 把远端 7897 的请求送回本地          | 远端程序访问代理</span><br><span class="line">            |                                                v</span><br><span class="line">            +---------------------------------------- atlanta curl / npm</span><br><span class="line"></span><br><span class="line">Clash :7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标网站 / API</span><br></pre></td></tr></table></figure>
+<h3 id="端口为什么会撞车">🔌 端口为什么会“撞车”</h3>
+<p>端口不是全局唯一的，它只在一台机器的网络命名空间里唯一。</p>
+<p>这意味着：</p>
+<ul>
+<li>你的 Win 本机可以有一个 <code>127.0.0.1:7897</code></li>
+<li><code>atlanta</code> 也可以有一个自己的
+<code>127.0.0.1:7897</code></li>
+<li>SSH 的
+<code>RemoteForward 7897 127.0.0.1:7897</code>，是在把这两个同号端口绑定成一条隧道</li>
+</ul>
+<p>问题在于，<strong>VS Code Remote SSH
+还有一套自己的端口转发系统</strong>。它会自动扫描远端监听端口，并尝试把它们转发回本地，方便你在浏览器或本机工具里访问。</p>
+<p>如果它看到 <code>atlanta</code> 上有个 <code>7897</code>
+在监听，它可能会再做一层类似这样的映射：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 7897  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>不过这里要注意一件事：<strong>这不是 VS Code
+的默认必然行为</strong>。官方文档写得很明确，如果本地同号端口已经被占用，它通常会改绑到别的本地端口，而不是硬抢这个端口。也就是说，更常见的情况其实是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">本地 4123  &lt;---- VS Code 自动转发 ----  atlanta 7897</span><br></pre></td></tr></table></figure>
+<p>而 <code>atlanta 7897</code> 本来又是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 7897  &lt;---- SSH RemoteForward ----  本地 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>两层叠起来，就容易出现环路或自咬尾巴。</p>
+<h3 id="这次故障最可能的形成过程">🔄 这次故障最可能的形成过程</h3>
+<p>按当时的现象，最合理的解释是：</p>
+<ol type="1">
+<li>我在 Win 上通过 VS Code Remote SSH 连到 <code>atlanta</code></li>
+<li>SSH 按配置建立了 <code>RemoteForward</code>，使
+<code>atlanta:7897 -&gt; Win本地:7897</code></li>
+<li>VS Code 又检测到远端 <code>7897</code>
+正在监听，于是自动做了端口转发</li>
+<li>按 VS Code 的正常行为，如果 Win 本地 <code>7897</code> 已经被 Clash
+占着，它本来应该改绑到别的本地端口，而不是继续占 <code>7897</code></li>
+<li>因此，真正危险的情况更像是：VS Code
+因为恢复了旧的端口映射，或者因为启动时序问题，实际又拿到了 <strong>Win
+本地 <code>7897</code></strong></li>
+<li>一旦这件事发生，“Win 本地 <code>7897</code>”就不再只是 Clash
+的入口，还会被 VS Code 的转发链路卷进去</li>
+<li>最终结果就是：本地代理流量绕回
+SSH，再绕回远端，再被转回来，形成回环或错误接管</li>
+</ol>
+<p>把这个过程单独画成“故障回环顺序图”，会更直观：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① SSH 先建立 RemoteForward</span><br><span class="line"></span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; Win 本地 127.0.0.1:7897</span><br><span class="line">  -&gt; Clash Verge</span><br><span class="line"></span><br><span class="line">② VS Code 发现 atlanta:7897 在监听</span><br><span class="line"></span><br><span class="line">本地某端口</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">③ 正常情况</span><br><span class="line"></span><br><span class="line">本地 4123</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line"></span><br><span class="line">Clash 继续独占本地 7897</span><br><span class="line"></span><br><span class="line">④ 危险情况：VS Code 因恢复旧映射或时序问题实际占回本地 7897</span><br><span class="line"></span><br><span class="line">本地 7897</span><br><span class="line">  &lt;- VS Code 自动转发 -&gt;</span><br><span class="line">atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 本地 7897</span><br><span class="line"></span><br><span class="line">结果：同一个端口同时处在“转发入口”和“代理出口”上，链路开始自绕</span><br></pre></td></tr></table></figure>
+<p>当时观察到的两个现象正好支持这个推断：</p>
+<ul>
+<li>只要断开 VS Code SSH，Win 本地网络立刻恢复</li>
+<li>只要删掉 VS Code 里自动转发的 <code>7897</code>，问题立刻消失</li>
+</ul>
+<h3 id="ssh-端口转发到底是怎么工作的">🛠️ SSH
+端口转发到底是怎么工作的</h3>
+<h4 id="remoteforward">RemoteForward</h4>
+<p><code>RemoteForward A B:C</code></p>
+<p>意思是：</p>
+<ul>
+<li>在远端机器监听 <code>A</code></li>
+<li>收到连接后，通过 SSH 隧道送到本地的 <code>B:C</code></li>
+</ul>
+<p>这里的配置：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">RemoteForward 7897 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>等价于：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta:7897  -&gt;  当前客户端:127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这里很容易混淆的一点是：</p>
+<ul>
+<li><code>SSH 隧道</code> 本身是双向承载数据的</li>
+<li>但 <code>RemoteForward</code> 定义的入口方向并不是对等的</li>
+</ul>
+<p>它真正表达的是：</p>
+<ul>
+<li>由远端程序去连接 <code>atlanta:7897</code></li>
+<li>SSH 再把这条连接转交给当前客户端本机的
+<code>127.0.0.1:7897</code></li>
+</ul>
+<p>所以更准确的理解应该是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta 上的程序</span><br><span class="line">  -&gt; 连接 atlanta:7897</span><br><span class="line">  -&gt; SSH RemoteForward</span><br><span class="line">  -&gt; 当前客户端的 127.0.0.1:7897</span><br></pre></td></tr></table></figure>
+<p>这条连接一旦建立，请求和响应都会在同一条被转发的 TCP
+连接里双向流动。也就是说：</p>
+<ul>
+<li><code>atlanta</code> 发给 <code>atlanta:7897</code>
+的请求，会被送到当前客户端的 <code>7897</code></li>
+<li>当前客户端上的代理再去访问外网</li>
+<li>外网返回的数据，会沿着同一条连接再返回给 <code>atlanta</code></li>
+</ul>
+<p>但这不等于“当前客户端也能靠这条 <code>RemoteForward</code> 主动去访问
+<code>atlanta:7897</code>”。<code>RemoteForward</code>
+解决的是“让远端借用本地服务”，不是让两端在这个端口上获得对等的主动访问能力。</p>
+<p>因此，只要在 <code>atlanta</code> 上配置：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&#x27;http://127.0.0.1:7897&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>流量其实并不是从 <code>atlanta</code> 直接出国，而是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">atlanta curl</span><br><span class="line">  -&gt; atlanta:7897</span><br><span class="line">  -&gt; SSH 隧道</span><br><span class="line">  -&gt; Win 本地 Clash:7897</span><br><span class="line">  -&gt; 机场节点</span><br><span class="line">  -&gt; 目标站点</span><br><span class="line">  &lt;- 响应原路返回</span><br></pre></td></tr></table></figure>
+<h4 id="vs-code-自动端口转发">VS Code 自动端口转发</h4>
+<p>VS Code Remote SSH 会做另一件事：</p>
+<ul>
+<li>发现远端某个端口在监听</li>
+<li>自动把它映射到本机</li>
+<li>让你本机直接访问远端服务</li>
+</ul>
+<p>这个功能本来是给
+<code>3000</code>、<code>8080</code>、<code>8888</code>
+这类开发服务准备的，比如远端起了 Web
+服务，你本机浏览器可以直接打开。</p>
+<p>它的核心作用其实很朴素：<strong>让“明明跑在远端”的服务，用起来像“跑在本机”一样顺手</strong>。这样你就不用每次都自己记
+SSH 隧道命令，也不用手工再开一层 <code>ssh -L</code>。</p>
+<p>典型应用场景一般有这些：</p>
+<ul>
+<li>远端跑了前端开发服务器，比如
+Vite、Next.js、Storybook，本机浏览器直接开 <code>localhost</code></li>
+<li>远端起了 Jupyter、Gradio、Streamlit、TensorBoard 这类本地 Web
+面板，本机可以直接点开预览</li>
+<li>远端临时起了一个调试
+API、管理后台或文档站，不想专门手敲隧道命令</li>
+<li>容器、跳板机或云主机里的服务只监听
+<code>127.0.0.1</code>，但你仍然想在本地 GUI 里访问它</li>
+</ul>
+<p>所以它最适合的是“开发服务”和“临时调试入口”。这类服务的共同特点是：</p>
+<ul>
+<li>端口是给人看的</li>
+<li>访问方向通常是“本机去看远端”</li>
+<li>即使换一个本地端口也无所谓，只要能打开就行</li>
+</ul>
+<p>它的探测方式，VS Code 团队在 issue 里解释过，主要有两类：</p>
+<ul>
+<li><code>process</code>：轮询远端
+<code>/proc</code>，找哪些进程正在监听端口</li>
+<li><code>output</code>：扫描终端或调试输出里像 URL / 端口的内容</li>
+</ul>
+<p>另外，官方文档也说明了一个关键细节：如果本地同号端口已经被占用，VS
+Code 往往会换一个本地端口，比如把远端 <code>3000</code> 映射到本地
+<code>4123</code>。</p>
+<p>所以对这次故障，更严谨的表述应该是：</p>
+<ul>
+<li>不是“VS Code 一看到远端 <code>7897</code> 就一定会再占本地
+<code>7897</code>”</li>
+<li>而是“VS Code 会自动转发远端
+<code>7897</code>；只有它因为恢复旧映射或时序问题真的落回本地
+<code>7897</code> 时，才会和 <code>RemoteForward</code> 叠成自环”</li>
+</ul>
+<p>也正因为如此，<code>7897</code> 这种本来就参与 SSH
+隧道的代理口，确实属于“不该自动转发的端口”。</p>
+<p>原因也不复杂：代理口和普通开发端口的角色完全不一样。</p>
+<ul>
+<li>开发端口通常是“给你打开页面用的”</li>
+<li>代理端口则是“给别的流量继续转发用的”</li>
+</ul>
+<p>前者被 VS Code 额外包一层映射，通常只是更方便；后者如果再被 IDE
+接管，就可能改变原来的流量路径，甚至把链路绕回自己。</p>
+<h3 id="为什么这类问题特别隐蔽">⚠️ 为什么这类问题特别隐蔽</h3>
+<p>因为它会同时制造两种错觉：</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 40%" />
+<col style="width: 45%" />
+</colgroup>
+<thead>
+<tr>
+<th>现象</th>
+<th>容易误判成什么</th>
+<th>实际更可能是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>atlanta curl</code> 无响应</td>
+<td>远端没网、机场挂了</td>
+<td>远端代理口被错误转发</td>
+</tr>
+<tr>
+<td>Win 本地机场节点看起来正常</td>
+<td>机场没问题</td>
+<td>但本地代理出口发生环路</td>
+</tr>
+<tr>
+<td>断开 VS Code SSH 后马上恢复</td>
+<td>偶发网络波动</td>
+<td>SSH/VS Code 转发链路有问题</td>
+</tr>
+<tr>
+<td>删除自动转发 <code>7897</code> 后恢复</td>
+<td>临时玄学</td>
+<td>端口冲突被解除</td>
+</tr>
+</tbody>
+</table>
+<p>根本原因是：<strong>表面上坏的是“网络”，实际上坏的是“流量路径”</strong>。</p>
+<h3 id="如何验证是不是端口回环">🧪 如何验证是不是端口回环</h3>
+<p>下次再遇到类似问题，可以按这个顺序排查。</p>
+<h4 id="在本机看-7897-到底谁在监听">在本机看 <code>7897</code>
+到底谁在监听</h4>
+<p>Windows 可以看：</p>
+<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line">netstat <span class="literal">-ano</span> | findstr <span class="number">7897</span></span><br></pre></td></tr></table></figure>
+<p>macOS / Linux 可以看：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">lsof -i :7897</span><br><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>重点不是只看“有没有监听”，而是看：</p>
+<ul>
+<li>是 Clash 在监听</li>
+<li>还是 VS Code helper / SSH client 在监听</li>
+<li>还是两边都试图占这个端口</li>
+</ul>
+<h4 id="在远端确认转发是否存在">在远端确认转发是否存在</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ss -ltnp | grep 7897</span><br></pre></td></tr></table></figure>
+<p>如果 <code>atlanta</code> 上有 <code>127.0.0.1:7897</code>
+的监听，很可能就是 SSH 建出来的 <code>RemoteForward</code>。</p>
+<h3 id="常见误区">🚫 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mac 先连上，Win 就会“占不到同一个远端端口”</td>
+<td>不一定。<code>RemoteForward</code> 作用在具体 SSH
+会话上，不能简单理解成一台机器上的全局唯一占坑。</td>
+</tr>
+<tr>
+<td>看到节点正常，就说明代理没问题</td>
+<td>不对。节点健康只说明客户端到订阅/控制面的状态正常，不代表数据流量没有回环。</td>
+</tr>
+<tr>
+<td><code>curl</code> 没输出一定是目标网站挂了</td>
+<td>不对。端口回环、代理黑洞、DNS
+被错误接管都可能表现成“卡死没输出”。</td>
+</tr>
+<tr>
+<td>VS Code 自动转发一定是好事</td>
+<td>只对普通开发服务是好事，对代理口、隧道口、数据库口未必。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>这次问题的本质，不是机场挂了，也不是服务器断网，而是远端代理口既参与了
+SSH 的 <code>RemoteForward</code>，又被 VS Code
+自动纳入端口转发候选；一旦 VS Code
+因恢复旧映射或启动时序异常实际占回本地同号端口，流量路径就会自我缠绕。</p>
+</blockquote>
+<p>如果你也在用 <code>RemoteForward</code> 让远端机器借用本地
+Clash，最稳的策略就三条：</p>
+<ul>
+<li>禁掉 VS Code 对代理端口的自动转发</li>
+<li>让远端端口和本地代理端口不要同号</li>
+<li>把不同设备的远端代理端口编号分开</li>
+</ul>
+<p>这样下次再遇到“本地看起来在线，远端却完全没网”的诡异故障，第一反应就不该是换节点，而该先检查端口转发链路。</p>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>SSH</tag>
+        <tag>VS Code</tag>
+        <tag>端口转发</tag>
+        <tag>Proxy</tag>
       </tags>
   </entry>
   <entry>
@@ -26815,11 +26815,17 @@ BPE。</p>
 </tr>
 </tbody>
 </table>
+<p>Qwen2.5 的 256 加 151387 正好等于词表条目 151643，再叠加 22 个特殊
+token；GPT-2 的 50257 条里已经包含了
+<code>&lt;|endoftext|&gt;</code>，所以 merges 加初始字节只有 50256。</p>
 <blockquote>
-<p>两边走的是同一个公式：Qwen2.5 = 256 + 151387 = 151643 条 BPE 条目，22
-个特殊 token 另外登记；GPT-2 = 256 + 50000 = 50256
-条，再加词表里本就写着的 <code>&lt;|endoftext|&gt;</code>，才是
-50257。</p>
+<p>这些特殊 token 在抓包时是会真的出现的：Qwen2.5-0.5B-Instruct 的
+<code>config.json</code> 里 <code>eos_token_id = 151645</code>，正是
+<code>&lt;|im_end|&gt;</code>。多轮对话的 prompt 用
+<code>&lt;|im_start|&gt;</code> 和 <code>&lt;|im_end|&gt;</code>
+包住每一轮，采样到 <code>&lt;|im_end|&gt;</code>
+就意味着本轮结束。所以转换表要把它们和 BPE 条目一起收进来（Qwen2.5 的 id
+口径是 151665 条，最大 id 151664），漏掉就解不出轮次边界。</p>
 </blockquote>
 <p><strong>初始单位是 256 个字节，不是字符</strong>。这是 byte-level BPE
 的关键：任何文本（汉字、emoji、二进制残留）先转成 UTF-8 字节，都能被这
