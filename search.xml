@@ -9392,6 +9392,269 @@ True。</li>
       </tags>
   </entry>
   <entry>
+    <title>Clash 与网络代理详解</title>
+    <url>/posts/755f751e/</url>
+    <content><![CDATA[<p>本文梳理 VPN、TUN
+模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>VPN</strong></td>
+<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
+<td>秘密隧道</td>
+</tr>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
+<td>传话筒</td>
+</tr>
+<tr>
+<td><strong>Clash</strong></td>
+<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
+<td>智能调度员</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
+<td>分流路牌</td>
+</tr>
+<tr>
+<td><strong>TUN</strong></td>
+<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
+<td>虚拟网卡</td>
+</tr>
+<tr>
+<td><strong>Mixin</strong></td>
+<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
+<td>补丁包</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>VPN</th>
+<th>代理 (Proxy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工作层级</strong></td>
+<td>操作系统层 (OSI L3 网络层)</td>
+<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
+</tr>
+<tr>
+<td><strong>接管范围</strong></td>
+<td>全局接管（通常），所有软件流量都走隧道</td>
+<td>仅接管支持代理设置的软件 (如浏览器)</td>
+</tr>
+<tr>
+<td><strong>加密程度</strong></td>
+<td>全程加密，强调安全性</td>
+<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
+</tr>
+<tr>
+<td><strong>灵活性</strong></td>
+<td>较差，通常“全走”或“全不走”</td>
+<td>极高，可按域名/进程分流</td>
+</tr>
+<tr>
+<td><strong>典型协议</strong></td>
+<td>WireGuard, OpenVPN, IPSec</td>
+<td>HTTP, Socks5, Shadowsocks, VMess</td>
+</tr>
+</tbody>
+</table>
+</blockquote>
+<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
+<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
+<h4 id="global-全局模式">1. Global 全局模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
+<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
+的所有活动。</li>
+<li><strong>缺点</strong>：访问国内网站（如
+B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
+</ul>
+<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
+<ul>
+<li><strong>原理</strong>：根据预设的规则列表（Rule
+List）智能判断。</li>
+<li><strong>流程</strong>：
+<ol type="1">
+<li>拦截请求。</li>
+<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
+<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
+</ol></li>
+<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
+</ul>
+<h4 id="direct-直连模式">3. Direct 直连模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
+<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
+</ul>
+<h4 id="script-脚本模式">4. Script 脚本模式</h4>
+<ul>
+<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
+<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
+</ul>
+<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
+<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
+Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
+<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
+7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
+7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
+<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
+<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
+<pre>
+<code class="mermaid">
+
+graph TD;
+    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
+    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
+    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
+    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
+    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
+</code>
+</pre>
+<ol type="1">
+<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
+<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
+<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
+<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
+3)，它处理的是 IP
+数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
+<li><strong>用户态处理</strong>：Clash 读取 TUN
+设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
+</ol>
+<blockquote>
+<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
+VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
+</blockquote>
+<blockquote>
+<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
+<p>这是一个核心问题：<strong>TUN
+模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
+<ul>
+<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
+Clash
+能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
+Clash 核心。</li>
+<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
+</ul>
+<p><strong>结论</strong>：开启 TUN
+模式并选择<strong>规则模式</strong>，意味着
+“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
+</blockquote>
+<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
+<p>在 Windows/macOS 上开启 TUN
+模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
+<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
+<strong>Service Mode</strong>。</p>
+<ul>
+<li><strong>守护进程</strong>：Service Mode
+会安装一个后台系统服务（Daemon）。</li>
+<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
+劫持、TUN 路由）。</li>
+<li><strong>UI 分离</strong>：Clash
+的图形界面（UI）只需要以普通权限运行，通过 IPC
+接口指挥后台服务干活。</li>
+<li><strong>主要作用</strong>：
+<ol type="1">
+<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
+<li><strong>系统级抗杀</strong>：UI
+关闭了，后台代理服务依然可以在线。</li>
+<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
+</ol></li>
+</ul>
+<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
+<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
+<h4 id="核心结构">核心结构</h4>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
+<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
+<p>很多时候我们使用机场提供的订阅链接，这个 URL
+下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
+TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
+<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
+<ul>
+<li><strong>原理</strong>：Clash
+启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
+配置，将两者<strong>合并</strong>。</li>
+<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
+<li><strong>用途</strong>：
+<ul>
+<li>强制开启 TUN 模式。</li>
+<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
+<li>添加个人的局域网 IP 直连规则。</li>
+</ul></li>
+</ul>
+<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
+模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
+IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
+浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
+的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
+</blockquote>
+<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
+<ol type="1">
+<li><strong>“开了全局模式就是最安全的”</strong>
+<ul>
+<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
+HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
+</ul></li>
+<li><strong>“Ping 值低网速就快”</strong>
+<ul>
+<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
+<code>TCP Handshake</code>
+时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
+等）。</li>
+</ul></li>
+<li><strong>“TUN 模式会影响打游戏吗？”</strong>
+<ul>
+<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
+协议，普通代理模式无法代理 UDP，必须开启 TUN
+模式才能让游戏流量走代理加速。</li>
+</ul></li>
+<li><strong>Clash 是 VPN 吗？</strong>
+<ul>
+<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
+<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
+VPN 几乎一致（接管全系统流量）。</li>
+</ul></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>Network</tag>
+        <tag>VPN</tag>
+        <tag>代理</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>BIOS</title>
     <url>/posts/ea91aa61/</url>
     <content><![CDATA[<p>从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里
@@ -10671,269 +10934,6 @@ A20 Gate。</li>
         <tag>固件</tag>
         <tag>启动流程</tag>
         <tag>UEFI</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Clash 与网络代理详解</title>
-    <url>/posts/755f751e/</url>
-    <content><![CDATA[<p>本文梳理 VPN、TUN
-模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>VPN</strong></td>
-<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
-<td>秘密隧道</td>
-</tr>
-<tr>
-<td><strong>Proxy</strong></td>
-<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
-<td>传话筒</td>
-</tr>
-<tr>
-<td><strong>Clash</strong></td>
-<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
-<td>智能调度员</td>
-</tr>
-<tr>
-<td><strong>Rule</strong></td>
-<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
-<td>分流路牌</td>
-</tr>
-<tr>
-<td><strong>TUN</strong></td>
-<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
-<td>虚拟网卡</td>
-</tr>
-<tr>
-<td><strong>Mixin</strong></td>
-<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
-<td>补丁包</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
-<table>
-<colgroup>
-<col style="width: 24%" />
-<col style="width: 20%" />
-<col style="width: 56%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>VPN</th>
-<th>代理 (Proxy)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>工作层级</strong></td>
-<td>操作系统层 (OSI L3 网络层)</td>
-<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
-</tr>
-<tr>
-<td><strong>接管范围</strong></td>
-<td>全局接管（通常），所有软件流量都走隧道</td>
-<td>仅接管支持代理设置的软件 (如浏览器)</td>
-</tr>
-<tr>
-<td><strong>加密程度</strong></td>
-<td>全程加密，强调安全性</td>
-<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
-</tr>
-<tr>
-<td><strong>灵活性</strong></td>
-<td>较差，通常“全走”或“全不走”</td>
-<td>极高，可按域名/进程分流</td>
-</tr>
-<tr>
-<td><strong>典型协议</strong></td>
-<td>WireGuard, OpenVPN, IPSec</td>
-<td>HTTP, Socks5, Shadowsocks, VMess</td>
-</tr>
-</tbody>
-</table>
-</blockquote>
-<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
-<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
-<h4 id="global-全局模式">1. Global 全局模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
-<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
-的所有活动。</li>
-<li><strong>缺点</strong>：访问国内网站（如
-B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
-</ul>
-<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
-<ul>
-<li><strong>原理</strong>：根据预设的规则列表（Rule
-List）智能判断。</li>
-<li><strong>流程</strong>：
-<ol type="1">
-<li>拦截请求。</li>
-<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
-<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
-</ol></li>
-<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
-</ul>
-<h4 id="direct-直连模式">3. Direct 直连模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
-<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
-</ul>
-<h4 id="script-脚本模式">4. Script 脚本模式</h4>
-<ul>
-<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
-<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
-</ul>
-<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
-<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
-Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
-<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
-7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
-7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
-<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
-<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
-<pre>
-<code class="mermaid">
-
-graph TD;
-    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
-    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
-    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
-    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
-    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
-</code>
-</pre>
-<ol type="1">
-<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
-<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
-<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
-<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
-3)，它处理的是 IP
-数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
-<li><strong>用户态处理</strong>：Clash 读取 TUN
-设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
-</ol>
-<blockquote>
-<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
-VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
-</blockquote>
-<blockquote>
-<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
-<p>这是一个核心问题：<strong>TUN
-模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
-<ul>
-<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
-Clash
-能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
-Clash 核心。</li>
-<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
-</ul>
-<p><strong>结论</strong>：开启 TUN
-模式并选择<strong>规则模式</strong>，意味着
-“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
-</blockquote>
-<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
-<p>在 Windows/macOS 上开启 TUN
-模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
-<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
-<strong>Service Mode</strong>。</p>
-<ul>
-<li><strong>守护进程</strong>：Service Mode
-会安装一个后台系统服务（Daemon）。</li>
-<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
-劫持、TUN 路由）。</li>
-<li><strong>UI 分离</strong>：Clash
-的图形界面（UI）只需要以普通权限运行，通过 IPC
-接口指挥后台服务干活。</li>
-<li><strong>主要作用</strong>：
-<ol type="1">
-<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
-<li><strong>系统级抗杀</strong>：UI
-关闭了，后台代理服务依然可以在线。</li>
-<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
-</ol></li>
-</ul>
-<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
-<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
-<h4 id="核心结构">核心结构</h4>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
-<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
-<p>很多时候我们使用机场提供的订阅链接，这个 URL
-下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
-TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
-<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
-<ul>
-<li><strong>原理</strong>：Clash
-启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
-配置，将两者<strong>合并</strong>。</li>
-<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
-<li><strong>用途</strong>：
-<ul>
-<li>强制开启 TUN 模式。</li>
-<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
-<li>添加个人的局域网 IP 直连规则。</li>
-</ul></li>
-</ul>
-<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
-模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
-IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
-浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
-的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
-</blockquote>
-<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
-<ol type="1">
-<li><strong>“开了全局模式就是最安全的”</strong>
-<ul>
-<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
-HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
-</ul></li>
-<li><strong>“Ping 值低网速就快”</strong>
-<ul>
-<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
-<code>TCP Handshake</code>
-时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
-等）。</li>
-</ul></li>
-<li><strong>“TUN 模式会影响打游戏吗？”</strong>
-<ul>
-<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
-协议，普通代理模式无法代理 UDP，必须开启 TUN
-模式才能让游戏流量走代理加速。</li>
-</ul></li>
-<li><strong>Clash 是 VPN 吗？</strong>
-<ul>
-<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
-<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
-VPN 几乎一致（接管全系统流量）。</li>
-</ul></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>Network</tag>
-        <tag>VPN</tag>
-        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -19496,338 +19496,6 @@ flowchart TD
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：多文件工程</title>
-    <url>/posts/b8d3f6a1/</url>
-    <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
-里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>声明（declaration）</td>
-<td>告诉编译器存在某个函数/变量，不给出实现</td>
-<td>说存在</td>
-</tr>
-<tr>
-<td>定义（definition）</td>
-<td>给出函数体或变量本体</td>
-<td>说怎么做</td>
-</tr>
-<tr>
-<td>头文件</td>
-<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
-<td>接口</td>
-</tr>
-<tr>
-<td>源文件</td>
-<td>放实现的 <code>.cpp</code> 文件</td>
-<td>实现</td>
-</tr>
-<tr>
-<td>include guard</td>
-<td>防止头文件被重复包含的宏保护</td>
-<td>只包含一次</td>
-</tr>
-<tr>
-<td><code>#pragma once</code></td>
-<td>另一种防止重复包含的写法</td>
-<td>简化版守卫</td>
-</tr>
-<tr>
-<td>编译单元</td>
-<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
-<td>独立编译的单位</td>
-</tr>
-<tr>
-<td>符号（symbol）</td>
-<td>函数/变量的名字标识</td>
-<td>链接的钥匙</td>
-</tr>
-<tr>
-<td>未定义引用</td>
-<td>声明了但找不到实现的符号</td>
-<td><code>undefined reference</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
-<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
-可执行程序。多文件工程就是把源码这一步拆成多个文件，每个
-<code>.cpp</code> 单独编译成
-<code>.o</code>，最后由链接器拼成可执行程序。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[main.cpp] --&gt; A1[main.o]
-    B[math.cpp] --&gt; B1[math.o]
-    C[utils.cpp] --&gt; C1[utils.o]
-    A1 --&gt; D[链接]
-    B1 --&gt; D
-    C1 --&gt; D
-    D --&gt; E[可执行程序]
-</code>
-</pre>
-<p>拆文件的收益：</p>
-<table>
-<thead>
-<tr>
-<th>好处</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>可读性</td>
-<td>每个文件只负责一块功能</td>
-</tr>
-<tr>
-<td>复用</td>
-<td>编译好的 <code>.o</code> 或库可以给别人用</td>
-</tr>
-<tr>
-<td>编译速度</td>
-<td>只改一个文件时，只需重编那一个</td>
-</tr>
-<tr>
-<td>协作</td>
-<td>多人各改各的文件，冲突少</td>
-</tr>
-</tbody>
-</table>
-<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
-<h4 id="标准模式">标准模式</h4>
-<p>一个模块通常拆成头文件（声明）+ 源文件（实现）两个文件。</p>
-<p>以一个小工具 <code>add</code> 为例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译时把多个源文件一起交给编译器：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
-<p>也可以分步编译，先各自生成目标文件再链接：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
-<h4 id="声明与定义的区别">声明与定义的区别</h4>
-<table>
-<thead>
-<tr>
-<th>代码</th>
-<th>类型</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int add(int a, int b);</code></td>
-<td>声明</td>
-<td>告诉编译器有这个函数</td>
-</tr>
-<tr>
-<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
-<td>定义</td>
-<td>给出函数体</td>
-</tr>
-</tbody>
-</table>
-<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
-<code>#include "math.h"</code> 就能调用
-<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
-章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
-<h3 id="头文件规范">🛡️ 头文件规范</h3>
-<h4 id="include-guard">include guard</h4>
-<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
-<p>原理：第一次包含时定义 <code>MATH_H</code>
-并展开内容；之后再次包含时，<code>MATH_H</code>
-已存在，整个内容被跳过。</p>
-<h4 id="pragma-once">#pragma once</h4>
-<p>另一种写法更简洁：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>优点</th>
-<th>注意</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#ifndef</code> 守卫</td>
-<td>标准 C++，所有编译器都支持</td>
-<td>宏名要唯一，别重名</td>
-</tr>
-<tr>
-<td><code>#pragma once</code></td>
-<td>简单、不易写错</td>
-<td>非标准，但主流编译器都支持</td>
-</tr>
-</tbody>
-</table>
-<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
-<h4 id="最小包含">最小包含</h4>
-<p>头文件里尽量只 <code>#include</code>
-真正需要的内容，能不放就不放：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
-<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
-<h3 id="编译单元">🧊 编译单元</h3>
-<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
-<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
-    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
-</code>
-</pre>
-<p>理解编译单元是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
-<code>.cpp</code>
-都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
-<blockquote>
-<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
-<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
-</blockquote>
-<h3 id="链接基础">🔗 链接基础</h3>
-<p>编译阶段每个 <code>.cpp</code>
-独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
-<table>
-<colgroup>
-<col style="width: 45%" />
-<col style="width: 27%" />
-<col style="width: 27%" />
-</colgroup>
-<thead>
-<tr>
-<th>链接错误</th>
-<th>原因</th>
-<th>解决</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>undefined reference</code>（未定义引用）</td>
-<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
-<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
-</tr>
-<tr>
-<td><code>multiple definition</code>（重复定义）</td>
-<td>同一个函数/全局变量被定义了两份</td>
-<td>定义只留一处，或把定义移出头文件</td>
-</tr>
-<tr>
-<td>找不到库</td>
-<td><code>-l</code> 参数写错或库未安装</td>
-<td>检查库名和链接参数</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
-<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
-<h4 id="循环包含">循环包含</h4>
-<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
-<code>a.h</code>，会形成死循环展开。include guard
-能挡住重复展开，但解决不了互相依赖本身。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
-<h4 id="头文件写实现">头文件写实现</h4>
-<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
-包含它，链接时就是重复定义：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
-<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
-<code>inline</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>inline</code>
-的字面意思是内联：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
-C++ 里，<code>inline</code>
-对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
-<code>.cpp</code>
-包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
-<blockquote>
-<p>现代编译器对是否真的内联展开有自己的判断，<code>inline</code>
-更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
-getter/setter）可以加 <code>inline</code>
-放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
-</blockquote>
-<h4 id="全局变量重复定义">全局变量重复定义</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
-<p>正解是头文件里只声明，源文件里定义：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>头文件里可以随便写实现</td>
-<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
-包含会重复定义</td>
-</tr>
-<tr>
-<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
-<td>两种都可以，保持一种习惯即可</td>
-</tr>
-<tr>
-<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
-<td>最小包含，只用需要的</td>
-</tr>
-<tr>
-<td>链接错误也是编译器错误</td>
-<td>编译已通过，链接失败是符号重复或找不到</td>
-</tr>
-<tr>
-<td>全局变量定义放头文件没问题</td>
-<td>每个编译单元各有一份，链接报重复定义</td>
-</tr>
-<tr>
-<td><code>#include</code> 越多越好，反正不会错</td>
-<td>增加编译依赖和冲突面，保持最小包含</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>多文件工程的骨架是头文件放声明、源文件放实现；每个 <code>.cpp</code>
-独立编译成目标文件，链接器负责把符号拼起来；头文件要加 include
-guard、保持最小包含，警惕重复定义和循环包含。</p>
-</blockquote>
-<p>到这一章，从第 1 章的编译流程到现在的多文件工程，已经把 C/C++
-工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
-管理这些编译命令。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>头文件</tag>
-        <tag>编译单元</tag>
-        <tag>链接</tag>
-        <tag>工程结构</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：拓展选学</title>
     <url>/posts/c6e1a9f2/</url>
     <content><![CDATA[<p>入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、<code>shared_ptr</code>
@@ -20856,6 +20524,338 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
         <tag>面向对象</tag>
         <tag>运算符重载</tag>
         <tag>静态成员</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：多文件工程</title>
+    <url>/posts/b8d3f6a1/</url>
+    <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
+里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>声明（declaration）</td>
+<td>告诉编译器存在某个函数/变量，不给出实现</td>
+<td>说存在</td>
+</tr>
+<tr>
+<td>定义（definition）</td>
+<td>给出函数体或变量本体</td>
+<td>说怎么做</td>
+</tr>
+<tr>
+<td>头文件</td>
+<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
+<td>接口</td>
+</tr>
+<tr>
+<td>源文件</td>
+<td>放实现的 <code>.cpp</code> 文件</td>
+<td>实现</td>
+</tr>
+<tr>
+<td>include guard</td>
+<td>防止头文件被重复包含的宏保护</td>
+<td>只包含一次</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>另一种防止重复包含的写法</td>
+<td>简化版守卫</td>
+</tr>
+<tr>
+<td>编译单元</td>
+<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
+<td>独立编译的单位</td>
+</tr>
+<tr>
+<td>符号（symbol）</td>
+<td>函数/变量的名字标识</td>
+<td>链接的钥匙</td>
+</tr>
+<tr>
+<td>未定义引用</td>
+<td>声明了但找不到实现的符号</td>
+<td><code>undefined reference</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
+<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
+可执行程序。多文件工程就是把源码这一步拆成多个文件，每个
+<code>.cpp</code> 单独编译成
+<code>.o</code>，最后由链接器拼成可执行程序。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp] --&gt; A1[main.o]
+    B[math.cpp] --&gt; B1[math.o]
+    C[utils.cpp] --&gt; C1[utils.o]
+    A1 --&gt; D[链接]
+    B1 --&gt; D
+    C1 --&gt; D
+    D --&gt; E[可执行程序]
+</code>
+</pre>
+<p>拆文件的收益：</p>
+<table>
+<thead>
+<tr>
+<th>好处</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>可读性</td>
+<td>每个文件只负责一块功能</td>
+</tr>
+<tr>
+<td>复用</td>
+<td>编译好的 <code>.o</code> 或库可以给别人用</td>
+</tr>
+<tr>
+<td>编译速度</td>
+<td>只改一个文件时，只需重编那一个</td>
+</tr>
+<tr>
+<td>协作</td>
+<td>多人各改各的文件，冲突少</td>
+</tr>
+</tbody>
+</table>
+<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
+<h4 id="标准模式">标准模式</h4>
+<p>一个模块通常拆成头文件（声明）+ 源文件（实现）两个文件。</p>
+<p>以一个小工具 <code>add</code> 为例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译时把多个源文件一起交给编译器：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<p>也可以分步编译，先各自生成目标文件再链接：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
+<h4 id="声明与定义的区别">声明与定义的区别</h4>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>类型</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int add(int a, int b);</code></td>
+<td>声明</td>
+<td>告诉编译器有这个函数</td>
+</tr>
+<tr>
+<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
+<td>定义</td>
+<td>给出函数体</td>
+</tr>
+</tbody>
+</table>
+<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
+<code>#include "math.h"</code> 就能调用
+<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
+章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
+<h3 id="头文件规范">🛡️ 头文件规范</h3>
+<h4 id="include-guard">include guard</h4>
+<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
+<p>原理：第一次包含时定义 <code>MATH_H</code>
+并展开内容；之后再次包含时，<code>MATH_H</code>
+已存在，整个内容被跳过。</p>
+<h4 id="pragma-once">#pragma once</h4>
+<p>另一种写法更简洁：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>优点</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#ifndef</code> 守卫</td>
+<td>标准 C++，所有编译器都支持</td>
+<td>宏名要唯一，别重名</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>简单、不易写错</td>
+<td>非标准，但主流编译器都支持</td>
+</tr>
+</tbody>
+</table>
+<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
+<h4 id="最小包含">最小包含</h4>
+<p>头文件里尽量只 <code>#include</code>
+真正需要的内容，能不放就不放：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
+<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
+<h3 id="编译单元">🧊 编译单元</h3>
+<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
+<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
+    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
+</code>
+</pre>
+<p>理解编译单元是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
+<code>.cpp</code>
+都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
+<blockquote>
+<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
+<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
+</blockquote>
+<h3 id="链接基础">🔗 链接基础</h3>
+<p>编译阶段每个 <code>.cpp</code>
+独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
+<table>
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>链接错误</th>
+<th>原因</th>
+<th>解决</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>undefined reference</code>（未定义引用）</td>
+<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
+<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
+</tr>
+<tr>
+<td><code>multiple definition</code>（重复定义）</td>
+<td>同一个函数/全局变量被定义了两份</td>
+<td>定义只留一处，或把定义移出头文件</td>
+</tr>
+<tr>
+<td>找不到库</td>
+<td><code>-l</code> 参数写错或库未安装</td>
+<td>检查库名和链接参数</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
+<h4 id="循环包含">循环包含</h4>
+<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
+<code>a.h</code>，会形成死循环展开。include guard
+能挡住重复展开，但解决不了互相依赖本身。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
+<h4 id="头文件写实现">头文件写实现</h4>
+<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
+包含它，链接时就是重复定义：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
+<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
+<code>inline</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>inline</code>
+的字面意思是内联：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
+C++ 里，<code>inline</code>
+对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
+<code>.cpp</code>
+包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
+<blockquote>
+<p>现代编译器对是否真的内联展开有自己的判断，<code>inline</code>
+更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
+getter/setter）可以加 <code>inline</code>
+放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
+</blockquote>
+<h4 id="全局变量重复定义">全局变量重复定义</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
+<p>正解是头文件里只声明，源文件里定义：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>头文件里可以随便写实现</td>
+<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
+包含会重复定义</td>
+</tr>
+<tr>
+<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
+<td>两种都可以，保持一种习惯即可</td>
+</tr>
+<tr>
+<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
+<td>最小包含，只用需要的</td>
+</tr>
+<tr>
+<td>链接错误也是编译器错误</td>
+<td>编译已通过，链接失败是符号重复或找不到</td>
+</tr>
+<tr>
+<td>全局变量定义放头文件没问题</td>
+<td>每个编译单元各有一份，链接报重复定义</td>
+</tr>
+<tr>
+<td><code>#include</code> 越多越好，反正不会错</td>
+<td>增加编译依赖和冲突面，保持最小包含</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>多文件工程的骨架是头文件放声明、源文件放实现；每个 <code>.cpp</code>
+独立编译成目标文件，链接器负责把符号拼起来；头文件要加 include
+guard、保持最小包含，警惕重复定义和循环包含。</p>
+</blockquote>
+<p>到这一章，从第 1 章的编译流程到现在的多文件工程，已经把 C/C++
+工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
+管理这些编译命令。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>头文件</tag>
+        <tag>编译单元</tag>
+        <tag>链接</tag>
+        <tag>工程结构</tag>
       </tags>
   </entry>
   <entry>
@@ -22749,6 +22749,228 @@ class="uri">https://os.phil-opp.com/</a></li>
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
+    <url>/posts/a5117577/</url>
+    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
+只是地图上的一种东西。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
+href="/posts/5d0b788d/">Rust OS
+入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
+需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理内存（Physical Memory）</td>
+<td>真正的 RAM 硬件</td>
+<td>可读写的存储芯片</td>
+</tr>
+<tr>
+<td>物理地址（Physical Address）</td>
+<td>CPU 访问物理资源时产生的地址</td>
+<td>不一定是 RAM 的地址</td>
+</tr>
+<tr>
+<td>物理地址空间（Physical Address Space）</td>
+<td>CPU 眼中全部地址的集合</td>
+<td>一张地址地图，RAM 只是其中一种</td>
+</tr>
+<tr>
+<td>MMIO（Memory-Mapped I/O）</td>
+<td>把设备寄存器映射进地址空间</td>
+<td>读写内存 = 操作硬件</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>记录地址区域用途的地图</td>
+<td>Kernel 靠它分辨能碰/不能碰</td>
+</tr>
+<tr>
+<td>Reserved</td>
+<td>地址空间里存在但 OS 不能用的区域</td>
+<td>千万别拿来当 RAM</td>
+</tr>
+<tr>
+<td>虚拟地址（Virtual Address）</td>
+<td>程序看到的地址，经 MMU 翻译</td>
+<td>程序眼里的地址是假的</td>
+</tr>
+</tbody>
+</table>
+<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
+<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
+RAM，那确实很简单：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
+<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
+时产生的地址叫<strong>物理地址（Physical
+Address）</strong>，而<strong>这个地址背后的东西不一定是
+RAM</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
+只是其中一种资源。</strong></p>
+</blockquote>
+<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
+<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
+<p>逐个来看：</p>
+<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
+本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
+<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
+附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
+访问它时路径是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
+<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
+ROM</strong>。</p>
+<p><strong>MMIO</strong>：见下一节。</p>
+<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
+<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
+<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
+的思想很简单：</p>
+<blockquote>
+<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
+</blockquote>
+<p>硬件工程师的思路是：CPU 本来就有读地址 /
+写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
+就不需要额外的指令来访问设备了。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
+<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
+<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
+附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
+MMIO，只是地址和机制更复杂。</p>
+<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
+<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
+<ul>
+<li>被硬件使用</li>
+<li>被固件使用</li>
+<li>对应 MMIO</li>
+<li>有特殊用途</li>
+<li>芯片组保留区域</li>
+</ul>
+<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
+<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
+= 硬件。</p>
+<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</h3>
+<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
+Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
+不能靠猜</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
+<p>它需要一张地图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>整个启动链路串起来就是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
+<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
+Allocator</h3>
+<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
+为例，下一步就是 <strong>Frame
+Allocator（物理页帧分配器）</strong>：</p>
+<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
+是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
+frame</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
+<p>之后所有内存需求都从这里申请：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
+<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
+Memory</strong> 就是接下来最自然的学习路线。</p>
+<h3 id="虚拟地址程序看到的地址是假的">🕳️
+虚拟地址：程序看到的地址是假的</h3>
+<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
+<p>通常<strong>并不是 RAM
+的物理地址</strong>，而是<strong>虚拟地址（Virtual
+Address）</strong>。现代操作系统的地址翻译链路是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
+<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
+<code>0x7FFF0000</code>，实际过程是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
+<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
+个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一层：虚拟地址空间</td>
+<td>程序看到的地址</td>
+<td><code>0x7FFF0000</code></td>
+</tr>
+<tr>
+<td>第二层：物理地址空间</td>
+<td>MMU 翻译后的地址</td>
+<td><code>0x12345000</code></td>
+</tr>
+<tr>
+<td>第三层：真正的硬件</td>
+<td>地址最终对应的东西</td>
+<td>RAM / MMIO / Firmware / Reserved</td>
+</tr>
+</tbody>
+</table>
+<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
+<ul>
+<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
+Stack/Heap、Page Tables、各进程的
+Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
+<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
+RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
+控制区域等。</li>
+</ul>
+<p><strong>这两处提到的内存内容不是一回事。</strong></p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
+只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
+分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
+Allocator，进而进入虚拟内存的世界。</p>
+</blockquote>
+<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
+Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
+Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>内存管理</tag>
+        <tag>物理地址</tag>
+        <tag>MMIO</tag>
+        <tag>Memory Map</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 入门：从按下电源键到内核接管</title>
     <url>/posts/5d0b788d/</url>
     <content><![CDATA[<p>按下电源键时，RAM
@@ -23166,228 +23388,6 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
         <tag>实模式</tag>
         <tag>Rust</tag>
         <tag>Bootloader</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
-    <url>/posts/a5117577/</url>
-    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
-只是地图上的一种东西。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
-href="/posts/5d0b788d/">Rust OS
-入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
-需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
-为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>物理内存（Physical Memory）</td>
-<td>真正的 RAM 硬件</td>
-<td>可读写的存储芯片</td>
-</tr>
-<tr>
-<td>物理地址（Physical Address）</td>
-<td>CPU 访问物理资源时产生的地址</td>
-<td>不一定是 RAM 的地址</td>
-</tr>
-<tr>
-<td>物理地址空间（Physical Address Space）</td>
-<td>CPU 眼中全部地址的集合</td>
-<td>一张地址地图，RAM 只是其中一种</td>
-</tr>
-<tr>
-<td>MMIO（Memory-Mapped I/O）</td>
-<td>把设备寄存器映射进地址空间</td>
-<td>读写内存 = 操作硬件</td>
-</tr>
-<tr>
-<td>Memory Map</td>
-<td>记录地址区域用途的地图</td>
-<td>Kernel 靠它分辨能碰/不能碰</td>
-</tr>
-<tr>
-<td>Reserved</td>
-<td>地址空间里存在但 OS 不能用的区域</td>
-<td>千万别拿来当 RAM</td>
-</tr>
-<tr>
-<td>虚拟地址（Virtual Address）</td>
-<td>程序看到的地址，经 MMU 翻译</td>
-<td>程序眼里的地址是假的</td>
-</tr>
-</tbody>
-</table>
-<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
-<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
-RAM，那确实很简单：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
-<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
-时产生的地址叫<strong>物理地址（Physical
-Address）</strong>，而<strong>这个地址背后的东西不一定是
-RAM</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
-只是其中一种资源。</strong></p>
-</blockquote>
-<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
-<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
-<p>逐个来看：</p>
-<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
-本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
-<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
-附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
-访问它时路径是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
-<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
-ROM</strong>。</p>
-<p><strong>MMIO</strong>：见下一节。</p>
-<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
-<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
-<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
-的思想很简单：</p>
-<blockquote>
-<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
-</blockquote>
-<p>硬件工程师的思路是：CPU 本来就有读地址 /
-写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
-就不需要额外的指令来访问设备了。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
-<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
-<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
-附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
-MMIO，只是地址和机制更复杂。</p>
-<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
-<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
-<ul>
-<li>被硬件使用</li>
-<li>被固件使用</li>
-<li>对应 MMIO</li>
-<li>有特殊用途</li>
-<li>芯片组保留区域</li>
-</ul>
-<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
-<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
-= 硬件。</p>
-<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
-Map：Bootloader 为什么要传给 Kernel</h3>
-<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
-Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
-不能靠猜</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
-<p>它需要一张地图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
-<p>整个启动链路串起来就是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
-<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
-Allocator</h3>
-<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
-为例，下一步就是 <strong>Frame
-Allocator（物理页帧分配器）</strong>：</p>
-<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
-是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
-frame</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
-<p>之后所有内存需求都从这里申请：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
-<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
-Memory</strong> 就是接下来最自然的学习路线。</p>
-<h3 id="虚拟地址程序看到的地址是假的">🕳️
-虚拟地址：程序看到的地址是假的</h3>
-<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
-<p>通常<strong>并不是 RAM
-的物理地址</strong>，而是<strong>虚拟地址（Virtual
-Address）</strong>。现代操作系统的地址翻译链路是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
-<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
-<code>0x7FFF0000</code>，实际过程是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
-<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
-个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>层级</th>
-<th>内容</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>第一层：虚拟地址空间</td>
-<td>程序看到的地址</td>
-<td><code>0x7FFF0000</code></td>
-</tr>
-<tr>
-<td>第二层：物理地址空间</td>
-<td>MMU 翻译后的地址</td>
-<td><code>0x12345000</code></td>
-</tr>
-<tr>
-<td>第三层：真正的硬件</td>
-<td>地址最终对应的东西</td>
-<td>RAM / MMIO / Firmware / Reserved</td>
-</tr>
-</tbody>
-</table>
-<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
-<ul>
-<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
-Stack/Heap、Page Tables、各进程的
-Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
-<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
-RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
-控制区域等。</li>
-</ul>
-<p><strong>这两处提到的内存内容不是一回事。</strong></p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
-只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
-分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
-Allocator，进而进入虚拟内存的世界。</p>
-</blockquote>
-<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
-Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
-Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>内存管理</tag>
-        <tag>物理地址</tag>
-        <tag>MMIO</tag>
-        <tag>Memory Map</tag>
       </tags>
   </entry>
   <entry>
@@ -27048,6 +27048,10 @@ token，计算时会把后面的位置屏蔽掉，每个位置只能看自己和
 prompt</strong>
 的原因：每个位置的输出只依赖它前面的输入，所有位置可以并行算；而 decode
 阶段新来的 token 依赖已经算完的全部历史，只能一个接一个地来。</p>
+<p>注意力内部会先把每个位置的向量投影成三份：Query（这个位置在找什么）、Key（这个位置有什么特征）、Value（被关注时贡献什么信息），再用
+Query 和各个 Key 匹配、按匹配度加权取 Value。所谓 <strong>KV
+cache</strong>，缓存的就是每层算好的 Key 和
+Value，名字的来源就在这里。</p>
 <h3 id="从-hidden-到-logits再到下一个-id">从 hidden 到
 logits，再到下一个 id</h3>
 <p>24 层走完，取最后一个位置的向量（1 x 896），过 <strong>LM
@@ -27057,9 +27061,11 @@ Head</strong> 映射到 151936 维。</p>
 表是同一份权重。模型读问题用的表和写答案用的表是同一张，本文研究的转换表也正是这张表的
 id 到字节映射。</p>
 <p>得到的 151936 个数就是 <strong>logits</strong>，每个候选 token
-一个分数，可以是任意实数。采样器按这些分数挑出一个
-id：贪心就是取最大；温度（temperature）调整概率分布的尖锐程度，越低越确定；top-p
-只保留累计概率达到 p 的那几个候选再重新采样。这几个开关只影响选哪个
+一个分数，可以是任意实数。中间过一次 softmax
+把它变成概率分布，采样器再从分布里挑出一个
+id：贪心就是取概率最大的那个；温度（temperature）在 softmax 之前把
+logits 除以 T，T 越小分布越尖锐、越确定；top-p 只保留累计概率达到 p
+的那几个候选再重新采样。这三个开关只影响选哪个
 id，不改变前面任何一步的数据形态。</p>
 <p>生成是自回归的：每产生一个 id
 就把它拼回序列，再跑一轮。模型的输出都是这样一 token 一 token

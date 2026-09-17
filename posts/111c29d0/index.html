@@ -30,7 +30,7 @@
 <meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-17T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-17T03:37:04.472Z">
+<meta property="article:modified_time" content="2026-09-17T03:39:02.483Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="LLM">
 <meta property="article:tag" content="PCIe">
@@ -265,7 +265,7 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-17 11:00:00 / Modified: 11:37:04" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+      <time title="Created: 2026-09-17 11:00:00 / Modified: 11:39:02" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
     </span>
 
   
@@ -653,6 +653,10 @@ token，计算时会把后面的位置屏蔽掉，每个位置只能看自己和
 prompt</strong>
 的原因：每个位置的输出只依赖它前面的输入，所有位置可以并行算；而 decode
 阶段新来的 token 依赖已经算完的全部历史，只能一个接一个地来。</p>
+<p>注意力内部会先把每个位置的向量投影成三份：Query（这个位置在找什么）、Key（这个位置有什么特征）、Value（被关注时贡献什么信息），再用
+Query 和各个 Key 匹配、按匹配度加权取 Value。所谓 <strong>KV
+cache</strong>，缓存的就是每层算好的 Key 和
+Value，名字的来源就在这里。</p>
 <h3 id="从-hidden-到-logits再到下一个-id">从 hidden 到
 logits，再到下一个 id</h3>
 <p>24 层走完，取最后一个位置的向量（1 x 896），过 <strong>LM
@@ -662,9 +666,11 @@ Head</strong> 映射到 151936 维。</p>
 表是同一份权重。模型读问题用的表和写答案用的表是同一张，本文研究的转换表也正是这张表的
 id 到字节映射。</p>
 <p>得到的 151936 个数就是 <strong>logits</strong>，每个候选 token
-一个分数，可以是任意实数。采样器按这些分数挑出一个
-id：贪心就是取最大；温度（temperature）调整概率分布的尖锐程度，越低越确定；top-p
-只保留累计概率达到 p 的那几个候选再重新采样。这几个开关只影响选哪个
+一个分数，可以是任意实数。中间过一次 softmax
+把它变成概率分布，采样器再从分布里挑出一个
+id：贪心就是取概率最大的那个；温度（temperature）在 softmax 之前把
+logits 除以 T，T 越小分布越尖锐、越确定；top-p 只保留累计概率达到 p
+的那几个候选再重新采样。这三个开关只影响选哪个
 id，不改变前面任何一步的数据形态。</p>
 <p>生成是自回归的：每产生一个 id
 就把它拼回序列，再跑一轮。模型的输出都是这样一 token 一 token
