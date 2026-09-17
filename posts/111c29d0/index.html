@@ -30,7 +30,7 @@
 <meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-17T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-17T02:26:00.660Z">
+<meta property="article:modified_time" content="2026-09-17T03:37:04.472Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="LLM">
 <meta property="article:tag" content="PCIe">
@@ -176,8 +176,9 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E6%8E%A8%E7%90%86%E9%87%8C%E6%95%B0%E6%8D%AE%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number"></span> <span class="nav-text">🧭 一次推理里，数据长什么样</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%96%87%E6%9C%AC%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-token"><span class="nav-number"></span> <span class="nav-text">✂️ 文本怎么变成 token</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%88%87"><span class="nav-number">1.</span> <span class="nav-text">为什么要切</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bpe-%E7%9A%84%E7%9B%B4%E8%A7%89"><span class="nav-number">2.</span> <span class="nav-text">BPE 的直觉</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E7%9C%9F%E5%AE%9E%E5%88%87%E5%88%86"><span class="nav-number">3.</span> <span class="nav-text">一次真实切分</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%C4%A1-%E5%88%B0%E5%BA%95%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">Ġ 到底是什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#token-%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-id"><span class="nav-number"></span> <span class="nav-text">🔢 token 怎么变成 id</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#id-%E5%8F%AA%E6%98%AF%E8%A1%8C%E5%8F%B7"><span class="nav-number">1.</span> <span class="nav-text">id 只是行号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%B9%E6%AE%8A-token-%E4%B8%8D%E5%9C%A8-bpe-%E8%A1%A8%E9%87%8C"><span class="nav-number">2.</span> <span class="nav-text">特殊 token 不在 BPE 表里</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E8%BF%9B-gpu-%E4%B9%8B%E5%90%8E%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧩 id 进 GPU 之后发生什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5-embedding-%E8%A1%A8"><span class="nav-number">1.</span> <span class="nav-text">查 embedding 表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%89%8D%E5%90%91%E8%AE%A1%E7%AE%97%E4%B8%8E%E9%87%87%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">前向计算与采样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#prefill-%E4%B8%8E-decode%E4%B8%A4%E7%A7%8D%E6%B5%81%E9%87%8F%E5%BD%A2%E6%80%81"><span class="nav-number">3.</span> <span class="nav-text">prefill 与
-decode：两种流量形态</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E6%80%8E%E4%B9%88%E5%9B%9E%E5%88%B0%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🔁 id 怎么回到文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E5%BC%A0%E4%B8%BB%E8%A6%81%E7%9A%84%E8%AF%8D%E8%A1%A8%E6%A0%BC%E5%BC%8F"><span class="nav-number"></span> <span class="nav-text">📋 三张主要的词表格式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E7%A7%8D%E6%B5%81%E6%B4%BE"><span class="nav-number">1.</span> <span class="nav-text">三种流派</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E6%96%87%E4%BB%B6%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">真实文件长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%90%BD%E5%88%B0%E6%8A%93%E5%8C%85%E5%9C%BA%E6%99%AF%E4%B8%80%E4%B8%B2-id-%E5%8F%8D%E6%9F%A5%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🎯 落到抓包场景：一串 id
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E6%8E%A8%E7%90%86%E9%87%8C%E6%95%B0%E6%8D%AE%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number"></span> <span class="nav-text">🧭 一次推理里，数据长什么样</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%96%87%E6%9C%AC%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-token"><span class="nav-number"></span> <span class="nav-text">✂️ 文本怎么变成 token</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%88%87"><span class="nav-number">1.</span> <span class="nav-text">为什么要切</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bpe-%E7%9A%84%E7%9B%B4%E8%A7%89"><span class="nav-number">2.</span> <span class="nav-text">BPE 的直觉</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E7%9C%9F%E5%AE%9E%E5%88%87%E5%88%86"><span class="nav-number">3.</span> <span class="nav-text">一次真实切分</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%C4%A1-%E5%88%B0%E5%BA%95%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">Ġ 到底是什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#token-%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-id"><span class="nav-number"></span> <span class="nav-text">🔢 token 怎么变成 id</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#id-%E5%8F%AA%E6%98%AF%E8%A1%8C%E5%8F%B7"><span class="nav-number">1.</span> <span class="nav-text">id 只是行号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%B9%E6%AE%8A-token-%E4%B8%8D%E5%9C%A8-bpe-%E8%A1%A8%E9%87%8C"><span class="nav-number">2.</span> <span class="nav-text">特殊 token 不在 BPE 表里</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E8%BF%9B-gpu-%E4%B9%8B%E5%90%8E%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧩 id 进 GPU 之后发生什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5-embedding-%E8%A1%A8"><span class="nav-number">1.</span> <span class="nav-text">查 embedding 表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E5%B1%82-transformer-%E9%87%8C%E5%81%9A%E4%BB%80%E4%B9%88"><span class="nav-number">2.</span> <span class="nav-text">一层 Transformer 里做什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%A8%E6%84%8F%E5%8A%9B%E5%9C%A8%E5%81%9A%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">注意力在做什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-hidden-%E5%88%B0-logits%E5%86%8D%E5%88%B0%E4%B8%8B%E4%B8%80%E4%B8%AA-id"><span class="nav-number">4.</span> <span class="nav-text">从 hidden 到
+logits，再到下一个 id</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#prefill-%E4%B8%8E-decode%E4%B8%A4%E7%A7%8D%E6%B5%81%E9%87%8F%E5%BD%A2%E6%80%81"><span class="nav-number">5.</span> <span class="nav-text">prefill 与
+decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%99%E4%BA%9B%E6%95%B0%E6%8D%AE%E5%9C%A8%E9%93%BE%E8%B7%AF%E4%B8%8A%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">6.</span> <span class="nav-text">这些数据在链路上长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E6%80%8E%E4%B9%88%E5%9B%9E%E5%88%B0%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🔁 id 怎么回到文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E5%BC%A0%E4%B8%BB%E8%A6%81%E7%9A%84%E8%AF%8D%E8%A1%A8%E6%A0%BC%E5%BC%8F"><span class="nav-number"></span> <span class="nav-text">📋 三张主要的词表格式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E7%A7%8D%E6%B5%81%E6%B4%BE"><span class="nav-number">1.</span> <span class="nav-text">三种流派</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E6%96%87%E4%BB%B6%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">真实文件长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%90%BD%E5%88%B0%E6%8A%93%E5%8C%85%E5%9C%BA%E6%99%AF%E4%B8%80%E4%B8%B2-id-%E5%8F%8D%E6%9F%A5%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🎯 落到抓包场景：一串 id
 反查文本</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%95%E8%A7%A3%E6%B5%81%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">试解流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E8%AF%95%E8%A7%A3%E7%BB%93%E6%9E%9C"><span class="nav-number">2.</span> <span class="nav-text">真实试解结果</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-dma-%E6%95%B0%E6%8D%AE%E9%87%8C%E5%88%87%E5%87%BA-id-%E5%BA%8F%E5%88%97"><span class="nav-number">3.</span> <span class="nav-text">从 DMA 数据里切出 id 序列</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%B9%E6%98%93%E8%B8%A9%E7%9A%84%E5%9D%91"><span class="nav-number"></span> <span class="nav-text">⚠️ 容易踩的坑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number"></span> <span class="nav-text">📌 小结</span></a></div>
         </div>
         <!--/noindex-->
@@ -264,7 +265,7 @@ decode：两种流量形态</span></a></li></ol></li><li class="nav-item nav-lev
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-17 11:00:00 / Modified: 10:26:00" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+      <time title="Created: 2026-09-17 11:00:00 / Modified: 11:37:04" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
     </span>
 
   
@@ -281,14 +282,14 @@ decode：两种流量形态</span></a></li></ol></li><li class="nav-item nav-lev
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>10k</span>
+      <span>13k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>19 mins.</span>
+      <span>24 mins.</span>
     </span>
 </div>
 
@@ -370,7 +371,10 @@ Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 </table>
 <h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
 <p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ tokenizer.encode()：规范化 + 切分 + 查表</span><br><span class="line">token id 序列 [53702, 68, 18137, ...]        ← 4 字节一个整数</span><br><span class="line">   ↓ 驱动排队，DMA 搬上 GPU</span><br><span class="line">embedding 查表</span><br><span class="line">   ↓ n_tokens x 896 的向量矩阵（bfloat16）</span><br><span class="line">24 层 Transformer 前向</span><br><span class="line">   ↓ 取最后一行，映射到 151936 维</span><br><span class="line">logits</span><br><span class="line">   ↓ 采样（贪心 / 温度 / top-p）</span><br><span class="line">下一个 token id</span><br><span class="line">   ↓ 追加进上下文，回到 embedding 那一步</span><br><span class="line">   ...</span><br><span class="line">   ↓ tokenizer.decode()：id -&gt; 字节 -&gt; 拼接 -&gt; UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ tokenizer.encode()</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
+<p>能看出来整条链上的数量级变化：<strong>76 B 的编号 → 33 KiB 的向量 →
+594 KiB 的分数 → 又是 4 B
+的编号</strong>。抓包看到的往往是两头的小数据，中间的大块计算留在显存里。</p>
 <p>往下按这条链路的顺序拆。前两段（文字到 id）完全在 CPU
 上完成，跟模型权重无关，可以离线跑；第三段在 GPU 里；第四段又回到
 CPU。</p>
@@ -621,22 +625,49 @@ BPE token 硬拆成字节。GPT-2
 只有一个（<code>&lt;|endoftext|&gt;</code>，id 50256）。</p>
 <h2 id="id-进-gpu-之后发生什么">🧩 id 进 GPU 之后发生什么</h2>
 <h3 id="查-embedding-表">查 embedding 表</h3>
-<p>GPU 拿到 id 序列后的第一件事是查表：embedding 表有 vocab_size
-行，每行是一个 hidden_size 维向量。Qwen2.5-0.5B 的 config 是
-<code>vocab_size=151936</code>、<code>hidden_size=896</code>，用
-bfloat16（2 字节）存：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">151936 x 896 x 2 B = 259.7 MiB</span><br></pre></td></tr></table></figure>
-<p>也就是说，链路上那几个字节的 id，一进显存就膨胀成 n_tokens x 896
-的向量矩阵。之后所有计算都在这个向量空间里做，跟 token
-的文本形态再无关系。</p>
-<h3 id="前向计算与采样">前向计算与采样</h3>
-<p>向量序列依次穿过 24 层 Transformer（注意力 +
-前馈网络），最后一行向量被映射到 151936 维，就是
-<strong>logits</strong>：每个候选 token 一个分数。采样器按这些分数挑一个
-id 出来（贪心取最大，或用温度、top-p 控制随机性），这个 id
-既是要追加到上下文里继续生成的内容，也是最终回传给主机的结果。</p>
+<p>GPU 拿到 id 序列后的第一件事是查表。Qwen2.5-0.5B 的 config 是
+<code>vocab_size=151936</code>、<code>hidden_size=896</code>，也就是
+151936 行、每行 896 个 bfloat16 数：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Token IDs  [53702, 68, 18137, ...]</span><br><span class="line">     │</span><br><span class="line">     │ 每个 id 当行号，取出表里对应的一行</span><br><span class="line">     ↓</span><br><span class="line">┌────────────────────────────────┐</span><br><span class="line">│ Embedding Table   151936 x 896 │  ← 权重的一部分，加载时一次性搬进显存</span><br><span class="line">│  row 53702  -&gt; vector 0        │</span><br><span class="line">│  row 68     -&gt; vector 1        │</span><br><span class="line">│  row 18137  -&gt; vector 2        │</span><br><span class="line">└───────────────┬────────────────┘</span><br><span class="line">                ↓</span><br><span class="line">           19 x 896 矩阵</span><br></pre></td></tr></table></figure>
+<p>整张表按 bfloat16 算是 259.7 MiB（151936 x 896 x 2 B），比链路上那 76
+字节的 id 大了好几个数量级。这一步在实现上是 <strong>gather
+而不是矩阵乘法</strong>：id 就是行号，取哪几行完全由 id 决定，同一个 id
+出现两次就取两次。</p>
+<p>对抓包来说这一点值得琢磨：如果能看到显存访问的行地址分布，id
+序列基本就暴露了。但链路抓不到显存内部的访问，只能看到进出 GPU
+的传输，所以这条路走不通——真正能用的还是本文讲的转换表反查。</p>
+<h3 id="一层-transformer-里做什么">一层 Transformer 里做什么</h3>
+<p>embedding 的输出是一张 n_tokens x 896 的矩阵，之后依次穿过 24
+层，每一层做的事都一样：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line">hidden states  (n x 896)</span><br><span class="line">        ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. RMSNorm          │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 2. Self-Attention   │  ← 每个 token 回看自己和前面的 token</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 3. Add residual     │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. RMSNorm          │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 5. FFN (MLP)        │  ← 896 → 4864 → 896</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 6. Add residual     │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">next layer  (n x 896)</span><br></pre></td></tr></table></figure>
+<p><code>4864</code> 来自 config 的 <code>intermediate_size</code>，是
+FFN 的中间维度，比 896 大五倍多。注意力的两头各要做一次矩阵乘法，FFN
+里还有两次，这些就是每层的主要计算量。<strong>它们全在显存里完成，链路上看不到中间过程</strong>——这正是抓包只能拿到进出的
+id、拿不到计算细节的原因。</p>
+<h3 id="注意力在做什么">注意力在做什么</h3>
+<p>注意力的作用是让每个位置的向量去参考其它位置的信息。为了防止模型看到还没生成的
+token，计算时会把后面的位置屏蔽掉，每个位置只能看自己和前面的位置：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">      t1  t2  t3  t4  t5</span><br><span class="line">t1    #   .   .   .   .</span><br><span class="line">t2    #   #   .   .   .</span><br><span class="line">t3    #   #   #   .   .</span><br><span class="line">t4    #   #   #   #   .</span><br><span class="line">t5    #   #   #   #   #</span><br></pre></td></tr></table></figure>
+<p><code>#</code> 表示可见，<code>.</code> 表示屏蔽。t1 只能看自己，t5
+能看到前面所有位置。这个下三角形状正是 <strong>prefill 能一次算完整个
+prompt</strong>
+的原因：每个位置的输出只依赖它前面的输入，所有位置可以并行算；而 decode
+阶段新来的 token 依赖已经算完的全部历史，只能一个接一个地来。</p>
+<h3 id="从-hidden-到-logits再到下一个-id">从 hidden 到
+logits，再到下一个 id</h3>
+<p>24 层走完，取最后一个位置的向量（1 x 896），过 <strong>LM
+Head</strong> 映射到 151936 维。</p>
+<p>Qwen2.5-0.5B 的 config 里写着
+<code>tie_word_embeddings = true</code>：这个输出矩阵和输入 embedding
+表是同一份权重。模型读问题用的表和写答案用的表是同一张，本文研究的转换表也正是这张表的
+id 到字节映射。</p>
+<p>得到的 151936 个数就是 <strong>logits</strong>，每个候选 token
+一个分数，可以是任意实数。采样器按这些分数挑出一个
+id：贪心就是取最大；温度（temperature）调整概率分布的尖锐程度，越低越确定；top-p
+只保留累计概率达到 p 的那几个候选再重新采样。这几个开关只影响选哪个
+id，不改变前面任何一步的数据形态。</p>
 <p>生成是自回归的：每产生一个 id
-就把它拼回序列，再跑一轮。所有模型输出都是这样一 token 一 token
+就把它拼回序列，再跑一轮。模型的输出都是这样一 token 一 token
 挤出来的，没有一次生成整段的情况。</p>
 <h3 id="prefill-与-decode两种流量形态">prefill 与
 decode：两种流量形态</h3>
@@ -670,9 +701,11 @@ decode：两种流量形态</h3>
 </tr>
 </tbody>
 </table>
-<p>KV cache 是注意力缓存的 K 和 V 向量，避免每生成一个 token
-就重算整段历史。Qwen2.5-0.5B 的规模是每 token 12.0 KiB（24 层 x 2 x 2 个
-KV 头 x 64 维 x 2 字节），4k 上下文约 48 MiB。</p>
+<p>两阶段的差别根源在 KV cache：注意力算出来的 K 和 V
+可以缓存下来，下一轮直接复用，不必每生成一个 token
+就把整段历史重算一遍。代价是显存，Qwen2.5-0.5B 每 token 12.0 KiB（24 层
+x 2 x 2 个 KV 头 x 64 维 x 2 字节），4k 上下文约 48 MiB。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">prefill</span><br><span class="line">┌────────────────────────┐</span><br><span class="line">│ prompt: A B C D E      │  ← 5 个位置并行算完</span><br><span class="line">└───────────┬────────────┘</span><br><span class="line">            ↓</span><br><span class="line">┌────────────────────────┐</span><br><span class="line">│ KV cache: A B C D E    │  ← 每层的 K/V 写进显存</span><br><span class="line">└───────────┬────────────┘</span><br><span class="line">            ↓ 取最后一个位置</span><br><span class="line">        logits → 采样 → F</span><br><span class="line"></span><br><span class="line">decode</span><br><span class="line">┌────────────────────────┐</span><br><span class="line">│ KV cache: A B C D E F  │  ← 读缓存，只算 F 这一个位置</span><br><span class="line">└───────────┬────────────┘</span><br><span class="line">            ↓</span><br><span class="line">        logits → 采样 → G</span><br></pre></td></tr></table></figure>
 <p>从抓包角度看，这个区别意味着：</p>
 <ul>
 <li><strong>权重</strong>在模型加载阶段一次性搬完（0.5B 参数按 bfloat16
@@ -685,6 +718,49 @@ token 数乘以每个 id 的字节数。</li>
 <li>KV cache 通常只待在显存里；一旦出现 CPU offload、KV cache swapping
 这类显存不够的兜底策略，链路上就会出现周期性的 KV cache 搬运流量。</li>
 </ul>
+<h3 id="这些数据在链路上长什么样">这些数据在链路上长什么样</h3>
+<p>把前面几步合起来看，一次推理在 PCIe 上的形状是这样：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">CPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. Tokenizer        │  ← 文本 → id</span><br><span class="line">│ 2. Runtime          │  ← 排队、下发 kernel</span><br><span class="line">│ 3. Sampling (opt)   │  ← 有的框架在这里采样</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ token ids（19 个 = 76 B）经 PCIe / DMA</span><br><span class="line">           ↓ 权重加载阶段另外搬一次（0.5B bf16 约 1 GB）</span><br><span class="line">GPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. Embedding        │  ← 查表得到 19 x 896</span><br><span class="line">│ 5. Transformer x 24 │  ← 注意力 + FFN</span><br><span class="line">│ 6. KV cache         │  ← 常驻显存，offload 时才过链路</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ logits 或采样后的 id（看采样在哪一侧）</span><br></pre></td></tr></table></figure>
+<p>按本文那句 19 个 token 的 prompt，尺寸变化汇总如下：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>形态</th>
+<th>大小</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>token id</td>
+<td>19 个 int32</td>
+<td>76 B</td>
+</tr>
+<tr>
+<td>embedding</td>
+<td>19 x 896 bf16</td>
+<td>33 KiB</td>
+</tr>
+<tr>
+<td>每层 hidden</td>
+<td>19 x 896 bf16</td>
+<td>33 KiB</td>
+</tr>
+<tr>
+<td>logits</td>
+<td>151936 个 fp32</td>
+<td>594 KiB</td>
+</tr>
+<tr>
+<td>采样结果</td>
+<td>1 个 int32</td>
+<td>4 B</td>
+</tr>
+</tbody>
+</table>
+<p>抓包时可以对着这几行找：链路上出现几十字节的小传输、数值范围在几万以内，多半是
+id 序列；出现五百多 KiB 的整块传输，可能是 logits 回传；上百 MB 到 1 GB
+级别的块，则是模型权重或 KV cache 的搬运。</p>
 <h2 id="id-怎么回到文本">🔁 id 怎么回到文本</h2>
 <p>解码是编码的逆过程，只有三步，但顺序不能错：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 每个 id 查表得到一段字节</span><br><span class="line">2. 把所有字节按顺序拼成一个 bytearray</span><br><span class="line">3. 对整个 bytearray 做一次 UTF-8 解码</span><br></pre></td></tr></table></figure>
@@ -997,13 +1073,13 @@ href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">444k</span>
+    <span title="Word count total">447k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">13:28</span>
+    <span title="Reading time total">13:33</span>
   </span>
 </div>
 <div class="busuanzi-count">
