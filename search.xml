@@ -22278,477 +22278,6 @@ TEE + TPM 协作信任要解决的问题。</p>
       </tags>
   </entry>
   <entry>
-    <title>Rust OS 入门：从 main 到 _start</title>
-    <url>/posts/76bb2795/</url>
-    <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
-Rust》系列教程（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>std</code></td>
-<td>Rust 标准库，提供依赖 OS 的高级能力</td>
-<td>站在 OS 肩膀上</td>
-</tr>
-<tr>
-<td><code>core</code></td>
-<td>不依赖 OS 的 Rust 核心库</td>
-<td>裸机也能用</td>
-</tr>
-<tr>
-<td><code>alloc</code></td>
-<td>提供 <code>Vec</code>、<code>Box</code> 等动态分配抽象，需要自己提供
-allocator</td>
-<td>有堆才能用</td>
-</tr>
-<tr>
-<td><code>no_std</code></td>
-<td>不自动链接 <code>std</code>，改用 <code>core</code>
-作为基础环境</td>
-<td>不依赖 std</td>
-</tr>
-<tr>
-<td><code>panic_handler</code></td>
-<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
-<td>崩溃了怎么办</td>
-</tr>
-<tr>
-<td><code>crt0</code></td>
-<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
-用户程序中，启动代码会提供 <code>_start</code>
-等入口相关代码，并负责进入 libc/运行时初始化流程</td>
-<td>启动的保洁员</td>
-</tr>
-<tr>
-<td><code>_start</code></td>
-<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
-code 提供</td>
-<td>一切从这开始</td>
-</tr>
-<tr>
-<td><code>no_main</code></td>
-<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
-<td>入口我自己定</td>
-</tr>
-<tr>
-<td>Target Triple</td>
-<td>描述目标平台的字符串，通常包含架构、厂商、操作系统和 ABI 等信息</td>
-<td>给谁编译</td>
-</tr>
-</tbody>
-</table>
-<h3 id="main-不是程序真正的入口">🚪 <code>main()</code>
-不是程序真正的入口</h3>
-<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
-是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
-<p>普通程序的实际调用链是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间、建立初始用户栈、设置 RSP</span><br><span class="line">ELF loader 跳转到 e_entry</span><br><span class="line">   ↓</span><br><span class="line">crt0 中的 _start（解析 argc / argv / envp）</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-graph TD
-    A[&quot;Linux kernel&quot;] --&gt;|&quot;创建进程地址空间 &#x2F; 建立初始用户栈 &#x2F; 设置 RSP&quot;| B[&quot;ELF loader 跳转到 e_entry&quot;]
-    B --&gt;|&quot;入口地址通常对应 crt0 中的 _start&quot;| C[&quot;crt0 中的 _start&quot;]
-    C --&gt;|&quot;解析 argc &#x2F; argv &#x2F; envp&quot;| D[&quot;libc &#x2F; Rust startup glue&quot;]
-    D --&gt; E[&quot;main()&quot;]
-</code>
-</pre>
-<p>这里的 libc / Rust startup glue 指的是从 <code>_start</code> 到
-<code>main()</code> 之间的启动与运行时衔接代码。它<strong>并不是一个类似
-JVM/.NET 那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup
-code 等组件共同完成相关工作。</p>
-<p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
-<code>e_entry</code>
-字段指定的入口地址</strong>开始执行，而不是直接找到某个叫
-<code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
-crt0 中的 <code>_start</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
-<p><strong>链接器确定程序入口地址，通常将其设置为 <code>_start</code>
-的地址</strong>。<code>main()</code>
-只是这条链上最后被调用的那个普通函数。</p>
-<h3 id="stdcore-与-no_std">🪆 <code>std</code>、<code>core</code> 与
-<code>no_std</code></h3>
-<p>Rust 标准库可以理解成两层：</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
-    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
-    S --&gt; C[&quot;core 核心库&quot;]
-    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
-    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
-</code>
-</pre>
-<p><strong><code>core</code>
-不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
-基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
-中。<code>std</code> 则建立在 <code>core</code>
-等基础设施之上，大量依赖操作系统提供的能力。</p>
-<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
-是宏，最终通过 <code>std::io</code> 使用 stdout
-对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
-<p>而裸机环境下只有：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
-<p>标准库不再替你提供 stdout。所以：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不自动链接 std，默认以 core 为基础</span><br></pre></td></tr></table></figure>
-<p>注意：<code>no_std</code> <strong>不是不能输出</strong>。OS kernel
-完全可以自己实现 <code>print!</code>——例如直接写 VGA
-framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp 教程后面
-VGA 文本模式章节要做的事）。</p>
-<p>另外，<code>no_std</code> 也不等于只能用 <code>core</code>：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
-<p><code>no_std</code> 会阻止自动链接 <code>std</code>，而
-<code>alloc</code> 可以显式引入（前提是你提供了一个 allocator）。</p>
-<h3 id="panicpanic_handler-与-panic-策略">💥
-Panic：<code>panic_handler</code> 与 panic 策略</h3>
-<p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
-binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
-<code>abort</code>（panic 的实现方式）。</p>
-<h4
-id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
-binary 必须提供的处理入口</h4>
-<p>最小程序：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
-<p>会报错：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
-<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
-时应该怎么办？</strong> 这个处理机制原本由 <code>std</code>
-提供，<code>no_std</code> 环境下就要自己定义：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
-<code>-&gt; !</code>
-表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
-<h4 id="panic-策略unwind-还是-abort">panic 策略：<code>unwind</code>
-还是 <code>abort</code></h4>
-<p>这是另一个独立的概念：Rust 可以选择 panic 的实现策略。</p>
-<p><code>unwind</code>（栈展开）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
-<p><code>abort</code>（直接终止）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
-<h4 id="为什么选-abort">为什么选 <code>abort</code></h4>
-<p>栈展开需要<strong>额外的展开信息和运行时支持</strong>，例如 Linux
-环境常见的 <code>libunwind</code>、Windows 的 SEH 等。</p>
-<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
-<strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
-是<strong>选择 panic 的实现策略</strong>。</p>
-</blockquote>
-<h3 id="no_main-与自定义入口-_start">🏁 <code>#![no_main]</code>
-与自定义入口 <code>_start</code></h3>
-<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
-之后，又会出现：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
-<p>原因前面已经说过：对于这种 freestanding <code>no_std</code>
-binary，不再使用 Rust
-默认的程序启动入口机制，因此不能依赖默认启动代码去调用
-<code>main()</code>。这与 phil-opp 教程的表述一致：freestanding
-executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
-<code>main</code>。所以：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
-<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
-<code>main()</code>。然后自己定义入口：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="start-的几个关键修饰符"><code>_start</code>
-的几个关键修饰符</h4>
-<table>
-<colgroup>
-<col style="width: 57%" />
-<col style="width: 42%" />
-</colgroup>
-<thead>
-<tr>
-<th>修饰符</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#[unsafe(no_mangle)]</code></td>
-<td>禁止 Rust name mangling，使最终符号名保持为 <code>_start</code></td>
-</tr>
-<tr>
-<td><code>pub</code></td>
-<td>使该 Rust item 对 crate 外可见；在这种入口函数中通常这样声明</td>
-</tr>
-<tr>
-<td><code>extern "C"</code></td>
-<td>使用稳定的 C ABI，而不是 Rust ABI</td>
-</tr>
-<tr>
-<td><code>-&gt; !</code></td>
-<td>表示入口函数不应该返回</td>
-</tr>
-</tbody>
-</table>
-<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
-名和类型信息的符号，例如 <code>fn start()</code> 可能变成
-<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
-<code>_start</code>，所以 <code>no_mangle</code>
-才是保证符号名正确的关键。</p>
-<h3 id="crt0-与-_start-的区别">🔍 <code>crt0</code> 与
-<code>_start</code> 的区别</h3>
-<p>这是最容易混淆的一对概念：</p>
-<ul>
-<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
-Linux 用户程序中由 C runtime startup code 提供，负责从哪里开始。</li>
-<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
-code）的统称，负责开始之后帮你做什么。注意它不是一个固定文件——现代
-Linux/glibc 中启动代码实际由
-<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
-等多个启动对象组成。</li>
-</ul>
-<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
-由这套启动代码提供</strong>——<code>_start</code>
-不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p><code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
-<p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
-并不负责准备栈</strong>。在 Linux
-用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间</span><br><span class="line">   ↓ 建立初始用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳转到 _start</span><br><span class="line">crt1 / _start</span><br><span class="line">   ↓ 解析 argc / argv / envp</span><br><span class="line">   ↓ 初始化 libc / runtime</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<p>所以 crt0
-做的事是在已有栈上解析参数、初始化运行环境，而不是申请一块内存并设置
-RSP。</p>
-<h4 id="为什么-rust-os-不使用默认的-crt0">为什么 Rust OS 不使用默认的
-<code>crt0</code>？</h4>
-<p>因为面向 Linux 用户态程序的 crt0 假设下面有操作系统：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">ELF loader</span><br><span class="line">   ↓</span><br><span class="line">crt0 / _start</span><br><span class="line">   ↓</span><br><span class="line">libc startup</span><br><span class="line">   ↓</span><br><span class="line">Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
-<p>而 Rust OS 的启动链是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Firmware / boot environment（传统 PC 上通常是 BIOS 或 UEFI）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓</span><br><span class="line">kernel entry</span><br><span class="line">   ↓</span><br><span class="line">kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
-<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
-crt0</strong>。但要注意：Rust OS 并不是完全没有启动代码——bootloader 和
-kernel 自己承担了建立执行环境、设置栈以及进入 kernel
-主逻辑等职责，它们本身就是一种 startup
-code。更准确的表述是：<strong>不使用面向 Linux 用户态程序的默认
-crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
-<h3 id="栈从哪里来">🥞 栈从哪里来？</h3>
-<p>栈并不是单纯申请一块内存然后保存一个地址，要分情况：</p>
-<p><strong>普通 Linux 用户程序</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
-<p><strong>Rust OS</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
-<p>在 Linux
-用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
-拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
-bootloader / kernel 早期启动代码自己的职责。</p>
-<p>更准确地说，栈是：</p>
-<blockquote>
-<p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
-CPU 并不存在一个叫栈的东西。</p>
-</blockquote>
-<p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
-<code>pop</code> / <code>call</code> / <code>ret</code> /
-<code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
-<h3 id="链接器与链接错误">🔗 链接器与链接错误</h3>
-<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
-</blockquote>
-<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
-<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
-之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
-target。它意味着我要生成一个 Linux 用户程序，于是链接器默认认为需要
-crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
-main，于是报：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
-<h4
-id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
-<p>含义：cargo → rustc → linker →
-<code>-nostartfiles</code>，告诉链接器<strong>不要自动链接标准的 C
-startup object files</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
-<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
-<table>
-<colgroup>
-<col style="width: 14%" />
-<col style="width: 26%" />
-<col style="width: 21%" />
-<col style="width: 38%" />
-</colgroup>
-<thead>
-<tr>
-<th>平台</th>
-<th>可执行格式</th>
-<th>默认入口</th>
-<th>禁用 C startup</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Linux</td>
-<td>ELF</td>
-<td><code>_start</code></td>
-<td><code>-nostartfiles</code></td>
-</tr>
-<tr>
-<td>Windows</td>
-<td>PE</td>
-<td><code>mainCRTStartup</code></td>
-<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
-</tr>
-<tr>
-<td>macOS</td>
-<td>Mach-O</td>
-<td>自定义</td>
-<td><code>-e __start</code>（配合
-<code>-static</code>、<code>-nostartfiles</code>）</td>
-</tr>
-</tbody>
-</table>
-<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
-<h4 id="为什么不推荐这个方法">为什么不推荐这个方法</h4>
-<p><code>-nostartfiles</code> 去掉的是默认的 C startup object
-files，<strong>并不会让 Linux loader 不再提供初始用户栈</strong>——你的
-<code>_start</code> 仍然会从 Linux
-建立好的初始栈开始执行，只是不会经过默认的 libc/Rust 启动流程。</p>
-<p>真正缺少的是 crt0 / libc startup 做的事：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 / libc startup</span><br><span class="line">   ├── 解析 argc / argv / envp</span><br><span class="line">   ├── libc 初始化</span><br><span class="line">   ├── TLS / runtime 等相关初始化</span><br><span class="line">   └── 最终调用 main()</span><br></pre></td></tr></table></figure>
-<p>所以编译成功、运行崩溃不能一概而论：一个非常简单的 Linux
-<code>no_std</code> + <code>no_main</code>
-程序，只要入口、ABI、链接等处理正确，完全可以运行——例如上面那个空
-<code>loop &#123;&#125;</code> 的 <code>_start</code>
-甚至可以一直运行。是否崩溃，取决于你的 <code>_start</code>
-是否依赖了上面这些缺失的初始化。这个方法之所以不推荐，是因为它在假装自己是
-Linux 程序，却没有承担 Linux
-程序应有的完整启动环境，越复杂的程序越容易踩坑。</p>
-<h3 id="正解bare-metal-target">🎯 正解：Bare Metal Target</h3>
-<p>真正的方向是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
-<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">thumbv7em   → ARM Cortex-M 等 Thumb-2 / ARMv7E-M 子架构</span><br><span class="line">none        → 没有操作系统</span><br><span class="line">eabihf      → Embedded ABI + hard-float</span><br></pre></td></tr></table></figure>
-<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
-<h4 id="target-triple-是什么">Target Triple 是什么</h4>
-<p>Rust 用 Target Triple 描述目标环境。其一般格式为
-<code>&lt;arch&gt;&lt;sub&gt;-&lt;vendor&gt;-&lt;sys&gt;-&lt;abi&gt;</code>，但有些
-target 会省略某些部分，严格说不一定是四元组。例如
-<code>x86_64-unknown-linux-gnu</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
-<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
-就表示没有 OS。</p>
-<h4 id="host-与-target">Host 与 Target</h4>
-<ul>
-<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
-<li><strong>Target</strong>：你希望程序运行的机器，例如
-<code>x86_64-blog_os</code> 裸机 kernel。</li>
-</ul>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
-<p>这种在一种平台上编译出另一种平台程序的做法叫<strong>交叉编译（cross
-compilation）</strong>。</p>
-<h3 id="两种启动链的最终对比">🆚 两种启动链的最终对比</h3>
-<pre>
-<code class="mermaid">
-
-graph TD
-    subgraph &quot;普通 Linux 用户程序&quot;
-        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
-        B1 --&gt; C1[&quot;ELF loader&quot;]
-        C1 --&gt; D1[&quot;crt0 &#x2F; _start&quot;]
-        D1 --&gt; E1[&quot;libc &#x2F; Rust startup&quot;]
-        E1 --&gt; F1[&quot;main()&quot;]
-    end
-    subgraph &quot;Rust OS&quot;
-        A2[&quot;硬件&quot;] --&gt; B2[&quot;固件 &#x2F; boot environment（传统 PC 上为 BIOS &#x2F; UEFI）&quot;]
-        B2 --&gt; C2[&quot;Bootloader&quot;]
-        C2 --&gt; D2[&quot;Kernel entry&quot;]
-        D2 --&gt; E2[&quot;Kernel initialization（含设置栈等）&quot;]
-        E2 --&gt; F2[&quot;kernel_main()&quot;]
-    end
-</code>
-</pre>
-<p>典型的 Rust Linux
-用户程序依赖的是操作系统提供的用户态执行环境，并使用
-<code>std</code>、默认 <code>main</code>
-入口机制以及相应的用户态启动代码和运行时支持；Rust OS
-不使用这一套，相应职责由 <strong>bootloader + kernel
-自己承担</strong>。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><code>no_std</code> 是不使用 Rust 标准库；<code>no_main</code> 是不让
-Rust 按普通程序方式处理 <code>main</code>；<code>_start</code>
-是你自己定义的底层入口；真正写 OS 时，我们不使用面向 Linux
-用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
-自己承担。</p>
-</blockquote>
-<p>关键变化：</p>
-<table>
-<thead>
-<tr>
-<th>组件</th>
-<th>普通程序</th>
-<th>Rust OS</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>std</code></td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>默认 <code>main</code> 入口机制</td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>用户态 crt0</td>
-<td>使用</td>
-<td>不使用</td>
-</tr>
-<tr>
-<td>Linux 用户态 runtime</td>
-<td>依赖</td>
-<td>不依赖</td>
-</tr>
-</tbody>
-</table>
-<p>但注意：<strong>启动代码 ≠ 消失</strong>。只是从操作系统提供的
-crt0/libc 启动流程，换成了由 bootloader + kernel
-自己承担的启动流程——这才是这篇文章最值得强调的核心思想。</p>
-<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
-文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
-<ul>
-<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
-href="https://os.phil-opp.com/freestanding-rust-binary/"
-class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
-<li>《Writing an OS in Rust》系列主页：<a
-href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a></li>
-</ul>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>no_std</tag>
-        <tag>裸机</tag>
-        <tag>链接器</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 入门：从按下电源键到内核接管</title>
     <url>/posts/5d0b788d/</url>
     <content><![CDATA[<p>按下电源键时，RAM
@@ -23388,6 +22917,477 @@ Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会�
         <tag>物理地址</tag>
         <tag>MMIO</tag>
         <tag>Memory Map</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Rust OS 入门：从 main 到 _start</title>
+    <url>/posts/76bb2795/</url>
+    <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文内容整理自 Philipp Oppermann 的《Writing an OS in
+Rust》系列教程（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>），配合个人学习笔记结构化为中文说明，示例与结论均可在该教程中溯源。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>Rust 标准库，提供依赖 OS 的高级能力</td>
+<td>站在 OS 肩膀上</td>
+</tr>
+<tr>
+<td><code>core</code></td>
+<td>不依赖 OS 的 Rust 核心库</td>
+<td>裸机也能用</td>
+</tr>
+<tr>
+<td><code>alloc</code></td>
+<td>提供 <code>Vec</code>、<code>Box</code> 等动态分配抽象，需要自己提供
+allocator</td>
+<td>有堆才能用</td>
+</tr>
+<tr>
+<td><code>no_std</code></td>
+<td>不自动链接 <code>std</code>，改用 <code>core</code>
+作为基础环境</td>
+<td>不依赖 std</td>
+</tr>
+<tr>
+<td><code>panic_handler</code></td>
+<td><code>no_std</code> 下必须自己提供的 panic 处理函数</td>
+<td>崩溃了怎么办</td>
+</tr>
+<tr>
+<td><code>crt0</code></td>
+<td>传统上对 C 程序启动代码（startup code）的统称；在典型 Linux
+用户程序中，启动代码会提供 <code>_start</code>
+等入口相关代码，并负责进入 libc/运行时初始化流程</td>
+<td>启动的保洁员</td>
+</tr>
+<tr>
+<td><code>_start</code></td>
+<td>启动代码中的入口符号；在典型 Linux 用户程序中由 C runtime startup
+code 提供</td>
+<td>一切从这开始</td>
+</tr>
+<tr>
+<td><code>no_main</code></td>
+<td>告诉 Rust 不要按普通程序的方式寻找 <code>main()</code></td>
+<td>入口我自己定</td>
+</tr>
+<tr>
+<td>Target Triple</td>
+<td>描述目标平台的字符串，通常包含架构、厂商、操作系统和 ABI 等信息</td>
+<td>给谁编译</td>
+</tr>
+</tbody>
+</table>
+<h3 id="main-不是程序真正的入口">🚪 <code>main()</code>
+不是程序真正的入口</h3>
+<p>这是理解 Rust OS 最重要的一步：<strong><code>main()</code>
+是应用程序逻辑的入口，而不是 CPU/OS 意义上的最底层入口。</strong></p>
+<p>普通程序的实际调用链是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间、建立初始用户栈、设置 RSP</span><br><span class="line">ELF loader 跳转到 e_entry</span><br><span class="line">   ↓</span><br><span class="line">crt0 中的 _start（解析 argc / argv / envp）</span><br><span class="line">   ↓</span><br><span class="line">libc / Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[&quot;Linux kernel&quot;] --&gt;|&quot;创建进程地址空间 &#x2F; 建立初始用户栈 &#x2F; 设置 RSP&quot;| B[&quot;ELF loader 跳转到 e_entry&quot;]
+    B --&gt;|&quot;入口地址通常对应 crt0 中的 _start&quot;| C[&quot;crt0 中的 _start&quot;]
+    C --&gt;|&quot;解析 argc &#x2F; argv &#x2F; envp&quot;| D[&quot;libc &#x2F; Rust startup glue&quot;]
+    D --&gt; E[&quot;main()&quot;]
+</code>
+</pre>
+<p>这里的 libc / Rust startup glue 指的是从 <code>_start</code> 到
+<code>main()</code> 之间的启动与运行时衔接代码。它<strong>并不是一个类似
+JVM/.NET 那样独立、庞大的运行时系统</strong>，而是由 libc、Rust startup
+code 等组件共同完成相关工作。</p>
+<p>当程序被 OS loader 加载后，CPU 会从 <strong>ELF 文件头
+<code>e_entry</code>
+字段指定的入口地址</strong>开始执行，而不是直接找到某个叫
+<code>_start</code> 的符号。在典型 Linux 用户程序中，这个地址通常对应
+crt0 中的 <code>_start</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">源代码中的 _start</span><br><span class="line">   ↓ 链接器解析符号</span><br><span class="line">确定 _start 的地址</span><br><span class="line">   ↓</span><br><span class="line">ELF header: e_entry = _start 的地址</span><br><span class="line">   ↓ OS Loader 加载 ELF</span><br><span class="line">CPU 从 e_entry 开始执行</span><br></pre></td></tr></table></figure>
+<p><strong>链接器确定程序入口地址，通常将其设置为 <code>_start</code>
+的地址</strong>。<code>main()</code>
+只是这条链上最后被调用的那个普通函数。</p>
+<h3 id="stdcore-与-no_std">🪆 <code>std</code>、<code>core</code> 与
+<code>no_std</code></h3>
+<p>Rust 标准库可以理解成两层：</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    S[&quot;std 标准库&quot;] --&gt; S1[&quot;操作系统相关：文件 &#x2F; 网络 &#x2F; 线程&quot;]
+    S --&gt; S2[&quot;println! &#x2F; Vec &#x2F; String&quot;]
+    S --&gt; C[&quot;core 核心库&quot;]
+    C --&gt; C1[&quot;基本类型 &#x2F; Option &#x2F; Result &#x2F; Iterator&quot;]
+    C --&gt; C2[&quot;基本 trait &#x2F; panic 基础机制&quot;]
+</code>
+</pre>
+<p><strong><code>core</code>
+不是直接和硬件交互的库，而是一个不依赖操作系统的 Rust
+基础库</strong>。它可以运行在 Linux、Windows、裸机、嵌入式甚至 OS Kernel
+中。<code>std</code> 则建立在 <code>core</code>
+等基础设施之上，大量依赖操作系统提供的能力。</p>
+<h4 id="no_std-做了什么"><code>#![no_std]</code> 做了什么</h4>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">&quot;Hello&quot;</span>);   <span class="comment">// 报错：cannot find macro `println!`</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为什么 <code>println!</code> 找不到？因为 <code>println!</code>
+是宏，最终通过 <code>std::io</code> 使用 stdout
+对应的文件描述符，并通过操作系统提供的 I/O 接口完成输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">println!</span><br><span class="line">   ↓</span><br><span class="line">std::io</span><br><span class="line">   ↓</span><br><span class="line">stdout 对应的文件描述符</span><br><span class="line">   ↓</span><br><span class="line">write 等系统调用</span><br><span class="line">   ↓</span><br><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">终端 / pipe / 重定向文件……</span><br></pre></td></tr></table></figure>
+<p>而裸机环境下只有：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line">  ↓</span><br><span class="line">硬件</span><br></pre></td></tr></table></figure>
+<p>标准库不再替你提供 stdout。所以：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">no_std ≠ 什么都没有</span><br><span class="line">no_std = 不自动链接 std，默认以 core 为基础</span><br></pre></td></tr></table></figure>
+<p>注意：<code>no_std</code> <strong>不是不能输出</strong>。OS kernel
+完全可以自己实现 <code>print!</code>——例如直接写 VGA
+framebuffer、串口，或者通过其他硬件接口输出（这正是 phil-opp 教程后面
+VGA 文本模式章节要做的事）。</p>
+<p>另外，<code>no_std</code> 也不等于只能用 <code>core</code>：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"><span class="keyword">extern</span> <span class="keyword">crate</span> alloc;              <span class="comment">// 显式引入 alloc</span></span><br><span class="line"><span class="keyword">use</span> alloc::vec::<span class="type">Vec</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 只要自己提供 allocator，就能使用 Vec、Box 等动态分配抽象</span></span><br></pre></td></tr></table></figure>
+<p><code>no_std</code> 会阻止自动链接 <code>std</code>，而
+<code>alloc</code> 可以显式引入（前提是你提供了一个 allocator）。</p>
+<h3 id="panicpanic_handler-与-panic-策略">💥
+Panic：<code>panic_handler</code> 与 panic 策略</h3>
+<p>这一节要分清<strong>两个不同概念</strong>：<code>panic_handler</code>（no_std
+binary 必须提供的处理入口）和 panic 策略 <code>unwind</code> /
+<code>abort</code>（panic 的实现方式）。</p>
+<h4
+id="panic_handlerno_std-binary-必须提供的处理入口"><code>panic_handler</code>：<code>no_std</code>
+binary 必须提供的处理入口</h4>
+<p>最小程序：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_std]</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">main</span>() &#123;&#125;</span><br></pre></td></tr></table></figure>
+<p>会报错：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">#[panic_handler] function required, but not found</span><br></pre></td></tr></table></figure>
+<p>因为 Rust 必须知道：<strong>程序发生 <code>panic</code>
+时应该怎么办？</strong> 这个处理机制原本由 <code>std</code>
+提供，<code>no_std</code> 环境下就要自己定义：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">use</span> core::panic::PanicInfo;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[panic_handler]</span></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">panic</span>(_info: &amp;PanicInfo) <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中 <code>PanicInfo</code> 包含 panic 的相关信息；返回类型
+<code>-&gt; !</code>
+表示<strong>这个函数永远不会返回</strong>（发散函数）。</p>
+<h4 id="panic-策略unwind-还是-abort">panic 策略：<code>unwind</code>
+还是 <code>abort</code></h4>
+<p>这是另一个独立的概念：Rust 可以选择 panic 的实现策略。</p>
+<p><code>unwind</code>（栈展开）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">沿调用栈展开（逐层退出函数，运行局部变量析构函数）</span><br><span class="line">  ↓</span><br><span class="line">最终终止 / 被捕获</span><br></pre></td></tr></table></figure>
+<p><code>abort</code>（直接终止）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">panic</span><br><span class="line">  ↓</span><br><span class="line">直接终止</span><br></pre></td></tr></table></figure>
+<h4 id="为什么选-abort">为什么选 <code>abort</code></h4>
+<p>栈展开需要<strong>额外的展开信息和运行时支持</strong>，例如 Linux
+环境常见的 <code>libunwind</code>、Windows 的 SEH 等。</p>
+<figure class="highlight toml"><table><tr><td class="code"><pre><span class="line"><span class="section">[profile.dev]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="section">[profile.release]</span></span><br><span class="line"><span class="attr">panic</span> = <span class="string">&quot;abort&quot;</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>注意区分：<code>#[panic_handler]</code> 是 <code>no_std</code> binary
+<strong>必须提供</strong>的 panic 处理入口；<code>panic = "abort"</code>
+是<strong>选择 panic 的实现策略</strong>。</p>
+</blockquote>
+<h3 id="no_main-与自定义入口-_start">🏁 <code>#![no_main]</code>
+与自定义入口 <code>_start</code></h3>
+<p>加入 <code>#![no_std]</code> 和 <code>panic = "abort"</code>
+之后，又会出现：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">using `fn main` requires the standard library</span><br></pre></td></tr></table></figure>
+<p>原因前面已经说过：对于这种 freestanding <code>no_std</code>
+binary，不再使用 Rust
+默认的程序启动入口机制，因此不能依赖默认启动代码去调用
+<code>main()</code>。这与 phil-opp 教程的表述一致：freestanding
+executable 没有 Rust runtime 和 crt0，因此不能直接定义普通
+<code>main</code>。所以：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#![no_main]</span></span><br></pre></td></tr></table></figure>
+<p>告诉 Rust：不要按照普通 Rust 程序的方式寻找
+<code>main()</code>。然后自己定义入口：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[unsafe(no_mangle)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">extern</span> <span class="string">&quot;C&quot;</span> <span class="keyword">fn</span> <span class="title function_">_start</span>() <span class="punctuation">-&gt;</span> ! &#123;</span><br><span class="line">    <span class="keyword">loop</span> &#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="start-的几个关键修饰符"><code>_start</code>
+的几个关键修饰符</h4>
+<table>
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>修饰符</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#[unsafe(no_mangle)]</code></td>
+<td>禁止 Rust name mangling，使最终符号名保持为 <code>_start</code></td>
+</tr>
+<tr>
+<td><code>pub</code></td>
+<td>使该 Rust item 对 crate 外可见；在这种入口函数中通常这样声明</td>
+</tr>
+<tr>
+<td><code>extern "C"</code></td>
+<td>使用稳定的 C ABI，而不是 Rust ABI</td>
+</tr>
+<tr>
+<td><code>-&gt; !</code></td>
+<td>表示入口函数不应该返回</td>
+</tr>
+</tbody>
+</table>
+<p>关于 name mangling：Rust 默认会把函数名改写成带 crate
+名和类型信息的符号，例如 <code>fn start()</code> 可能变成
+<code>_ZN3blog_os5start...</code>，但链接器/bootloader 想找的是字面量
+<code>_start</code>，所以 <code>no_mangle</code>
+才是保证符号名正确的关键。</p>
+<h3 id="crt0-与-_start-的区别">🔍 <code>crt0</code> 与
+<code>_start</code> 的区别</h3>
+<p>这是最容易混淆的一对概念：</p>
+<ul>
+<li><strong><code>_start</code></strong>：启动代码中的入口符号；在典型
+Linux 用户程序中由 C runtime startup code 提供，负责从哪里开始。</li>
+<li><strong><code>crt0</code></strong>：传统上对 C 程序启动代码（startup
+code）的统称，负责开始之后帮你做什么。注意它不是一个固定文件——现代
+Linux/glibc 中启动代码实际由
+<code>crt1.o</code>、<code>crti.o</code>、<code>crtn.o</code>
+等多个启动对象组成。</li>
+</ul>
+<p>关系：在典型 Linux 用户程序中，<strong><code>_start</code>
+由这套启动代码提供</strong>——<code>_start</code>
+不是启动代码之外的下一层，而是启动代码里的那个入口函数：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">启动代码（传统上统称 crt0；现代 Linux 常拆分为 crt1.o / crti.o / crtn.o 等）</span><br><span class="line">  ├── 提供入口符号 _start</span><br><span class="line">  ├── 启动相关代码（解析 argc / argv / envp、初始化 libc / runtime）</span><br><span class="line">  └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p><code>_start = 启动代码中的入口符号（从哪里开始）</code>，<code>crt0 = 传统上对这套启动代码的统称（开始之后帮你做什么）</code>。</p>
+<p>这里要特别澄清一个容易形成的错误认识：<strong>crt0
+并不负责准备栈</strong>。在 Linux
+用户程序启动时，初始用户栈已经由内核在加载程序时建立好了：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 创建进程地址空间</span><br><span class="line">   ↓ 建立初始用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳转到 _start</span><br><span class="line">crt1 / _start</span><br><span class="line">   ↓ 解析 argc / argv / envp</span><br><span class="line">   ↓ 初始化 libc / runtime</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<p>所以 crt0
+做的事是在已有栈上解析参数、初始化运行环境，而不是申请一块内存并设置
+RSP。</p>
+<h4 id="为什么-rust-os-不使用默认的-crt0">为什么 Rust OS 不使用默认的
+<code>crt0</code>？</h4>
+<p>因为面向 Linux 用户态程序的 crt0 假设下面有操作系统：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓</span><br><span class="line">ELF loader</span><br><span class="line">   ↓</span><br><span class="line">crt0 / _start</span><br><span class="line">   ↓</span><br><span class="line">libc startup</span><br><span class="line">   ↓</span><br><span class="line">Rust startup glue</span><br><span class="line">   ↓</span><br><span class="line">main()</span><br></pre></td></tr></table></figure>
+<p>而 Rust OS 的启动链是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Firmware / boot environment（传统 PC 上通常是 BIOS 或 UEFI）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓</span><br><span class="line">kernel entry</span><br><span class="line">   ↓</span><br><span class="line">kernel initialization</span><br><span class="line">   ↓</span><br><span class="line">kernel_main()</span><br></pre></td></tr></table></figure>
+<p>下面既没有 Linux/Windows，也没有 libc，所以<strong>不能使用默认的
+crt0</strong>。但要注意：Rust OS 并不是完全没有启动代码——bootloader 和
+kernel 自己承担了建立执行环境、设置栈以及进入 kernel
+主逻辑等职责，它们本身就是一种 startup
+code。更准确的表述是：<strong>不使用面向 Linux 用户态程序的默认
+crt0，相应的启动职责由 bootloader + kernel 自己承担</strong>。</p>
+<h3 id="栈从哪里来">🥞 栈从哪里来？</h3>
+<p>栈并不是单纯申请一块内存然后保存一个地址，要分情况：</p>
+<p><strong>普通 Linux 用户程序</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Linux kernel</span><br><span class="line">   ↓ 建立进程地址空间</span><br><span class="line">   ↓ 建立用户栈</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 _start</span><br></pre></td></tr></table></figure>
+<p><strong>Rust OS</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">BIOS / UEFI（传统 PC）</span><br><span class="line">   ↓</span><br><span class="line">bootloader</span><br><span class="line">   ↓ 建立 kernel 执行环境</span><br><span class="line">   ↓ 设置 RSP</span><br><span class="line">   ↓ 跳到 kernel entry</span><br></pre></td></tr></table></figure>
+<p>在 Linux
+用户程序中，初始用户栈<strong>已经由内核在加载程序时建立</strong>，<code>_start</code>
+拿到的是一个合法的栈；而在 Rust OS 中，建立执行环境（包括设置栈指针）是
+bootloader / kernel 早期启动代码自己的职责。</p>
+<p>更准确地说，栈是：</p>
+<blockquote>
+<p><strong>一种由软件约定定义的数据结构/内存使用方式，通常由一段内存区域和一个栈指针寄存器共同实现。</strong>
+CPU 并不存在一个叫栈的东西。</p>
+</blockquote>
+<p>x86-64 上通过 <code>RSP</code> 指向当前栈顶，用 <code>push</code> /
+<code>pop</code> / <code>call</code> / <code>ret</code> /
+<code>sub rsp, ...</code> / <code>add rsp, ...</code> 等指令操作它。</p>
+<h3 id="链接器与链接错误">🔗 链接器与链接错误</h3>
+<h4 id="编译器与链接器的分工">编译器与链接器的分工</h4>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 源码</span><br><span class="line">   ↓ rustc</span><br><span class="line">目标文件 .o</span><br><span class="line">   ↓ 链接器（多个 .o + 库 + 入口点 + 地址布局）</span><br><span class="line">Executable</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>编译器负责把源代码变成目标文件；链接器负责把这些目标文件和库组合成最终可执行文件。</strong></p>
+</blockquote>
+<h4 id="为什么会出现链接器错误">为什么会出现链接器错误</h4>
+<p>因为你在 <code>#![no_std]</code> + <code>#![no_main]</code>
+之后，仍然使用 <code>x86_64-unknown-linux-gnu</code> 这个
+target。它意味着我要生成一个 Linux 用户程序，于是链接器默认认为需要
+crt0、libc、Linux runtime；而你的程序没有 std、没有 libc、没有
+main，于是报：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">undefined reference</span><br><span class="line">entry point not found</span><br></pre></td></tr></table></figure>
+<h4
+id="一种临时方案手动传链接器参数">一种临时方案：手动传链接器参数</h4>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cargo rustc -- -C link-arg=-nostartfiles</span><br></pre></td></tr></table></figure>
+<p>含义：cargo → rustc → linker →
+<code>-nostartfiles</code>，告诉链接器<strong>不要自动链接标准的 C
+startup object files</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 ❌</span><br><span class="line">你的 _start ✅</span><br></pre></td></tr></table></figure>
+<h4 id="各平台参数为什么不同">各平台参数为什么不同</h4>
+<table>
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 26%" />
+<col style="width: 21%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>平台</th>
+<th>可执行格式</th>
+<th>默认入口</th>
+<th>禁用 C startup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>ELF</td>
+<td><code>_start</code></td>
+<td><code>-nostartfiles</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>PE</td>
+<td><code>mainCRTStartup</code></td>
+<td><code>/ENTRY:_start</code> + <code>/SUBSYSTEM:console</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>Mach-O</td>
+<td>自定义</td>
+<td><code>-e __start</code>（配合
+<code>-static</code>、<code>-nostartfiles</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>因为它们的可执行文件格式、ABI、默认启动方式、链接器都不同。</p>
+<h4 id="为什么不推荐这个方法">为什么不推荐这个方法</h4>
+<p><code>-nostartfiles</code> 去掉的是默认的 C startup object
+files，<strong>并不会让 Linux loader 不再提供初始用户栈</strong>——你的
+<code>_start</code> 仍然会从 Linux
+建立好的初始栈开始执行，只是不会经过默认的 libc/Rust 启动流程。</p>
+<p>真正缺少的是 crt0 / libc startup 做的事：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">crt0 / libc startup</span><br><span class="line">   ├── 解析 argc / argv / envp</span><br><span class="line">   ├── libc 初始化</span><br><span class="line">   ├── TLS / runtime 等相关初始化</span><br><span class="line">   └── 最终调用 main()</span><br></pre></td></tr></table></figure>
+<p>所以编译成功、运行崩溃不能一概而论：一个非常简单的 Linux
+<code>no_std</code> + <code>no_main</code>
+程序，只要入口、ABI、链接等处理正确，完全可以运行——例如上面那个空
+<code>loop &#123;&#125;</code> 的 <code>_start</code>
+甚至可以一直运行。是否崩溃，取决于你的 <code>_start</code>
+是否依赖了上面这些缺失的初始化。这个方法之所以不推荐，是因为它在假装自己是
+Linux 程序，却没有承担 Linux
+程序应有的完整启动环境，越复杂的程序越容易踩坑。</p>
+<h3 id="正解bare-metal-target">🎯 正解：Bare Metal Target</h3>
+<p>真正的方向是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">不要假装自己是 Linux 程序</span><br><span class="line">而是告诉 Rust：我根本没有操作系统</span><br></pre></td></tr></table></figure>
+<p>例如嵌入式常用的 <code>thumbv7em-none-eabihf</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">thumbv7em   → ARM Cortex-M 等 Thumb-2 / ARMv7E-M 子架构</span><br><span class="line">none        → 没有操作系统</span><br><span class="line">eabihf      → Embedded ABI + hard-float</span><br></pre></td></tr></table></figure>
+<p>这样 Rust 就不会默认假设存在 Linux、Windows、libc、crt0。</p>
+<h4 id="target-triple-是什么">Target Triple 是什么</h4>
+<p>Rust 用 Target Triple 描述目标环境。其一般格式为
+<code>&lt;arch&gt;&lt;sub&gt;-&lt;vendor&gt;-&lt;sys&gt;-&lt;abi&gt;</code>，但有些
+target 会省略某些部分，严格说不一定是四元组。例如
+<code>x86_64-unknown-linux-gnu</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x86_64    → CPU 架构</span><br><span class="line">unknown   → vendor</span><br><span class="line">linux     → OS</span><br><span class="line">gnu       → ABI</span><br></pre></td></tr></table></figure>
+<p>而 <code>thumbv7em-none-eabihf</code> 中的 <code>none</code>
+就表示没有 OS。</p>
+<h4 id="host-与-target">Host 与 Target</h4>
+<ul>
+<li><strong>Host</strong>：运行编译器的机器，例如 Windows x86-64。</li>
+<li><strong>Target</strong>：你希望程序运行的机器，例如
+<code>x86_64-blog_os</code> 裸机 kernel。</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Windows 电脑</span><br><span class="line">   ↓ rustc（交叉编译）</span><br><span class="line">x86_64 裸机 kernel</span><br></pre></td></tr></table></figure>
+<p>这种在一种平台上编译出另一种平台程序的做法叫<strong>交叉编译（cross
+compilation）</strong>。</p>
+<h3 id="两种启动链的最终对比">🆚 两种启动链的最终对比</h3>
+<pre>
+<code class="mermaid">
+
+graph TD
+    subgraph &quot;普通 Linux 用户程序&quot;
+        A1[&quot;硬件&quot;] --&gt; B1[&quot;操作系统&quot;]
+        B1 --&gt; C1[&quot;ELF loader&quot;]
+        C1 --&gt; D1[&quot;crt0 &#x2F; _start&quot;]
+        D1 --&gt; E1[&quot;libc &#x2F; Rust startup&quot;]
+        E1 --&gt; F1[&quot;main()&quot;]
+    end
+    subgraph &quot;Rust OS&quot;
+        A2[&quot;硬件&quot;] --&gt; B2[&quot;固件 &#x2F; boot environment（传统 PC 上为 BIOS &#x2F; UEFI）&quot;]
+        B2 --&gt; C2[&quot;Bootloader&quot;]
+        C2 --&gt; D2[&quot;Kernel entry&quot;]
+        D2 --&gt; E2[&quot;Kernel initialization（含设置栈等）&quot;]
+        E2 --&gt; F2[&quot;kernel_main()&quot;]
+    end
+</code>
+</pre>
+<p>典型的 Rust Linux
+用户程序依赖的是操作系统提供的用户态执行环境，并使用
+<code>std</code>、默认 <code>main</code>
+入口机制以及相应的用户态启动代码和运行时支持；Rust OS
+不使用这一套，相应职责由 <strong>bootloader + kernel
+自己承担</strong>。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><code>no_std</code> 是不使用 Rust 标准库；<code>no_main</code> 是不让
+Rust 按普通程序方式处理 <code>main</code>；<code>_start</code>
+是你自己定义的底层入口；真正写 OS 时，我们不使用面向 Linux
+用户态程序的默认 crt0——相应的启动职责由 bootloader 和 kernel
+自己承担。</p>
+</blockquote>
+<p>关键变化：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>普通程序</th>
+<th>Rust OS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>std</code></td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>默认 <code>main</code> 入口机制</td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>用户态 crt0</td>
+<td>使用</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td>Linux 用户态 runtime</td>
+<td>依赖</td>
+<td>不依赖</td>
+</tr>
+</tbody>
+</table>
+<p>但注意：<strong>启动代码 ≠ 消失</strong>。只是从操作系统提供的
+crt0/libc 启动流程，换成了由 bootloader + kernel
+自己承担的启动流程——这才是这篇文章最值得强调的核心思想。</p>
+<p>如果你想亲手把这个过程跑一遍（包括自定义 target 文件、VGA
+文本模式输出、<code>println!</code> 宏等），推荐按顺序阅读：</p>
+<ul>
+<li>《Writing an OS in Rust》A Freestanding Rust Binary：<a
+href="https://os.phil-opp.com/freestanding-rust-binary/"
+class="uri">https://os.phil-opp.com/freestanding-rust-binary/</a></li>
+<li>《Writing an OS in Rust》系列主页：<a
+href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a></li>
+</ul>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>no_std</tag>
+        <tag>裸机</tag>
+        <tag>链接器</tag>
       </tags>
   </entry>
   <entry>
@@ -26692,14 +26692,15 @@ Count</td>
       </tags>
   </entry>
   <entry>
-    <title>Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字</title>
+    <title>从 Token ID 还原文本：Tokenizer、BPE 与转换表</title>
     <url>/posts/111c29d0/</url>
     <content><![CDATA[<p>链路上抓到一串整数时，它很可能就是 token
-id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id
-到字节的对照表，本文称之为<strong>转换表</strong>；而这张表在不同模型之间并不通用。</p>
-<p>本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token
-怎么变成 id、id 送上 GPU 之后发生什么、生成的 id
-又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，怎么用几张表把它试解成文本。文中数字全部来自本机真实跑出来的结果，词表取自
+id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要的只是一张
+<strong>id 到字节</strong>
+的对照表，本文称之为<strong>转换表</strong>；而这张表在不同模型之间并不通用。</p>
+<p>本文的落点就是反查这一步。为了讲清它，前面会先把编码侧的形态走一遍（文字
+→ UTF-8 字节 → token → id），中间说明 id 进 GPU
+之后发生了什么——那部分只是背景，反查用不到模型内部的计算。文中数字全部来自本机真实跑出来的结果，词表取自
 Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
@@ -26769,6 +26770,19 @@ Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 </tr>
 </tbody>
 </table>
+<h2 id="全文的落点id-字节-文本">🔑 全文的落点：id → 字节 → 文本</h2>
+<p>先给结论，后面都是为它铺垫：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">token id</span><br><span class="line">   ↓ 查表：一个 id 对应一段字节</span><br><span class="line">字节</span><br><span class="line">   ↓ 按顺序拼接</span><br><span class="line">字节池</span><br><span class="line">   ↓ 整段做一次 UTF-8 解码</span><br><span class="line">文本</span><br></pre></td></tr></table></figure>
+<p>三点：</p>
+<ul>
+<li><strong>表是 <code>id → bytes</code> 的映射，不是 token
+字符串到词</strong>。token 的边界不在字符边界上，单个 token
+常常拼不出一个完整字符，只能先拼字节再统一解码。</li>
+<li><strong>反查只要这一张表，不需要 merges</strong>。merges
+只在编码时决定怎么切分，解码方向用不上，表因此可以做得极小。</li>
+<li><strong>表不通用</strong>。同一个 id
+在不同模型里是不同东西；手上只有一串整数时，只能拿备好的几张表逐张试，再按打分排序。</li>
+</ul>
 <h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
 <p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户输入的文字：PCIe 链路上抓到的 token id，能还原出原来的问题吗？</span><br><span class="line">   ↓ UTF-8 编码（32 个字符 → 68 字节）</span><br><span class="line">字节</span><br><span class="line">   ↓ tokenizer.encode()：BPE 合并 + 查表</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
@@ -26873,7 +26887,7 @@ merges。</p>
 <h3 id="从文字到字节再到-token">从文字到字节，再到 token</h3>
 <p>这几个层次容易混在一起，拿 你好 两个字过一遍就清楚了：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你看到的文字：你好</span><br><span class="line">   ↓ UTF-8 编码，一个汉字 3 个字节（统一标准）</span><br><span class="line">字节：e4 bd a0 e5 a5 bd</span><br><span class="line">   ↓ byte-level BPE 按频率合并字节对（取决于 Tokenizer）</span><br><span class="line">token：ä½łå¥½                      ← 词表里正好有这一整块</span><br><span class="line">   ↓ 查词表</span><br><span class="line">token id：108386</span><br><span class="line">   ↓</span><br><span class="line">模型真正看到的：108386</span><br></pre></td></tr></table></figure>
-<p>同一段文字，不同模型切出来的结果差得很多（实测）：</p>
+<p>同一段文字，不同模型切出来的结果差得很多：</p>
 <table>
 <thead>
 <tr>
@@ -26913,93 +26927,6 @@ token，GPT-2 要 4 个。</li>
 </ul>
 <p>抓包时能看到的也是最后那一层：一串 id。要把它变回文字，靠的就是从 id
 反查回字节的那张表。</p>
-<h3 id="一次真实切分">一次真实切分</h3>
-<p>拿一句中英混合的话做实验：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> tokenizers <span class="keyword">import</span> Tokenizer</span><br><span class="line"></span><br><span class="line">tok = Tokenizer.from_file(<span class="string">&quot;qwen.json&quot;</span>)</span><br><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(enc.ids), enc.ids[:<span class="number">8</span>], enc.tokens[:<span class="number">5</span>])</span><br><span class="line"><span class="comment"># 19 [53702, 68, 18137, 241, 122, 100309, 99745, 26939] [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27;Ġé&#x27;, &#x27;ĵ&#x27;, &#x27;¾&#x27;]</span></span><br></pre></td></tr></table></figure>
-<p>逐 token 展开来看，<code>Ġ</code> 的含义就出来了：</p>
-<table>
-<thead>
-<tr>
-<th>序号</th>
-<th>id</th>
-<th>词表里的写法</th>
-<th>还原出的字节</th>
-<th>归属</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>0</td>
-<td>53702</td>
-<td><code>PCI</code></td>
-<td><code>PCI</code></td>
-<td>整个词块</td>
-</tr>
-<tr>
-<td>1</td>
-<td>68</td>
-<td><code>e</code></td>
-<td><code>e</code></td>
-<td>单个字符</td>
-</tr>
-<tr>
-<td>2</td>
-<td>18137</td>
-<td><code>Ġé</code></td>
-<td><code>\xe9</code></td>
-<td>空格 + 链的第 1 字节</td>
-</tr>
-<tr>
-<td>3</td>
-<td>241</td>
-<td><code>ĵ</code></td>
-<td><code>\x93</code></td>
-<td>链的第 2 字节</td>
-</tr>
-<tr>
-<td>4</td>
-<td>122</td>
-<td><code>¾</code></td>
-<td><code>\xbe</code></td>
-<td>链的第 3 字节</td>
-</tr>
-<tr>
-<td>5</td>
-<td>100309</td>
-<td><code>è·¯ä¸Ĭ</code></td>
-<td><code>\xe8\xb7\xaf\xe4\xb8\x8a</code></td>
-<td>路上</td>
-</tr>
-<tr>
-<td>6</td>
-<td>99745</td>
-<td><code>æĬĵ</code></td>
-<td><code>\xe6\x8a\x93</code></td>
-<td>抓</td>
-</tr>
-<tr>
-<td>…</td>
-<td></td>
-<td></td>
-<td></td>
-<td>其余 12 个 token 同理</td>
-</tr>
-</tbody>
-</table>
-<p>两个观察：</p>
-<ul>
-<li><strong>一个英文词可能被切碎，一个汉字可能横跨多个
-token</strong>。序号 2 到 4 合起来才是 链
-这一个字（<code>e9 93 be</code>）。</li>
-<li><strong>token 的边界不在字符边界上</strong>。序号 2
-的字节是空格加三分之一个汉字，单独拿出来根本不是合法 UTF-8。</li>
-</ul>
-<p>第二点直接决定了后面解码和反查的写法，值得单独看一眼：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">token id 53702  -&gt; &#x27;PCI&#x27;        独立可读</span><br><span class="line">token id 68     -&gt; &#x27;e&#x27;          独立可读</span><br><span class="line">token id 18137  -&gt; &#x27; \xe9&#x27;      空格 + 链 的第 1 个字节</span><br><span class="line">token id 241    -&gt; &#x27;\x93&#x27;       链 的第 2 个字节</span><br><span class="line">token id 122    -&gt; &#x27;\xbe&#x27;       链 的第 3 个字节</span><br><span class="line">token id 45995  -&gt; &#x27;路&#x27;         独立可读</span><br></pre></td></tr></table></figure>
-<p>在 Python 里逐个解码这些 token，序号 2 到 4 都会显示成替换字符
-<code>�</code>（序号 2
-还带着前面的空格）；只有把它们的字节按顺序拼起来再做一次 UTF-8
-解码，才得到 链路。</p>
 <h3 id="ġ-到底是什么"><code>Ġ</code> 到底是什么</h3>
 <p>既然基本单位是字节，词表里就该有空格、换行这些不可打印字节。为了让词表能用纯文本保存（一个
 <code>tokenizer.json</code> 或一份 merges 文件），GPT-2 定义了
@@ -27105,57 +27032,25 @@ BPE token 硬拆成字节。GPT-2
 151936 行、每行 896 个 bfloat16 数（bfloat16 是 16 位浮点数，占 2
 字节）：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Token IDs  [53702, 68, 18137, ...]</span><br><span class="line">     │</span><br><span class="line">     │ 每个 id 当行号，取出表里对应的一行</span><br><span class="line">     ↓</span><br><span class="line">┌────────────────────────────────┐</span><br><span class="line">│ Embedding Table   151936 x 896 │  ← 权重的一部分，加载时一次性搬进显存</span><br><span class="line">│  row 53702  -&gt; vector 0        │</span><br><span class="line">│  row 68     -&gt; vector 1        │</span><br><span class="line">│  row 18137  -&gt; vector 2        │</span><br><span class="line">└───────────────┬────────────────┘</span><br><span class="line">                ↓</span><br><span class="line">           19 x 896 矩阵</span><br></pre></td></tr></table></figure>
-<p>整张表按 bfloat16 算是 259.7 MiB（151936 x 896 x 2 B，MiB 按 1024 x
-1024 字节计），比链路上那 76 字节的 id
-大了好几个数量级。这一步在实现上是 <strong>gather
-而不是矩阵乘法</strong>：id 就是行号，取哪几行完全由 id 决定，同一个 id
-出现两次就取两次。</p>
-<p>对抓包来说这一点值得琢磨：如果能看到显存访问的行地址分布，id
-序列基本就暴露了。但链路抓不到显存内部的访问，只能看到进出 GPU
-的传输，所以这条路走不通——真正能用的还是本文讲的转换表反查。</p>
-<h3 id="一层-transformer-里做什么">一层 Transformer 里做什么</h3>
-<p>embedding 的输出是一张 n_tokens x 896 的矩阵，之后依次穿过 24
-层，每一层做的事都一样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">hidden states  (n x 896)</span><br><span class="line">        ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. RMSNorm          │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 2. Self-Attention   │  ← 每个 token 回看自己和前面的 token</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 3. Add residual     │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. RMSNorm          │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 5. FFN (MLP)        │  ← 896 → 4864 → 896</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 6. Add residual     │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">next layer  (n x 896)</span><br></pre></td></tr></table></figure>
-<p>图里这几样东西：RMSNorm（Root Mean Square Layer
-Normalization）是归一化层，FFN（Feed-Forward
-Network，前馈网络）是两层线性变换加激活函数，Add residual
-是把子层的输入加回输出，也就是残差连接。</p>
-<p><code>4864</code> 来自 config 的 <code>intermediate_size</code>，是
-FFN 的中间维度，比 896 大五倍多。注意力的两头各要做一次矩阵乘法，FFN
-里还有两次，这些就是每层的主要计算量。<strong>它们全在显存里完成，链路上看不到中间过程</strong>——这正是抓包只能拿到进出的
-id、拿不到计算细节的原因。</p>
-<h3 id="注意力在做什么">注意力在做什么</h3>
-<p>注意力的作用是让每个位置的向量去参考其它位置的信息。为了防止模型看到还没生成的
-token，计算时会把后面的位置屏蔽掉，每个位置只能看自己和前面的位置：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">      t1  t2  t3  t4  t5</span><br><span class="line">t1    #   .   .   .   .</span><br><span class="line">t2    #   #   .   .   .</span><br><span class="line">t3    #   #   #   .   .</span><br><span class="line">t4    #   #   #   #   .</span><br><span class="line">t5    #   #   #   #   #</span><br></pre></td></tr></table></figure>
-<p><code>#</code> 表示可见，<code>.</code> 表示屏蔽。t1 只能看自己，t5
-能看到前面所有位置。这个下三角形状正是 <strong>prefill 能一次算完整个
-prompt</strong>
-的原因：每个位置的输出只依赖它前面的输入，所有位置可以并行算；而 decode
-阶段新来的 token 依赖已经算完的全部历史，只能一个接一个地来。</p>
-<p>注意力内部会先把每个位置的向量投影成三份：Query（这个位置在找什么）、Key（这个位置有什么特征）、Value（被关注时贡献什么信息），再用
-Query 和各个 Key 匹配、按匹配度加权取 Value。所谓 <strong>KV
-cache</strong>，缓存的就是每层算好的 Key 和
-Value，名字的来源就在这里。</p>
-<h3 id="从-hidden-到-logits再到下一个-id">从 hidden 到
-logits，再到下一个 id</h3>
-<p>24 层走完，取最后一个位置的向量（1 x 896），过 <strong>LM
-Head</strong>（输出层）映射到 151936 维。</p>
-<p>Qwen2.5-0.5B 的 config 里写着
-<code>tie_word_embeddings = true</code>：这个输出矩阵和输入 embedding
-表是同一份权重。模型读问题用的表和写答案用的表是同一张，本文研究的转换表也正是这张表的
-id 到字节映射。</p>
-<p>得到的 151936 个数就是 <strong>logits</strong>，每个候选 token
-一个分数，可以是任意实数。中间过一次 softmax
-把它变成概率分布，采样器再从分布里挑出一个
-id：贪心就是取概率最大的那个；温度（temperature）在 softmax 之前把
-logits 除以 T，T 越小分布越尖锐、越确定；top-p 只保留累计概率达到 p
-的那几个候选再重新采样。这三个开关只影响选哪个
-id，不改变前面任何一步的数据形态。</p>
-<p>生成是自回归的：每产生一个 id
-就把它拼回序列，再跑一轮。模型的输出都是这样一 token 一 token
-挤出来的，没有一次生成整段的情况。</p>
+<p>整张表按 bfloat16 算是 259.7 MiB（151936 x 896 x 2 B），比链路上那 76
+字节的 id 大了好几个数量级。这一步在实现上是 <strong>gather
+而不是矩阵乘法</strong>：id 就是行号，取哪几行完全由 id 决定。</p>
+<h3 id="从-id-到下一个-id">从 id 到下一个 id</h3>
+<p>embedding 的输出是一张 n_tokens x 896 的矩阵，之后穿过 24 层
+Transformer，最后一个位置的向量过 <strong>LM
+Head</strong>（输出层）映射到 151936 维，得到
+<strong>logits</strong>——每个候选 token 一个分数。过一次 softmax
+把它变成概率分布，采样器从中挑出一个
+id：贪心取概率最大的那个；温度（temperature）在 softmax 之前把 logits
+除以 T，T 越小分布越尖锐；top-p 只保留累计概率达到 p
+的那几个候选再重新采样。这个 id
+既追加回上下文继续生成，也是最终回传给主机的结果。</p>
+<p><strong>这些计算对本文的反查没有用</strong>：Transformer 内部不改变
+id
+的编码规则，那些中间状态只存在于显存里，链路上也看不到。这里提它，只是为了说明后面那些数据量级是怎么来的。</p>
+<p>一处与词表相关的细节值得一提：Qwen2.5-0.5B 的 config 里
+<code>tie_word_embeddings = true</code>，也就是输出层和输入 embedding
+表共用同一份权重——模型读问题用的表和写答案用的表是同一张。</p>
 <h3 id="prefill-与-decode两种流量形态">prefill 与
 decode：两种流量形态</h3>
 <table>
@@ -27206,8 +27101,9 @@ token 数乘以每个 id 的字节数。</li>
 这类显存不够的兜底策略，链路上就会出现周期性的 KV cache 搬运流量。</li>
 </ul>
 <h3 id="这些数据在链路上长什么样">这些数据在链路上长什么样</h3>
-<p>把前面几步合起来看，一次推理在 PCIe 上的形状是这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. Tokenizer        │  ← 文本 → id</span><br><span class="line">│ 2. Runtime          │  ← 排队、下发 kernel</span><br><span class="line">│ 3. Sampling (opt)   │  ← 有的框架在这里采样</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ token ids（19 个 = 76 B）经 PCIe / DMA</span><br><span class="line">           ↓ 权重加载阶段另外搬一次（0.5B bf16 约 1 GB）</span><br><span class="line">GPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. Embedding        │  ← 查表得到 19 x 896</span><br><span class="line">│ 5. Transformer x 24 │  ← 注意力 + FFN</span><br><span class="line">│ 6. KV cache         │  ← 常驻显存，offload 时才过链路</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ logits 或采样后的 id（看采样在哪一侧）</span><br></pre></td></tr></table></figure>
+<p>一次推理真正跨 PCIe 的部分只有两块：主机把 id 送上去，GPU
+把结果送回来；权重在加载阶段搬一次（0.5B bf16 约 1 GB），KV cache
+平时不出显存。</p>
 <p>按开头那句
 <code>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</code>（19 个
 token），尺寸变化汇总如下：</p>
@@ -27335,12 +27231,10 @@ normalizer
 <p>三种格式各写一个读取函数，出口统一是 <code>&#123;id: bytes&#125;</code>。HF
 那支最简单：</p>
 <figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> json</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_hf_table</span>(<span class="params">path</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;tokenizer.json -&gt; &#123;id: bytes&#125;，特殊 token 天然不在 model.vocab 里。&quot;&quot;&quot;</span></span><br><span class="line">    raw = json.load(<span class="built_in">open</span>(path))</span><br><span class="line">    <span class="keyword">return</span> &#123;tid: token_bytes(piece) <span class="keyword">for</span> piece, tid <span class="keyword">in</span> raw[<span class="string">&quot;model&quot;</span>][<span class="string">&quot;vocab&quot;</span>].items()&#125;</span><br></pre></td></tr></table></figure>
-<p><code>.tiktoken</code> 多一步 base64 解码：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> base64</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_tiktoken_table</span>(<span class="params">path</span>):</span><br><span class="line">    table = &#123;&#125;</span><br><span class="line">    <span class="keyword">for</span> line <span class="keyword">in</span> <span class="built_in">open</span>(path):</span><br><span class="line">        b64, rank = line.split()</span><br><span class="line">        table[<span class="built_in">int</span>(rank)] = base64.b64decode(b64)</span><br><span class="line">    <span class="keyword">return</span> table</span><br></pre></td></tr></table></figure>
-<p>sentencepiece 要解析 protobuf 的重复字段
-<code>pieces</code>，每条取片段、分数、类型，把 <code>▁</code>
-换回空格，byte fallback 类型（<code>&lt;0xE9&gt;</code> 这种）的 id
-直接映射成对应字节。做完这一步，三张表在代码里就完全一样了。</p>
+<p><code>.tiktoken</code> 多一步 base64 解码；sentencepiece 那支要解析
+protobuf 的 <code>pieces</code> 字段，把 <code>▁</code> 换回空格，byte
+fallback 类型（<code>&lt;0xE9&gt;</code>）的 id
+直接映射成字节。做完这一步，三张表在代码里就完全一样了。</p>
 <p>表的规模心里有个数：Qwen2.5 的 151665 条映射总共约 976 KB
 字节内容，平均每个 token 6.44 字节；GPT-2 的 50257 条约 321
 KB。挂到抓包工具里做多模型试解，内存开销可以忽略。</p>
@@ -27476,33 +27370,23 @@ UTF-8，需要越界数、替换字符、语言模型多层打分</td>
 </thead>
 <tbody>
 <tr>
-<td><strong>切分</strong></td>
-<td>byte-level BPE 从 256
-个字节起步，按频率合并；中文常被拆到字节级</td>
-</tr>
-<tr>
-<td><strong>id</strong></td>
-<td>词表行号，跨模型无语义；同一文本在不同模型下长度差别很大</td>
+<td><strong>切分与 id</strong></td>
+<td>byte-level BPE 从 256 个字节起步按频率合并；id
+是词表行号，跨模型无语义</td>
 </tr>
 <tr>
 <td><strong>GPU 侧</strong></td>
-<td>id 查 embedding 变成向量，前向算出 logits，采样得到下一个 id</td>
-</tr>
-<tr>
-<td><strong>两阶段</strong></td>
-<td>prefill 一次吃整段 prompt，decode 每步只出一个 id</td>
+<td>id 查 embedding 变向量，前向出 logits，采样得下一个 id；prefill
+一次吃整段 prompt，decode 每步一个</td>
 </tr>
 <tr>
 <td><strong>解码</strong></td>
 <td>id → 字节 → 拼接 → UTF-8，三步顺序不能变</td>
 </tr>
 <tr>
-<td><strong>转换表</strong></td>
-<td>id → bytes 的映射；三种格式读进来统一成同一个函数</td>
-</tr>
-<tr>
-<td><strong>反查</strong></td>
-<td>多表试解 + 打分（越界、替换字符、可打印比例，必要时加语言模型）</td>
+<td><strong>转换表与反查</strong></td>
+<td>id → bytes 的映射（三种格式读进来统一成同一个函数），多表试解 +
+打分排序</td>
 </tr>
 </tbody>
 </table>

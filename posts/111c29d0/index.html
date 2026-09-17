@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
+    <meta name="description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要的只是一张 id 到字节 的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文的落点就是反查这一步。为了讲清它，前面会先把编码侧的形态走一遍（文字 → UTF-8 字节 → token → id），中间说明 id 进 GPU 之后发生了什么——那部分只是背景，反查用不到模">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字">
+<meta property="og:title" content="从 Token ID 还原文本：Tokenizer、BPE 与转换表">
 <meta property="og:url" content="https://iamzihao.github.io/posts/111c29d0/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
+<meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要的只是一张 id 到字节 的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文的落点就是反查这一步。为了讲清它，前面会先把编码侧的形态走一遍（文字 → UTF-8 字节 → token → id），中间说明 id 进 GPU 之后发生了什么——那部分只是背景，反查用不到模">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-17T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-17T08:45:07.001Z">
+<meta property="article:modified_time" content="2026-09-17T08:52:45.280Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="LLM">
 <meta property="article:tag" content="PCIe">
@@ -43,10 +43,10 @@
 <link rel="canonical" href="https://iamzihao.github.io/posts/111c29d0/">
 
 
-<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/111c29d0/","path":"posts/111c29d0/","title":"Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字"}</script>
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/111c29d0/","path":"posts/111c29d0/","title":"从 Token ID 还原文本：Tokenizer、BPE 与转换表"}</script>
 
 <script class="next-config" data-name="calendar" type="application/json">""</script>
-<title>Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字 | Zihao Li</title>
+<title>从 Token ID 还原文本：Tokenizer、BPE 与转换表 | Zihao Li</title>
   
 
 
@@ -176,10 +176,9 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E6%8E%A8%E7%90%86%E9%87%8C%E6%95%B0%E6%8D%AE%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number"></span> <span class="nav-text">🧭 一次推理里，数据长什么样</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%96%87%E6%9C%AC%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-token"><span class="nav-number"></span> <span class="nav-text">✂️ 文本怎么变成 token</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%88%87"><span class="nav-number">1.</span> <span class="nav-text">为什么要切</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bpe-%E7%9A%84%E7%9B%B4%E8%A7%89"><span class="nav-number">2.</span> <span class="nav-text">BPE 的直觉</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%8D%E8%A1%A8%E5%92%8C-merges-%E6%98%AF%E4%BA%A7%E7%89%A9%E7%BC%96%E7%A0%81%E6%AF%8F%E6%AC%A1%E9%83%BD%E8%A6%81%E5%81%9A"><span class="nav-number">3.</span> <span class="nav-text">词表和 merges
-是产物，编码每次都要做</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E6%96%87%E5%AD%97%E5%88%B0%E5%AD%97%E8%8A%82%E5%86%8D%E5%88%B0-token"><span class="nav-number">4.</span> <span class="nav-text">从文字到字节，再到 token</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E7%9C%9F%E5%AE%9E%E5%88%87%E5%88%86"><span class="nav-number">5.</span> <span class="nav-text">一次真实切分</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%C4%A1-%E5%88%B0%E5%BA%95%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">6.</span> <span class="nav-text">Ġ 到底是什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#token-%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-id"><span class="nav-number"></span> <span class="nav-text">🔢 token 怎么变成 id</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#id-%E5%8F%AA%E6%98%AF%E8%A1%8C%E5%8F%B7"><span class="nav-number">1.</span> <span class="nav-text">id 只是行号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%B9%E6%AE%8A-token-%E4%B8%8D%E5%9C%A8-bpe-%E8%A1%A8%E9%87%8C"><span class="nav-number">2.</span> <span class="nav-text">特殊 token 不在 BPE 表里</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E8%BF%9B-gpu-%E4%B9%8B%E5%90%8E%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧩 id 进 GPU 之后发生什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5-embedding-%E8%A1%A8"><span class="nav-number">1.</span> <span class="nav-text">查 embedding 表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E5%B1%82-transformer-%E9%87%8C%E5%81%9A%E4%BB%80%E4%B9%88"><span class="nav-number">2.</span> <span class="nav-text">一层 Transformer 里做什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%A8%E6%84%8F%E5%8A%9B%E5%9C%A8%E5%81%9A%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">注意力在做什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-hidden-%E5%88%B0-logits%E5%86%8D%E5%88%B0%E4%B8%8B%E4%B8%80%E4%B8%AA-id"><span class="nav-number">4.</span> <span class="nav-text">从 hidden 到
-logits，再到下一个 id</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#prefill-%E4%B8%8E-decode%E4%B8%A4%E7%A7%8D%E6%B5%81%E9%87%8F%E5%BD%A2%E6%80%81"><span class="nav-number">5.</span> <span class="nav-text">prefill 与
-decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%99%E4%BA%9B%E6%95%B0%E6%8D%AE%E5%9C%A8%E9%93%BE%E8%B7%AF%E4%B8%8A%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">6.</span> <span class="nav-text">这些数据在链路上长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E6%80%8E%E4%B9%88%E5%9B%9E%E5%88%B0%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🔁 id 怎么回到文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E5%BC%A0%E4%B8%BB%E8%A6%81%E7%9A%84%E8%AF%8D%E8%A1%A8%E6%A0%BC%E5%BC%8F"><span class="nav-number"></span> <span class="nav-text">📋 三张主要的词表格式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E7%A7%8D%E6%B5%81%E6%B4%BE"><span class="nav-number">1.</span> <span class="nav-text">三种流派</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E6%96%87%E4%BB%B6%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">真实文件长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%90%BD%E5%88%B0%E6%8A%93%E5%8C%85%E5%9C%BA%E6%99%AF%E4%B8%80%E4%B8%B2-id-%E5%8F%8D%E6%9F%A5%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🎯 落到抓包场景：一串 id
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%A8%E6%96%87%E7%9A%84%E8%90%BD%E7%82%B9id-%E5%AD%97%E8%8A%82-%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🔑 全文的落点：id → 字节 → 文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E6%8E%A8%E7%90%86%E9%87%8C%E6%95%B0%E6%8D%AE%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number"></span> <span class="nav-text">🧭 一次推理里，数据长什么样</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%96%87%E6%9C%AC%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-token"><span class="nav-number"></span> <span class="nav-text">✂️ 文本怎么变成 token</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%88%87"><span class="nav-number">1.</span> <span class="nav-text">为什么要切</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bpe-%E7%9A%84%E7%9B%B4%E8%A7%89"><span class="nav-number">2.</span> <span class="nav-text">BPE 的直觉</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%8D%E8%A1%A8%E5%92%8C-merges-%E6%98%AF%E4%BA%A7%E7%89%A9%E7%BC%96%E7%A0%81%E6%AF%8F%E6%AC%A1%E9%83%BD%E8%A6%81%E5%81%9A"><span class="nav-number">3.</span> <span class="nav-text">词表和 merges
+是产物，编码每次都要做</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E6%96%87%E5%AD%97%E5%88%B0%E5%AD%97%E8%8A%82%E5%86%8D%E5%88%B0-token"><span class="nav-number">4.</span> <span class="nav-text">从文字到字节，再到 token</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%C4%A1-%E5%88%B0%E5%BA%95%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">5.</span> <span class="nav-text">Ġ 到底是什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#token-%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-id"><span class="nav-number"></span> <span class="nav-text">🔢 token 怎么变成 id</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#id-%E5%8F%AA%E6%98%AF%E8%A1%8C%E5%8F%B7"><span class="nav-number">1.</span> <span class="nav-text">id 只是行号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%B9%E6%AE%8A-token-%E4%B8%8D%E5%9C%A8-bpe-%E8%A1%A8%E9%87%8C"><span class="nav-number">2.</span> <span class="nav-text">特殊 token 不在 BPE 表里</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E8%BF%9B-gpu-%E4%B9%8B%E5%90%8E%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧩 id 进 GPU 之后发生什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5-embedding-%E8%A1%A8"><span class="nav-number">1.</span> <span class="nav-text">查 embedding 表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-id-%E5%88%B0%E4%B8%8B%E4%B8%80%E4%B8%AA-id"><span class="nav-number">2.</span> <span class="nav-text">从 id 到下一个 id</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#prefill-%E4%B8%8E-decode%E4%B8%A4%E7%A7%8D%E6%B5%81%E9%87%8F%E5%BD%A2%E6%80%81"><span class="nav-number">3.</span> <span class="nav-text">prefill 与
+decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%99%E4%BA%9B%E6%95%B0%E6%8D%AE%E5%9C%A8%E9%93%BE%E8%B7%AF%E4%B8%8A%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">4.</span> <span class="nav-text">这些数据在链路上长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E6%80%8E%E4%B9%88%E5%9B%9E%E5%88%B0%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🔁 id 怎么回到文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E5%BC%A0%E4%B8%BB%E8%A6%81%E7%9A%84%E8%AF%8D%E8%A1%A8%E6%A0%BC%E5%BC%8F"><span class="nav-number"></span> <span class="nav-text">📋 三张主要的词表格式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E7%A7%8D%E6%B5%81%E6%B4%BE"><span class="nav-number">1.</span> <span class="nav-text">三种流派</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E6%96%87%E4%BB%B6%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">真实文件长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%90%BD%E5%88%B0%E6%8A%93%E5%8C%85%E5%9C%BA%E6%99%AF%E4%B8%80%E4%B8%B2-id-%E5%8F%8D%E6%9F%A5%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🎯 落到抓包场景：一串 id
 反查文本</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%95%E8%A7%A3%E6%B5%81%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">试解流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E8%AF%95%E8%A7%A3%E7%BB%93%E6%9E%9C"><span class="nav-number">2.</span> <span class="nav-text">真实试解结果</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-dma-%E6%95%B0%E6%8D%AE%E9%87%8C%E5%88%87%E5%87%BA-id-%E5%BA%8F%E5%88%97"><span class="nav-number">3.</span> <span class="nav-text">从 DMA 数据里切出 id 序列</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%B9%E6%98%93%E8%B8%A9%E7%9A%84%E5%9D%91"><span class="nav-number"></span> <span class="nav-text">⚠️ 容易踩的坑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number"></span> <span class="nav-text">📌 小结</span></a></div>
         </div>
         <!--/noindex-->
@@ -249,12 +248,12 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
     </span>
 
     <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
-      <meta itemprop="name" content="Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字 | Zihao Li">
+      <meta itemprop="name" content="从 Token ID 还原文本：Tokenizer、BPE 与转换表 | Zihao Li">
       <meta itemprop="description" content="">
     </span>
       <header class="post-header">
         <h1 class="post-title" itemprop="name headline">
-          Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字
+          从 Token ID 还原文本：Tokenizer、BPE 与转换表
         </h1>
 
         <div class="post-meta-container">
@@ -266,7 +265,7 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-17 11:00:00 / Modified: 16:45:07" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+      <time title="Created: 2026-09-17 11:00:00 / Modified: 16:52:45" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
     </span>
 
   
@@ -283,14 +282,14 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>14k</span>
+      <span>12k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>26 mins.</span>
+      <span>22 mins.</span>
     </span>
 </div>
 
@@ -301,11 +300,12 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
     
     
     <div class="post-body" itemprop="articleBody"><p>链路上抓到一串整数时，它很可能就是 token
-id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id
-到字节的对照表，本文称之为<strong>转换表</strong>；而这张表在不同模型之间并不通用。</p>
-<p>本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token
-怎么变成 id、id 送上 GPU 之后发生什么、生成的 id
-又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，怎么用几张表把它试解成文本。文中数字全部来自本机真实跑出来的结果，词表取自
+id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要的只是一张
+<strong>id 到字节</strong>
+的对照表，本文称之为<strong>转换表</strong>；而这张表在不同模型之间并不通用。</p>
+<p>本文的落点就是反查这一步。为了讲清它，前面会先把编码侧的形态走一遍（文字
+→ UTF-8 字节 → token → id），中间说明 id 进 GPU
+之后发生了什么——那部分只是背景，反查用不到模型内部的计算。文中数字全部来自本机真实跑出来的结果，词表取自
 Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
@@ -375,6 +375,19 @@ Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 </tr>
 </tbody>
 </table>
+<h2 id="全文的落点id-字节-文本">🔑 全文的落点：id → 字节 → 文本</h2>
+<p>先给结论，后面都是为它铺垫：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">token id</span><br><span class="line">   ↓ 查表：一个 id 对应一段字节</span><br><span class="line">字节</span><br><span class="line">   ↓ 按顺序拼接</span><br><span class="line">字节池</span><br><span class="line">   ↓ 整段做一次 UTF-8 解码</span><br><span class="line">文本</span><br></pre></td></tr></table></figure>
+<p>三点：</p>
+<ul>
+<li><strong>表是 <code>id → bytes</code> 的映射，不是 token
+字符串到词</strong>。token 的边界不在字符边界上，单个 token
+常常拼不出一个完整字符，只能先拼字节再统一解码。</li>
+<li><strong>反查只要这一张表，不需要 merges</strong>。merges
+只在编码时决定怎么切分，解码方向用不上，表因此可以做得极小。</li>
+<li><strong>表不通用</strong>。同一个 id
+在不同模型里是不同东西；手上只有一串整数时，只能拿备好的几张表逐张试，再按打分排序。</li>
+</ul>
 <h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
 <p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">用户输入的文字：PCIe 链路上抓到的 token id，能还原出原来的问题吗？</span><br><span class="line">   ↓ UTF-8 编码（32 个字符 → 68 字节）</span><br><span class="line">字节</span><br><span class="line">   ↓ tokenizer.encode()：BPE 合并 + 查表</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
@@ -479,7 +492,7 @@ merges。</p>
 <h3 id="从文字到字节再到-token">从文字到字节，再到 token</h3>
 <p>这几个层次容易混在一起，拿 你好 两个字过一遍就清楚了：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">你看到的文字：你好</span><br><span class="line">   ↓ UTF-8 编码，一个汉字 3 个字节（统一标准）</span><br><span class="line">字节：e4 bd a0 e5 a5 bd</span><br><span class="line">   ↓ byte-level BPE 按频率合并字节对（取决于 Tokenizer）</span><br><span class="line">token：ä½łå¥½                      ← 词表里正好有这一整块</span><br><span class="line">   ↓ 查词表</span><br><span class="line">token id：108386</span><br><span class="line">   ↓</span><br><span class="line">模型真正看到的：108386</span><br></pre></td></tr></table></figure>
-<p>同一段文字，不同模型切出来的结果差得很多（实测）：</p>
+<p>同一段文字，不同模型切出来的结果差得很多：</p>
 <table>
 <thead>
 <tr>
@@ -519,93 +532,6 @@ token，GPT-2 要 4 个。</li>
 </ul>
 <p>抓包时能看到的也是最后那一层：一串 id。要把它变回文字，靠的就是从 id
 反查回字节的那张表。</p>
-<h3 id="一次真实切分">一次真实切分</h3>
-<p>拿一句中英混合的话做实验：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> tokenizers <span class="keyword">import</span> Tokenizer</span><br><span class="line"></span><br><span class="line">tok = Tokenizer.from_file(<span class="string">&quot;qwen.json&quot;</span>)</span><br><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(enc.ids), enc.ids[:<span class="number">8</span>], enc.tokens[:<span class="number">5</span>])</span><br><span class="line"><span class="comment"># 19 [53702, 68, 18137, 241, 122, 100309, 99745, 26939] [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27;Ġé&#x27;, &#x27;ĵ&#x27;, &#x27;¾&#x27;]</span></span><br></pre></td></tr></table></figure>
-<p>逐 token 展开来看，<code>Ġ</code> 的含义就出来了：</p>
-<table>
-<thead>
-<tr>
-<th>序号</th>
-<th>id</th>
-<th>词表里的写法</th>
-<th>还原出的字节</th>
-<th>归属</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>0</td>
-<td>53702</td>
-<td><code>PCI</code></td>
-<td><code>PCI</code></td>
-<td>整个词块</td>
-</tr>
-<tr>
-<td>1</td>
-<td>68</td>
-<td><code>e</code></td>
-<td><code>e</code></td>
-<td>单个字符</td>
-</tr>
-<tr>
-<td>2</td>
-<td>18137</td>
-<td><code>Ġé</code></td>
-<td><code>\xe9</code></td>
-<td>空格 + 链的第 1 字节</td>
-</tr>
-<tr>
-<td>3</td>
-<td>241</td>
-<td><code>ĵ</code></td>
-<td><code>\x93</code></td>
-<td>链的第 2 字节</td>
-</tr>
-<tr>
-<td>4</td>
-<td>122</td>
-<td><code>¾</code></td>
-<td><code>\xbe</code></td>
-<td>链的第 3 字节</td>
-</tr>
-<tr>
-<td>5</td>
-<td>100309</td>
-<td><code>è·¯ä¸Ĭ</code></td>
-<td><code>\xe8\xb7\xaf\xe4\xb8\x8a</code></td>
-<td>路上</td>
-</tr>
-<tr>
-<td>6</td>
-<td>99745</td>
-<td><code>æĬĵ</code></td>
-<td><code>\xe6\x8a\x93</code></td>
-<td>抓</td>
-</tr>
-<tr>
-<td>…</td>
-<td></td>
-<td></td>
-<td></td>
-<td>其余 12 个 token 同理</td>
-</tr>
-</tbody>
-</table>
-<p>两个观察：</p>
-<ul>
-<li><strong>一个英文词可能被切碎，一个汉字可能横跨多个
-token</strong>。序号 2 到 4 合起来才是 链
-这一个字（<code>e9 93 be</code>）。</li>
-<li><strong>token 的边界不在字符边界上</strong>。序号 2
-的字节是空格加三分之一个汉字，单独拿出来根本不是合法 UTF-8。</li>
-</ul>
-<p>第二点直接决定了后面解码和反查的写法，值得单独看一眼：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">token id 53702  -&gt; &#x27;PCI&#x27;        独立可读</span><br><span class="line">token id 68     -&gt; &#x27;e&#x27;          独立可读</span><br><span class="line">token id 18137  -&gt; &#x27; \xe9&#x27;      空格 + 链 的第 1 个字节</span><br><span class="line">token id 241    -&gt; &#x27;\x93&#x27;       链 的第 2 个字节</span><br><span class="line">token id 122    -&gt; &#x27;\xbe&#x27;       链 的第 3 个字节</span><br><span class="line">token id 45995  -&gt; &#x27;路&#x27;         独立可读</span><br></pre></td></tr></table></figure>
-<p>在 Python 里逐个解码这些 token，序号 2 到 4 都会显示成替换字符
-<code>�</code>（序号 2
-还带着前面的空格）；只有把它们的字节按顺序拼起来再做一次 UTF-8
-解码，才得到 链路。</p>
 <h3 id="ġ-到底是什么"><code>Ġ</code> 到底是什么</h3>
 <p>既然基本单位是字节，词表里就该有空格、换行这些不可打印字节。为了让词表能用纯文本保存（一个
 <code>tokenizer.json</code> 或一份 merges 文件），GPT-2 定义了
@@ -711,57 +637,25 @@ BPE token 硬拆成字节。GPT-2
 151936 行、每行 896 个 bfloat16 数（bfloat16 是 16 位浮点数，占 2
 字节）：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Token IDs  [53702, 68, 18137, ...]</span><br><span class="line">     │</span><br><span class="line">     │ 每个 id 当行号，取出表里对应的一行</span><br><span class="line">     ↓</span><br><span class="line">┌────────────────────────────────┐</span><br><span class="line">│ Embedding Table   151936 x 896 │  ← 权重的一部分，加载时一次性搬进显存</span><br><span class="line">│  row 53702  -&gt; vector 0        │</span><br><span class="line">│  row 68     -&gt; vector 1        │</span><br><span class="line">│  row 18137  -&gt; vector 2        │</span><br><span class="line">└───────────────┬────────────────┘</span><br><span class="line">                ↓</span><br><span class="line">           19 x 896 矩阵</span><br></pre></td></tr></table></figure>
-<p>整张表按 bfloat16 算是 259.7 MiB（151936 x 896 x 2 B，MiB 按 1024 x
-1024 字节计），比链路上那 76 字节的 id
-大了好几个数量级。这一步在实现上是 <strong>gather
-而不是矩阵乘法</strong>：id 就是行号，取哪几行完全由 id 决定，同一个 id
-出现两次就取两次。</p>
-<p>对抓包来说这一点值得琢磨：如果能看到显存访问的行地址分布，id
-序列基本就暴露了。但链路抓不到显存内部的访问，只能看到进出 GPU
-的传输，所以这条路走不通——真正能用的还是本文讲的转换表反查。</p>
-<h3 id="一层-transformer-里做什么">一层 Transformer 里做什么</h3>
-<p>embedding 的输出是一张 n_tokens x 896 的矩阵，之后依次穿过 24
-层，每一层做的事都一样：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line">hidden states  (n x 896)</span><br><span class="line">        ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. RMSNorm          │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 2. Self-Attention   │  ← 每个 token 回看自己和前面的 token</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 3. Add residual     │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. RMSNorm          │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 5. FFN (MLP)        │  ← 896 → 4864 → 896</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 6. Add residual     │</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓</span><br><span class="line">next layer  (n x 896)</span><br></pre></td></tr></table></figure>
-<p>图里这几样东西：RMSNorm（Root Mean Square Layer
-Normalization）是归一化层，FFN（Feed-Forward
-Network，前馈网络）是两层线性变换加激活函数，Add residual
-是把子层的输入加回输出，也就是残差连接。</p>
-<p><code>4864</code> 来自 config 的 <code>intermediate_size</code>，是
-FFN 的中间维度，比 896 大五倍多。注意力的两头各要做一次矩阵乘法，FFN
-里还有两次，这些就是每层的主要计算量。<strong>它们全在显存里完成，链路上看不到中间过程</strong>——这正是抓包只能拿到进出的
-id、拿不到计算细节的原因。</p>
-<h3 id="注意力在做什么">注意力在做什么</h3>
-<p>注意力的作用是让每个位置的向量去参考其它位置的信息。为了防止模型看到还没生成的
-token，计算时会把后面的位置屏蔽掉，每个位置只能看自己和前面的位置：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">      t1  t2  t3  t4  t5</span><br><span class="line">t1    #   .   .   .   .</span><br><span class="line">t2    #   #   .   .   .</span><br><span class="line">t3    #   #   #   .   .</span><br><span class="line">t4    #   #   #   #   .</span><br><span class="line">t5    #   #   #   #   #</span><br></pre></td></tr></table></figure>
-<p><code>#</code> 表示可见，<code>.</code> 表示屏蔽。t1 只能看自己，t5
-能看到前面所有位置。这个下三角形状正是 <strong>prefill 能一次算完整个
-prompt</strong>
-的原因：每个位置的输出只依赖它前面的输入，所有位置可以并行算；而 decode
-阶段新来的 token 依赖已经算完的全部历史，只能一个接一个地来。</p>
-<p>注意力内部会先把每个位置的向量投影成三份：Query（这个位置在找什么）、Key（这个位置有什么特征）、Value（被关注时贡献什么信息），再用
-Query 和各个 Key 匹配、按匹配度加权取 Value。所谓 <strong>KV
-cache</strong>，缓存的就是每层算好的 Key 和
-Value，名字的来源就在这里。</p>
-<h3 id="从-hidden-到-logits再到下一个-id">从 hidden 到
-logits，再到下一个 id</h3>
-<p>24 层走完，取最后一个位置的向量（1 x 896），过 <strong>LM
-Head</strong>（输出层）映射到 151936 维。</p>
-<p>Qwen2.5-0.5B 的 config 里写着
-<code>tie_word_embeddings = true</code>：这个输出矩阵和输入 embedding
-表是同一份权重。模型读问题用的表和写答案用的表是同一张，本文研究的转换表也正是这张表的
-id 到字节映射。</p>
-<p>得到的 151936 个数就是 <strong>logits</strong>，每个候选 token
-一个分数，可以是任意实数。中间过一次 softmax
-把它变成概率分布，采样器再从分布里挑出一个
-id：贪心就是取概率最大的那个；温度（temperature）在 softmax 之前把
-logits 除以 T，T 越小分布越尖锐、越确定；top-p 只保留累计概率达到 p
-的那几个候选再重新采样。这三个开关只影响选哪个
-id，不改变前面任何一步的数据形态。</p>
-<p>生成是自回归的：每产生一个 id
-就把它拼回序列，再跑一轮。模型的输出都是这样一 token 一 token
-挤出来的，没有一次生成整段的情况。</p>
+<p>整张表按 bfloat16 算是 259.7 MiB（151936 x 896 x 2 B），比链路上那 76
+字节的 id 大了好几个数量级。这一步在实现上是 <strong>gather
+而不是矩阵乘法</strong>：id 就是行号，取哪几行完全由 id 决定。</p>
+<h3 id="从-id-到下一个-id">从 id 到下一个 id</h3>
+<p>embedding 的输出是一张 n_tokens x 896 的矩阵，之后穿过 24 层
+Transformer，最后一个位置的向量过 <strong>LM
+Head</strong>（输出层）映射到 151936 维，得到
+<strong>logits</strong>——每个候选 token 一个分数。过一次 softmax
+把它变成概率分布，采样器从中挑出一个
+id：贪心取概率最大的那个；温度（temperature）在 softmax 之前把 logits
+除以 T，T 越小分布越尖锐；top-p 只保留累计概率达到 p
+的那几个候选再重新采样。这个 id
+既追加回上下文继续生成，也是最终回传给主机的结果。</p>
+<p><strong>这些计算对本文的反查没有用</strong>：Transformer 内部不改变
+id
+的编码规则，那些中间状态只存在于显存里，链路上也看不到。这里提它，只是为了说明后面那些数据量级是怎么来的。</p>
+<p>一处与词表相关的细节值得一提：Qwen2.5-0.5B 的 config 里
+<code>tie_word_embeddings = true</code>，也就是输出层和输入 embedding
+表共用同一份权重——模型读问题用的表和写答案用的表是同一张。</p>
 <h3 id="prefill-与-decode两种流量形态">prefill 与
 decode：两种流量形态</h3>
 <table>
@@ -812,8 +706,9 @@ token 数乘以每个 id 的字节数。</li>
 这类显存不够的兜底策略，链路上就会出现周期性的 KV cache 搬运流量。</li>
 </ul>
 <h3 id="这些数据在链路上长什么样">这些数据在链路上长什么样</h3>
-<p>把前面几步合起来看，一次推理在 PCIe 上的形状是这样：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">CPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. Tokenizer        │  ← 文本 → id</span><br><span class="line">│ 2. Runtime          │  ← 排队、下发 kernel</span><br><span class="line">│ 3. Sampling (opt)   │  ← 有的框架在这里采样</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ token ids（19 个 = 76 B）经 PCIe / DMA</span><br><span class="line">           ↓ 权重加载阶段另外搬一次（0.5B bf16 约 1 GB）</span><br><span class="line">GPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. Embedding        │  ← 查表得到 19 x 896</span><br><span class="line">│ 5. Transformer x 24 │  ← 注意力 + FFN</span><br><span class="line">│ 6. KV cache         │  ← 常驻显存，offload 时才过链路</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ logits 或采样后的 id（看采样在哪一侧）</span><br></pre></td></tr></table></figure>
+<p>一次推理真正跨 PCIe 的部分只有两块：主机把 id 送上去，GPU
+把结果送回来；权重在加载阶段搬一次（0.5B bf16 约 1 GB），KV cache
+平时不出显存。</p>
 <p>按开头那句
 <code>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</code>（19 个
 token），尺寸变化汇总如下：</p>
@@ -941,12 +836,10 @@ normalizer
 <p>三种格式各写一个读取函数，出口统一是 <code>&#123;id: bytes&#125;</code>。HF
 那支最简单：</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> json</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_hf_table</span>(<span class="params">path</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;tokenizer.json -&gt; &#123;id: bytes&#125;，特殊 token 天然不在 model.vocab 里。&quot;&quot;&quot;</span></span><br><span class="line">    raw = json.load(<span class="built_in">open</span>(path))</span><br><span class="line">    <span class="keyword">return</span> &#123;tid: token_bytes(piece) <span class="keyword">for</span> piece, tid <span class="keyword">in</span> raw[<span class="string">&quot;model&quot;</span>][<span class="string">&quot;vocab&quot;</span>].items()&#125;</span><br></pre></td></tr></table></figure>
-<p><code>.tiktoken</code> 多一步 base64 解码：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> base64</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_tiktoken_table</span>(<span class="params">path</span>):</span><br><span class="line">    table = &#123;&#125;</span><br><span class="line">    <span class="keyword">for</span> line <span class="keyword">in</span> <span class="built_in">open</span>(path):</span><br><span class="line">        b64, rank = line.split()</span><br><span class="line">        table[<span class="built_in">int</span>(rank)] = base64.b64decode(b64)</span><br><span class="line">    <span class="keyword">return</span> table</span><br></pre></td></tr></table></figure>
-<p>sentencepiece 要解析 protobuf 的重复字段
-<code>pieces</code>，每条取片段、分数、类型，把 <code>▁</code>
-换回空格，byte fallback 类型（<code>&lt;0xE9&gt;</code> 这种）的 id
-直接映射成对应字节。做完这一步，三张表在代码里就完全一样了。</p>
+<p><code>.tiktoken</code> 多一步 base64 解码；sentencepiece 那支要解析
+protobuf 的 <code>pieces</code> 字段，把 <code>▁</code> 换回空格，byte
+fallback 类型（<code>&lt;0xE9&gt;</code>）的 id
+直接映射成字节。做完这一步，三张表在代码里就完全一样了。</p>
 <p>表的规模心里有个数：Qwen2.5 的 151665 条映射总共约 976 KB
 字节内容，平均每个 token 6.44 字节；GPT-2 的 50257 条约 321
 KB。挂到抓包工具里做多模型试解，内存开销可以忽略。</p>
@@ -1082,33 +975,23 @@ UTF-8，需要越界数、替换字符、语言模型多层打分</td>
 </thead>
 <tbody>
 <tr>
-<td><strong>切分</strong></td>
-<td>byte-level BPE 从 256
-个字节起步，按频率合并；中文常被拆到字节级</td>
-</tr>
-<tr>
-<td><strong>id</strong></td>
-<td>词表行号，跨模型无语义；同一文本在不同模型下长度差别很大</td>
+<td><strong>切分与 id</strong></td>
+<td>byte-level BPE 从 256 个字节起步按频率合并；id
+是词表行号，跨模型无语义</td>
 </tr>
 <tr>
 <td><strong>GPU 侧</strong></td>
-<td>id 查 embedding 变成向量，前向算出 logits，采样得到下一个 id</td>
-</tr>
-<tr>
-<td><strong>两阶段</strong></td>
-<td>prefill 一次吃整段 prompt，decode 每步只出一个 id</td>
+<td>id 查 embedding 变向量，前向出 logits，采样得下一个 id；prefill
+一次吃整段 prompt，decode 每步一个</td>
 </tr>
 <tr>
 <td><strong>解码</strong></td>
 <td>id → 字节 → 拼接 → UTF-8，三步顺序不能变</td>
 </tr>
 <tr>
-<td><strong>转换表</strong></td>
-<td>id → bytes 的映射；三种格式读进来统一成同一个函数</td>
-</tr>
-<tr>
-<td><strong>反查</strong></td>
-<td>多表试解 + 打分（越界、替换字符、可打印比例，必要时加语言模型）</td>
+<td><strong>转换表与反查</strong></td>
+<td>id → bytes 的映射（三种格式读进来统一成同一个函数），多表试解 +
+打分排序</td>
 </tr>
 </tbody>
 </table>
@@ -1173,13 +1056,13 @@ href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">448k</span>
+    <span title="Word count total">446k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">13:35</span>
+    <span title="Reading time total">13:30</span>
   </span>
 </div>
 <div class="busuanzi-count">
