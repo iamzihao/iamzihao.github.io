@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字">
+<meta property="og:url" content="https://iamzihao.github.io/posts/111c29d0/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-17T03:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-17T02:05:35.591Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="LLM">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="tokenizer">
+<meta property="article:tag" content="BPE">
+<meta property="article:tag" content="推理">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/111c29d0/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/111c29d0/","path":"posts/111c29d0/","title":"Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E6%8E%A8%E7%90%86%E9%87%8C%E6%95%B0%E6%8D%AE%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number"></span> <span class="nav-text">🧭 一次推理里，数据长什么样</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%96%87%E6%9C%AC%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-token"><span class="nav-number"></span> <span class="nav-text">✂️ 文本怎么变成 token</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%88%87"><span class="nav-number">1.</span> <span class="nav-text">为什么要切</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bpe-%E7%9A%84%E7%9B%B4%E8%A7%89"><span class="nav-number">2.</span> <span class="nav-text">BPE 的直觉</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E7%9C%9F%E5%AE%9E%E5%88%87%E5%88%86"><span class="nav-number">3.</span> <span class="nav-text">一次真实切分</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%C4%A1-%E5%88%B0%E5%BA%95%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">Ġ 到底是什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#token-%E6%80%8E%E4%B9%88%E5%8F%98%E6%88%90-id"><span class="nav-number"></span> <span class="nav-text">🔢 token 怎么变成 id</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#id-%E5%8F%AA%E6%98%AF%E8%A1%8C%E5%8F%B7"><span class="nav-number">1.</span> <span class="nav-text">id 只是行号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%89%B9%E6%AE%8A-token-%E4%B8%8D%E5%9C%A8-bpe-%E8%A1%A8%E9%87%8C"><span class="nav-number">2.</span> <span class="nav-text">特殊 token 不在 BPE 表里</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E8%BF%9B-gpu-%E4%B9%8B%E5%90%8E%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧩 id 进 GPU 之后发生什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5-embedding-%E8%A1%A8"><span class="nav-number">1.</span> <span class="nav-text">查 embedding 表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%89%8D%E5%90%91%E8%AE%A1%E7%AE%97%E4%B8%8E%E9%87%87%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">前向计算与采样</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#prefill-%E4%B8%8E-decode%E4%B8%A4%E7%A7%8D%E6%B5%81%E9%87%8F%E5%BD%A2%E6%80%81"><span class="nav-number">3.</span> <span class="nav-text">prefill 与
+decode：两种流量形态</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#id-%E6%80%8E%E4%B9%88%E5%9B%9E%E5%88%B0%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🔁 id 怎么回到文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E5%BC%A0%E4%B8%BB%E8%A6%81%E7%9A%84%E8%AF%8D%E8%A1%A8%E6%A0%BC%E5%BC%8F"><span class="nav-number"></span> <span class="nav-text">📋 三张主要的词表格式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E7%A7%8D%E6%B5%81%E6%B4%BE"><span class="nav-number">1.</span> <span class="nav-text">三种流派</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E6%96%87%E4%BB%B6%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">2.</span> <span class="nav-text">真实文件长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%90%BD%E5%88%B0%E6%8A%93%E5%8C%85%E5%9C%BA%E6%99%AF%E4%B8%80%E4%B8%B2-id-%E5%8F%8D%E6%9F%A5%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🎯 落到抓包场景：一串 id
+反查文本</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%95%E8%A7%A3%E6%B5%81%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">试解流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E8%AF%95%E8%A7%A3%E7%BB%93%E6%9E%9C"><span class="nav-number">2.</span> <span class="nav-text">真实试解结果</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E-dma-%E6%95%B0%E6%8D%AE%E9%87%8C%E5%88%87%E5%87%BA-id-%E5%BA%8F%E5%88%97"><span class="nav-number">3.</span> <span class="nav-text">从 DMA 数据里切出 id 序列</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%B9%E6%98%93%E8%B8%A9%E7%9A%84%E5%9D%91"><span class="nav-number"></span> <span class="nav-text">⚠️ 容易踩的坑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number"></span> <span class="nav-text">📌 小结</span></a></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">85</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">211</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/111c29d0/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-17 11:00:00 / Modified: 10:05:35" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>10k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>18 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>链路上抓到一串整数时，它很可能就是 token
+id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id
+到字节的对照表，本文称之为<strong>转换表</strong>；而这张表在不同模型之间并不通用。</p>
+<p>本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token
+怎么变成 id、id 送上 GPU 之后发生什么、生成的 id
+又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，怎么用几张表把它试解成文本。文中数字全部来自本机真实跑出来的结果，词表取自
+Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>token</strong></td>
+<td>模型处理文本的最小单位</td>
+<td>比字粗、比词细的碎片</td>
+</tr>
+<tr>
+<td><strong>tokenizer</strong></td>
+<td>负责文本与 token 互转的程序</td>
+<td>编码器与解码器合体</td>
+</tr>
+<tr>
+<td><strong>词表（vocab）</strong></td>
+<td>token 与 id 的对照表</td>
+<td>一本字典，行号即 id</td>
+</tr>
+<tr>
+<td><strong>BPE</strong></td>
+<td>Byte Pair Encoding，按频率合并相邻字节对的切分算法</td>
+<td>主流词表的生成方式</td>
+</tr>
+<tr>
+<td><strong>token id</strong></td>
+<td>token 在词表里的整数编号</td>
+<td>模型真正看见的东西</td>
+</tr>
+<tr>
+<td><strong>embedding</strong></td>
+<td>把 id 查成向量的那张表</td>
+<td>数字进入网络的入口</td>
+</tr>
+<tr>
+<td><strong>logits</strong></td>
+<td>最后一层输出的分数，长度等于词表大小</td>
+<td>每个候选 token 的得分</td>
+</tr>
+<tr>
+<td><strong>prefill / decode</strong></td>
+<td>处理 prompt 与逐 token 生成两个阶段</td>
+<td>一次大计算 + 多次小计算</td>
+</tr>
+<tr>
+<td><strong>转换表</strong></td>
+<td>id 到字节（或文本）的映射</td>
+<td>反查文本的依据</td>
+</tr>
+</tbody>
+</table>
+<h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
+<p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ tokenizer.encode()：规范化 + 切分 + 查表</span><br><span class="line">token id 序列 [53702, 68, 18137, ...]        ← 4 字节一个整数</span><br><span class="line">   ↓ 驱动排队，DMA 搬上 GPU</span><br><span class="line">embedding 查表</span><br><span class="line">   ↓ n_tokens x 896 的向量矩阵（bfloat16）</span><br><span class="line">24 层 Transformer 前向</span><br><span class="line">   ↓ 取最后一行，映射到 151936 维</span><br><span class="line">logits</span><br><span class="line">   ↓ 采样（贪心 / 温度 / top-p）</span><br><span class="line">下一个 token id</span><br><span class="line">   ↓ 追加进上下文，回到 embedding 那一步</span><br><span class="line">   ...</span><br><span class="line">   ↓ tokenizer.decode()：id -&gt; 字节 -&gt; 拼接 -&gt; UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
+<p>往下按这条链路的顺序拆。前两段（文字到 id）完全在 CPU
+上完成，跟模型权重无关，可以离线跑；第三段在 GPU 里；第四段又回到
+CPU。</p>
+<h2 id="文本怎么变成-token">✂️ 文本怎么变成 token</h2>
+<h3 id="为什么要切">为什么要切</h3>
+<p>模型的输入是一串整数，每个整数必须是词表里的合法编号，所以文本要先切成一堆片段再逐个编号。按字符切，字符集本身就有几万个，标点和大小写还得分开放；按空格切词，词表会跟着语言和领域无限膨胀，遇到没见过的词（OOV，out-of-vocabulary）就没法编码。</p>
+<p>折中方案是<strong>子词（subword）</strong>：高频片段保留成整块，低频内容退化成更小的碎片。常见做法是
+BPE。</p>
+<h3 id="bpe-的直觉">BPE 的直觉</h3>
+<p>BPE
+原是一种数据压缩算法，思路很朴素：先从最小的单位开始，统计哪对相邻单位出现最多，就把它们合并成一个新单位，重复到词表规模达标为止。</p>
+<p>真实词表里的 <code>merges</code> 列表记录了每一次合并。Qwen2.5 的
+<code>tokenizer.json</code> 里 <code>merges</code> 有 151387
+条，开头几条是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Ġ Ġ        ← 两个单空格片段并成一个双空格片段</span><br><span class="line">ĠĠ ĠĠ      ← 两个双空格片段并成一个四空格片段</span><br><span class="line">i n        ← i 和 n 并成 in</span><br><span class="line">Ġ t        ← 空格和 t 并成一个带前导空格的片段</span><br></pre></td></tr></table></figure>
+<p><code>Ġ</code>
+不是乱码，它是空格（0x20）在词表里的写法，下一节解释。</p>
+<p>BPE 生成的词表有一条清晰的账：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>初始字节</th>
+<th>merges 次数</th>
+<th>词表条目</th>
+<th>特殊 token</th>
+<th>最大 id</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Qwen2.5</strong></td>
+<td>256</td>
+<td>151387</td>
+<td>151643</td>
+<td>22（单独登记）</td>
+<td>151664</td>
+</tr>
+<tr>
+<td><strong>GPT-2</strong></td>
+<td>256</td>
+<td>50000</td>
+<td>50257</td>
+<td>1（本来就在词表里）</td>
+<td>50256</td>
+</tr>
+</tbody>
+</table>
+<p>Qwen2.5 的 256 加 151387 正好等于词表条目 151643，再叠加 22 个特殊
+token；GPT-2 的 50257 条里已经包含了
+<code>&lt;|endoftext|&gt;</code>，所以 merges 加初始字节只有 50256。</p>
+<p><strong>初始单位是 256 个字节，不是字符</strong>。这是 byte-level BPE
+的关键：任何文本（汉字、emoji、二进制残留）先转成 UTF-8 字节，都能被这
+256 个基本单位表示，于是永远不会有 OOV，也永远能还原。</p>
+<h3 id="一次真实切分">一次真实切分</h3>
+<p>拿一句中英混合的话做实验：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> tokenizers <span class="keyword">import</span> Tokenizer</span><br><span class="line"></span><br><span class="line">tok = Tokenizer.from_file(<span class="string">&quot;qwen.json&quot;</span>)</span><br><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(enc.ids), enc.ids[:<span class="number">8</span>], enc.tokens[:<span class="number">5</span>])</span><br><span class="line"><span class="comment"># 19 [53702, 68, 18137, 241, 122, 100309, 99745, 26939] [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27;Ġé&#x27;, &#x27;ĵ&#x27;, &#x27;¾&#x27;]</span></span><br></pre></td></tr></table></figure>
+<p>逐 token 展开来看，<code>Ġ</code> 的含义就出来了：</p>
+<table>
+<thead>
+<tr>
+<th>序号</th>
+<th>id</th>
+<th>词表里的写法</th>
+<th>还原出的字节</th>
+<th>归属</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>53702</td>
+<td><code>PCI</code></td>
+<td><code>PCI</code></td>
+<td>整个词块</td>
+</tr>
+<tr>
+<td>1</td>
+<td>68</td>
+<td><code>e</code></td>
+<td><code>e</code></td>
+<td>单个字符</td>
+</tr>
+<tr>
+<td>2</td>
+<td>18137</td>
+<td><code>Ġé</code></td>
+<td><code>\xe9</code></td>
+<td>空格 + 链的第 1 字节</td>
+</tr>
+<tr>
+<td>3</td>
+<td>241</td>
+<td><code>ĵ</code></td>
+<td><code>\x93</code></td>
+<td>链的第 2 字节</td>
+</tr>
+<tr>
+<td>4</td>
+<td>122</td>
+<td><code>¾</code></td>
+<td><code>\xbe</code></td>
+<td>链的第 3 字节</td>
+</tr>
+<tr>
+<td>5</td>
+<td>100309</td>
+<td><code>è·¯ä¸Ĭ</code></td>
+<td><code>\xe8\xb7\xaf\xe4\xb8\x8a</code></td>
+<td>路上</td>
+</tr>
+<tr>
+<td>6</td>
+<td>99745</td>
+<td><code>æĬĵ</code></td>
+<td><code>\xe6\x8a\x93</code></td>
+<td>抓</td>
+</tr>
+<tr>
+<td>…</td>
+<td></td>
+<td></td>
+<td></td>
+<td>其余 12 个 token 同理</td>
+</tr>
+</tbody>
+</table>
+<p>两个观察：</p>
+<ul>
+<li><strong>一个英文词可能被切碎，一个汉字可能横跨多个
+token</strong>。序号 2 到 4 合起来才是 链
+这一个字（<code>e9 93 be</code>）。</li>
+<li><strong>token 的边界不在字符边界上</strong>。序号 2
+的字节是空格加三分之一个汉字，单独拿出来根本不是合法 UTF-8。</li>
+</ul>
+<p>第二点直接决定了后面解码和反查的写法，值得单独看一眼：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">token id 53702  -&gt; &#x27;PCI&#x27;        独立可读</span><br><span class="line">token id 68     -&gt; &#x27;e&#x27;          独立可读</span><br><span class="line">token id 18137  -&gt; &#x27; \xe9&#x27;      空格 + 链 的第 1 个字节</span><br><span class="line">token id 241    -&gt; &#x27;\x93&#x27;       链 的第 2 个字节</span><br><span class="line">token id 122    -&gt; &#x27;\xbe&#x27;       链 的第 3 个字节</span><br><span class="line">token id 45995  -&gt; &#x27;路&#x27;         独立可读</span><br></pre></td></tr></table></figure>
+<p>在 Python 里逐个解码这些 token，序号 2 到 4 都会显示成替换字符
+<code>�</code>（序号 2
+还带着前面的空格）；只有把它们的字节按顺序拼起来再做一次 UTF-8
+解码，才得到 链路。</p>
+<h3 id="ġ-到底是什么"><code>Ġ</code> 到底是什么</h3>
+<p>既然基本单位是字节，词表里就该有空格、换行这些不可打印字节。为了让词表能用纯文本保存（一个
+<code>tokenizer.json</code> 或一份 merges 文件），GPT-2 定义了
+bytes_to_unicode 映射：把 256 个字节一一对应到 256
+个可见字符，空格（0x20）映射成
+<code>Ġ</code>（U+0120），换行（0x0A）映射成
+<code>Ċ</code>（U+010A），其余可打印字节保持原样。</p>
+<p>这个映射是可逆的，反着查一遍就能拿回真实字节——<strong>这正是转换表的全部内容</strong>：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">bytes_to_unicode</span>():</span><br><span class="line">    <span class="string">&quot;&quot;&quot;GPT-2 定义的字节到可见字符映射，256 个字节一个不漏。&quot;&quot;&quot;</span></span><br><span class="line">    bs = (<span class="built_in">list</span>(<span class="built_in">range</span>(<span class="built_in">ord</span>(<span class="string">&quot;!&quot;</span>), <span class="built_in">ord</span>(<span class="string">&quot;~&quot;</span>) + <span class="number">1</span>))</span><br><span class="line">          + <span class="built_in">list</span>(<span class="built_in">range</span>(<span class="built_in">ord</span>(<span class="string">&quot;¡&quot;</span>), <span class="built_in">ord</span>(<span class="string">&quot;¬&quot;</span>) + <span class="number">1</span>))</span><br><span class="line">          + <span class="built_in">list</span>(<span class="built_in">range</span>(<span class="built_in">ord</span>(<span class="string">&quot;®&quot;</span>), <span class="built_in">ord</span>(<span class="string">&quot;ÿ&quot;</span>) + <span class="number">1</span>)))</span><br><span class="line">    cs = bs[:]</span><br><span class="line">    n = <span class="number">0</span></span><br><span class="line">    <span class="keyword">for</span> b <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">256</span>):</span><br><span class="line">        <span class="keyword">if</span> b <span class="keyword">not</span> <span class="keyword">in</span> bs:</span><br><span class="line">            bs.append(b)</span><br><span class="line">            cs.append(<span class="number">256</span> + n)</span><br><span class="line">            n += <span class="number">1</span></span><br><span class="line">    <span class="keyword">return</span> &#123;b: <span class="built_in">chr</span>(c) <span class="keyword">for</span> b, c <span class="keyword">in</span> <span class="built_in">zip</span>(bs, cs)&#125;</span><br><span class="line"></span><br><span class="line">U2B = &#123;v: k <span class="keyword">for</span> k, v <span class="keyword">in</span> bytes_to_unicode().items()&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">token_bytes</span>(<span class="params">s</span>):                      <span class="comment"># 词表里的写法 -&gt; 真实字节</span></span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bytes</span>(U2B[ch] <span class="keyword">for</span> ch <span class="keyword">in</span> s)</span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(token_bytes(<span class="string">&quot;Ġé&quot;</span>))                 <span class="comment"># b&#x27; \xe9&#x27;</span></span><br><span class="line"><span class="built_in">print</span>(token_bytes(<span class="string">&quot;è·¯ä¸Ĭ&quot;</span>))             <span class="comment"># b&#x27;\xe8\xb7\xaf\xe4\xb8\x8a&#x27;  路上</span></span><br></pre></td></tr></table></figure>
+<h2 id="token-怎么变成-id">🔢 token 怎么变成 id</h2>
+<h3 id="id-只是行号">id 只是行号</h3>
+<p>词表是一份有序对照表，id
+就是行号。它没有语义，也<strong>没有跨模型含义</strong>：Qwen2.5 的
+53702 是 <code>PCI</code>，GPT-2 的 53702
+是另一个完全无关的片段。同一句中文，两个模型的 token 数也差很多：</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>文本</th>
+<th>字符数</th>
+<th>汉字数</th>
+<th>Qwen2.5 token 数</th>
+<th>GPT-2 token 数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</td>
+<td>32</td>
+<td>16</td>
+<td>19</td>
+<td>44</td>
+</tr>
+<tr>
+<td>大语言模型的推理过程分为预填充和解码两个阶段。</td>
+<td>23</td>
+<td>22</td>
+<td>15</td>
+<td>54</td>
+</tr>
+<tr>
+<td>Hello, how are you today?</td>
+<td>25</td>
+<td>0</td>
+<td>7</td>
+<td>7</td>
+</tr>
+</tbody>
+</table>
+<p>中文语料喂得多的 Qwen2.5 把常用汉字组合并进了词表（一个 token
+常常覆盖两个汉字），GPT-2
+词表里几乎没有中文，只能退回到字节，于是同一个汉字要 3 个 token
+表示。同样一句中文，GPT-2 的 token 序列比 Qwen2.5
+长出一倍以上，反查时要拼的片段也更多。</p>
+<p><code>config.json</code> 里的 <code>vocab_size</code>
+和词表长度也不总相等：Qwen2.5-0.5B 的 config 写
+151936，<code>tokenizer.json</code> 里实际 151665 条，多出来的行是预留
+id。反查时用 id
+当数组下标，预留区永远查不到东西，越界判断要用词表长度，而不是 config
+的值。</p>
+<h3 id="特殊-token-不在-bpe-表里">特殊 token 不在 BPE 表里</h3>
+<p>Qwen2.5 有 22 个特殊 token，id 排在 151643 到 151664：</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>内容</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>151643</td>
+<td><code>&lt;|endoftext|&gt;</code></td>
+<td>文本结束</td>
+</tr>
+<tr>
+<td>151644</td>
+<td><code>&lt;|im_start|&gt;</code></td>
+<td>对话轮次开始</td>
+</tr>
+<tr>
+<td>151645</td>
+<td><code>&lt;|im_end|&gt;</code></td>
+<td>对话轮次结束</td>
+</tr>
+</tbody>
+</table>
+<p>它们不参与字节合并，是整串匹配的固定字符串，反向也直接映射成这串文字。做转换表时要单独处理，否则会当成
+BPE token 硬拆成字节。GPT-2
+只有一个（<code>&lt;|endoftext|&gt;</code>，id 50256）。</p>
+<h2 id="id-进-gpu-之后发生什么">🧩 id 进 GPU 之后发生什么</h2>
+<h3 id="查-embedding-表">查 embedding 表</h3>
+<p>GPU 拿到 id 序列后的第一件事是查表：embedding 表有 vocab_size
+行，每行是一个 hidden_size 维向量。Qwen2.5-0.5B 的 config 是
+<code>vocab_size=151936</code>、<code>hidden_size=896</code>，用
+bfloat16（2 字节）存：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">151936 x 896 x 2 B = 259.7 MiB</span><br></pre></td></tr></table></figure>
+<p>也就是说，链路上那几个字节的 id，一进显存就膨胀成 n_tokens x 896
+的向量矩阵。之后所有计算都在这个向量空间里做，跟 token
+的文本形态再无关系。</p>
+<h3 id="前向计算与采样">前向计算与采样</h3>
+<p>向量序列依次穿过 24 层 Transformer（注意力 +
+前馈网络），最后一行向量被映射到 151936 维，就是
+<strong>logits</strong>：每个候选 token 一个分数。采样器按这些分数挑一个
+id 出来（贪心取最大，或用温度、top-p 控制随机性），这个 id
+既是要追加到上下文里继续生成的内容，也是最终回传给主机的结果。</p>
+<p>生成是自回归的：每产生一个 id
+就把它拼回序列，再跑一轮。所有模型输出都是这样一 token 一 token
+挤出来的，没有一次生成整段的情况。</p>
+<h3 id="prefill-与-decode两种流量形态">prefill 与
+decode：两种流量形态</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>阶段</th>
+<th>算什么</th>
+<th>每轮搬多少 id</th>
+<th>显存里新增什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>prefill</strong></td>
+<td>一次性处理整段 prompt</td>
+<td>一次搬 n 个（prompt 长度）</td>
+<td>n 个位置的 KV cache</td>
+</tr>
+<tr>
+<td><strong>decode</strong></td>
+<td>每次只算一个新 token</td>
+<td>每轮 1 个</td>
+<td>1 个位置的 KV cache</td>
+</tr>
+</tbody>
+</table>
+<p>KV cache 是注意力缓存的 K 和 V 向量，避免每生成一个 token
+就重算整段历史。Qwen2.5-0.5B 的规模是每 token 12.0 KiB（24 层 x 2 x 2 个
+KV 头 x 64 维 x 2 字节），4k 上下文约 48 MiB。</p>
+<p>从抓包角度看，这个区别意味着：</p>
+<ul>
+<li><strong>权重</strong>在模型加载阶段一次性搬完（0.5B 参数按 bfloat16
+算约 1 GB），之后推理期不再搬。</li>
+<li><strong>prompt 的 id</strong> 在 prefill 阶段一次性上行，长度就是
+token 数乘以每个 id 的字节数。</li>
+<li><strong>生成的 id</strong> 在 decode
+阶段一个个下行。每步回传的是采样后的 id，还是整整 151936 维的 logits（约
+600 KB），取决于采样放在哪一侧——放在 GPU 上就只回传 4 字节。</li>
+<li>KV cache 通常只待在显存里；一旦出现 CPU offload、KV cache swapping
+这类显存不够的兜底策略，链路上就会出现周期性的 KV cache 搬运流量。</li>
+</ul>
+<h2 id="id-怎么回到文本">🔁 id 怎么回到文本</h2>
+<p>解码是编码的逆过程，只有三步，但顺序不能错：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. 每个 id 查表得到一段字节</span><br><span class="line">2. 把所有字节按顺序拼成一个 bytearray</span><br><span class="line">3. 对整个 bytearray 做一次 UTF-8 解码</span><br></pre></td></tr></table></figure>
+<p>真实数据验证一遍：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 逐 token 解码：中间三个字节碎片会变成替换字符</span></span><br><span class="line">[tok.decode([i]) <span class="keyword">for</span> i <span class="keyword">in</span> enc.ids[:<span class="number">5</span>]]</span><br><span class="line"><span class="comment"># [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27; �&#x27;, &#x27;�&#x27;, &#x27;�&#x27;]</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 拼接后统一解码：一个字都不缺</span></span><br><span class="line">tok.decode(enc.ids)</span><br><span class="line"><span class="comment"># &#x27;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>用 <code>tok.decode()</code>
+一步到位当然方便，但抓包反查时必须自己实现这三步：手上有 id，没有那个
+tokenizer 对象，只有一张表。</p>
+<p>顺便记一条自测习惯：任何转换表到手，先拿已知文本走一遍往返（encode →
+id → decode），能复原才说明表是全的。真实词表的往返结果：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">拼接字节 = b&#x27;PCIe \xe9\x93\xbe\xe8\xb7\xaf\xe4\xb8\x8a\xe6\x8a\x93\xe5\x88\xb0\xe7\x9a\x84 token id...&#x27;</span><br><span class="line">UTF-8 解码 = &#x27;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&#x27;</span><br><span class="line">往返一致 = True</span><br></pre></td></tr></table></figure>
+<h2 id="三张主要的词表格式">📋 三张主要的词表格式</h2>
+<h3 id="三种流派">三种流派</h3>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>流派</th>
+<th>代表模型</th>
+<th>词表文件</th>
+<th>空格表示</th>
+<th>可逆性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HF tokenizers</strong></td>
+<td>Qwen2.5、Llama 3</td>
+<td><code>tokenizer.json</code>（JSON）</td>
+<td><code>Ġ</code>（byte-level）</td>
+<td>完全可逆</td>
+</tr>
+<tr>
+<td><strong>sentencepiece</strong></td>
+<td>T5、Llama 2</td>
+<td><code>tokenizer.model</code>（protobuf）</td>
+<td><code>▁</code>（U+2581）</td>
+<td>基本可逆</td>
+</tr>
+<tr>
+<td><strong>tiktoken</strong></td>
+<td>GPT-3.5 / GPT-4 系</td>
+<td><code>.tiktoken</code>（纯文本）</td>
+<td><code>Ġ</code>（byte-level）</td>
+<td>完全可逆</td>
+</tr>
+<tr>
+<td><strong>WordPiece</strong></td>
+<td>BERT</td>
+<td><code>vocab.txt</code>（纯文本）</td>
+<td>空格在切分时就被丢掉，<code>##</code> 前缀表续接</td>
+<td>有损</td>
+</tr>
+</tbody>
+</table>
+<p>前面三种都属于子词方案（BPE 或与之相近的 unigram
+切分），差别主要在文件格式和空格记号。WordPiece 是另一支，它的
+normalizer
+常常顺手做小写化、去重音、按标点切分，原文的大小写和空白在编码时就丢了，这类表只能反查出规范化之后的近似文本。</p>
+<h3 id="真实文件长什么样">真实文件长什么样</h3>
+<p>tiktoken 的 <code>.tiktoken</code> 一行一条，格式是 base64
+加序号（rank）。<code>cl100k_base</code> 的前几行：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">IQ== 0      ← base64 解出来是 b&#x27;!&#x27;</span><br><span class="line">Ig== 1      ← b&#x27;&quot;&#x27;</span><br><span class="line">Iw== 2      ← b&#x27;#&#x27;</span><br><span class="line">JA== 3      ← b&#x27;$&#x27;</span><br></pre></td></tr></table></figure>
+<p>文件共 100256 行，前 256 行是全部单字节 token（0x00 到 0xFF
+各出现一次），和前面 256 个基本单位的说法对上。</p>
+<p>sentencepiece 的 <code>tokenizer.model</code> 是 protobuf
+二进制，解析出来每条 piece 带三样东西：片段、分数（log
+概率）、类型：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">piece=&#x27;&lt;pad&gt;&#x27;   score= 0.0000  type=CONTROL</span><br><span class="line">piece=&#x27;&lt;/s&gt;&#x27;    score= 0.0000  type=CONTROL</span><br><span class="line">piece=&#x27;▁&#x27;       score=-2.0123  type=NORMAL     ← 空格本身也是一个 piece</span><br><span class="line">piece=&#x27;X&#x27;       score=-2.4865  type=NORMAL</span><br></pre></td></tr></table></figure>
+<p>T5 的词表里有 21987 条 piece 含
+<code>▁</code>。反查时把它换回空格即可，另外要留意 <code>▁</code>
+出现在片段开头还是结尾、以及有没有 byte fallback 的
+<code>&lt;0xE9&gt;</code> 形式——后者表示这个片段就是单个字节 0xE9。</p>
+<p>HF 的 <code>tokenizer.json</code> 最省事，一份 JSON
+把整条流水线都写全了。Qwen2.5 的顶层结构：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">normalizer     : NFC                    ← 先做 Unicode 规范化</span><br><span class="line">pre_tokenizer  : Split(正则) + ByteLevel ← 按 GPT-2 正则预切分，再转字节</span><br><span class="line">model          : BPE（vocab 151643 + merges 151387）</span><br><span class="line">post_processor : ByteLevel</span><br><span class="line">decoder        : ByteLevel</span><br><span class="line">added_tokens   : 22 个特殊 token</span><br></pre></td></tr></table></figure>
+<p>三种格式各写一个读取函数，出口统一是 <code>&#123;id: bytes&#125;</code>。HF
+那支最简单：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> json</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_hf_table</span>(<span class="params">path</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;tokenizer.json -&gt; &#123;id: bytes&#125;，特殊 token 天然不在 model.vocab 里。&quot;&quot;&quot;</span></span><br><span class="line">    raw = json.load(<span class="built_in">open</span>(path))</span><br><span class="line">    <span class="keyword">return</span> &#123;tid: token_bytes(piece) <span class="keyword">for</span> piece, tid <span class="keyword">in</span> raw[<span class="string">&quot;model&quot;</span>][<span class="string">&quot;vocab&quot;</span>].items()&#125;</span><br></pre></td></tr></table></figure>
+<p><code>.tiktoken</code> 多一步 base64 解码：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> base64</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_tiktoken_table</span>(<span class="params">path</span>):</span><br><span class="line">    table = &#123;&#125;</span><br><span class="line">    <span class="keyword">for</span> line <span class="keyword">in</span> <span class="built_in">open</span>(path):</span><br><span class="line">        b64, rank = line.split()</span><br><span class="line">        table[<span class="built_in">int</span>(rank)] = base64.b64decode(b64)</span><br><span class="line">    <span class="keyword">return</span> table</span><br></pre></td></tr></table></figure>
+<p>sentencepiece 要解析 protobuf 的重复字段
+<code>pieces</code>，每条取片段、分数、类型，把 <code>▁</code>
+换回空格，byte fallback 类型（<code>&lt;0xE9&gt;</code> 这种）的 id
+直接映射成对应字节。做完这一步，三张表在代码里就完全一样了。</p>
+<p>表的规模心里有个数：Qwen2.5 的 151665 条映射总共约 976 KB
+字节内容，平均每个 token 6.44 字节；GPT-2 的 50257 条约 321
+KB。挂到抓包工具里做多模型试解，内存开销可以忽略。</p>
+<h2 id="落到抓包场景一串-id-反查文本">🎯 落到抓包场景：一串 id
+反查文本</h2>
+<p>前置假设：链路（PCIe）上传的是<strong>整数 id
+序列</strong>，不是已经渲染好的文本。这个假设待验证，但值得作为基线——如果成立，反查的全部工作量就是本文讲的转换表。</p>
+<h3 id="试解流程">试解流程</h3>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1. 从 DMA 数据里切出整数数组（4 字节 int32 还是 8 字节 int64，两种都要试）</span><br><span class="line">2. 对每张转换表调一次 decode</span><br><span class="line">3. 给每次结果打分，排序</span><br><span class="line">4. 分数最高的那张表就是最可能的模型</span><br></pre></td></tr></table></figure>
+<p>打分器先只用最朴素的两条规则：越界 id
+有几个、解出的文本里有多少替换字符。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">try_decode</span>(<span class="params">ids, table</span>):</span><br><span class="line">    out, miss = <span class="built_in">bytearray</span>(), <span class="number">0</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> ids:</span><br><span class="line">        b = table.get(i)</span><br><span class="line">        <span class="keyword">if</span> b <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            miss += <span class="number">1</span></span><br><span class="line">            out += <span class="string">b&quot;?&quot;</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            out += b</span><br><span class="line">    text = out.decode(<span class="string">&quot;utf-8&quot;</span>, errors=<span class="string">&quot;replace&quot;</span>)</span><br><span class="line">    <span class="keyword">return</span> text, &#123;<span class="string">&quot;越界 id&quot;</span>: miss, <span class="string">&quot;替换字符&quot;</span>: text.count(<span class="string">&quot;\ufffd&quot;</span>)&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="真实试解结果">真实试解结果</h3>
+<p>用两张表互相当作错误答案，跑出来是这样：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>抓到的 id 流</th>
+<th>用 Qwen2.5 表解</th>
+<th>用 GPT-2 表解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen2.5 编码的 19 个 id</td>
+<td>✅ 越界 0/19，替换字符 0 →
+<code>PCIe 链路上抓到的 token id，能还原出原</code></td>
+<td>❌ 越界 7/19，替换字符 2 →
+<code>?euffle��??ivation PH real</code></td>
+</tr>
+<tr>
+<td>GPT-2 编码的 44 个 id</td>
+<td>❌ 越界 0/44，替换字符 11 →
+<code>machineIe.div��路Dock抓 acc</code></td>
+<td>✅ 越界 0/44，替换字符 0 →
+<code>PCIe 链路上抓到的 token id，能还原出原</code></td>
+</tr>
+</tbody>
+</table>
+<p>几点值得留意：</p>
+<ul>
+<li><strong>越界数</strong>是最硬的信号。Qwen2.5 的 id 拿去查 GPT-2
+表，19 个里有 7 个超出 GPT-2 词表范围，直接排除。</li>
+<li><strong>替换字符数</strong>是第二硬的信号。GPT-2 的 44 个 id 拿去查
+Qwen2.5 表，全部落在范围内，但解出的字节拼不成合法 UTF-8，出现 11 个
+<code>�</code>。</li>
+<li><strong>两个信号都会失灵</strong>。GPT-2 id 流用 Qwen2.5
+表解出来的片段里，<code>路</code> 和 <code>抓</code>
+是真汉字——字节巧合拼成了合法字符。所以还需要第三层判断，比如统计可打印字符比例、中文字符比例，或者更进一步，把解出的文本丢给一个小语言模型算困惑度。</li>
+</ul>
+<h3 id="从-dma-数据里切出-id-序列">从 DMA 数据里切出 id 序列</h3>
+<p>如果链路传的是裸整数数组，切分很直接：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> struct</span><br><span class="line"></span><br><span class="line">buf = struct.pack(<span class="string">&quot;&lt;%dI&quot;</span> % <span class="built_in">len</span>(ids), *ids)        <span class="comment"># 写：int32 小端</span></span><br><span class="line">back = <span class="built_in">list</span>(struct.unpack(<span class="string">&quot;&lt;%dI&quot;</span> % (<span class="built_in">len</span>(buf) // <span class="number">4</span>), buf))</span><br><span class="line"><span class="keyword">assert</span> back == ids</span><br></pre></td></tr></table></figure>
+<p>Qwen2.5 那 19 个 id 序列化后是 76 字节，开头几个是
+<code>c6 d1 00 00 44 00 00 00 d9 46 00 00</code>。但实际抓包更可能遇到：整数混在请求结构体里（带
+batch 维度、长度字段、padding），或者一批 id 被拆成多个 DMA
+包出现。切分逻辑要按框架的实际结构来，先拿已知文本做一次抓包对照，比盲试靠谱。</p>
+<p>另外，链路如果有加密（PCIe IDE，或 ccAI
+那类密文通道），抓到的就是高熵密文，id
+结构完全看不出来，得先解决解密或走侧信道的路子——那是另一个话题了。</p>
+<h2 id="容易踩的坑">⚠️ 容易踩的坑</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>以为 token 就是词</td>
+<td>一个汉字可能占 1～3 个 token，一个英文词可能被切成好几段</td>
+</tr>
+<tr>
+<td>逐个 token 解码再拼字符串</td>
+<td>token 边界不在字符边界上，必须先拼字节再做一次 UTF-8 解码</td>
+</tr>
+<tr>
+<td>以为所有模型共用一张表</td>
+<td>id 只是行号，Qwen2.5 的 53702 和 GPT-2 的 53702 毫无关系</td>
+</tr>
+<tr>
+<td>把 <code>config.json</code> 的 <code>vocab_size</code>
+当词表长度</td>
+<td>Qwen2.5-0.5B 的 config 写 151936，<code>tokenizer.json</code> 实际
+151665 条</td>
+</tr>
+<tr>
+<td>认为 UTF-8 解得出就是解对了</td>
+<td>拿错表也能拼出合法
+UTF-8，需要越界数、替换字符、语言模型多层打分</td>
+</tr>
+<tr>
+<td>以为 token 数约等于字符数</td>
+<td>同一句中文，Qwen2.5 是 19 个 token，GPT-2 是 44 个</td>
+</tr>
+<tr>
+<td>忽略特殊 token</td>
+<td>它们不在 BPE 表里，<code>&lt;|im_start|&gt;</code>
+这类要单独建映射</td>
+</tr>
+<tr>
+<td>只看 id 数值判断模型</td>
+<td>词表大小相近的模型会互相吻合一部分，要靠整串打分</td>
+</tr>
+</tbody>
+</table>
+<h2 id="小结">📌 小结</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>切分</strong></td>
+<td>byte-level BPE 从 256
+个字节起步，按频率合并；中文常被拆到字节级</td>
+</tr>
+<tr>
+<td><strong>id</strong></td>
+<td>词表行号，跨模型无语义；同一文本在不同模型下长度差别很大</td>
+</tr>
+<tr>
+<td><strong>GPU 侧</strong></td>
+<td>id 查 embedding 变成向量，前向算出 logits，采样得到下一个 id</td>
+</tr>
+<tr>
+<td><strong>两阶段</strong></td>
+<td>prefill 一次吃整段 prompt，decode 每步只出一个 id</td>
+</tr>
+<tr>
+<td><strong>解码</strong></td>
+<td>id → 字节 → 拼接 → UTF-8，三步顺序不能变</td>
+</tr>
+<tr>
+<td><strong>转换表</strong></td>
+<td>id → bytes 的映射；三种格式读进来统一成同一个函数</td>
+</tr>
+<tr>
+<td><strong>反查</strong></td>
+<td>多表试解 + 打分（越界、替换字符、可打印比例，必要时加语言模型）</td>
+</tr>
+</tbody>
+</table>
+<p>下一步可以顺着两个方向推进：一是把常见模型的词表都读成同一份
+<code>id -&gt; bytes</code>
+表结构，用已知文本做一轮往返自测，把转换表这块地基打实；二是把打分器做实，让一串来路不明的整数能自动判出属于哪个模型。抓包侧的前置知识则在《<a
+href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
+解析入门</a>》里。</p>
+<p>Happy Hacking! 🎉</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/LLM/" rel="tag"># LLM</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/tokenizer/" rel="tag"># tokenizer</a>
+              <a href="/tags/BPE/" rel="tag"># BPE</a>
+              <a href="/tags/%E6%8E%A8%E7%90%86/" rel="tag"># 推理</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/f50af83e/" rel="prev" title="PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包">
+                  <i class="fa fa-angle-left"></i> PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">444k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">13:27</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

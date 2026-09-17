@@ -2924,6 +2924,89 @@ ID)，及sticky用来定义文件的模式。当这些标记位应用到可执�
       </tags>
   </entry>
   <entry>
+    <title>Dotfiles</title>
+    <url>/posts/e5afd7e1/</url>
+    <content><![CDATA[<p>在 Linux 或 macOS
+系统中，以点（<code>.</code>）开头的文件和文件夹统称
+<code>dotfiles</code>（如
+<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
+Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
+<span id="more"></span></p>
+<h3
+id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
+<p>我们通常会经历几个阶段：</p>
+<ol type="1">
+<li><strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。</li>
+<li><strong>自动化脚本的萌芽</strong>：编写 Shell
+脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。</li>
+<li><strong>Git 裸仓库的炫技</strong>：使用
+<code>git bare repository</code>
+是一个更高级的方案，它允许我们直接在主目录下用 Git
+进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
+Git 操作的直观性。</li>
+</ol>
+<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
+GNU Stow 的舞台。</p>
+<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
+的哲学：一个优雅的“符号链接农场”</h3>
+<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
+Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
+<p>想象一下：</p>
+<ul>
+<li>你的 <code>~/dotfiles</code> 目录是一个<strong>农场</strong>。</li>
+<li>农场里的每一个子目录（如 <code>nvim</code>, <code>git</code>,
+<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。</li>
+<li>你的主目录 <code>~</code> 是需要播种的<strong>土地</strong>。</li>
+</ul>
+<p><code>stow</code>
+命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
+<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
+<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
+Concerns）：</p>
+<ol type="1">
+<li><strong>配置的源码</strong>：你的 <code>dotfiles</code>
+仓库是所有配置的唯一“真理之源”（Single Source of
+Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。</li>
+<li><strong>配置的部署</strong>：主目录 <code>~</code>
+下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</li>
+</ol>
+<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
+<code>dotfiles</code>
+仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
+会负责实现它。</p>
+<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
+<ol type="1">
+<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
+最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
+下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
+目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
+<li><p><strong>高度模块化 (Modular)</strong>
+每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
+Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
+配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
+配置？只需选择性地 <code>stow</code>
+即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
+<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
+与 <code>git</code>
+结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
+几条命令，一个熟悉的环境便跃然屏上。</p></li>
+<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
+在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
+</ol>
+<h3 id="结论大道至简">结论：大道至简</h3>
+<p>在 dotfiles 管理的江湖里，<code>stow</code>
+并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
+<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
+值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
+]]></content>
+      <tags>
+        <tag>Linux</tag>
+        <tag>Git</tag>
+        <tag>工具</tag>
+        <tag>Dotfiles</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>关于Intel TDX的深度思考与技术剖析</title>
     <url>/posts/b63e909c/</url>
     <content><![CDATA[<p>本文深入探讨了可信执行环境（TEE）的核心技术，特别是Intel的Trust
@@ -3096,89 +3179,6 @@ TDX等TEE技术通过提供硬件层面的隔离性、机密性、完整性和�
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Dotfiles</title>
-    <url>/posts/e5afd7e1/</url>
-    <content><![CDATA[<p>在 Linux 或 macOS
-系统中，以点（<code>.</code>）开头的文件和文件夹统称
-<code>dotfiles</code>（如
-<code>.bashrc</code>、<code>.gitconfig</code>），保存着终端提示符、编辑器（如
-Vim/Neovim）、窗口管理器等工具的配置。随着配置变多、跨设备使用变常见，如何管理这些散落在主目录各处的文件就成了一个问题。
-<span id="more"></span></p>
-<h3
-id="传统方案的困境在简单与复杂之间挣扎">传统方案的困境：在简单与复杂之间挣扎</h3>
-<p>我们通常会经历几个阶段：</p>
-<ol type="1">
-<li><strong>蛮荒时代的手动复制</strong>：在新设备上凭记忆和手动拷贝来恢复环境，低效、易错且令人沮丧。</li>
-<li><strong>自动化脚本的萌芽</strong>：编写 Shell
-脚本来批量创建软链接（<code>ln -s</code>）。这是一种进步，但随着配置文件的增删，维护脚本本身成了一件麻烦事，我们等于是在用一个配置文件去管理另一堆配置文件。</li>
-<li><strong>Git 裸仓库的炫技</strong>：使用
-<code>git bare repository</code>
-是一个更高级的方案，它允许我们直接在主目录下用 Git
-进行版本控制。功能非常强大，但其命令相对晦涩（需要一个特殊的别名），心智负担较重，破坏了
-Git 操作的直观性。</li>
-</ol>
-<p>这些方案，要么过于简陋，要么过于复杂。我们真正需要的，是一种既直观又强大，能够清晰地将“配置的存储”与“配置的部署”分离开的工具。这正是
-GNU Stow 的舞台。</p>
-<h3 id="stow-的哲学一个优雅的符号链接农场">Stow
-的哲学：一个优雅的“符号链接农场”</h3>
-<p><code>Stow</code> 本质上是一个“符号链接农场管理器”（Symlink Farm
-Manager）。这个比喻非常精妙地揭示了它的核心工作原理。</p>
-<p>想象一下：</p>
-<ul>
-<li>你的 <code>~/dotfiles</code> 目录是一个<strong>农场</strong>。</li>
-<li>农场里的每一个子目录（如 <code>nvim</code>, <code>git</code>,
-<code>zsh</code>）都是一种<strong>作物</strong>（配置包）。</li>
-<li>你的主目录 <code>~</code> 是需要播种的<strong>土地</strong>。</li>
-</ul>
-<p><code>stow</code>
-命令所做的，就是将你在“农场”里精心培育的“作物”，自动“播种”到“土地”的正确位置上。它通过创建符号链接（symlink）来实现这一点，这些链接就像是作物的根系，从主目录的指定位置（如
-<code>~/.config/nvim</code>）精确地指向农场里的源文件（<code>~/dotfiles/nvim/.config/nvim</code>）。</p>
-<p>这种模式的核心是<strong>“关注点分离”</strong>（Separation of
-Concerns）：</p>
-<ol type="1">
-<li><strong>配置的源码</strong>：你的 <code>dotfiles</code>
-仓库是所有配置的唯一“真理之源”（Single Source of
-Truth）。它结构清晰，按应用模块化组织，非常适合用 Git进行版本控制。</li>
-<li><strong>配置的部署</strong>：主目录 <code>~</code>
-下的配置文件只是指向源码的“指针”（软链接）。它们让应用能够正常工作，但其本身不包含任何实际配置内容。</li>
-</ol>
-<p>你不再需要编写 <code>ln -s a b</code> 这样的命令式脚本，而是通过在
-<code>dotfiles</code>
-仓库里组织文件结构这种<strong>声明式</strong>的方式，来定义你的环境应该是什么样子。<code>stow</code>
-会负责实现它。</p>
-<h3 id="选择-stow-的核心优势">选择 Stow 的核心优势</h3>
-<ol type="1">
-<li><p><strong>绝对直观 (Intuitive)</strong> <code>stow</code>
-最具颠覆性的一点在于它的目录结构映射。你在 <code>~/dotfiles/nvim/</code>
-下看到的目录结构，就是 <code>stow</code> 将要在 <code>~</code>
-目录下为你创建的软链接结构。这种“所见即所得”的设计，使得理解和维护配置变得异常简单。</p></li>
-<li><p><strong>高度模块化 (Modular)</strong>
-每个应用的配置都封装在独立的目录中。这意味着你可以像乐高积木一样组合你的环境。想启用
-Neovim 配置？<code>stow nvim</code>。想暂时禁用 Zsh
-配置来调试问题？<code>stow -D zsh</code>。想在不同机器上使用不同的 Git
-配置？只需选择性地 <code>stow</code>
-即可。这种模块化能力是脚本或裸仓库方案难以比拟的。</p></li>
-<li><p><strong>极致的可移植性 (Portable)</strong> 当 <code>stow</code>
-与 <code>git</code>
-结合，配置新机器的体验将得到升华。整个过程简化为三步： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 克隆你的配置仓库</span></span><br><span class="line">git <span class="built_in">clone</span> https://github.com/your/dotfiles.git ~/dotfiles</span><br><span class="line"><span class="comment"># 2. 进入目录</span></span><br><span class="line"><span class="built_in">cd</span> ~/dotfiles</span><br><span class="line"><span class="comment"># 3. 按需“安装”你的配置</span></span><br><span class="line">stow git zsh nvim</span><br></pre></td></tr></table></figure>
-几条命令，一个熟悉的环境便跃然屏上。</p></li>
-<li><p><strong>安全且健壮 (Robust)</strong> <code>stow</code>
-在执行操作前会进行检查。如果它发现目标位置已经存在一个文件或目录（而不是一个指向自己的软链接），它会报错并停止，防止意外覆盖你的重要文件。它足够智能，会自动创建缺失的父目录，也会在卸载时清理空目录。</p></li>
-</ol>
-<h3 id="结论大道至简">结论：大道至简</h3>
-<p>在 dotfiles 管理的江湖里，<code>stow</code>
-并非屠龙之技，而是一招一式都直击痛点的“无招胜有招”。它放弃了复杂的逻辑，回归到对文件系统结构最朴素的映射，通过“软链接农场”这一简单而强大的模型，完美地平衡了易用性、功能性与可维护性。</p>
-<p>如果你正在寻找一种能让你重拾对配置文件掌控感的方法，<code>stow</code>
-值得一试。它将帮助你打造一个真正属于自己的、可轻松漫游于多台设备间的个性化高效环境。</p>
-]]></content>
-      <tags>
-        <tag>Linux</tag>
-        <tag>Git</tag>
-        <tag>工具</tag>
-        <tag>Dotfiles</tag>
       </tags>
   </entry>
   <entry>
@@ -7216,185 +7216,6 @@ NVBit“在哪些指令前，插入哪些函数调用”。</p>
       </tags>
   </entry>
   <entry>
-    <title>CMake 入门</title>
-    <url>/posts/233853f2/</url>
-    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
-Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
-IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
-或分别维护 VS/Xcode 工程，成本会直线上升。</p>
-<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
-需要的工程与命令。 <span id="more"></span></p>
-<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
-<ul>
-<li><p><strong>跨平台</strong>：一份
-<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
-Studio、Xcode）。</p></li>
-<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
-<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
-</ul>
-<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
-  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
-  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
-  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
-</code>
-</pre>
-<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
-<ul>
-<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
-<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
-调用本机构建器编译/链接）。</li>
-<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
-Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
-<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
-</ul>
-<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
-<ul>
-<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
-<code>.sln/.vcxproj</code>、Xcode
-<code>.xcodeproj</code>（由生成器决定）。</li>
-<li>CMake
-缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
-<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
-<code>configure_file()</code> 生成的配置头/源文件。</li>
-<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
-</ul>
-<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
-<ul>
-<li>可执行文件：如 <code>build/hello</code>（Windows 为
-<code>build/hello.exe</code>）。</li>
-<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
-<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
-<li>自定义输出：可用
-<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
-调整位置。</li>
-</ul>
-<h3 id="分钟上手">5 分钟上手</h3>
-<p>目录结构：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
-<p><code>CMakeLists.txt</code>：</p>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
-<p><code>src/main.cpp</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>构建与运行：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
-<h3 id="cmake-改变了什么一个对比例子">CMake
-改变了什么：一个对比例子</h3>
-<p>场景：两个源文件
-<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
-Linux 与 Windows 上都能构建。</p>
-<ul>
-<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
-<li><p>Linux（GCC/Clang）：</p></li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li>Windows（MSVC）：</li>
-</ul>
-<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
-<ul>
-<li><p>维护代价：命令不通用，IDE
-工程（VS/Xcode）还要各自维护一份。</p></li>
-<li><p>有 CMake（一份脚本到处用）</p></li>
-</ul>
-<p><code>CMakeLists.txt</code>：</p>
-<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
-<p>构建命令（所有平台一致）：</p>
-<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
-<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
-VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
-<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
-<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
-<p>以 Linux 的命令为例：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
-<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
-<code>/std:c++17</code>）。</p></li>
-<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
-<li><p><strong>src/main.cpp
-src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
-<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
-<code>include</code>。</p></li>
-<li><p><strong>-o app</strong>：输出可执行文件名为
-<code>app</code>。</p></li>
-</ul>
-<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
-CMake 希望你“声明语义、自动映射细节”的原因。</p>
-<h3 id="工作原理">工作原理</h3>
-<pre>
-<code class="mermaid">
-
-graph TD;
-  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
-  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
-  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
-  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
-</code>
-</pre>
-<p>概括：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
-<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
-<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p><strong>cmake_minimum_required(VERSION
-3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
-<li><p><strong>project(app LANGUAGES
-CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
-编译器与平台特性。</p></li>
-<li><p><strong>add_executable(app …)</strong>：声明目标
-<code>app</code>；CMake
-为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
-<li><p><strong>target_compile_features(app PRIVATE
-cxx_std_17)</strong>：声明“需要 C++17”，CMake
-按编译器映射成正确开关：</p>
-<ul>
-<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
-<li><p>MSVC：<code>/std:c++17</code></p></li>
-</ul></li>
-<li><p><strong>target_include_directories(app PRIVATE
-include)</strong>：声明头文件目录，按平台生成参数：</p>
-<ul>
-<li><p>GCC/Clang：<code>-I include</code></p></li>
-<li><p>MSVC：<code>/I include</code></p></li>
-</ul></li>
-</ul>
-<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
-<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
-<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
-<ul>
-<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
-<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
-<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
-<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
-平台工程生成方面配合 Xcode。</p></li>
-<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
-</ul>
-<p>此外，CMake
-也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
-往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
-<h3 id="就这么记住">就这么记住</h3>
-<ul>
-<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
-<li><p><strong>总在源码外构建</strong>：<code>-S</code>
-指源码，<code>-B</code> 指构建目录。</p></li>
-<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
-Make 还是 Ninja。</p></li>
-</ul>
-<h3 id="结语">结语</h3>
-<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
-就是省心的那一个。</p>
-]]></content>
-      <tags>
-        <tag>CMake</tag>
-        <tag>构建系统</tag>
-        <tag>C/C++</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
     <url>/posts/f1a2b3c4/</url>
     <content><![CDATA[<p>本文介绍
@@ -7665,6 +7486,185 @@ FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
         <tag>Serverless</tag>
         <tag>FaaS</tag>
         <tag>云原生</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CMake 入门</title>
+    <url>/posts/233853f2/</url>
+    <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
+Linux/Windows/macOS，当项目走出“玩具”阶段，构建就会成为最大的摩擦源：不同编译器、不同
+IDE、不同参数、不同依赖的发现与链接。如果还靠手写 <code>Makefile</code>
+或分别维护 VS/Xcode 工程，成本会直线上升。</p>
+<p>这正是 CMake 出现的原因：用一份跨平台的构建脚本，生成各平台各 IDE
+需要的工程与命令。 <span id="more"></span></p>
+<h3 id="cmake-解决了哪些痛点精简版">CMake 解决了哪些痛点（精简版）</h3>
+<ul>
+<li><p><strong>跨平台</strong>：一份
+<code>CMakeLists.txt</code>，到处生成工程（Ninja/Makefiles、Visual
+Studio、Xcode）。</p></li>
+<li><p><strong>少折腾</strong>：自动管理头文件目录、编译选项、链接依赖，不用手拼长命令。</p></li>
+<li><p><strong>更清爽</strong>：源代码与构建产物分离，目录不再被临时文件污染。</p></li>
+</ul>
+<h3 id="一图速懂它到底做了什么">一图速懂：它到底做了什么</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;写 CMakeLists.txt&quot;] --&gt; B[&quot;cmake -S 源码 -B 构建&quot;];
+  B --&gt; C[&quot;构建：cmake --build 构建目录&quot;];
+  C --&gt; D[&quot;运行：.&#x2F;build&#x2F;hello（或 IDE 里运行）&quot;];
+  B --&gt; E[&quot;按平台生成合适的工程&#x2F;构建文件&quot;];
+</code>
+</pre>
+<h4 id="为什么在-b-分叉">为什么在 B 分叉</h4>
+<ul>
+<li>B 是“配置/生成”阶段，产生两种后续选择：</li>
+<li>走 C：继续用 <code>cmake --build</code> 统一构建（CMake
+调用本机构建器编译/链接）。</li>
+<li>走 E：直接使用已生成的本机构建文件（Makefile、Ninja、Visual
+Studio、Xcode 工程）在命令行或 IDE 中构建。</li>
+<li>二者本质等价，通常二选一即可；团队混用也没问题。</li>
+</ul>
+<h4 id="配置阶段b的产物">配置阶段（B）的产物</h4>
+<ul>
+<li>本机构建文件：<code>Makefile</code>、<code>build.ninja</code>、VS
+<code>.sln/.vcxproj</code>、Xcode
+<code>.xcodeproj</code>（由生成器决定）。</li>
+<li>CMake
+缓存与元数据：<code>CMakeCache.txt</code>、<code>CMakeFiles/</code>、平台/编译器/特性探测结果。</li>
+<li>可选辅助：<code>compile_commands.json</code>（<code>-DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>）、通过
+<code>configure_file()</code> 生成的配置头/源文件。</li>
+<li>位置：全部写入 <code>-B</code> 指定的构建目录。</li>
+</ul>
+<h4 id="构建阶段c的产物">构建阶段（C）的产物</h4>
+<ul>
+<li>可执行文件：如 <code>build/hello</code>（Windows 为
+<code>build/hello.exe</code>）。</li>
+<li>库文件：静态库（<code>.a</code>/<code>.lib</code>）、共享库（<code>.so</code>/<code>.dll</code>/<code>.dylib</code>）。</li>
+<li>中间文件：目标文件（<code>*.o</code>/<code>*.obj</code>）、依赖/缓存等，位于构建目录。</li>
+<li>自定义输出：可用
+<code>CMAKE_RUNTIME_OUTPUT_DIRECTORY</code>、<code>CMAKE_LIBRARY_OUTPUT_DIRECTORY</code>、<code>CMAKE_ARCHIVE_OUTPUT_DIRECTORY</code>
+调整位置。</li>
+</ul>
+<h3 id="分钟上手">5 分钟上手</h3>
+<p>目录结构：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">your_project/</span><br><span class="line">  CMakeLists.txt</span><br><span class="line">  src/main.cpp</span><br></pre></td></tr></table></figure>
+<p><code>CMakeLists.txt</code>：</p>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(hello LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(hello src/main.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(hello PRIVATE cxx_std_17)</span><br></pre></td></tr></table></figure>
+<p><code>src/main.cpp</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  std::cout &lt;&lt; <span class="string">&quot;Hello, CMake!&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>构建与运行：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br><span class="line">./build/hello</span><br></pre></td></tr></table></figure>
+<h3 id="cmake-改变了什么一个对比例子">CMake
+改变了什么：一个对比例子</h3>
+<p>场景：两个源文件
+<code>src/main.cpp</code>、<code>src/util.cpp</code>，需要 C++17，并在
+Linux 与 Windows 上都能构建。</p>
+<ul>
+<li><p>没有 CMake（每个平台都要记不同命令）</p></li>
+<li><p>Linux（GCC/Clang）：</p></li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li>Windows（MSVC）：</li>
+</ul>
+<pre><code><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cl /std:c++17 /O2 src\main.cpp src\util.cpp /I include /Fe:app.exe</span><br></pre></td></tr></table></figure></code></pre>
+<ul>
+<li><p>维护代价：命令不通用，IDE
+工程（VS/Xcode）还要各自维护一份。</p></li>
+<li><p>有 CMake（一份脚本到处用）</p></li>
+</ul>
+<p><code>CMakeLists.txt</code>：</p>
+<p><figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure></p>
+<p>构建命令（所有平台一致）：</p>
+<p><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">cmake -S . -B build</span><br><span class="line">cmake --build build</span><br></pre></td></tr></table></figure></p>
+<p>效果：不用关心底层是 Make 还是 Ninja、GCC 还是 MSVC，也不用为
+VS/Xcode 手工维护工程；需要 IDE 时让 CMake 直接生成即可。诸如
+<code>-lm</code>、异常/运行时等平台差异，交给生成器与工具链处理。</p>
+<h4 id="g-命令解析在没有-cmake-时">g++ 命令解析（在没有 CMake 时）</h4>
+<p>以 Linux 的命令为例：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -O2 src/main.cpp src/util.cpp -Iinclude -o app</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>g++</strong>：调用 GNU C++ 编译器。</p></li>
+<li><p><strong>-std=c++17</strong>：启用 C++17 标准（在 MSVC 下等价为
+<code>/std:c++17</code>）。</p></li>
+<li><p><strong>-O2</strong>：开启二级优化（体积与速度的折中）。</p></li>
+<li><p><strong>src/main.cpp
+src/util.cpp</strong>：要编译并参与链接的源文件。</p></li>
+<li><p><strong>-Iinclude</strong>：增加头文件搜索目录
+<code>include</code>。</p></li>
+<li><p><strong>-o app</strong>：输出可执行文件名为
+<code>app</code>。</p></li>
+</ul>
+<p>在实际项目中，这条命令会迅速膨胀：再加多目录、宏定义、库搜索路径（<code>-L</code>）、链接库（<code>-lxxx</code>）、平台差异参数，就会变得又长又难复用。这正是
+CMake 希望你“声明语义、自动映射细节”的原因。</p>
+<h3 id="工作原理">工作原理</h3>
+<pre>
+<code class="mermaid">
+
+graph TD;
+  A[&quot;CMakeLists.txt：声明要什么&quot;] --&gt; B[&quot;配置阶段：检测平台&#x2F;编译器&#x2F;特性&quot;];
+  B --&gt; C[&quot;选择生成器：Ninja&#x2F;Makefiles&#x2F;VS&#x2F;Xcode&quot;];
+  C --&gt; D[&quot;生成本机构建文件（规则&#x2F;工程）&quot;];
+  D --&gt; E[&quot;cmake --build：调用本机构建器编译&#x2F;链接&quot;];
+</code>
+</pre>
+<p>概括：你只写“意图”，CMake 按“环境”翻译成正确做法。</p>
+<h3 id="这几行背后发生了什么">这几行背后发生了什么</h3>
+<figure class="highlight cmake"><table><tr><td class="code"><pre><span class="line"><span class="keyword">cmake_minimum_required</span>(VERSION <span class="number">3.20</span>)</span><br><span class="line"><span class="keyword">project</span>(app LANGUAGES CXX)</span><br><span class="line"><span class="keyword">add_executable</span>(app src/main.cpp src/util.cpp)</span><br><span class="line"><span class="keyword">target_compile_features</span>(app PRIVATE cxx_std_17)</span><br><span class="line"><span class="keyword">target_include_directories</span>(app PRIVATE <span class="keyword">include</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p><strong>cmake_minimum_required(VERSION
+3.20)</strong>：锁定最低版本，启用对应语法与行为，避免旧版差异。</p></li>
+<li><p><strong>project(app LANGUAGES
+CXX)</strong>：确定工程名与语言；CMake 会探测可用的 C++
+编译器与平台特性。</p></li>
+<li><p><strong>add_executable(app …)</strong>：声明目标
+<code>app</code>；CMake
+为它建立依赖图，并在生成阶段把它翻译成本机的规则/工程项。</p></li>
+<li><p><strong>target_compile_features(app PRIVATE
+cxx_std_17)</strong>：声明“需要 C++17”，CMake
+按编译器映射成正确开关：</p>
+<ul>
+<li><p>GCC/Clang：<code>-std=c++17</code></p></li>
+<li><p>MSVC：<code>/std:c++17</code></p></li>
+</ul></li>
+<li><p><strong>target_include_directories(app PRIVATE
+include)</strong>：声明头文件目录，按平台生成参数：</p>
+<ul>
+<li><p>GCC/Clang：<code>-I include</code></p></li>
+<li><p>MSVC：<code>/I include</code></p></li>
+</ul></li>
+</ul>
+<p>这就是“一份脚本到处用”的核心：写语义，不写平台细节；由生成器与工具链适配差异。</p>
+<h3 id="cmake-支持哪些语言">CMake 支持哪些语言？</h3>
+<p>首要用户群是 <strong>C/C++</strong>，但并不止于此。常见支持包括：</p>
+<ul>
+<li><p><strong>C、C++</strong>：最成熟、生态最广。</p></li>
+<li><p><strong>CUDA、HIP</strong>：GPU 相关项目常用。</p></li>
+<li><p><strong>Fortran</strong>：在科学计算/数值领域仍然重要。</p></li>
+<li><p><strong>Objective-C/Swift（通过外部集成）</strong>：在 Apple
+平台工程生成方面配合 Xcode。</p></li>
+<li><p><strong>ASM、ISPC 等</strong>：低层或专用场景。</p></li>
+</ul>
+<p>此外，CMake
+也常被当作“元构建工具”，去驱动其他语言/工具链（如生成外部工具命令、打包脚本）。原则是：若目标/命令能被描述成“配置+构建”的过程，CMake
+往往能充当胶水把它们组织起来，但其强项仍然是 C/C++ 及其周边。</p>
+<h3 id="就这么记住">就这么记住</h3>
+<ul>
+<li><p><strong>写清“要什么”</strong>：目标、源文件、需要的标准或库。</p></li>
+<li><p><strong>总在源码外构建</strong>：<code>-S</code>
+指源码，<code>-B</code> 指构建目录。</p></li>
+<li><p><strong>统一的构建命令</strong>：<code>cmake --build</code>，不用关心底层是
+Make 还是 Ninja。</p></li>
+</ul>
+<h3 id="结语">结语</h3>
+<p>先用这套最小流程把程序跑起来，再根据需要逐步增加依赖与选项；当你不想再重复为不同平台维护多套工程时，CMake
+就是省心的那一个。</p>
+]]></content>
+      <tags>
+        <tag>CMake</tag>
+        <tag>构建系统</tag>
+        <tag>C/C++</tag>
       </tags>
   </entry>
   <entry>
@@ -9392,6 +9392,269 @@ True。</li>
       </tags>
   </entry>
   <entry>
+    <title>Clash 与网络代理详解</title>
+    <url>/posts/755f751e/</url>
+    <content><![CDATA[<p>本文梳理 VPN、TUN
+模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>VPN</strong></td>
+<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
+<td>秘密隧道</td>
+</tr>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
+<td>传话筒</td>
+</tr>
+<tr>
+<td><strong>Clash</strong></td>
+<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
+<td>智能调度员</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
+<td>分流路牌</td>
+</tr>
+<tr>
+<td><strong>TUN</strong></td>
+<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
+<td>虚拟网卡</td>
+</tr>
+<tr>
+<td><strong>Mixin</strong></td>
+<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
+<td>补丁包</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>VPN</th>
+<th>代理 (Proxy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工作层级</strong></td>
+<td>操作系统层 (OSI L3 网络层)</td>
+<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
+</tr>
+<tr>
+<td><strong>接管范围</strong></td>
+<td>全局接管（通常），所有软件流量都走隧道</td>
+<td>仅接管支持代理设置的软件 (如浏览器)</td>
+</tr>
+<tr>
+<td><strong>加密程度</strong></td>
+<td>全程加密，强调安全性</td>
+<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
+</tr>
+<tr>
+<td><strong>灵活性</strong></td>
+<td>较差，通常“全走”或“全不走”</td>
+<td>极高，可按域名/进程分流</td>
+</tr>
+<tr>
+<td><strong>典型协议</strong></td>
+<td>WireGuard, OpenVPN, IPSec</td>
+<td>HTTP, Socks5, Shadowsocks, VMess</td>
+</tr>
+</tbody>
+</table>
+</blockquote>
+<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
+<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
+<h4 id="global-全局模式">1. Global 全局模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
+<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
+的所有活动。</li>
+<li><strong>缺点</strong>：访问国内网站（如
+B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
+</ul>
+<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
+<ul>
+<li><strong>原理</strong>：根据预设的规则列表（Rule
+List）智能判断。</li>
+<li><strong>流程</strong>：
+<ol type="1">
+<li>拦截请求。</li>
+<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
+<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
+</ol></li>
+<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
+</ul>
+<h4 id="direct-直连模式">3. Direct 直连模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
+<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
+</ul>
+<h4 id="script-脚本模式">4. Script 脚本模式</h4>
+<ul>
+<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
+<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
+</ul>
+<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
+<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
+Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
+<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
+7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
+7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
+<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
+<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
+<pre>
+<code class="mermaid">
+
+graph TD;
+    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
+    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
+    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
+    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
+    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
+</code>
+</pre>
+<ol type="1">
+<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
+<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
+<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
+<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
+3)，它处理的是 IP
+数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
+<li><strong>用户态处理</strong>：Clash 读取 TUN
+设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
+</ol>
+<blockquote>
+<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
+VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
+</blockquote>
+<blockquote>
+<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
+<p>这是一个核心问题：<strong>TUN
+模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
+<ul>
+<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
+Clash
+能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
+Clash 核心。</li>
+<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
+</ul>
+<p><strong>结论</strong>：开启 TUN
+模式并选择<strong>规则模式</strong>，意味着
+“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
+</blockquote>
+<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
+<p>在 Windows/macOS 上开启 TUN
+模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
+<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
+<strong>Service Mode</strong>。</p>
+<ul>
+<li><strong>守护进程</strong>：Service Mode
+会安装一个后台系统服务（Daemon）。</li>
+<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
+劫持、TUN 路由）。</li>
+<li><strong>UI 分离</strong>：Clash
+的图形界面（UI）只需要以普通权限运行，通过 IPC
+接口指挥后台服务干活。</li>
+<li><strong>主要作用</strong>：
+<ol type="1">
+<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
+<li><strong>系统级抗杀</strong>：UI
+关闭了，后台代理服务依然可以在线。</li>
+<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
+</ol></li>
+</ul>
+<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
+<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
+<h4 id="核心结构">核心结构</h4>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
+<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
+<p>很多时候我们使用机场提供的订阅链接，这个 URL
+下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
+TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
+<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
+<ul>
+<li><strong>原理</strong>：Clash
+启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
+配置，将两者<strong>合并</strong>。</li>
+<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
+<li><strong>用途</strong>：
+<ul>
+<li>强制开启 TUN 模式。</li>
+<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
+<li>添加个人的局域网 IP 直连规则。</li>
+</ul></li>
+</ul>
+<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
+模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
+IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
+浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
+的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
+</blockquote>
+<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
+<ol type="1">
+<li><strong>“开了全局模式就是最安全的”</strong>
+<ul>
+<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
+HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
+</ul></li>
+<li><strong>“Ping 值低网速就快”</strong>
+<ul>
+<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
+<code>TCP Handshake</code>
+时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
+等）。</li>
+</ul></li>
+<li><strong>“TUN 模式会影响打游戏吗？”</strong>
+<ul>
+<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
+协议，普通代理模式无法代理 UDP，必须开启 TUN
+模式才能让游戏流量走代理加速。</li>
+</ul></li>
+<li><strong>Clash 是 VPN 吗？</strong>
+<ul>
+<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
+<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
+VPN 几乎一致（接管全系统流量）。</li>
+</ul></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>Network</tag>
+        <tag>VPN</tag>
+        <tag>代理</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>BIOS</title>
     <url>/posts/ea91aa61/</url>
     <content><![CDATA[<p>从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里
@@ -10671,269 +10934,6 @@ A20 Gate。</li>
         <tag>固件</tag>
         <tag>启动流程</tag>
         <tag>UEFI</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Clash 与网络代理详解</title>
-    <url>/posts/755f751e/</url>
-    <content><![CDATA[<p>本文梳理 VPN、TUN
-模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>VPN</strong></td>
-<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
-<td>秘密隧道</td>
-</tr>
-<tr>
-<td><strong>Proxy</strong></td>
-<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
-<td>传话筒</td>
-</tr>
-<tr>
-<td><strong>Clash</strong></td>
-<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
-<td>智能调度员</td>
-</tr>
-<tr>
-<td><strong>Rule</strong></td>
-<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
-<td>分流路牌</td>
-</tr>
-<tr>
-<td><strong>TUN</strong></td>
-<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
-<td>虚拟网卡</td>
-</tr>
-<tr>
-<td><strong>Mixin</strong></td>
-<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
-<td>补丁包</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
-<table>
-<colgroup>
-<col style="width: 24%" />
-<col style="width: 20%" />
-<col style="width: 56%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>VPN</th>
-<th>代理 (Proxy)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>工作层级</strong></td>
-<td>操作系统层 (OSI L3 网络层)</td>
-<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
-</tr>
-<tr>
-<td><strong>接管范围</strong></td>
-<td>全局接管（通常），所有软件流量都走隧道</td>
-<td>仅接管支持代理设置的软件 (如浏览器)</td>
-</tr>
-<tr>
-<td><strong>加密程度</strong></td>
-<td>全程加密，强调安全性</td>
-<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
-</tr>
-<tr>
-<td><strong>灵活性</strong></td>
-<td>较差，通常“全走”或“全不走”</td>
-<td>极高，可按域名/进程分流</td>
-</tr>
-<tr>
-<td><strong>典型协议</strong></td>
-<td>WireGuard, OpenVPN, IPSec</td>
-<td>HTTP, Socks5, Shadowsocks, VMess</td>
-</tr>
-</tbody>
-</table>
-</blockquote>
-<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
-<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
-<h4 id="global-全局模式">1. Global 全局模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
-<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
-的所有活动。</li>
-<li><strong>缺点</strong>：访问国内网站（如
-B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
-</ul>
-<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
-<ul>
-<li><strong>原理</strong>：根据预设的规则列表（Rule
-List）智能判断。</li>
-<li><strong>流程</strong>：
-<ol type="1">
-<li>拦截请求。</li>
-<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
-<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
-</ol></li>
-<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
-</ul>
-<h4 id="direct-直连模式">3. Direct 直连模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
-<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
-</ul>
-<h4 id="script-脚本模式">4. Script 脚本模式</h4>
-<ul>
-<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
-<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
-</ul>
-<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
-<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
-Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
-<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
-7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
-7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
-<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
-<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
-<pre>
-<code class="mermaid">
-
-graph TD;
-    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
-    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
-    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
-    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
-    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
-</code>
-</pre>
-<ol type="1">
-<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
-<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
-<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
-<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
-3)，它处理的是 IP
-数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
-<li><strong>用户态处理</strong>：Clash 读取 TUN
-设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
-</ol>
-<blockquote>
-<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
-VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
-</blockquote>
-<blockquote>
-<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
-<p>这是一个核心问题：<strong>TUN
-模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
-<ul>
-<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
-Clash
-能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
-Clash 核心。</li>
-<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
-</ul>
-<p><strong>结论</strong>：开启 TUN
-模式并选择<strong>规则模式</strong>，意味着
-“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
-</blockquote>
-<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
-<p>在 Windows/macOS 上开启 TUN
-模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
-<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
-<strong>Service Mode</strong>。</p>
-<ul>
-<li><strong>守护进程</strong>：Service Mode
-会安装一个后台系统服务（Daemon）。</li>
-<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
-劫持、TUN 路由）。</li>
-<li><strong>UI 分离</strong>：Clash
-的图形界面（UI）只需要以普通权限运行，通过 IPC
-接口指挥后台服务干活。</li>
-<li><strong>主要作用</strong>：
-<ol type="1">
-<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
-<li><strong>系统级抗杀</strong>：UI
-关闭了，后台代理服务依然可以在线。</li>
-<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
-</ol></li>
-</ul>
-<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
-<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
-<h4 id="核心结构">核心结构</h4>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
-<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
-<p>很多时候我们使用机场提供的订阅链接，这个 URL
-下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
-TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
-<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
-<ul>
-<li><strong>原理</strong>：Clash
-启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
-配置，将两者<strong>合并</strong>。</li>
-<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
-<li><strong>用途</strong>：
-<ul>
-<li>强制开启 TUN 模式。</li>
-<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
-<li>添加个人的局域网 IP 直连规则。</li>
-</ul></li>
-</ul>
-<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
-模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
-IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
-浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
-的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
-</blockquote>
-<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
-<ol type="1">
-<li><strong>“开了全局模式就是最安全的”</strong>
-<ul>
-<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
-HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
-</ul></li>
-<li><strong>“Ping 值低网速就快”</strong>
-<ul>
-<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
-<code>TCP Handshake</code>
-时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
-等）。</li>
-</ul></li>
-<li><strong>“TUN 模式会影响打游戏吗？”</strong>
-<ul>
-<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
-协议，普通代理模式无法代理 UDP，必须开启 TUN
-模式才能让游戏流量走代理加速。</li>
-</ul></li>
-<li><strong>Clash 是 VPN 吗？</strong>
-<ul>
-<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
-<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
-VPN 几乎一致（接管全系统流量）。</li>
-</ul></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>Network</tag>
-        <tag>VPN</tag>
-        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -21946,338 +21946,6 @@ PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
       </tags>
   </entry>
   <entry>
-    <title>机密计算入门：数据使用中的安全与TEE</title>
-    <url>/posts/84b980d1/</url>
-    <content><![CDATA[<p>硬盘和网络传输中的数据都有加密保护，但数据进入内存参与计算时往往是明文。机密计算（Confidential
-Computing）解决的就是这个问题，本文介绍它与 TEE 的基本概念。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>数据三态</td>
-<td>静态、传输中、使用中三种数据状态</td>
-<td>内存里的数据最危险</td>
-</tr>
-<tr>
-<td>TEE</td>
-<td>Trusted Execution Environment，可信执行环境</td>
-<td>CPU 里的硬件保险箱</td>
-</tr>
-<tr>
-<td>CVM</td>
-<td>Confidential Virtual Machine，机密虚拟机</td>
-<td>内存被硬件加密的虚拟机</td>
-</tr>
-<tr>
-<td>SEV-SNP</td>
-<td>AMD 的 CVM 技术（安全加密虚拟化-安全嵌套分页）</td>
-<td>AMD 系机密虚拟机</td>
-</tr>
-<tr>
-<td>TDX</td>
-<td>Intel 的 CVM 技术（信任域扩展）</td>
-<td>Intel 系机密虚拟机</td>
-</tr>
-<tr>
-<td>CCA</td>
-<td>ARM 的 CVM 技术（机密计算架构）</td>
-<td>ARM 系机密虚拟机</td>
-</tr>
-<tr>
-<td>内存加密</td>
-<td>数据在内存里以密文形式存储</td>
-<td>明文只在 CPU 芯片内出现</td>
-</tr>
-<tr>
-<td>信任根（RoT）</td>
-<td>Root of Trust，信任链的起点</td>
-<td>安全体系的根</td>
-</tr>
-<tr>
-<td>黑盒信任根</td>
-<td>用户无法直接验证的信任根</td>
-<td>信任全押在厂商身上</td>
-</tr>
-<tr>
-<td>信任缺口</td>
-<td>trust gap，用户与云平台间的信任落差</td>
-<td>数据你说了不算</td>
-</tr>
-<tr>
-<td>TLS</td>
-<td>Transport Layer Security，传输层安全协议</td>
-<td>加密管道本身</td>
-</tr>
-<tr>
-<td>HTTPS</td>
-<td>HTTP over TLS</td>
-<td>加密管道送 HTTP</td>
-</tr>
-</tbody>
-</table>
-<h3 id="数据三态为什么内存里的数据最难保护">🧩
-数据三态：为什么内存里的数据最难保护</h3>
-<p>任何数据在生命周期里都有三种状态：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 静态数据 (Data at Rest)      → 存在硬盘/磁盘里</span><br><span class="line">② 传输中数据 (Data in Transit) → 网络上传输</span><br><span class="line">③ 使用中数据 (Data in Use)     → 在内存里被 CPU 计算</span><br></pre></td></tr></table></figure>
-<p>传统加密方案只保护前两种：</p>
-<table>
-<thead>
-<tr>
-<th>状态</th>
-<th>保护手段</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>静态</td>
-<td>磁盘加密</td>
-<td>BitLocker、LUKS</td>
-</tr>
-<tr>
-<td>传输中</td>
-<td>网络加密</td>
-<td>HTTPS/TLS</td>
-</tr>
-<tr>
-<td>使用中</td>
-<td>❌ 传统方案管不了</td>
-<td>内存里的明文</td>
-</tr>
-</tbody>
-</table>
-<p>第 ③ 种状态是真正的盲区：<strong>数据在内存里被 CPU
-处理时是明文</strong>。在传统云环境里，云服务商的运维人员、管理员、甚至被攻破的虚拟机监控器（hypervisor）都能看到内存里的明文数据。</p>
-<blockquote>
-<p>典型场景：云端跑 AI
-推理，模型权重和用户数据在内存里参与计算。磁盘加密管静态、HTTPS
-管传输，唯独正在计算这一头是裸奔的。</p>
-</blockquote>
-<h3 id="tee给-cpu-装一个保险箱">🏦 TEE：给 CPU 装一个保险箱</h3>
-<p><strong>TEE（Trusted Execution Environment，可信执行环境）</strong>
-的思路：在 CPU
-硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
-<p><strong>普通虚拟机 vs 机密虚拟机（CVM）：</strong></p>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>普通 VM</th>
-<th>CVM（机密虚拟机）</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>内存</td>
-<td>明文</td>
-<td>硬件加密</td>
-</tr>
-<tr>
-<td>hypervisor</td>
-<td>能读</td>
-<td>读不了</td>
-</tr>
-<tr>
-<td>云管理员</td>
-<td>能读</td>
-<td>读不了</td>
-</tr>
-<tr>
-<td>物理攻击</td>
-<td>可读内存</td>
-<td>也读不了</td>
-</tr>
-</tbody>
-</table>
-<p>主流的 CVM 技术：</p>
-<table>
-<thead>
-<tr>
-<th>技术</th>
-<th>厂商</th>
-<th>特点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AMD SEV-SNP</td>
-<td>AMD</td>
-<td>内存加密 + SNP（安全嵌套分页）防篡改，生态最成熟</td>
-</tr>
-<tr>
-<td>Intel TDX</td>
-<td>Intel</td>
-<td>类似思路，生态还在早期</td>
-</tr>
-<tr>
-<td>ARM CCA</td>
-<td>ARM</td>
-<td>面向 ARM 芯片，适合移动/嵌入式</td>
-</tr>
-</tbody>
-</table>
-<p>概括：<strong>TEE = 硬件帮你把正在计算的数据锁进保险箱</strong>。</p>
-<h3 id="内存加密计算时不还是要解密吗">🔐
-内存加密：计算时不还是要解密吗？</h3>
-<p>这是最常问的问题。答案：<strong>要解密，但解密发生在 CPU
-芯片内部，明文永远不出芯片</strong>。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统（无内存加密）：</span><br><span class="line">  DRAM(明文) ──内存总线──&gt; CPU 计算 ──&gt; DRAM(明文)</span><br><span class="line">  ▲                                ▲</span><br><span class="line">  └─ 总线嗅探、插内存条、冷启动都能读到明文 ─┘</span><br><span class="line"></span><br><span class="line">内存加密后（SEV）：</span><br><span class="line">  DRAM(密文) ──内存总线──&gt; CPU 内部解密 → 明文只存在于芯片内 ──&gt; 重新加密写回 DRAM</span><br><span class="line">                    │        （缓存/寄存器/执行单元）</span><br><span class="line">                    │</span><br><span class="line">                    └─ 总线上的、DRAM 里的，全是密文 AES(key)</span><br></pre></td></tr></table></figure>
-<p>四个关键点：</p>
-<ol type="1">
-<li><strong>密钥永远在 CPU 内部</strong>，由 CPU 的专用安全处理器（AMD
-是 PSP，Platform Security Processor）生成和管理，外界拿不到。</li>
-<li><strong>解密点 = 内存控制器</strong>，它就在 CPU 芯片上。数据从 DRAM
-进入芯片后才被解密；离开芯片写回内存前被加密。</li>
-<li>攻击者能接触到的所有地方——内存条、总线、DMA
-设备——看到的都是密文。<strong>计算这个动作发生在芯片内部，外人看不到明文</strong>。</li>
-<li>类比：CPU
-是个保密工厂。仓库（DRAM）里堆的全是加密原料，原料进车间（芯片内部）才解锁加工，成品出车间前重新上锁。你能抢仓库、能蹲在传送带（总线）旁边，但看到的永远是锁着的东西。</li>
-</ol>
-<blockquote>
-<p>边界提醒：这个模型防的是外部窃读。如果攻击者攻破了 CVM
-<strong>内部</strong>的软件（guest kernel
-漏洞），明文当然还是会被读到——这要靠后面讲的远程认证来保证 CVM
-内部没被装后门。</p>
-</blockquote>
-<h3 id="https-和-tls-的区别">🧷 HTTPS 和 TLS 的区别</h3>
-<p><strong>TLS 是加密管道协议本身，HTTPS 是 HTTP 跑在 TLS
-管道里这个组合。</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">HTTP ──┐</span><br><span class="line">TLS  ──┼──&gt; HTTPS = HTTP over TLS（https:// 前缀）</span><br><span class="line">TCP/IP─┘</span><br></pre></td></tr></table></figure>
-<table>
-<colgroup>
-<col style="width: 42%" />
-<col style="width: 57%" />
-</colgroup>
-<thead>
-<tr>
-<th>概念</th>
-<th>是什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>TLS</td>
-<td>独立的加密协议：握手、证书验证、密钥协商、加密传输。不关心上面跑的是什么</td>
-</tr>
-<tr>
-<td>HTTPS</td>
-<td>HTTP + TLS 的固定组合，是 TLS 最常见的应用场景</td>
-</tr>
-<tr>
-<td>SSL</td>
-<td>TLS 的前身（SSL 3.0 → TLS 1.0），现在说 SSL 证书其实都是 TLS
-证书</td>
-</tr>
-</tbody>
-</table>
-<p>TLS 不只服务 HTTP：比如内核里可以直接跑 TLS（kernel
-TLS），给特定通道做端到端加密，这是机密计算里的常见性能优化点。</p>
-<h3 id="黑盒信任根tee-的信任缺口">🔮 黑盒信任根：TEE 的信任缺口</h3>
-<p>TEE 的保险箱钥匙（信任根）捏在<strong>芯片厂商</strong>手里：</p>
-<ul>
-<li>你要相信 AMD/Intel 的密钥管理、固件、证书链全都没问题</li>
-<li>用户<strong>无法直接验证</strong>，只能信任厂商，这叫
-<strong>black-box trust root（黑盒信任根）</strong></li>
-<li>用户和云平台之间存在 <strong>trust
-gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
-</ul>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统 TEE 信任模型：</span><br><span class="line">  用户 → 信任 → 云平台 → 信任 → 芯片厂商</span><br><span class="line">        └──────────────────────────┘</span><br><span class="line">        信任链全部建立在&quot;厂商没毛病&quot;上，</span><br><span class="line">        用户没有独立验证的入口，这叫黑盒</span><br></pre></td></tr></table></figure>
-<p>三个具体痛点：</p>
-<table>
-<thead>
-<tr>
-<th>痛点</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>厂商依赖</td>
-<td>用户必须信任制造商，制造商出问题或作恶，安全就崩</td>
-</tr>
-<tr>
-<td>无法独立验证</td>
-<td>验证服务本身也是厂商/平台提供的，用户只能被动接受结论</td>
-</tr>
-<tr>
-<td>多租户复杂</td>
-<td>多租户云环境虚拟化栈复杂，漏洞不可避免，风险放大</td>
-</tr>
-</tbody>
-</table>
-<p>这正是 TEE 与 TPM 协作信任的切入点：<strong>TPM
-是用户能直接访问、能自己配置的白盒信任根，用它来制衡 TEE
-的黑盒信任根</strong>。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>磁盘加密 + HTTPS 就能保护云端数据</td>
-<td>只保护静态和传输两种状态，内存里的使用中数据仍是明文</td>
-</tr>
-<tr>
-<td>内存加密后 CPU 计算会暴露明文</td>
-<td>解密只在 CPU 芯片内部，外部看到的永远是密文</td>
-</tr>
-<tr>
-<td>TEE 是纯软件方案</td>
-<td>TEE 依赖 CPU 硬件隔离和内存加密，密钥由芯片内安全处理器管理</td>
-</tr>
-<tr>
-<td>信任厂商 = 安全</td>
-<td>黑盒信任根意味着用户无法独立验证，存在信任缺口</td>
-</tr>
-<tr>
-<td>HTTPS 和 TLS 是两种加密技术</td>
-<td>HTTPS = HTTP over TLS，TLS 才是底层协议</td>
-</tr>
-<tr>
-<td>SSL 和 TLS 没关系</td>
-<td>TLS 是 SSL 的继任者，本质同一套体系</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>数据在使用中（内存里）是明文，传统加密管不了，需要 TEE
-这类硬件级隔离；TEE 靠内存加密 +
-解密只在芯片内保护使用中数据，但它的信任根归厂商、用户无法验证，形成了黑盒信任缺口——这正是
-TEE + TPM 协作信任要解决的问题。</p>
-</blockquote>
-<p>下一站：SEV-SNP 的隔离到底怎么做到的（NPT、RMP、ASID）。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>机密计算</tag>
-        <tag>内存加密</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 入门：从 main 到 _start</title>
     <url>/posts/76bb2795/</url>
     <content><![CDATA[<p>师兄很早之前就推荐了这个项目学习，最近终于有时间来体验一下。看完第一节感觉对计算机的了解很有帮助，于是整理这份笔记。</p>
@@ -22749,6 +22417,560 @@ class="uri">https://os.phil-opp.com/</a></li>
       </tags>
   </entry>
   <entry>
+    <title>机密计算入门：数据使用中的安全与TEE</title>
+    <url>/posts/84b980d1/</url>
+    <content><![CDATA[<p>硬盘和网络传输中的数据都有加密保护，但数据进入内存参与计算时往往是明文。机密计算（Confidential
+Computing）解决的就是这个问题，本文介绍它与 TEE 的基本概念。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据三态</td>
+<td>静态、传输中、使用中三种数据状态</td>
+<td>内存里的数据最危险</td>
+</tr>
+<tr>
+<td>TEE</td>
+<td>Trusted Execution Environment，可信执行环境</td>
+<td>CPU 里的硬件保险箱</td>
+</tr>
+<tr>
+<td>CVM</td>
+<td>Confidential Virtual Machine，机密虚拟机</td>
+<td>内存被硬件加密的虚拟机</td>
+</tr>
+<tr>
+<td>SEV-SNP</td>
+<td>AMD 的 CVM 技术（安全加密虚拟化-安全嵌套分页）</td>
+<td>AMD 系机密虚拟机</td>
+</tr>
+<tr>
+<td>TDX</td>
+<td>Intel 的 CVM 技术（信任域扩展）</td>
+<td>Intel 系机密虚拟机</td>
+</tr>
+<tr>
+<td>CCA</td>
+<td>ARM 的 CVM 技术（机密计算架构）</td>
+<td>ARM 系机密虚拟机</td>
+</tr>
+<tr>
+<td>内存加密</td>
+<td>数据在内存里以密文形式存储</td>
+<td>明文只在 CPU 芯片内出现</td>
+</tr>
+<tr>
+<td>信任根（RoT）</td>
+<td>Root of Trust，信任链的起点</td>
+<td>安全体系的根</td>
+</tr>
+<tr>
+<td>黑盒信任根</td>
+<td>用户无法直接验证的信任根</td>
+<td>信任全押在厂商身上</td>
+</tr>
+<tr>
+<td>信任缺口</td>
+<td>trust gap，用户与云平台间的信任落差</td>
+<td>数据你说了不算</td>
+</tr>
+<tr>
+<td>TLS</td>
+<td>Transport Layer Security，传输层安全协议</td>
+<td>加密管道本身</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>HTTP over TLS</td>
+<td>加密管道送 HTTP</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数据三态为什么内存里的数据最难保护">🧩
+数据三态：为什么内存里的数据最难保护</h3>
+<p>任何数据在生命周期里都有三种状态：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 静态数据 (Data at Rest)      → 存在硬盘/磁盘里</span><br><span class="line">② 传输中数据 (Data in Transit) → 网络上传输</span><br><span class="line">③ 使用中数据 (Data in Use)     → 在内存里被 CPU 计算</span><br></pre></td></tr></table></figure>
+<p>传统加密方案只保护前两种：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>保护手段</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>静态</td>
+<td>磁盘加密</td>
+<td>BitLocker、LUKS</td>
+</tr>
+<tr>
+<td>传输中</td>
+<td>网络加密</td>
+<td>HTTPS/TLS</td>
+</tr>
+<tr>
+<td>使用中</td>
+<td>❌ 传统方案管不了</td>
+<td>内存里的明文</td>
+</tr>
+</tbody>
+</table>
+<p>第 ③ 种状态是真正的盲区：<strong>数据在内存里被 CPU
+处理时是明文</strong>。在传统云环境里，云服务商的运维人员、管理员、甚至被攻破的虚拟机监控器（hypervisor）都能看到内存里的明文数据。</p>
+<blockquote>
+<p>典型场景：云端跑 AI
+推理，模型权重和用户数据在内存里参与计算。磁盘加密管静态、HTTPS
+管传输，唯独正在计算这一头是裸奔的。</p>
+</blockquote>
+<h3 id="tee给-cpu-装一个保险箱">🏦 TEE：给 CPU 装一个保险箱</h3>
+<p><strong>TEE（Trusted Execution Environment，可信执行环境）</strong>
+的思路：在 CPU
+硬件层面划出一块隔离区域，里面的数据和代码连操作系统、hypervisor、甚至物理上能摸到内存条的人都读不走。</p>
+<p><strong>普通虚拟机 vs 机密虚拟机（CVM）：</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>普通 VM</th>
+<th>CVM（机密虚拟机）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内存</td>
+<td>明文</td>
+<td>硬件加密</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>能读</td>
+<td>读不了</td>
+</tr>
+<tr>
+<td>云管理员</td>
+<td>能读</td>
+<td>读不了</td>
+</tr>
+<tr>
+<td>物理攻击</td>
+<td>可读内存</td>
+<td>也读不了</td>
+</tr>
+</tbody>
+</table>
+<p>主流的 CVM 技术：</p>
+<table>
+<thead>
+<tr>
+<th>技术</th>
+<th>厂商</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AMD SEV-SNP</td>
+<td>AMD</td>
+<td>内存加密 + SNP（安全嵌套分页）防篡改，生态最成熟</td>
+</tr>
+<tr>
+<td>Intel TDX</td>
+<td>Intel</td>
+<td>类似思路，生态还在早期</td>
+</tr>
+<tr>
+<td>ARM CCA</td>
+<td>ARM</td>
+<td>面向 ARM 芯片，适合移动/嵌入式</td>
+</tr>
+</tbody>
+</table>
+<p>概括：<strong>TEE = 硬件帮你把正在计算的数据锁进保险箱</strong>。</p>
+<h3 id="内存加密计算时不还是要解密吗">🔐
+内存加密：计算时不还是要解密吗？</h3>
+<p>这是最常问的问题。答案：<strong>要解密，但解密发生在 CPU
+芯片内部，明文永远不出芯片</strong>。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统（无内存加密）：</span><br><span class="line">  DRAM(明文) ──内存总线──&gt; CPU 计算 ──&gt; DRAM(明文)</span><br><span class="line">  ▲                                ▲</span><br><span class="line">  └─ 总线嗅探、插内存条、冷启动都能读到明文 ─┘</span><br><span class="line"></span><br><span class="line">内存加密后（SEV）：</span><br><span class="line">  DRAM(密文) ──内存总线──&gt; CPU 内部解密 → 明文只存在于芯片内 ──&gt; 重新加密写回 DRAM</span><br><span class="line">                    │        （缓存/寄存器/执行单元）</span><br><span class="line">                    │</span><br><span class="line">                    └─ 总线上的、DRAM 里的，全是密文 AES(key)</span><br></pre></td></tr></table></figure>
+<p>四个关键点：</p>
+<ol type="1">
+<li><strong>密钥永远在 CPU 内部</strong>，由 CPU 的专用安全处理器（AMD
+是 PSP，Platform Security Processor）生成和管理，外界拿不到。</li>
+<li><strong>解密点 = 内存控制器</strong>，它就在 CPU 芯片上。数据从 DRAM
+进入芯片后才被解密；离开芯片写回内存前被加密。</li>
+<li>攻击者能接触到的所有地方——内存条、总线、DMA
+设备——看到的都是密文。<strong>计算这个动作发生在芯片内部，外人看不到明文</strong>。</li>
+<li>类比：CPU
+是个保密工厂。仓库（DRAM）里堆的全是加密原料，原料进车间（芯片内部）才解锁加工，成品出车间前重新上锁。你能抢仓库、能蹲在传送带（总线）旁边，但看到的永远是锁着的东西。</li>
+</ol>
+<blockquote>
+<p>边界提醒：这个模型防的是外部窃读。如果攻击者攻破了 CVM
+<strong>内部</strong>的软件（guest kernel
+漏洞），明文当然还是会被读到——这要靠后面讲的远程认证来保证 CVM
+内部没被装后门。</p>
+</blockquote>
+<h3 id="https-和-tls-的区别">🧷 HTTPS 和 TLS 的区别</h3>
+<p><strong>TLS 是加密管道协议本身，HTTPS 是 HTTP 跑在 TLS
+管道里这个组合。</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">HTTP ──┐</span><br><span class="line">TLS  ──┼──&gt; HTTPS = HTTP over TLS（https:// 前缀）</span><br><span class="line">TCP/IP─┘</span><br></pre></td></tr></table></figure>
+<table>
+<colgroup>
+<col style="width: 42%" />
+<col style="width: 57%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TLS</td>
+<td>独立的加密协议：握手、证书验证、密钥协商、加密传输。不关心上面跑的是什么</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>HTTP + TLS 的固定组合，是 TLS 最常见的应用场景</td>
+</tr>
+<tr>
+<td>SSL</td>
+<td>TLS 的前身（SSL 3.0 → TLS 1.0），现在说 SSL 证书其实都是 TLS
+证书</td>
+</tr>
+</tbody>
+</table>
+<p>TLS 不只服务 HTTP：比如内核里可以直接跑 TLS（kernel
+TLS），给特定通道做端到端加密，这是机密计算里的常见性能优化点。</p>
+<h3 id="黑盒信任根tee-的信任缺口">🔮 黑盒信任根：TEE 的信任缺口</h3>
+<p>TEE 的保险箱钥匙（信任根）捏在<strong>芯片厂商</strong>手里：</p>
+<ul>
+<li>你要相信 AMD/Intel 的密钥管理、固件、证书链全都没问题</li>
+<li>用户<strong>无法直接验证</strong>，只能信任厂商，这叫
+<strong>black-box trust root（黑盒信任根）</strong></li>
+<li>用户和云平台之间存在 <strong>trust
+gap（信任缺口）</strong>：数据在你云上跑，但你说了不算</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">传统 TEE 信任模型：</span><br><span class="line">  用户 → 信任 → 云平台 → 信任 → 芯片厂商</span><br><span class="line">        └──────────────────────────┘</span><br><span class="line">        信任链全部建立在&quot;厂商没毛病&quot;上，</span><br><span class="line">        用户没有独立验证的入口，这叫黑盒</span><br></pre></td></tr></table></figure>
+<p>三个具体痛点：</p>
+<table>
+<thead>
+<tr>
+<th>痛点</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>厂商依赖</td>
+<td>用户必须信任制造商，制造商出问题或作恶，安全就崩</td>
+</tr>
+<tr>
+<td>无法独立验证</td>
+<td>验证服务本身也是厂商/平台提供的，用户只能被动接受结论</td>
+</tr>
+<tr>
+<td>多租户复杂</td>
+<td>多租户云环境虚拟化栈复杂，漏洞不可避免，风险放大</td>
+</tr>
+</tbody>
+</table>
+<p>这正是 TEE 与 TPM 协作信任的切入点：<strong>TPM
+是用户能直接访问、能自己配置的白盒信任根，用它来制衡 TEE
+的黑盒信任根</strong>。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>磁盘加密 + HTTPS 就能保护云端数据</td>
+<td>只保护静态和传输两种状态，内存里的使用中数据仍是明文</td>
+</tr>
+<tr>
+<td>内存加密后 CPU 计算会暴露明文</td>
+<td>解密只在 CPU 芯片内部，外部看到的永远是密文</td>
+</tr>
+<tr>
+<td>TEE 是纯软件方案</td>
+<td>TEE 依赖 CPU 硬件隔离和内存加密，密钥由芯片内安全处理器管理</td>
+</tr>
+<tr>
+<td>信任厂商 = 安全</td>
+<td>黑盒信任根意味着用户无法独立验证，存在信任缺口</td>
+</tr>
+<tr>
+<td>HTTPS 和 TLS 是两种加密技术</td>
+<td>HTTPS = HTTP over TLS，TLS 才是底层协议</td>
+</tr>
+<tr>
+<td>SSL 和 TLS 没关系</td>
+<td>TLS 是 SSL 的继任者，本质同一套体系</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数据在使用中（内存里）是明文，传统加密管不了，需要 TEE
+这类硬件级隔离；TEE 靠内存加密 +
+解密只在芯片内保护使用中数据，但它的信任根归厂商、用户无法验证，形成了黑盒信任缺口——这正是
+TEE + TPM 协作信任要解决的问题。</p>
+</blockquote>
+<p>下一站：SEV-SNP 的隔离到底怎么做到的（NPT、RMP、ASID）。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>机密计算</tag>
+        <tag>内存加密</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
+    <url>/posts/a5117577/</url>
+    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
+只是地图上的一种东西。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
+href="/posts/5d0b788d/">Rust OS
+入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
+需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理内存（Physical Memory）</td>
+<td>真正的 RAM 硬件</td>
+<td>可读写的存储芯片</td>
+</tr>
+<tr>
+<td>物理地址（Physical Address）</td>
+<td>CPU 访问物理资源时产生的地址</td>
+<td>不一定是 RAM 的地址</td>
+</tr>
+<tr>
+<td>物理地址空间（Physical Address Space）</td>
+<td>CPU 眼中全部地址的集合</td>
+<td>一张地址地图，RAM 只是其中一种</td>
+</tr>
+<tr>
+<td>MMIO（Memory-Mapped I/O）</td>
+<td>把设备寄存器映射进地址空间</td>
+<td>读写内存 = 操作硬件</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>记录地址区域用途的地图</td>
+<td>Kernel 靠它分辨能碰/不能碰</td>
+</tr>
+<tr>
+<td>Reserved</td>
+<td>地址空间里存在但 OS 不能用的区域</td>
+<td>千万别拿来当 RAM</td>
+</tr>
+<tr>
+<td>虚拟地址（Virtual Address）</td>
+<td>程序看到的地址，经 MMU 翻译</td>
+<td>程序眼里的地址是假的</td>
+</tr>
+</tbody>
+</table>
+<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
+<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
+RAM，那确实很简单：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
+<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
+时产生的地址叫<strong>物理地址（Physical
+Address）</strong>，而<strong>这个地址背后的东西不一定是
+RAM</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
+只是其中一种资源。</strong></p>
+</blockquote>
+<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
+<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
+<p>逐个来看：</p>
+<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
+本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
+<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
+附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
+访问它时路径是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
+<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
+ROM</strong>。</p>
+<p><strong>MMIO</strong>：见下一节。</p>
+<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
+<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
+<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
+的思想很简单：</p>
+<blockquote>
+<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
+</blockquote>
+<p>硬件工程师的思路是：CPU 本来就有读地址 /
+写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
+就不需要额外的指令来访问设备了。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
+<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
+<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
+附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
+MMIO，只是地址和机制更复杂。</p>
+<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
+<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
+<ul>
+<li>被硬件使用</li>
+<li>被固件使用</li>
+<li>对应 MMIO</li>
+<li>有特殊用途</li>
+<li>芯片组保留区域</li>
+</ul>
+<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
+<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
+= 硬件。</p>
+<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</h3>
+<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
+Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
+不能靠猜</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
+<p>它需要一张地图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>整个启动链路串起来就是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
+<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
+Allocator</h3>
+<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
+为例，下一步就是 <strong>Frame
+Allocator（物理页帧分配器）</strong>：</p>
+<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
+是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
+frame</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
+<p>之后所有内存需求都从这里申请：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
+<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
+Memory</strong> 就是接下来最自然的学习路线。</p>
+<h3 id="虚拟地址程序看到的地址是假的">🕳️
+虚拟地址：程序看到的地址是假的</h3>
+<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
+<p>通常<strong>并不是 RAM
+的物理地址</strong>，而是<strong>虚拟地址（Virtual
+Address）</strong>。现代操作系统的地址翻译链路是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
+<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
+<code>0x7FFF0000</code>，实际过程是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
+<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
+个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一层：虚拟地址空间</td>
+<td>程序看到的地址</td>
+<td><code>0x7FFF0000</code></td>
+</tr>
+<tr>
+<td>第二层：物理地址空间</td>
+<td>MMU 翻译后的地址</td>
+<td><code>0x12345000</code></td>
+</tr>
+<tr>
+<td>第三层：真正的硬件</td>
+<td>地址最终对应的东西</td>
+<td>RAM / MMIO / Firmware / Reserved</td>
+</tr>
+</tbody>
+</table>
+<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
+<ul>
+<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
+Stack/Heap、Page Tables、各进程的
+Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
+<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
+RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
+控制区域等。</li>
+</ul>
+<p><strong>这两处提到的内存内容不是一回事。</strong></p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
+只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
+分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
+Allocator，进而进入虚拟内存的世界。</p>
+</blockquote>
+<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
+Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
+Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>内存管理</tag>
+        <tag>物理地址</tag>
+        <tag>MMIO</tag>
+        <tag>Memory Map</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 入门：从按下电源键到内核接管</title>
     <url>/posts/5d0b788d/</url>
     <content><![CDATA[<p>按下电源键时，RAM
@@ -23166,228 +23388,6 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
         <tag>实模式</tag>
         <tag>Rust</tag>
         <tag>Bootloader</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
-    <url>/posts/a5117577/</url>
-    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
-只是地图上的一种东西。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
-href="/posts/5d0b788d/">Rust OS
-入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
-需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
-为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>物理内存（Physical Memory）</td>
-<td>真正的 RAM 硬件</td>
-<td>可读写的存储芯片</td>
-</tr>
-<tr>
-<td>物理地址（Physical Address）</td>
-<td>CPU 访问物理资源时产生的地址</td>
-<td>不一定是 RAM 的地址</td>
-</tr>
-<tr>
-<td>物理地址空间（Physical Address Space）</td>
-<td>CPU 眼中全部地址的集合</td>
-<td>一张地址地图，RAM 只是其中一种</td>
-</tr>
-<tr>
-<td>MMIO（Memory-Mapped I/O）</td>
-<td>把设备寄存器映射进地址空间</td>
-<td>读写内存 = 操作硬件</td>
-</tr>
-<tr>
-<td>Memory Map</td>
-<td>记录地址区域用途的地图</td>
-<td>Kernel 靠它分辨能碰/不能碰</td>
-</tr>
-<tr>
-<td>Reserved</td>
-<td>地址空间里存在但 OS 不能用的区域</td>
-<td>千万别拿来当 RAM</td>
-</tr>
-<tr>
-<td>虚拟地址（Virtual Address）</td>
-<td>程序看到的地址，经 MMU 翻译</td>
-<td>程序眼里的地址是假的</td>
-</tr>
-</tbody>
-</table>
-<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
-<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
-RAM，那确实很简单：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
-<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
-时产生的地址叫<strong>物理地址（Physical
-Address）</strong>，而<strong>这个地址背后的东西不一定是
-RAM</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
-只是其中一种资源。</strong></p>
-</blockquote>
-<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
-<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
-<p>逐个来看：</p>
-<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
-本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
-<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
-附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
-访问它时路径是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
-<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
-ROM</strong>。</p>
-<p><strong>MMIO</strong>：见下一节。</p>
-<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
-<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
-<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
-的思想很简单：</p>
-<blockquote>
-<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
-</blockquote>
-<p>硬件工程师的思路是：CPU 本来就有读地址 /
-写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
-就不需要额外的指令来访问设备了。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
-<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
-<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
-附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
-MMIO，只是地址和机制更复杂。</p>
-<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
-<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
-<ul>
-<li>被硬件使用</li>
-<li>被固件使用</li>
-<li>对应 MMIO</li>
-<li>有特殊用途</li>
-<li>芯片组保留区域</li>
-</ul>
-<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
-<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
-= 硬件。</p>
-<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
-Map：Bootloader 为什么要传给 Kernel</h3>
-<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
-Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
-不能靠猜</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
-<p>它需要一张地图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
-<p>整个启动链路串起来就是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
-<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
-Allocator</h3>
-<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
-为例，下一步就是 <strong>Frame
-Allocator（物理页帧分配器）</strong>：</p>
-<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
-是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
-frame</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
-<p>之后所有内存需求都从这里申请：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
-<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
-Memory</strong> 就是接下来最自然的学习路线。</p>
-<h3 id="虚拟地址程序看到的地址是假的">🕳️
-虚拟地址：程序看到的地址是假的</h3>
-<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
-<p>通常<strong>并不是 RAM
-的物理地址</strong>，而是<strong>虚拟地址（Virtual
-Address）</strong>。现代操作系统的地址翻译链路是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
-<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
-<code>0x7FFF0000</code>，实际过程是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
-<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
-个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>层级</th>
-<th>内容</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>第一层：虚拟地址空间</td>
-<td>程序看到的地址</td>
-<td><code>0x7FFF0000</code></td>
-</tr>
-<tr>
-<td>第二层：物理地址空间</td>
-<td>MMU 翻译后的地址</td>
-<td><code>0x12345000</code></td>
-</tr>
-<tr>
-<td>第三层：真正的硬件</td>
-<td>地址最终对应的东西</td>
-<td>RAM / MMIO / Firmware / Reserved</td>
-</tr>
-</tbody>
-</table>
-<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
-<ul>
-<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
-Stack/Heap、Page Tables、各进程的
-Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
-<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
-RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
-控制区域等。</li>
-</ul>
-<p><strong>这两处提到的内存内容不是一回事。</strong></p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
-只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
-分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
-Allocator，进而进入虚拟内存的世界。</p>
-</blockquote>
-<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
-Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
-Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>内存管理</tag>
-        <tag>物理地址</tag>
-        <tag>MMIO</tag>
-        <tag>Memory Map</tag>
       </tags>
   </entry>
   <entry>
@@ -24606,6 +24606,249 @@ struct，基本都要用 <code>repr</code> 系列声明布局。</p>
       </tags>
   </entry>
   <entry>
+    <title>ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？</title>
+    <url>/posts/878640d9/</url>
+    <content><![CDATA[<blockquote>
+<p>论文：<strong>ccAI: A Compatible and Confidential System for AI
+Computing</strong>（MICRO 2025）</p>
+<p>作者想让普通的、老的 GPU/NPU（统称 xPU）也能安全地跑
+AI，同时尽量不改原来的软件和硬件。</p>
+</blockquote>
+<p>这是 <strong>ccAI 论文精读系列</strong>
+的第一篇，只回答两个问题：<strong>为什么 AI 计算需要保密？为什么 GPU
+是其中的短板？</strong></p>
+<span id="more"></span>
+<h2 id="一个场景模型上云gpu-是云厂商的">🏢 一个场景：模型上云，GPU
+是云厂商的</h2>
+<p>假设你是公司，把自己训练的大模型放到云服务器上跑推理。数据链路长这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你的 AI 模型 + 用户数据</span><br><span class="line">              ↓</span><br><span class="line">          云服务器</span><br><span class="line">              ├── CPU</span><br><span class="line">              └── GPU    ← 云厂商的 GPU</span><br></pre></td></tr></table></figure>
+<p>模型参数、用户输入、中间计算结果、最终输出——都要经过云厂商的
+GPU。如果云服务器里存在<strong>恶意的特权软件</strong>（云厂商的运维人员、被攻破的管理程序，都属于威胁模型的一部分），理论上它可能尝试读取这些数据。而模型参数和用户数据，都是商业机密。</p>
+<p>我们希望的是：</p>
+<blockquote>
+<p><strong>即使云服务器的某些软件是恶意的，也不能偷看到 AI
+数据。</strong></p>
+</blockquote>
+<p>这就是 <strong>Confidential Computing（机密计算）</strong>
+要解决的问题。论文把它落到加速器上，叫 <strong>confidential xPU
+computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机密。</p>
+<h2 id="cpu-侧已经有答案gpu-侧没有">🔐 CPU 侧已经有答案，GPU 侧没有</h2>
+<p>CPU 这一侧的机密计算已经比较成熟，思路概括：</p>
+<blockquote>
+<p><strong>给程序划一个别人不能看的房间。</strong></p>
+</blockquote>
+<p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
+Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
+Machine（受保护的虚拟机）</strong>。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          Host OS</span><br><span class="line">             ↓</span><br><span class="line">┌──────────────────────┐</span><br><span class="line">│         TVM          │  ← 受保护虚拟机（TEE）</span><br><span class="line">│                      │</span><br><span class="line">│ 1. AI Application    │  ← 明文：AI 应用</span><br><span class="line">│ 2. Model &amp; User Data │  ← 明文：模型 / 用户数据（别人看不了）</span><br><span class="line">│ 3. GPU Driver        │  ← xPU 驱动</span><br><span class="line">└────────────┬─────────┘</span><br><span class="line">             ↓</span><br><span class="line">            GPU</span><br></pre></td></tr></table></figure>
+<p>TVM 把 CPU 侧的软件栈（AI
+应用、驱动、库）保护起来了。但问题马上出现：</p>
+<blockquote>
+<p><strong>数据一旦离开 TVM，通过 PCIe 传给
+GPU，就是明文裸奔。</strong></p>
+</blockquote>
+<p>模型参数在 PCIe
+总线上传输时，谁都能看、谁都能改。这就是这篇论文真正要解决的痛点：</p>
+<blockquote>
+<p><strong>怎么让老 GPU 也能安全地参与机密 AI 计算？</strong></p>
+</blockquote>
+<h2 id="为什么不直接换新-gpu-改-gpu">❌ 为什么不直接换新 GPU / 改
+GPU？</h2>
+<p>最直觉的方案：给 GPU 加上安全硬件。新 GPU
+确实可以这么做（比如某些新卡自带内存加密、安全启动、远程证明）。但现实是：</p>
+<ul>
+<li>云服务器里<strong>存量</strong>大多是 A100、T4、RTX 4090
+这类没有专门安全硬件的设备；</li>
+<li>还有国产 GPU、NPU、FPGA，架构各不相同；</li>
+<li>为了安全把所有 GPU 换成 H100 —— 成本不可接受。</li>
+</ul>
+<p>插一句，论文实验里用到的 xPU 包括 NVIDIA A100、RTX 4090
+Ti、T4、Tenstorrent N150d（NPU）、Enflame S60（国产
+GPU），就是为了证明这套方案<strong>不是只能保护一种 GPU</strong>。</p>
+<p>所以作者把问题反了过来：</p>
+<blockquote>
+<p><strong>能不能不改 GPU 本身、不改 GPU
+软件，只在外面加一层东西，把普通 GPU 保护起来？</strong></p>
+</blockquote>
+<h2 id="突破口pcie-是所有-xpu-的共同通道">💡 突破口：PCIe 是所有 xPU
+的共同通道</h2>
+<p>GPU 内部差别很大，但有一个共同点——它们都通过 <strong>PCIe</strong>
+插在主机上，跟 CPU/内存通信：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">A100 ──┐</span><br><span class="line">T4 ────┤</span><br><span class="line">4090 ──┤── PCIe ── CPU</span><br><span class="line">NPU ───┤</span><br><span class="line">FPGA ──┘</span><br></pre></td></tr></table></figure>
+<p>于是作者的思路是：</p>
+<blockquote>
+<p><strong>我不管 GPU 内部怎么实现，我只管 PCIe
+上跑的数据。</strong></p>
+</blockquote>
+<p>论文里的原话是 <strong>leveraging the PCIe interconnect as a common
+abstraction layer</strong>——把 PCIe 当成不同 xPU
+的统一接口。这是理解全文最关键的一句。</p>
+<h2 id="背景小课dma-mmio-pcie-packet">📚 背景小课：DMA / MMIO / PCIe
+Packet</h2>
+<p>在讲 ccAI 怎么拦之前，得先知道 PCIe 上到底跑什么。xPU 和 CPU
+之间主要有两类交互。</p>
+<h3 id="dma搬数据的">DMA：搬数据的</h3>
+<p>GPU 算 AI 需要把模型、输入数据从 CPU 内存拿过来。如果让 CPU
+一字节一字节搬，会很慢。于是有了 <strong>DMA（Direct Memory
+Access）</strong>：设备自己去内存里拿数据，CPU
+只需告诉它源地址、目标地址、长度。</p>
+<blockquote>
+<p>类比：搬家。没有 DMA 是你自己一箱一箱搬；有 DMA
+是叫搬家公司，你报个地址就行。🚚</p>
+</blockquote>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 内存 ── DMA Read ──→ GPU    ← 模型/输入（1.2GB）被读走</span><br><span class="line">                          │</span><br><span class="line">                          ↓</span><br><span class="line">                        计算</span><br></pre></td></tr></table></figure>
+<p>所以论文说：<strong>DMA 用于 data/code
+exchange（搬数据/代码）</strong>。</p>
+<h3 id="mmio控制设备的">MMIO：控制设备的</h3>
+<p>GPU 内部有一堆寄存器（控制、状态、命令）。CPU
+要下达开始计算的命令，或查询 GPU
+当前的状态，就要访问这些寄存器。<strong>MMIO（Memory-Mapped
+I/O）</strong> 的做法是把寄存器伪装成内存地址：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">地址 0x1000 → GPU 控制寄存器</span><br><span class="line">地址 0x1004 → GPU 状态寄存器</span><br><span class="line">地址 0x1008 → GPU 命令寄存器</span><br></pre></td></tr></table></figure>
+<p>CPU 写 <code>0x1000</code>，看起来像写内存，实际是在操作 GPU
+寄存器。</p>
+<blockquote>
+<p>类比：DMA 是 🚚 搬货，MMIO 是 🎮 按按钮。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>DMA</th>
+<th>MMIO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>干什么</td>
+<td>搬大量数据</td>
+<td>控制设备</td>
+</tr>
+<tr>
+<td>典型内容</td>
+<td>模型、输入数据、代码</td>
+<td>命令、寄存器状态</td>
+</tr>
+<tr>
+<td>数据量</td>
+<td>通常很大</td>
+<td>通常很小</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么不能直接保护-dmammio">为什么不能直接保护 DMA/MMIO？</h3>
+<p>因为<strong>每个 xPU 的 DMA/MMIO 实现都不一样</strong>：有的 GPU 带
+MMU，有的 TPU 不带；驱动更是各家各写（NVIDIA Driver、Xilinx
+Driver……）。想设计一个统一的 DMA/MMIO 安全机制，几乎不可能。</p>
+<p>但它们的 DMA/MMIO
+流量，最终都会变成同一个东西，在同一个通道上跑：</p>
+<h3 id="pcie-packet高速公路上的一辆辆货车">PCIe
+Packet：高速公路上的一辆辆货车</h3>
+<p>把 PCIe 想成 CPU↔︎xPU 之间的高速公路，<strong>Packet
+就是路上的货车</strong>。每辆货车两部分：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">┌────────────┬─────────────┐</span><br><span class="line">│ Header     │ Payload     │</span><br><span class="line">└────────────┴─────────────┘</span><br><span class="line">       ↑             ↑</span><br><span class="line">      物流单          真正的货</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>Header =
+物流单</strong>：这是什么包、谁发的、发给谁、访问哪块地址、多大。具体包括
+Format、Type、Data Length、Requester ID、Completer ID、Address/Routing
+Info 等字段。</li>
+<li><strong>Payload = 真正的数据</strong>：比如一段 AI
+模型数据、一批输入。</li>
+</ul>
+<p>这就是 ccAI 下手的粒度：</p>
+<blockquote>
+<p><strong>ccAI 工作在 PCIe packet level，而不是针对某一种 xPU
+的内部结构。</strong></p>
+</blockquote>
+<h2 id="威胁模型与三个设计目标">🎯 威胁模型与三个设计目标</h2>
+<p>保护对象很明确——在 PCIe 上跑来跑去的：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">输入数据 / AI 模型 / 中间结果 / 输出结果</span><br></pre></td></tr></table></figure>
+<p>论文给自己立了三个目标：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>目标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>G1 Compatibility</strong></td>
+<td>不改 GPU、不改 Driver、不改 Application、不换特殊 CPU</td>
+</tr>
+<tr>
+<td><strong>G2 Security</strong></td>
+<td>数据、模型、代码、中间结果全部受保护，可远程证明</td>
+</tr>
+<tr>
+<td><strong>G3 Performance</strong></td>
+<td>不能为了安全把 GPU 拖成蜗牛 🐌</td>
+</tr>
+</tbody>
+</table>
+<p>关于 G2 有个直觉问题：PCIe
+上跑的东西重要程度不一样——有模型数据，也有中断、控制信息。<strong>全都加密</strong>既浪费又没必要。所以论文设计了
+<strong>细粒度安全控制（fine-grained
+security）</strong>，按数据包属性给四种处置：禁止 / 完整性+加密 /
+完整性+安全校验 / 直接通过（A1~A4）。具体怎么判断，是下一篇的主题。</p>
+<h2 id="本篇小结">📌 本篇小结</h2>
+<p>先记住这 5 个词，后面全靠它们：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>东西</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>xPU</strong></td>
+<td>GPU/NPU/FPGA 等 AI 加速器的统称</td>
+</tr>
+<tr>
+<td><strong>TVM</strong></td>
+<td>受保护的虚拟机，保护 CPU 侧软件</td>
+</tr>
+<tr>
+<td><strong>PCIe</strong></td>
+<td>CPU ↔︎ xPU 的共同高速通道</td>
+</tr>
+<tr>
+<td><strong>PCIe Packet</strong></td>
+<td>PCIe 上的一条条消息，有 Header（物流单）和 Payload（货）</td>
+</tr>
+<tr>
+<td><strong>Confidential xPU Computing</strong></td>
+<td>让普通加速器执行 AI 时数据/模型仍保密</td>
+</tr>
+</tbody>
+</table>
+<p>下一篇进入正题：作者往 CPU 和 GPU 之间塞了一个门卫
+<strong>PCIe-SC</strong>，又写了一个翻译员
+<strong>Adaptor</strong>，看它们怎么做到不换
+GPU、不改驱动还能保护数据——<strong>ccAI 精读（二）：不换 GPU
+也能机密计算</strong>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em> 的入门精读笔记。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 前置：逐行拆解 VGA 的 Writer</title>
     <url>/posts/0e69cce8/</url>
     <content><![CDATA[<p>前三篇的语法与思想，最终都落在一个真实的模块上：VGA 文本模式的
@@ -24971,249 +25214,6 @@ tree（一个词，或一对括号括起来的整体），<code>$( ... )*</code>
         <tag>unsafe</tag>
         <tag>Writer</tag>
         <tag>综合实践</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>ccAI 精读（一）：为什么 GPU 跑 AI 需要保密？</title>
-    <url>/posts/878640d9/</url>
-    <content><![CDATA[<blockquote>
-<p>论文：<strong>ccAI: A Compatible and Confidential System for AI
-Computing</strong>（MICRO 2025）</p>
-<p>作者想让普通的、老的 GPU/NPU（统称 xPU）也能安全地跑
-AI，同时尽量不改原来的软件和硬件。</p>
-</blockquote>
-<p>这是 <strong>ccAI 论文精读系列</strong>
-的第一篇，只回答两个问题：<strong>为什么 AI 计算需要保密？为什么 GPU
-是其中的短板？</strong></p>
-<span id="more"></span>
-<h2 id="一个场景模型上云gpu-是云厂商的">🏢 一个场景：模型上云，GPU
-是云厂商的</h2>
-<p>假设你是公司，把自己训练的大模型放到云服务器上跑推理。数据链路长这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你的 AI 模型 + 用户数据</span><br><span class="line">              ↓</span><br><span class="line">          云服务器</span><br><span class="line">              ├── CPU</span><br><span class="line">              └── GPU    ← 云厂商的 GPU</span><br></pre></td></tr></table></figure>
-<p>模型参数、用户输入、中间计算结果、最终输出——都要经过云厂商的
-GPU。如果云服务器里存在<strong>恶意的特权软件</strong>（云厂商的运维人员、被攻破的管理程序，都属于威胁模型的一部分），理论上它可能尝试读取这些数据。而模型参数和用户数据，都是商业机密。</p>
-<p>我们希望的是：</p>
-<blockquote>
-<p><strong>即使云服务器的某些软件是恶意的，也不能偷看到 AI
-数据。</strong></p>
-</blockquote>
-<p>这就是 <strong>Confidential Computing（机密计算）</strong>
-要解决的问题。论文把它落到加速器上，叫 <strong>confidential xPU
-computing</strong>：让 GPU/NPU 执行 AI 时，数据和模型仍然保持机密。</p>
-<h2 id="cpu-侧已经有答案gpu-侧没有">🔐 CPU 侧已经有答案，GPU 侧没有</h2>
-<p>CPU 这一侧的机密计算已经比较成熟，思路概括：</p>
-<blockquote>
-<p><strong>给程序划一个别人不能看的房间。</strong></p>
-</blockquote>
-<p>比如 Intel SGX、AMD SEV，都是这种 <strong>TEE（Trusted Execution
-Environment）</strong>。论文里使用的是 <strong>TVM = Trusted Virtual
-Machine（受保护的虚拟机）</strong>。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          Host OS</span><br><span class="line">             ↓</span><br><span class="line">┌──────────────────────┐</span><br><span class="line">│         TVM          │  ← 受保护虚拟机（TEE）</span><br><span class="line">│                      │</span><br><span class="line">│ 1. AI Application    │  ← 明文：AI 应用</span><br><span class="line">│ 2. Model &amp; User Data │  ← 明文：模型 / 用户数据（别人看不了）</span><br><span class="line">│ 3. GPU Driver        │  ← xPU 驱动</span><br><span class="line">└────────────┬─────────┘</span><br><span class="line">             ↓</span><br><span class="line">            GPU</span><br></pre></td></tr></table></figure>
-<p>TVM 把 CPU 侧的软件栈（AI
-应用、驱动、库）保护起来了。但问题马上出现：</p>
-<blockquote>
-<p><strong>数据一旦离开 TVM，通过 PCIe 传给
-GPU，就是明文裸奔。</strong></p>
-</blockquote>
-<p>模型参数在 PCIe
-总线上传输时，谁都能看、谁都能改。这就是这篇论文真正要解决的痛点：</p>
-<blockquote>
-<p><strong>怎么让老 GPU 也能安全地参与机密 AI 计算？</strong></p>
-</blockquote>
-<h2 id="为什么不直接换新-gpu-改-gpu">❌ 为什么不直接换新 GPU / 改
-GPU？</h2>
-<p>最直觉的方案：给 GPU 加上安全硬件。新 GPU
-确实可以这么做（比如某些新卡自带内存加密、安全启动、远程证明）。但现实是：</p>
-<ul>
-<li>云服务器里<strong>存量</strong>大多是 A100、T4、RTX 4090
-这类没有专门安全硬件的设备；</li>
-<li>还有国产 GPU、NPU、FPGA，架构各不相同；</li>
-<li>为了安全把所有 GPU 换成 H100 —— 成本不可接受。</li>
-</ul>
-<p>插一句，论文实验里用到的 xPU 包括 NVIDIA A100、RTX 4090
-Ti、T4、Tenstorrent N150d（NPU）、Enflame S60（国产
-GPU），就是为了证明这套方案<strong>不是只能保护一种 GPU</strong>。</p>
-<p>所以作者把问题反了过来：</p>
-<blockquote>
-<p><strong>能不能不改 GPU 本身、不改 GPU
-软件，只在外面加一层东西，把普通 GPU 保护起来？</strong></p>
-</blockquote>
-<h2 id="突破口pcie-是所有-xpu-的共同通道">💡 突破口：PCIe 是所有 xPU
-的共同通道</h2>
-<p>GPU 内部差别很大，但有一个共同点——它们都通过 <strong>PCIe</strong>
-插在主机上，跟 CPU/内存通信：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">A100 ──┐</span><br><span class="line">T4 ────┤</span><br><span class="line">4090 ──┤── PCIe ── CPU</span><br><span class="line">NPU ───┤</span><br><span class="line">FPGA ──┘</span><br></pre></td></tr></table></figure>
-<p>于是作者的思路是：</p>
-<blockquote>
-<p><strong>我不管 GPU 内部怎么实现，我只管 PCIe
-上跑的数据。</strong></p>
-</blockquote>
-<p>论文里的原话是 <strong>leveraging the PCIe interconnect as a common
-abstraction layer</strong>——把 PCIe 当成不同 xPU
-的统一接口。这是理解全文最关键的一句。</p>
-<h2 id="背景小课dma-mmio-pcie-packet">📚 背景小课：DMA / MMIO / PCIe
-Packet</h2>
-<p>在讲 ccAI 怎么拦之前，得先知道 PCIe 上到底跑什么。xPU 和 CPU
-之间主要有两类交互。</p>
-<h3 id="dma搬数据的">DMA：搬数据的</h3>
-<p>GPU 算 AI 需要把模型、输入数据从 CPU 内存拿过来。如果让 CPU
-一字节一字节搬，会很慢。于是有了 <strong>DMA（Direct Memory
-Access）</strong>：设备自己去内存里拿数据，CPU
-只需告诉它源地址、目标地址、长度。</p>
-<blockquote>
-<p>类比：搬家。没有 DMA 是你自己一箱一箱搬；有 DMA
-是叫搬家公司，你报个地址就行。🚚</p>
-</blockquote>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 内存 ── DMA Read ──→ GPU    ← 模型/输入（1.2GB）被读走</span><br><span class="line">                          │</span><br><span class="line">                          ↓</span><br><span class="line">                        计算</span><br></pre></td></tr></table></figure>
-<p>所以论文说：<strong>DMA 用于 data/code
-exchange（搬数据/代码）</strong>。</p>
-<h3 id="mmio控制设备的">MMIO：控制设备的</h3>
-<p>GPU 内部有一堆寄存器（控制、状态、命令）。CPU
-要下达开始计算的命令，或查询 GPU
-当前的状态，就要访问这些寄存器。<strong>MMIO（Memory-Mapped
-I/O）</strong> 的做法是把寄存器伪装成内存地址：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">地址 0x1000 → GPU 控制寄存器</span><br><span class="line">地址 0x1004 → GPU 状态寄存器</span><br><span class="line">地址 0x1008 → GPU 命令寄存器</span><br></pre></td></tr></table></figure>
-<p>CPU 写 <code>0x1000</code>，看起来像写内存，实际是在操作 GPU
-寄存器。</p>
-<blockquote>
-<p>类比：DMA 是 🚚 搬货，MMIO 是 🎮 按按钮。</p>
-</blockquote>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>DMA</th>
-<th>MMIO</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>干什么</td>
-<td>搬大量数据</td>
-<td>控制设备</td>
-</tr>
-<tr>
-<td>典型内容</td>
-<td>模型、输入数据、代码</td>
-<td>命令、寄存器状态</td>
-</tr>
-<tr>
-<td>数据量</td>
-<td>通常很大</td>
-<td>通常很小</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么不能直接保护-dmammio">为什么不能直接保护 DMA/MMIO？</h3>
-<p>因为<strong>每个 xPU 的 DMA/MMIO 实现都不一样</strong>：有的 GPU 带
-MMU，有的 TPU 不带；驱动更是各家各写（NVIDIA Driver、Xilinx
-Driver……）。想设计一个统一的 DMA/MMIO 安全机制，几乎不可能。</p>
-<p>但它们的 DMA/MMIO
-流量，最终都会变成同一个东西，在同一个通道上跑：</p>
-<h3 id="pcie-packet高速公路上的一辆辆货车">PCIe
-Packet：高速公路上的一辆辆货车</h3>
-<p>把 PCIe 想成 CPU↔︎xPU 之间的高速公路，<strong>Packet
-就是路上的货车</strong>。每辆货车两部分：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PCIe Packet</span><br><span class="line">┌────────────┬─────────────┐</span><br><span class="line">│ Header     │ Payload     │</span><br><span class="line">└────────────┴─────────────┘</span><br><span class="line">       ↑             ↑</span><br><span class="line">      物流单          真正的货</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong>Header =
-物流单</strong>：这是什么包、谁发的、发给谁、访问哪块地址、多大。具体包括
-Format、Type、Data Length、Requester ID、Completer ID、Address/Routing
-Info 等字段。</li>
-<li><strong>Payload = 真正的数据</strong>：比如一段 AI
-模型数据、一批输入。</li>
-</ul>
-<p>这就是 ccAI 下手的粒度：</p>
-<blockquote>
-<p><strong>ccAI 工作在 PCIe packet level，而不是针对某一种 xPU
-的内部结构。</strong></p>
-</blockquote>
-<h2 id="威胁模型与三个设计目标">🎯 威胁模型与三个设计目标</h2>
-<p>保护对象很明确——在 PCIe 上跑来跑去的：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">输入数据 / AI 模型 / 中间结果 / 输出结果</span><br></pre></td></tr></table></figure>
-<p>论文给自己立了三个目标：</p>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>目标</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>G1 Compatibility</strong></td>
-<td>不改 GPU、不改 Driver、不改 Application、不换特殊 CPU</td>
-</tr>
-<tr>
-<td><strong>G2 Security</strong></td>
-<td>数据、模型、代码、中间结果全部受保护，可远程证明</td>
-</tr>
-<tr>
-<td><strong>G3 Performance</strong></td>
-<td>不能为了安全把 GPU 拖成蜗牛 🐌</td>
-</tr>
-</tbody>
-</table>
-<p>关于 G2 有个直觉问题：PCIe
-上跑的东西重要程度不一样——有模型数据，也有中断、控制信息。<strong>全都加密</strong>既浪费又没必要。所以论文设计了
-<strong>细粒度安全控制（fine-grained
-security）</strong>，按数据包属性给四种处置：禁止 / 完整性+加密 /
-完整性+安全校验 / 直接通过（A1~A4）。具体怎么判断，是下一篇的主题。</p>
-<h2 id="本篇小结">📌 本篇小结</h2>
-<p>先记住这 5 个词，后面全靠它们：</p>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>东西</th>
-<th>要点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>xPU</strong></td>
-<td>GPU/NPU/FPGA 等 AI 加速器的统称</td>
-</tr>
-<tr>
-<td><strong>TVM</strong></td>
-<td>受保护的虚拟机，保护 CPU 侧软件</td>
-</tr>
-<tr>
-<td><strong>PCIe</strong></td>
-<td>CPU ↔︎ xPU 的共同高速通道</td>
-</tr>
-<tr>
-<td><strong>PCIe Packet</strong></td>
-<td>PCIe 上的一条条消息，有 Header（物流单）和 Payload（货）</td>
-</tr>
-<tr>
-<td><strong>Confidential xPU Computing</strong></td>
-<td>让普通加速器执行 AI 时数据/模型仍保密</td>
-</tr>
-</tbody>
-</table>
-<p>下一篇进入正题：作者往 CPU 和 GPU 之间塞了一个门卫
-<strong>PCIe-SC</strong>，又写了一个翻译员
-<strong>Adaptor</strong>，看它们怎么做到不换
-GPU、不改驱动还能保护数据——<strong>ccAI 精读（二）：不换 GPU
-也能机密计算</strong>。</p>
-<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
-System for AI Computing</em> 的入门精读笔记。）</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>GPU</tag>
-        <tag>AI</tag>
-        <tag>机密计算</tag>
-        <tag>论文精读</tag>
       </tags>
   </entry>
   <entry>
@@ -26689,6 +26689,653 @@ Count</td>
         <tag>硬件</tag>
         <tag>DMA</tag>
         <tag>抓包分析</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Tokenizer 转换表入门：prompt 怎么变成 token id，又怎么回到文字</title>
+    <url>/posts/111c29d0/</url>
+    <content><![CDATA[<p>链路上抓到一串整数时，它很可能就是 token
+id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id
+到字节的对照表，本文称之为<strong>转换表</strong>；而这张表在不同模型之间并不通用。</p>
+<p>本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token
+怎么变成 id、id 送上 GPU 之后发生什么、生成的 id
+又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，怎么用几张表把它试解成文本。文中数字全部来自本机真实跑出来的结果，词表取自
+Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>token</strong></td>
+<td>模型处理文本的最小单位</td>
+<td>比字粗、比词细的碎片</td>
+</tr>
+<tr>
+<td><strong>tokenizer</strong></td>
+<td>负责文本与 token 互转的程序</td>
+<td>编码器与解码器合体</td>
+</tr>
+<tr>
+<td><strong>词表（vocab）</strong></td>
+<td>token 与 id 的对照表</td>
+<td>一本字典，行号即 id</td>
+</tr>
+<tr>
+<td><strong>BPE</strong></td>
+<td>Byte Pair Encoding，按频率合并相邻字节对的切分算法</td>
+<td>主流词表的生成方式</td>
+</tr>
+<tr>
+<td><strong>token id</strong></td>
+<td>token 在词表里的整数编号</td>
+<td>模型真正看见的东西</td>
+</tr>
+<tr>
+<td><strong>embedding</strong></td>
+<td>把 id 查成向量的那张表</td>
+<td>数字进入网络的入口</td>
+</tr>
+<tr>
+<td><strong>logits</strong></td>
+<td>最后一层输出的分数，长度等于词表大小</td>
+<td>每个候选 token 的得分</td>
+</tr>
+<tr>
+<td><strong>prefill / decode</strong></td>
+<td>处理 prompt 与逐 token 生成两个阶段</td>
+<td>一次大计算 + 多次小计算</td>
+</tr>
+<tr>
+<td><strong>转换表</strong></td>
+<td>id 到字节（或文本）的映射</td>
+<td>反查文本的依据</td>
+</tr>
+</tbody>
+</table>
+<h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
+<p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ tokenizer.encode()：规范化 + 切分 + 查表</span><br><span class="line">token id 序列 [53702, 68, 18137, ...]        ← 4 字节一个整数</span><br><span class="line">   ↓ 驱动排队，DMA 搬上 GPU</span><br><span class="line">embedding 查表</span><br><span class="line">   ↓ n_tokens x 896 的向量矩阵（bfloat16）</span><br><span class="line">24 层 Transformer 前向</span><br><span class="line">   ↓ 取最后一行，映射到 151936 维</span><br><span class="line">logits</span><br><span class="line">   ↓ 采样（贪心 / 温度 / top-p）</span><br><span class="line">下一个 token id</span><br><span class="line">   ↓ 追加进上下文，回到 embedding 那一步</span><br><span class="line">   ...</span><br><span class="line">   ↓ tokenizer.decode()：id -&gt; 字节 -&gt; 拼接 -&gt; UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
+<p>往下按这条链路的顺序拆。前两段（文字到 id）完全在 CPU
+上完成，跟模型权重无关，可以离线跑；第三段在 GPU 里；第四段又回到
+CPU。</p>
+<h2 id="文本怎么变成-token">✂️ 文本怎么变成 token</h2>
+<h3 id="为什么要切">为什么要切</h3>
+<p>模型的输入是一串整数，每个整数必须是词表里的合法编号，所以文本要先切成一堆片段再逐个编号。按字符切，字符集本身就有几万个，标点和大小写还得分开放；按空格切词，词表会跟着语言和领域无限膨胀，遇到没见过的词（OOV，out-of-vocabulary）就没法编码。</p>
+<p>折中方案是<strong>子词（subword）</strong>：高频片段保留成整块，低频内容退化成更小的碎片。常见做法是
+BPE。</p>
+<h3 id="bpe-的直觉">BPE 的直觉</h3>
+<p>BPE
+原是一种数据压缩算法，思路很朴素：先从最小的单位开始，统计哪对相邻单位出现最多，就把它们合并成一个新单位，重复到词表规模达标为止。</p>
+<p>真实词表里的 <code>merges</code> 列表记录了每一次合并。Qwen2.5 的
+<code>tokenizer.json</code> 里 <code>merges</code> 有 151387
+条，开头几条是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Ġ Ġ        ← 两个单空格片段并成一个双空格片段</span><br><span class="line">ĠĠ ĠĠ      ← 两个双空格片段并成一个四空格片段</span><br><span class="line">i n        ← i 和 n 并成 in</span><br><span class="line">Ġ t        ← 空格和 t 并成一个带前导空格的片段</span><br></pre></td></tr></table></figure>
+<p><code>Ġ</code>
+不是乱码，它是空格（0x20）在词表里的写法，下一节解释。</p>
+<p>BPE 生成的词表有一条清晰的账：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>初始字节</th>
+<th>merges 次数</th>
+<th>词表条目</th>
+<th>特殊 token</th>
+<th>最大 id</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Qwen2.5</strong></td>
+<td>256</td>
+<td>151387</td>
+<td>151643</td>
+<td>22（单独登记）</td>
+<td>151664</td>
+</tr>
+<tr>
+<td><strong>GPT-2</strong></td>
+<td>256</td>
+<td>50000</td>
+<td>50257</td>
+<td>1（本来就在词表里）</td>
+<td>50256</td>
+</tr>
+</tbody>
+</table>
+<p>Qwen2.5 的 256 加 151387 正好等于词表条目 151643，再叠加 22 个特殊
+token；GPT-2 的 50257 条里已经包含了
+<code>&lt;|endoftext|&gt;</code>，所以 merges 加初始字节只有 50256。</p>
+<p><strong>初始单位是 256 个字节，不是字符</strong>。这是 byte-level BPE
+的关键：任何文本（汉字、emoji、二进制残留）先转成 UTF-8 字节，都能被这
+256 个基本单位表示，于是永远不会有 OOV，也永远能还原。</p>
+<h3 id="一次真实切分">一次真实切分</h3>
+<p>拿一句中英混合的话做实验：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> tokenizers <span class="keyword">import</span> Tokenizer</span><br><span class="line"></span><br><span class="line">tok = Tokenizer.from_file(<span class="string">&quot;qwen.json&quot;</span>)</span><br><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(enc.ids), enc.ids[:<span class="number">8</span>], enc.tokens[:<span class="number">5</span>])</span><br><span class="line"><span class="comment"># 19 [53702, 68, 18137, 241, 122, 100309, 99745, 26939] [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27;Ġé&#x27;, &#x27;ĵ&#x27;, &#x27;¾&#x27;]</span></span><br></pre></td></tr></table></figure>
+<p>逐 token 展开来看，<code>Ġ</code> 的含义就出来了：</p>
+<table>
+<thead>
+<tr>
+<th>序号</th>
+<th>id</th>
+<th>词表里的写法</th>
+<th>还原出的字节</th>
+<th>归属</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>53702</td>
+<td><code>PCI</code></td>
+<td><code>PCI</code></td>
+<td>整个词块</td>
+</tr>
+<tr>
+<td>1</td>
+<td>68</td>
+<td><code>e</code></td>
+<td><code>e</code></td>
+<td>单个字符</td>
+</tr>
+<tr>
+<td>2</td>
+<td>18137</td>
+<td><code>Ġé</code></td>
+<td><code>\xe9</code></td>
+<td>空格 + 链的第 1 字节</td>
+</tr>
+<tr>
+<td>3</td>
+<td>241</td>
+<td><code>ĵ</code></td>
+<td><code>\x93</code></td>
+<td>链的第 2 字节</td>
+</tr>
+<tr>
+<td>4</td>
+<td>122</td>
+<td><code>¾</code></td>
+<td><code>\xbe</code></td>
+<td>链的第 3 字节</td>
+</tr>
+<tr>
+<td>5</td>
+<td>100309</td>
+<td><code>è·¯ä¸Ĭ</code></td>
+<td><code>\xe8\xb7\xaf\xe4\xb8\x8a</code></td>
+<td>路上</td>
+</tr>
+<tr>
+<td>6</td>
+<td>99745</td>
+<td><code>æĬĵ</code></td>
+<td><code>\xe6\x8a\x93</code></td>
+<td>抓</td>
+</tr>
+<tr>
+<td>…</td>
+<td></td>
+<td></td>
+<td></td>
+<td>其余 12 个 token 同理</td>
+</tr>
+</tbody>
+</table>
+<p>两个观察：</p>
+<ul>
+<li><strong>一个英文词可能被切碎，一个汉字可能横跨多个
+token</strong>。序号 2 到 4 合起来才是 链
+这一个字（<code>e9 93 be</code>）。</li>
+<li><strong>token 的边界不在字符边界上</strong>。序号 2
+的字节是空格加三分之一个汉字，单独拿出来根本不是合法 UTF-8。</li>
+</ul>
+<p>第二点直接决定了后面解码和反查的写法，值得单独看一眼：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">token id 53702  -&gt; &#x27;PCI&#x27;        独立可读</span><br><span class="line">token id 68     -&gt; &#x27;e&#x27;          独立可读</span><br><span class="line">token id 18137  -&gt; &#x27; \xe9&#x27;      空格 + 链 的第 1 个字节</span><br><span class="line">token id 241    -&gt; &#x27;\x93&#x27;       链 的第 2 个字节</span><br><span class="line">token id 122    -&gt; &#x27;\xbe&#x27;       链 的第 3 个字节</span><br><span class="line">token id 45995  -&gt; &#x27;路&#x27;         独立可读</span><br></pre></td></tr></table></figure>
+<p>在 Python 里逐个解码这些 token，序号 2 到 4 都会显示成替换字符
+<code>�</code>（序号 2
+还带着前面的空格）；只有把它们的字节按顺序拼起来再做一次 UTF-8
+解码，才得到 链路。</p>
+<h3 id="ġ-到底是什么"><code>Ġ</code> 到底是什么</h3>
+<p>既然基本单位是字节，词表里就该有空格、换行这些不可打印字节。为了让词表能用纯文本保存（一个
+<code>tokenizer.json</code> 或一份 merges 文件），GPT-2 定义了
+bytes_to_unicode 映射：把 256 个字节一一对应到 256
+个可见字符，空格（0x20）映射成
+<code>Ġ</code>（U+0120），换行（0x0A）映射成
+<code>Ċ</code>（U+010A），其余可打印字节保持原样。</p>
+<p>这个映射是可逆的，反着查一遍就能拿回真实字节——<strong>这正是转换表的全部内容</strong>：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">bytes_to_unicode</span>():</span><br><span class="line">    <span class="string">&quot;&quot;&quot;GPT-2 定义的字节到可见字符映射，256 个字节一个不漏。&quot;&quot;&quot;</span></span><br><span class="line">    bs = (<span class="built_in">list</span>(<span class="built_in">range</span>(<span class="built_in">ord</span>(<span class="string">&quot;!&quot;</span>), <span class="built_in">ord</span>(<span class="string">&quot;~&quot;</span>) + <span class="number">1</span>))</span><br><span class="line">          + <span class="built_in">list</span>(<span class="built_in">range</span>(<span class="built_in">ord</span>(<span class="string">&quot;¡&quot;</span>), <span class="built_in">ord</span>(<span class="string">&quot;¬&quot;</span>) + <span class="number">1</span>))</span><br><span class="line">          + <span class="built_in">list</span>(<span class="built_in">range</span>(<span class="built_in">ord</span>(<span class="string">&quot;®&quot;</span>), <span class="built_in">ord</span>(<span class="string">&quot;ÿ&quot;</span>) + <span class="number">1</span>)))</span><br><span class="line">    cs = bs[:]</span><br><span class="line">    n = <span class="number">0</span></span><br><span class="line">    <span class="keyword">for</span> b <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">256</span>):</span><br><span class="line">        <span class="keyword">if</span> b <span class="keyword">not</span> <span class="keyword">in</span> bs:</span><br><span class="line">            bs.append(b)</span><br><span class="line">            cs.append(<span class="number">256</span> + n)</span><br><span class="line">            n += <span class="number">1</span></span><br><span class="line">    <span class="keyword">return</span> &#123;b: <span class="built_in">chr</span>(c) <span class="keyword">for</span> b, c <span class="keyword">in</span> <span class="built_in">zip</span>(bs, cs)&#125;</span><br><span class="line"></span><br><span class="line">U2B = &#123;v: k <span class="keyword">for</span> k, v <span class="keyword">in</span> bytes_to_unicode().items()&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">token_bytes</span>(<span class="params">s</span>):                      <span class="comment"># 词表里的写法 -&gt; 真实字节</span></span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bytes</span>(U2B[ch] <span class="keyword">for</span> ch <span class="keyword">in</span> s)</span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(token_bytes(<span class="string">&quot;Ġé&quot;</span>))                 <span class="comment"># b&#x27; \xe9&#x27;</span></span><br><span class="line"><span class="built_in">print</span>(token_bytes(<span class="string">&quot;è·¯ä¸Ĭ&quot;</span>))             <span class="comment"># b&#x27;\xe8\xb7\xaf\xe4\xb8\x8a&#x27;  路上</span></span><br></pre></td></tr></table></figure>
+<h2 id="token-怎么变成-id">🔢 token 怎么变成 id</h2>
+<h3 id="id-只是行号">id 只是行号</h3>
+<p>词表是一份有序对照表，id
+就是行号。它没有语义，也<strong>没有跨模型含义</strong>：Qwen2.5 的
+53702 是 <code>PCI</code>，GPT-2 的 53702
+是另一个完全无关的片段。同一句中文，两个模型的 token 数也差很多：</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>文本</th>
+<th>字符数</th>
+<th>汉字数</th>
+<th>Qwen2.5 token 数</th>
+<th>GPT-2 token 数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</td>
+<td>32</td>
+<td>16</td>
+<td>19</td>
+<td>44</td>
+</tr>
+<tr>
+<td>大语言模型的推理过程分为预填充和解码两个阶段。</td>
+<td>23</td>
+<td>22</td>
+<td>15</td>
+<td>54</td>
+</tr>
+<tr>
+<td>Hello, how are you today?</td>
+<td>25</td>
+<td>0</td>
+<td>7</td>
+<td>7</td>
+</tr>
+</tbody>
+</table>
+<p>中文语料喂得多的 Qwen2.5 把常用汉字组合并进了词表（一个 token
+常常覆盖两个汉字），GPT-2
+词表里几乎没有中文，只能退回到字节，于是同一个汉字要 3 个 token
+表示。同样一句中文，GPT-2 的 token 序列比 Qwen2.5
+长出一倍以上，反查时要拼的片段也更多。</p>
+<p><code>config.json</code> 里的 <code>vocab_size</code>
+和词表长度也不总相等：Qwen2.5-0.5B 的 config 写
+151936，<code>tokenizer.json</code> 里实际 151665 条，多出来的行是预留
+id。反查时用 id
+当数组下标，预留区永远查不到东西，越界判断要用词表长度，而不是 config
+的值。</p>
+<h3 id="特殊-token-不在-bpe-表里">特殊 token 不在 BPE 表里</h3>
+<p>Qwen2.5 有 22 个特殊 token，id 排在 151643 到 151664：</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>内容</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>151643</td>
+<td><code>&lt;|endoftext|&gt;</code></td>
+<td>文本结束</td>
+</tr>
+<tr>
+<td>151644</td>
+<td><code>&lt;|im_start|&gt;</code></td>
+<td>对话轮次开始</td>
+</tr>
+<tr>
+<td>151645</td>
+<td><code>&lt;|im_end|&gt;</code></td>
+<td>对话轮次结束</td>
+</tr>
+</tbody>
+</table>
+<p>它们不参与字节合并，是整串匹配的固定字符串，反向也直接映射成这串文字。做转换表时要单独处理，否则会当成
+BPE token 硬拆成字节。GPT-2
+只有一个（<code>&lt;|endoftext|&gt;</code>，id 50256）。</p>
+<h2 id="id-进-gpu-之后发生什么">🧩 id 进 GPU 之后发生什么</h2>
+<h3 id="查-embedding-表">查 embedding 表</h3>
+<p>GPU 拿到 id 序列后的第一件事是查表：embedding 表有 vocab_size
+行，每行是一个 hidden_size 维向量。Qwen2.5-0.5B 的 config 是
+<code>vocab_size=151936</code>、<code>hidden_size=896</code>，用
+bfloat16（2 字节）存：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">151936 x 896 x 2 B = 259.7 MiB</span><br></pre></td></tr></table></figure>
+<p>也就是说，链路上那几个字节的 id，一进显存就膨胀成 n_tokens x 896
+的向量矩阵。之后所有计算都在这个向量空间里做，跟 token
+的文本形态再无关系。</p>
+<h3 id="前向计算与采样">前向计算与采样</h3>
+<p>向量序列依次穿过 24 层 Transformer（注意力 +
+前馈网络），最后一行向量被映射到 151936 维，就是
+<strong>logits</strong>：每个候选 token 一个分数。采样器按这些分数挑一个
+id 出来（贪心取最大，或用温度、top-p 控制随机性），这个 id
+既是要追加到上下文里继续生成的内容，也是最终回传给主机的结果。</p>
+<p>生成是自回归的：每产生一个 id
+就把它拼回序列，再跑一轮。所有模型输出都是这样一 token 一 token
+挤出来的，没有一次生成整段的情况。</p>
+<h3 id="prefill-与-decode两种流量形态">prefill 与
+decode：两种流量形态</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>阶段</th>
+<th>算什么</th>
+<th>每轮搬多少 id</th>
+<th>显存里新增什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>prefill</strong></td>
+<td>一次性处理整段 prompt</td>
+<td>一次搬 n 个（prompt 长度）</td>
+<td>n 个位置的 KV cache</td>
+</tr>
+<tr>
+<td><strong>decode</strong></td>
+<td>每次只算一个新 token</td>
+<td>每轮 1 个</td>
+<td>1 个位置的 KV cache</td>
+</tr>
+</tbody>
+</table>
+<p>KV cache 是注意力缓存的 K 和 V 向量，避免每生成一个 token
+就重算整段历史。Qwen2.5-0.5B 的规模是每 token 12.0 KiB（24 层 x 2 x 2 个
+KV 头 x 64 维 x 2 字节），4k 上下文约 48 MiB。</p>
+<p>从抓包角度看，这个区别意味着：</p>
+<ul>
+<li><strong>权重</strong>在模型加载阶段一次性搬完（0.5B 参数按 bfloat16
+算约 1 GB），之后推理期不再搬。</li>
+<li><strong>prompt 的 id</strong> 在 prefill 阶段一次性上行，长度就是
+token 数乘以每个 id 的字节数。</li>
+<li><strong>生成的 id</strong> 在 decode
+阶段一个个下行。每步回传的是采样后的 id，还是整整 151936 维的 logits（约
+600 KB），取决于采样放在哪一侧——放在 GPU 上就只回传 4 字节。</li>
+<li>KV cache 通常只待在显存里；一旦出现 CPU offload、KV cache swapping
+这类显存不够的兜底策略，链路上就会出现周期性的 KV cache 搬运流量。</li>
+</ul>
+<h2 id="id-怎么回到文本">🔁 id 怎么回到文本</h2>
+<p>解码是编码的逆过程，只有三步，但顺序不能错：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 每个 id 查表得到一段字节</span><br><span class="line">2. 把所有字节按顺序拼成一个 bytearray</span><br><span class="line">3. 对整个 bytearray 做一次 UTF-8 解码</span><br></pre></td></tr></table></figure>
+<p>真实数据验证一遍：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 逐 token 解码：中间三个字节碎片会变成替换字符</span></span><br><span class="line">[tok.decode([i]) <span class="keyword">for</span> i <span class="keyword">in</span> enc.ids[:<span class="number">5</span>]]</span><br><span class="line"><span class="comment"># [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27; �&#x27;, &#x27;�&#x27;, &#x27;�&#x27;]</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 拼接后统一解码：一个字都不缺</span></span><br><span class="line">tok.decode(enc.ids)</span><br><span class="line"><span class="comment"># &#x27;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>用 <code>tok.decode()</code>
+一步到位当然方便，但抓包反查时必须自己实现这三步：手上有 id，没有那个
+tokenizer 对象，只有一张表。</p>
+<p>顺便记一条自测习惯：任何转换表到手，先拿已知文本走一遍往返（encode →
+id → decode），能复原才说明表是全的。真实词表的往返结果：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">拼接字节 = b&#x27;PCIe \xe9\x93\xbe\xe8\xb7\xaf\xe4\xb8\x8a\xe6\x8a\x93\xe5\x88\xb0\xe7\x9a\x84 token id...&#x27;</span><br><span class="line">UTF-8 解码 = &#x27;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&#x27;</span><br><span class="line">往返一致 = True</span><br></pre></td></tr></table></figure>
+<h2 id="三张主要的词表格式">📋 三张主要的词表格式</h2>
+<h3 id="三种流派">三种流派</h3>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>流派</th>
+<th>代表模型</th>
+<th>词表文件</th>
+<th>空格表示</th>
+<th>可逆性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HF tokenizers</strong></td>
+<td>Qwen2.5、Llama 3</td>
+<td><code>tokenizer.json</code>（JSON）</td>
+<td><code>Ġ</code>（byte-level）</td>
+<td>完全可逆</td>
+</tr>
+<tr>
+<td><strong>sentencepiece</strong></td>
+<td>T5、Llama 2</td>
+<td><code>tokenizer.model</code>（protobuf）</td>
+<td><code>▁</code>（U+2581）</td>
+<td>基本可逆</td>
+</tr>
+<tr>
+<td><strong>tiktoken</strong></td>
+<td>GPT-3.5 / GPT-4 系</td>
+<td><code>.tiktoken</code>（纯文本）</td>
+<td><code>Ġ</code>（byte-level）</td>
+<td>完全可逆</td>
+</tr>
+<tr>
+<td><strong>WordPiece</strong></td>
+<td>BERT</td>
+<td><code>vocab.txt</code>（纯文本）</td>
+<td>空格在切分时就被丢掉，<code>##</code> 前缀表续接</td>
+<td>有损</td>
+</tr>
+</tbody>
+</table>
+<p>前面三种都属于子词方案（BPE 或与之相近的 unigram
+切分），差别主要在文件格式和空格记号。WordPiece 是另一支，它的
+normalizer
+常常顺手做小写化、去重音、按标点切分，原文的大小写和空白在编码时就丢了，这类表只能反查出规范化之后的近似文本。</p>
+<h3 id="真实文件长什么样">真实文件长什么样</h3>
+<p>tiktoken 的 <code>.tiktoken</code> 一行一条，格式是 base64
+加序号（rank）。<code>cl100k_base</code> 的前几行：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">IQ== 0      ← base64 解出来是 b&#x27;!&#x27;</span><br><span class="line">Ig== 1      ← b&#x27;&quot;&#x27;</span><br><span class="line">Iw== 2      ← b&#x27;#&#x27;</span><br><span class="line">JA== 3      ← b&#x27;$&#x27;</span><br></pre></td></tr></table></figure>
+<p>文件共 100256 行，前 256 行是全部单字节 token（0x00 到 0xFF
+各出现一次），和前面 256 个基本单位的说法对上。</p>
+<p>sentencepiece 的 <code>tokenizer.model</code> 是 protobuf
+二进制，解析出来每条 piece 带三样东西：片段、分数（log
+概率）、类型：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">piece=&#x27;&lt;pad&gt;&#x27;   score= 0.0000  type=CONTROL</span><br><span class="line">piece=&#x27;&lt;/s&gt;&#x27;    score= 0.0000  type=CONTROL</span><br><span class="line">piece=&#x27;▁&#x27;       score=-2.0123  type=NORMAL     ← 空格本身也是一个 piece</span><br><span class="line">piece=&#x27;X&#x27;       score=-2.4865  type=NORMAL</span><br></pre></td></tr></table></figure>
+<p>T5 的词表里有 21987 条 piece 含
+<code>▁</code>。反查时把它换回空格即可，另外要留意 <code>▁</code>
+出现在片段开头还是结尾、以及有没有 byte fallback 的
+<code>&lt;0xE9&gt;</code> 形式——后者表示这个片段就是单个字节 0xE9。</p>
+<p>HF 的 <code>tokenizer.json</code> 最省事，一份 JSON
+把整条流水线都写全了。Qwen2.5 的顶层结构：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">normalizer     : NFC                    ← 先做 Unicode 规范化</span><br><span class="line">pre_tokenizer  : Split(正则) + ByteLevel ← 按 GPT-2 正则预切分，再转字节</span><br><span class="line">model          : BPE（vocab 151643 + merges 151387）</span><br><span class="line">post_processor : ByteLevel</span><br><span class="line">decoder        : ByteLevel</span><br><span class="line">added_tokens   : 22 个特殊 token</span><br></pre></td></tr></table></figure>
+<p>三种格式各写一个读取函数，出口统一是 <code>&#123;id: bytes&#125;</code>。HF
+那支最简单：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> json</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_hf_table</span>(<span class="params">path</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;tokenizer.json -&gt; &#123;id: bytes&#125;，特殊 token 天然不在 model.vocab 里。&quot;&quot;&quot;</span></span><br><span class="line">    raw = json.load(<span class="built_in">open</span>(path))</span><br><span class="line">    <span class="keyword">return</span> &#123;tid: token_bytes(piece) <span class="keyword">for</span> piece, tid <span class="keyword">in</span> raw[<span class="string">&quot;model&quot;</span>][<span class="string">&quot;vocab&quot;</span>].items()&#125;</span><br></pre></td></tr></table></figure>
+<p><code>.tiktoken</code> 多一步 base64 解码：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> base64</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">load_tiktoken_table</span>(<span class="params">path</span>):</span><br><span class="line">    table = &#123;&#125;</span><br><span class="line">    <span class="keyword">for</span> line <span class="keyword">in</span> <span class="built_in">open</span>(path):</span><br><span class="line">        b64, rank = line.split()</span><br><span class="line">        table[<span class="built_in">int</span>(rank)] = base64.b64decode(b64)</span><br><span class="line">    <span class="keyword">return</span> table</span><br></pre></td></tr></table></figure>
+<p>sentencepiece 要解析 protobuf 的重复字段
+<code>pieces</code>，每条取片段、分数、类型，把 <code>▁</code>
+换回空格，byte fallback 类型（<code>&lt;0xE9&gt;</code> 这种）的 id
+直接映射成对应字节。做完这一步，三张表在代码里就完全一样了。</p>
+<p>表的规模心里有个数：Qwen2.5 的 151665 条映射总共约 976 KB
+字节内容，平均每个 token 6.44 字节；GPT-2 的 50257 条约 321
+KB。挂到抓包工具里做多模型试解，内存开销可以忽略。</p>
+<h2 id="落到抓包场景一串-id-反查文本">🎯 落到抓包场景：一串 id
+反查文本</h2>
+<p>前置假设：链路（PCIe）上传的是<strong>整数 id
+序列</strong>，不是已经渲染好的文本。这个假设待验证，但值得作为基线——如果成立，反查的全部工作量就是本文讲的转换表。</p>
+<h3 id="试解流程">试解流程</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 从 DMA 数据里切出整数数组（4 字节 int32 还是 8 字节 int64，两种都要试）</span><br><span class="line">2. 对每张转换表调一次 decode</span><br><span class="line">3. 给每次结果打分，排序</span><br><span class="line">4. 分数最高的那张表就是最可能的模型</span><br></pre></td></tr></table></figure>
+<p>打分器先只用最朴素的两条规则：越界 id
+有几个、解出的文本里有多少替换字符。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">try_decode</span>(<span class="params">ids, table</span>):</span><br><span class="line">    out, miss = <span class="built_in">bytearray</span>(), <span class="number">0</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> ids:</span><br><span class="line">        b = table.get(i)</span><br><span class="line">        <span class="keyword">if</span> b <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            miss += <span class="number">1</span></span><br><span class="line">            out += <span class="string">b&quot;?&quot;</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            out += b</span><br><span class="line">    text = out.decode(<span class="string">&quot;utf-8&quot;</span>, errors=<span class="string">&quot;replace&quot;</span>)</span><br><span class="line">    <span class="keyword">return</span> text, &#123;<span class="string">&quot;越界 id&quot;</span>: miss, <span class="string">&quot;替换字符&quot;</span>: text.count(<span class="string">&quot;\ufffd&quot;</span>)&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="真实试解结果">真实试解结果</h3>
+<p>用两张表互相当作错误答案，跑出来是这样：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>抓到的 id 流</th>
+<th>用 Qwen2.5 表解</th>
+<th>用 GPT-2 表解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen2.5 编码的 19 个 id</td>
+<td>✅ 越界 0/19，替换字符 0 →
+<code>PCIe 链路上抓到的 token id，能还原出原</code></td>
+<td>❌ 越界 7/19，替换字符 2 →
+<code>?euffle��??ivation PH real</code></td>
+</tr>
+<tr>
+<td>GPT-2 编码的 44 个 id</td>
+<td>❌ 越界 0/44，替换字符 11 →
+<code>machineIe.div��路Dock抓 acc</code></td>
+<td>✅ 越界 0/44，替换字符 0 →
+<code>PCIe 链路上抓到的 token id，能还原出原</code></td>
+</tr>
+</tbody>
+</table>
+<p>几点值得留意：</p>
+<ul>
+<li><strong>越界数</strong>是最硬的信号。Qwen2.5 的 id 拿去查 GPT-2
+表，19 个里有 7 个超出 GPT-2 词表范围，直接排除。</li>
+<li><strong>替换字符数</strong>是第二硬的信号。GPT-2 的 44 个 id 拿去查
+Qwen2.5 表，全部落在范围内，但解出的字节拼不成合法 UTF-8，出现 11 个
+<code>�</code>。</li>
+<li><strong>两个信号都会失灵</strong>。GPT-2 id 流用 Qwen2.5
+表解出来的片段里，<code>路</code> 和 <code>抓</code>
+是真汉字——字节巧合拼成了合法字符。所以还需要第三层判断，比如统计可打印字符比例、中文字符比例，或者更进一步，把解出的文本丢给一个小语言模型算困惑度。</li>
+</ul>
+<h3 id="从-dma-数据里切出-id-序列">从 DMA 数据里切出 id 序列</h3>
+<p>如果链路传的是裸整数数组，切分很直接：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> struct</span><br><span class="line"></span><br><span class="line">buf = struct.pack(<span class="string">&quot;&lt;%dI&quot;</span> % <span class="built_in">len</span>(ids), *ids)        <span class="comment"># 写：int32 小端</span></span><br><span class="line">back = <span class="built_in">list</span>(struct.unpack(<span class="string">&quot;&lt;%dI&quot;</span> % (<span class="built_in">len</span>(buf) // <span class="number">4</span>), buf))</span><br><span class="line"><span class="keyword">assert</span> back == ids</span><br></pre></td></tr></table></figure>
+<p>Qwen2.5 那 19 个 id 序列化后是 76 字节，开头几个是
+<code>c6 d1 00 00 44 00 00 00 d9 46 00 00</code>。但实际抓包更可能遇到：整数混在请求结构体里（带
+batch 维度、长度字段、padding），或者一批 id 被拆成多个 DMA
+包出现。切分逻辑要按框架的实际结构来，先拿已知文本做一次抓包对照，比盲试靠谱。</p>
+<p>另外，链路如果有加密（PCIe IDE，或 ccAI
+那类密文通道），抓到的就是高熵密文，id
+结构完全看不出来，得先解决解密或走侧信道的路子——那是另一个话题了。</p>
+<h2 id="容易踩的坑">⚠️ 容易踩的坑</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>以为 token 就是词</td>
+<td>一个汉字可能占 1～3 个 token，一个英文词可能被切成好几段</td>
+</tr>
+<tr>
+<td>逐个 token 解码再拼字符串</td>
+<td>token 边界不在字符边界上，必须先拼字节再做一次 UTF-8 解码</td>
+</tr>
+<tr>
+<td>以为所有模型共用一张表</td>
+<td>id 只是行号，Qwen2.5 的 53702 和 GPT-2 的 53702 毫无关系</td>
+</tr>
+<tr>
+<td>把 <code>config.json</code> 的 <code>vocab_size</code>
+当词表长度</td>
+<td>Qwen2.5-0.5B 的 config 写 151936，<code>tokenizer.json</code> 实际
+151665 条</td>
+</tr>
+<tr>
+<td>认为 UTF-8 解得出就是解对了</td>
+<td>拿错表也能拼出合法
+UTF-8，需要越界数、替换字符、语言模型多层打分</td>
+</tr>
+<tr>
+<td>以为 token 数约等于字符数</td>
+<td>同一句中文，Qwen2.5 是 19 个 token，GPT-2 是 44 个</td>
+</tr>
+<tr>
+<td>忽略特殊 token</td>
+<td>它们不在 BPE 表里，<code>&lt;|im_start|&gt;</code>
+这类要单独建映射</td>
+</tr>
+<tr>
+<td>只看 id 数值判断模型</td>
+<td>词表大小相近的模型会互相吻合一部分，要靠整串打分</td>
+</tr>
+</tbody>
+</table>
+<h2 id="小结">📌 小结</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>概念</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>切分</strong></td>
+<td>byte-level BPE 从 256
+个字节起步，按频率合并；中文常被拆到字节级</td>
+</tr>
+<tr>
+<td><strong>id</strong></td>
+<td>词表行号，跨模型无语义；同一文本在不同模型下长度差别很大</td>
+</tr>
+<tr>
+<td><strong>GPU 侧</strong></td>
+<td>id 查 embedding 变成向量，前向算出 logits，采样得到下一个 id</td>
+</tr>
+<tr>
+<td><strong>两阶段</strong></td>
+<td>prefill 一次吃整段 prompt，decode 每步只出一个 id</td>
+</tr>
+<tr>
+<td><strong>解码</strong></td>
+<td>id → 字节 → 拼接 → UTF-8，三步顺序不能变</td>
+</tr>
+<tr>
+<td><strong>转换表</strong></td>
+<td>id → bytes 的映射；三种格式读进来统一成同一个函数</td>
+</tr>
+<tr>
+<td><strong>反查</strong></td>
+<td>多表试解 + 打分（越界、替换字符、可打印比例，必要时加语言模型）</td>
+</tr>
+</tbody>
+</table>
+<p>下一步可以顺着两个方向推进：一是把常见模型的词表都读成同一份
+<code>id -&gt; bytes</code>
+表结构，用已知文本做一轮往返自测，把转换表这块地基打实；二是把打分器做实，让一串来路不明的整数能自动判出属于哪个模型。抓包侧的前置知识则在《<a
+href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
+解析入门</a>》里。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>LLM</tag>
+        <tag>PCIe</tag>
+        <tag>tokenizer</tag>
+        <tag>BPE</tag>
+        <tag>推理</tag>
       </tags>
   </entry>
 </search>
