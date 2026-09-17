@@ -30,13 +30,13 @@
 <meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要一张 id 到字节的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文沿着一次完整推理把数据形态走一遍：文本怎么被切成 token、token 怎么变成 id、id 送上 GPU 之后发生什么、生成的 id 又怎么回到文本。最后落到抓包场景——手上只有一串来路不明的整数，">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-17T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-17T03:41:17.446Z">
+<meta property="article:modified_time" content="2026-09-17T03:45:05.645Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="LLM">
-<meta property="article:tag" content="PCIe">
 <meta property="article:tag" content="tokenizer">
 <meta property="article:tag" content="BPE">
 <meta property="article:tag" content="推理">
+<meta property="article:tag" content="PCIe">
 <meta name="twitter:card" content="summary">
 
 
@@ -265,7 +265,7 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-17 11:00:00 / Modified: 11:41:17" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+      <time title="Created: 2026-09-17 11:00:00 / Modified: 11:45:05" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
     </span>
 
   
@@ -289,7 +289,7 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>25 mins.</span>
+      <span>26 mins.</span>
     </span>
 </div>
 
@@ -371,7 +371,7 @@ Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 </table>
 <h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
 <p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ UTF-8 编码（本文那句 prompt：32 个字符 → 68 字节）</span><br><span class="line">字节</span><br><span class="line">   ↓ tokenizer.encode()：BPE 合并 + 查表</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">用户输入的文字：PCIe 链路上抓到的 token id，能还原出原来的问题吗？</span><br><span class="line">   ↓ UTF-8 编码（32 个字符 → 68 字节）</span><br><span class="line">字节</span><br><span class="line">   ↓ tokenizer.encode()：BPE 合并 + 查表</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
 <p>能看出来整条链上的数量级变化：<strong>76 B 的编号 → 33 KiB 的向量 →
 594 KiB 的分数 → 又是 4 B
 的编号</strong>。抓包看到的往往是两头的小数据，中间的大块计算留在显存里。</p>
@@ -770,7 +770,9 @@ token 数乘以每个 id 的字节数。</li>
 <h3 id="这些数据在链路上长什么样">这些数据在链路上长什么样</h3>
 <p>把前面几步合起来看，一次推理在 PCIe 上的形状是这样：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">CPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 1. Tokenizer        │  ← 文本 → id</span><br><span class="line">│ 2. Runtime          │  ← 排队、下发 kernel</span><br><span class="line">│ 3. Sampling (opt)   │  ← 有的框架在这里采样</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ token ids（19 个 = 76 B）经 PCIe / DMA</span><br><span class="line">           ↓ 权重加载阶段另外搬一次（0.5B bf16 约 1 GB）</span><br><span class="line">GPU 侧</span><br><span class="line">┌─────────────────────┐</span><br><span class="line">│ 4. Embedding        │  ← 查表得到 19 x 896</span><br><span class="line">│ 5. Transformer x 24 │  ← 注意力 + FFN</span><br><span class="line">│ 6. KV cache         │  ← 常驻显存，offload 时才过链路</span><br><span class="line">└──────────┬──────────┘</span><br><span class="line">           ↓ logits 或采样后的 id（看采样在哪一侧）</span><br></pre></td></tr></table></figure>
-<p>按本文那句 19 个 token 的 prompt，尺寸变化汇总如下：</p>
+<p>按开头那句
+<code>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</code>（19 个
+token），尺寸变化汇总如下：</p>
 <table>
 <thead>
 <tr>
@@ -914,7 +916,9 @@ KB。挂到抓包工具里做多模型试解，内存开销可以忽略。</p>
 有几个、解出的文本里有多少替换字符。</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">try_decode</span>(<span class="params">ids, table</span>):</span><br><span class="line">    out, miss = <span class="built_in">bytearray</span>(), <span class="number">0</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> ids:</span><br><span class="line">        b = table.get(i)</span><br><span class="line">        <span class="keyword">if</span> b <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            miss += <span class="number">1</span></span><br><span class="line">            out += <span class="string">b&quot;?&quot;</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            out += b</span><br><span class="line">    text = out.decode(<span class="string">&quot;utf-8&quot;</span>, errors=<span class="string">&quot;replace&quot;</span>)</span><br><span class="line">    <span class="keyword">return</span> text, &#123;<span class="string">&quot;越界 id&quot;</span>: miss, <span class="string">&quot;替换字符&quot;</span>: text.count(<span class="string">&quot;\ufffd&quot;</span>)&#125;</span><br></pre></td></tr></table></figure>
 <h3 id="真实试解结果">真实试解结果</h3>
-<p>用两张表互相当作错误答案，跑出来是这样：</p>
+<p>用两张表互相当作错误答案，跑出来是这样（待解的都是开头那句
+<code>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</code>
+的编码结果，Qwen2.5 切出 19 个 id，GPT-2 切出 44 个）：</p>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -959,7 +963,9 @@ Qwen2.5 表，全部落在范围内，但解出的字节拼不成合法 UTF-8，
 <h3 id="从-dma-数据里切出-id-序列">从 DMA 数据里切出 id 序列</h3>
 <p>如果链路传的是裸整数数组，切分很直接：</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> struct</span><br><span class="line"></span><br><span class="line">buf = struct.pack(<span class="string">&quot;&lt;%dI&quot;</span> % <span class="built_in">len</span>(ids), *ids)        <span class="comment"># 写：int32 小端</span></span><br><span class="line">back = <span class="built_in">list</span>(struct.unpack(<span class="string">&quot;&lt;%dI&quot;</span> % (<span class="built_in">len</span>(buf) // <span class="number">4</span>), buf))</span><br><span class="line"><span class="keyword">assert</span> back == ids</span><br></pre></td></tr></table></figure>
-<p>Qwen2.5 那 19 个 id 序列化后是 76 字节，开头几个是
+<p>开头那句
+<code>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</code> 用
+Qwen2.5 编码得到 19 个 id，序列化后是 76 字节，开头几个是
 <code>c6 d1 00 00 44 00 00 00 d9 46 00 00</code>。但实际抓包更可能遇到：整数混在请求结构体里（带
 batch 维度、长度字段、padding），或者一批 id 被拆成多个 DMA
 包出现。切分逻辑要按框架的实际结构来，先拿已知文本做一次抓包对照，比盲试靠谱。</p>
@@ -1004,7 +1010,8 @@ UTF-8，需要越界数、替换字符、语言模型多层打分</td>
 </tr>
 <tr>
 <td>以为 token 数约等于字符数</td>
-<td>同一句中文，Qwen2.5 是 19 个 token，GPT-2 是 44 个</td>
+<td>同一句中文（<code>PCIe 链路上抓到的 token id，能还原出原来的问题吗？</code>），Qwen2.5
+切出 19 个 token，GPT-2 切出 44 个</td>
 </tr>
 <tr>
 <td>忽略特殊 token</td>
@@ -1077,10 +1084,10 @@ href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
     <footer class="post-footer">
           <div class="post-tags">
               <a href="/tags/LLM/" rel="tag"># LLM</a>
-              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
               <a href="/tags/tokenizer/" rel="tag"># tokenizer</a>
               <a href="/tags/BPE/" rel="tag"># BPE</a>
               <a href="/tags/%E6%8E%A8%E7%90%86/" rel="tag"># 推理</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
           </div>
 
         
