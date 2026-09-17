@@ -10937,6 +10937,325 @@ A20 Gate。</li>
       </tags>
   </entry>
   <entry>
+    <title>优化器详解：从SGD到Adam的原理与参数调优</title>
+    <url>/posts/104dbac2/</url>
+    <content><![CDATA[<p>选择合适的优化器以及理解其背后的参数，往往决定了模型是能够快速收敛到最佳状态，还是在训练过程中产生“梯度爆炸”甚至完全无法收敛。本文将通俗地解释这些概念，并深入剖析
+PyTorch 中常用优化器的关键参数。</p>
+<span id="more"></span>
+<h2 id="通俗理解蒙眼下山">通俗理解：蒙眼下山</h2>
+<p>想象你被蒙住双眼，放置在一座高山上。你的目标是下到山谷的最低点——在深度学习中，这代表着让模型的<strong>损失函数
+(Loss)</strong> 最小化。</p>
+<p>优化器，就是你的<strong>下山策略</strong>。</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    Start(&quot;山顶 (高 Loss)&quot;) --&gt; Strategy{选择优化器}
+    Strategy -- &quot;SGD&quot; --&gt; Path1(&quot;固定步长，稳步试探&quot;)
+    Strategy -- &quot;Adam&quot; --&gt; Path2(&quot;自适应速度，智能调整&quot;)
+    Path1 --&gt; Goal(&quot;山谷 (低 Loss)&quot;)
+    Path2 --&gt; Goal
+</code>
+</pre>
+<h3 id="基础选手sgd-随机梯度下降">🚶 基础选手：SGD (随机梯度下降)</h3>
+<p><strong>策略</strong>：用脚探一下当前的地面，感觉哪个方向是向下的，就往那个方向迈出固定的一步。</p>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>老实</strong>：它完全依赖当前的梯度方向。你设定多大的步长（学习率），它就走多远。</li>
+<li><strong>稳健但缓慢</strong>：如果步长太小，下山速度极慢；如果步长太大，可能会在山谷震荡甚至跑偏。</li>
+<li><strong>优势</strong>：在计算机视觉（CV）任务中（如 ResNet
+训练），SGD 往往能找到更平坦、泛化能力更强的极小值点。</li>
+</ul>
+<h3 id="进阶选手adam-自适应矩估计">🏎️ 进阶选手：Adam (自适应矩估计)</h3>
+<p><strong>策略</strong>：它不仅看当前的坡度，还记得之前的速度（动量），并且会根据地形的复杂程度自动调整步子大小。</p>
+<ul>
+<li><strong>平坦路段</strong>：自动加速。</li>
+<li><strong>陡峭悬崖</strong>：自动减速，防止冲过头。</li>
+</ul>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>智能</strong>：结合了动量（Momentum）和自适应学习率（RMSprop
+的思想）。</li>
+<li><strong>快速</strong>：收敛速度通常远快于 SGD。</li>
+<li><strong>劣势</strong>：对初始推力（学习率）非常敏感，且在某些 CV
+任务上，最终的泛化性能可能不如精心调教的 SGD。</li>
+</ul>
+<h2 id="深入剖析关键参数与含义">深入剖析：关键参数与含义</h2>
+<p>在 PyTorch 中，我们通常通过 <code>torch.optim</code>
+来调用这些优化器。理解每个参数的物理含义，是避免“炼丹”失败的关键。</p>
+<h3 id="sgd-的关键参数">SGD 的关键参数</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.SGD(model.parameters(), lr=<span class="number">0.1</span>, momentum=<span class="number">0.9</span>, weight_decay=<span class="number">1e-4</span>)</span><br></pre></td></tr></table></figure>
+<ol type="1">
+<li><strong><code>lr</code> (Learning Rate, 学习率)</strong>
+<ul>
+<li><strong>含义</strong>：下山的“步长”。</li>
+<li><strong>通俗解释</strong>：决定了你每一次更新参数时变化有多大。</li>
+<li><strong>典型值</strong>：<code>0.1</code>, <code>0.01</code>。SGD
+需要较大的 <code>lr</code> 才能推动模型前进。</li>
+</ul></li>
+<li><strong><code>momentum</code> (动量)</strong>
+<ul>
+<li><strong>含义</strong>：模拟物理中的“惯性”。</li>
+<li><strong>通俗解释</strong>：如果之前一直是下坡，那么这次不仅要看当前的坡度，还要加上之前的速度冲下去。这有助于冲过局部的平坦区域（鞍点）或小坑。</li>
+<li><strong>典型值</strong>：<code>0.9</code>。这意味着当前的更新方向有
+90% 来自之前的积累，10% 来自当前的梯度。</li>
+</ul></li>
+<li><strong><code>weight_decay</code> (权重衰减)</strong>
+<ul>
+<li><strong>含义</strong>：L2 正则化。</li>
+<li><strong>通俗解释</strong>：一种“惩罚机制”。为了防止模型为了拟合数据而变得过于复杂（参数值过大），我们在损失函数里加了一项惩罚。它就像给模型加了“刹车”，防止过拟合。</li>
+<li><strong>典型值</strong>：<code>1e-4</code> (0.0001) 或
+<code>5e-4</code>。</li>
+</ul></li>
+</ol>
+<h3 id="adam-的关键参数">Adam 的关键参数</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adam(model.parameters(), lr=<span class="number">0.001</span>, betas=(<span class="number">0.9</span>, <span class="number">0.999</span>), eps=<span class="number">1e-8</span>)</span><br></pre></td></tr></table></figure>
+<ol type="1">
+<li><strong><code>lr</code> (Learning Rate)</strong>
+<ul>
+<li><strong>注意</strong>：Adam 的学习率通常比 SGD 小得多。</li>
+<li><strong>典型值</strong>：<code>0.001</code> (1e-3) 或
+<code>3e-4</code>。这是因为 Adam
+内部会自动根据梯度的一阶矩和二阶矩放大更新幅度。</li>
+</ul></li>
+<li><strong><code>betas</code> (Beta1, Beta2)</strong>
+<ul>
+<li><strong>含义</strong>：控制两个“记忆”的衰减率。</li>
+<li><strong><code>beta1</code> (默认 0.9)</strong>：对应
+<strong>一阶矩估计</strong>（即动量
+Momentum）。控制“惯性”保持多久。</li>
+<li><strong><code>beta2</code> (默认 0.999)</strong>：对应
+<strong>二阶矩估计</strong>（即梯度的平方）。用来衡量“路况”的平稳程度，从而实现自适应步长。</li>
+<li><strong>调参建议</strong>：通常保持默认即可。</li>
+</ul></li>
+<li><strong><code>eps</code> (Epsilon)</strong>
+<ul>
+<li><strong>含义</strong>：数值稳定性项。</li>
+<li><strong>作用</strong>：防止分母为零。在计算自适应步长时，分母是梯度的平方根，加一个极小数
+<code>eps</code> 避免除零错误。</li>
+</ul></li>
+</ol>
+<h2 id="实战避坑为什么会梯度爆炸">实战避坑：为什么会梯度爆炸？</h2>
+<p>在实际开发中，一个最常见的错误就是<strong>将 SGD 的经验直接套用到
+Adam 上</strong>。</p>
+<h3 id="典型事故现场">典型事故现场</h3>
+<p>假设你习惯了训练 ResNet，配置了 <code>lr=0.1</code>。然后你想尝试一下
+Transformer，于是把优化器改成了
+Adam，但<strong>忘记了修改学习率</strong>。</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    Config[&quot;配置: Adam 优化器&quot;] --&gt; Input[&quot;输入: SGD 级别的学习率 (0.1)&quot;]
+    Input -- &quot;对于 Adam 来说&quot; --&gt; Mechanism[&quot;Adam 内部的自适应放大机制&quot;]
+    Mechanism --&gt; Result[&quot;实际更新步长过大 (相当于 SGD 的 100 倍)&quot;]
+    Result --&gt; Boom[&quot;参数变为 NaN &#x2F; Infinity&quot;]
+    Boom --&gt; Loss[&quot;Loss 震荡或不收敛&quot;]
+</code>
+</pre>
+<p><strong>原因分析</strong>： Adam 自带“助推器”（自适应调整）。对于
+Adam 来说，<code>0.001</code> 已经是很快的速度了。如果你给它
+<code>0.1</code>
+的初始推力，相当于给一辆法拉利加了火箭燃料，瞬间就会因为步长过大冲出赛道，导致参数变成
+<code>NaN</code> (Not a Number) 或无穷大。</p>
+<p><strong>修正方案</strong>： 一旦切换到 Adam，务必将学习率降低 1-2
+个数量级（从 <code>0.1</code> 降到 <code>0.001</code>）。</p>
+<h2 id="选型指南我该用哪个">选型指南：我该用哪个？</h2>
+<p>没有绝对的“最好”，只有“最适合”。</p>
+<h3 id="选择-sgd-的场景">✅ 选择 SGD 的场景</h3>
+<ul>
+<li><strong>任务</strong>：计算机视觉标准任务（图像分类、物体检测、分割）。</li>
+<li><strong>代表模型</strong>：ResNet, VGG, YOLO。</li>
+<li><strong>理由</strong>：虽然收敛慢，需要配合学习率衰减策略（Learning
+Rate Scheduler），但往往能收敛到更优的解，测试集准确率更高。</li>
+<li><strong>推荐配置</strong>：<code>SGD(lr=0.1, momentum=0.9, weight_decay=5e-4)</code></li>
+</ul>
+<h3 id="选择-adam-的场景">✅ 选择 Adam 的场景</h3>
+<ul>
+<li><strong>任务</strong>：自然语言处理（NLP）、强化学习、生成对抗网络（GAN）、或快速原型开发。</li>
+<li><strong>代表模型</strong>：Transformer, BERT, GPT, ViT。</li>
+<li><strong>理由</strong>：收敛速度极快，对超参数（Hyper-parameters）不那么敏感，开箱即用。</li>
+<li><strong>推荐配置</strong>：<code>Adam(lr=1e-3)</code> 或
+<code>AdamW(lr=3e-4)</code></li>
+</ul>
+<h3 id="小贴士adamw-是什么">💡 小贴士：AdamW 是什么？</h3>
+<p>你可能会在现在的代码中经常看到 <code>AdamW</code>。它是 Adam
+的修正版。简单来说，Adam 在处理
+<code>weight_decay</code>（权重衰减）时存在一个理论上的
+Bug，<code>AdamW</code> 修复了这个问题，使得它在训练 Transformer
+等大模型时效果更好、更稳定。</p>
+<h2 id="总结">总结</h2>
+<ul>
+<li><strong>SGD</strong>
+像手动挡赛车，上限高，但需要精细的油门控制（调参）。</li>
+<li><strong>Adam</strong>
+像自动挡跑车，起步快，省心，但在某些赛道上可能不如手动挡精准。</li>
+<li><strong>切记</strong>：换车（优化器）的时候，千万别忘了换挡（调整学习率）！</li>
+</ul>
+<h2 id="拓展其他常见优化器一览">拓展：其他常见优化器一览</h2>
+<p>除了 SGD 和
+Adam，深度学习工具箱中还有许多其他优化器。了解它们有助于在特定场景下做出更合适的选择。</p>
+<h3 id="rmsprop-root-mean-square-propagation">📊 RMSprop (Root Mean
+Square Propagation)</h3>
+<p><strong>诞生背景</strong>：为了解决 AdaGrad
+学习率过早衰减的问题。</p>
+<p><strong>核心思想</strong>：使用梯度的<strong>移动平均平方</strong>（而非累积平方）来调整学习率，这样可以让学习率在训练后期仍然保持活力。</p>
+<p><strong>下山比喻</strong>：就像一个经验丰富的登山者，会根据最近一段路的情况（而不是整段路程）来判断下一步的步长。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.RMSprop(model.parameters(), lr=<span class="number">0.01</span>, alpha=<span class="number">0.99</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong><code>lr</code></strong>：学习率，典型值
+<code>0.01</code></li>
+<li><strong><code>alpha</code></strong>：平滑常数，控制历史梯度的衰减速度，默认
+<code>0.99</code></li>
+</ul>
+<p><strong>适用场景</strong>：RNN（循环神经网络）训练，是 Adam
+出现之前的主流选择。</p>
+<h3 id="adagrad-adaptive-gradient">📈 AdaGrad (Adaptive Gradient)</h3>
+<p><strong>核心思想</strong>：为每个参数维护一个<strong>累积的梯度平方和</strong>，频繁更新的参数会获得更小的学习率，稀疏参数会获得更大的学习率。</p>
+<p><strong>下山比喻</strong>：如果某个方向你经常走（梯度大），说明这个方向可能已经接近目标了，就放慢脚步；如果某个方向很少走（梯度小），就加快探索。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adagrad(model.parameters(), lr=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>优点</strong>：对稀疏梯度友好，适合处理稀疏数据。</li>
+<li><strong>缺点</strong>：学习率会单调递减，训练后期可能过小导致无法继续学习。</li>
+</ul>
+<p><strong>适用场景</strong>：自然语言处理中的稀疏特征学习，但现在已较少使用。</p>
+<h3 id="adadelta">🔄 AdaDelta</h3>
+<p><strong>诞生背景</strong>：AdaGrad
+的改进版，解决了学习率过早衰减的问题。</p>
+<p><strong>核心创新</strong>：不需要手动设置学习率！它会根据参数更新的历史信息自动调整。</p>
+<p><strong>下山比喻</strong>：完全自动驾驶，不仅会根据路况调整速度，还会根据之前走过的路来预测下一步该走多远。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adadelta(model.parameters(), rho=<span class="number">0.9</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong><code>rho</code></strong>：衰减率，控制历史信息的权重，默认
+<code>0.9</code></li>
+</ul>
+<p><strong>特点</strong>：</p>
+<ul>
+<li><strong>优点</strong>：无需设置学习率，对超参数不敏感。</li>
+<li><strong>缺点</strong>：收敛速度可能较慢，实际使用中不如 Adam
+受欢迎。</li>
+</ul>
+<h3 id="adamw-adam-with-weight-decay-fix">⚡ AdamW (Adam with Weight
+Decay Fix)</h3>
+<p><strong>核心改进</strong>：修复了 Adam 在处理权重衰减（Weight
+Decay）时的理论缺陷。</p>
+<p><strong>技术细节</strong>：在原始 Adam 中，<code>weight_decay</code>
+被错误地应用到了梯度上，而不是直接应用到参数上。AdamW
+将权重衰减与梯度更新<strong>解耦</strong>，使得正则化效果更符合 L2
+正则化的原始意图。</p>
+<p><strong>下山比喻</strong>：Adam
+在刹车（权重衰减）时，刹车片和油门混在一起了；AdamW
+把刹车系统独立出来，刹车更精准。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.AdamW(model.parameters(), lr=<span class="number">3e-4</span>, weight_decay=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong><code>lr</code></strong>：学习率，典型值
+<code>3e-4</code>（比 Adam 稍小）</li>
+<li><strong><code>weight_decay</code></strong>：权重衰减，典型值
+<code>0.01</code>（可以比 Adam 中设置得更大）</li>
+</ul>
+<p><strong>适用场景</strong>：</p>
+<ul>
+<li><strong>Transformer 模型</strong>：BERT、GPT 等大模型的标准选择</li>
+<li><strong>计算机视觉</strong>：ViT（Vision Transformer）等</li>
+<li><strong>现代深度学习</strong>：几乎成为新项目的默认选择</li>
+</ul>
+<p><strong>为什么现在更推荐 AdamW？</strong></p>
+<ol type="1">
+<li>理论更严谨：权重衰减的实现方式更符合数学原理</li>
+<li>泛化性能更好：在大多数任务上测试集表现更优</li>
+<li>超参数更稳定:对 <code>weight_decay</code> 的敏感性更低</li>
+</ol>
+<h3 id="其他新兴优化器">🎯 其他新兴优化器</h3>
+<h4 id="nadam-nesterov-accelerated-adam">NAdam (Nesterov-accelerated
+Adam)</h4>
+<p>结合了 Nesterov 动量和 Adam
+的优点，在收敛速度和稳定性之间取得更好的平衡。</p>
+<h4 id="radam-rectified-adam">RAdam (Rectified Adam)</h4>
+<p>解决了 Adam
+在训练初期可能不稳定的问题，通过动态调整学习率来保证训练的稳定性。</p>
+<h4 id="lookahead">Lookahead</h4>
+<p>一种<strong>元优化器</strong>，可以包装在任何优化器（如
+Adam、SGD）外面，通过向前看的策略来稳定训练过程。</p>
+<h3 id="快速对比表">📋 快速对比表</h3>
+<table>
+<thead>
+<tr>
+<th>优化器</th>
+<th>学习率需求</th>
+<th>收敛速度</th>
+<th>超参数敏感性</th>
+<th>主要应用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SGD</strong></td>
+<td>较大 (0.1)</td>
+<td>慢</td>
+<td>高</td>
+<td>CV 任务 (ResNet)</td>
+</tr>
+<tr>
+<td><strong>Adam</strong></td>
+<td>较小 (0.001)</td>
+<td>快</td>
+<td>中</td>
+<td>NLP、GAN、快速原型</td>
+</tr>
+<tr>
+<td><strong>AdamW</strong></td>
+<td>较小 (3e-4)</td>
+<td>快</td>
+<td>低</td>
+<td>Transformer、现代大模型</td>
+</tr>
+<tr>
+<td><strong>RMSprop</strong></td>
+<td>中等 (0.01)</td>
+<td>中</td>
+<td>中</td>
+<td>RNN（历史选择）</td>
+</tr>
+<tr>
+<td><strong>AdaGrad</strong></td>
+<td>中等 (0.01)</td>
+<td>慢（后期）</td>
+<td>低</td>
+<td>稀疏数据（较少使用）</td>
+</tr>
+<tr>
+<td><strong>AdaDelta</strong></td>
+<td>无需设置</td>
+<td>中</td>
+<td>低</td>
+<td>理论研究（较少使用）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实用建议">📌 实用建议</h3>
+<ol type="1">
+<li><strong>新手入门</strong>：直接使用
+<code>AdamW(lr=3e-4)</code>，这是 2024 年最稳妥的选择。</li>
+<li><strong>CV 任务追求极致</strong>：尝试
+<code>SGD(lr=0.1, momentum=0.9)</code> 配合学习率调度器。</li>
+<li><strong>大模型训练</strong>：优先考虑 <code>AdamW</code>，配合
+<code>weight_decay=0.1</code>。</li>
+<li><strong>实验阶段</strong>：先用 AdamW
+快速验证想法，再根据任务特点微调。记住：<strong>没有万能的优化器，只有最适合你任务的优化器</strong>。理解原理比盲目选择更重要！</li>
+</ol>
+]]></content>
+      <tags>
+        <tag>PyTorch</tag>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+        <tag>优化器</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>实模式（Real Mode）</title>
     <url>/posts/b08764f6/</url>
     <content><![CDATA[<p>本文主要介绍实模式（Real
@@ -11420,325 +11739,6 @@ graph LR
         <tag>x86</tag>
         <tag>启动</tag>
         <tag>实模式</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>优化器详解：从SGD到Adam的原理与参数调优</title>
-    <url>/posts/104dbac2/</url>
-    <content><![CDATA[<p>选择合适的优化器以及理解其背后的参数，往往决定了模型是能够快速收敛到最佳状态，还是在训练过程中产生“梯度爆炸”甚至完全无法收敛。本文将通俗地解释这些概念，并深入剖析
-PyTorch 中常用优化器的关键参数。</p>
-<span id="more"></span>
-<h2 id="通俗理解蒙眼下山">通俗理解：蒙眼下山</h2>
-<p>想象你被蒙住双眼，放置在一座高山上。你的目标是下到山谷的最低点——在深度学习中，这代表着让模型的<strong>损失函数
-(Loss)</strong> 最小化。</p>
-<p>优化器，就是你的<strong>下山策略</strong>。</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    Start(&quot;山顶 (高 Loss)&quot;) --&gt; Strategy{选择优化器}
-    Strategy -- &quot;SGD&quot; --&gt; Path1(&quot;固定步长，稳步试探&quot;)
-    Strategy -- &quot;Adam&quot; --&gt; Path2(&quot;自适应速度，智能调整&quot;)
-    Path1 --&gt; Goal(&quot;山谷 (低 Loss)&quot;)
-    Path2 --&gt; Goal
-</code>
-</pre>
-<h3 id="基础选手sgd-随机梯度下降">🚶 基础选手：SGD (随机梯度下降)</h3>
-<p><strong>策略</strong>：用脚探一下当前的地面，感觉哪个方向是向下的，就往那个方向迈出固定的一步。</p>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>老实</strong>：它完全依赖当前的梯度方向。你设定多大的步长（学习率），它就走多远。</li>
-<li><strong>稳健但缓慢</strong>：如果步长太小，下山速度极慢；如果步长太大，可能会在山谷震荡甚至跑偏。</li>
-<li><strong>优势</strong>：在计算机视觉（CV）任务中（如 ResNet
-训练），SGD 往往能找到更平坦、泛化能力更强的极小值点。</li>
-</ul>
-<h3 id="进阶选手adam-自适应矩估计">🏎️ 进阶选手：Adam (自适应矩估计)</h3>
-<p><strong>策略</strong>：它不仅看当前的坡度，还记得之前的速度（动量），并且会根据地形的复杂程度自动调整步子大小。</p>
-<ul>
-<li><strong>平坦路段</strong>：自动加速。</li>
-<li><strong>陡峭悬崖</strong>：自动减速，防止冲过头。</li>
-</ul>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>智能</strong>：结合了动量（Momentum）和自适应学习率（RMSprop
-的思想）。</li>
-<li><strong>快速</strong>：收敛速度通常远快于 SGD。</li>
-<li><strong>劣势</strong>：对初始推力（学习率）非常敏感，且在某些 CV
-任务上，最终的泛化性能可能不如精心调教的 SGD。</li>
-</ul>
-<h2 id="深入剖析关键参数与含义">深入剖析：关键参数与含义</h2>
-<p>在 PyTorch 中，我们通常通过 <code>torch.optim</code>
-来调用这些优化器。理解每个参数的物理含义，是避免“炼丹”失败的关键。</p>
-<h3 id="sgd-的关键参数">SGD 的关键参数</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.SGD(model.parameters(), lr=<span class="number">0.1</span>, momentum=<span class="number">0.9</span>, weight_decay=<span class="number">1e-4</span>)</span><br></pre></td></tr></table></figure>
-<ol type="1">
-<li><strong><code>lr</code> (Learning Rate, 学习率)</strong>
-<ul>
-<li><strong>含义</strong>：下山的“步长”。</li>
-<li><strong>通俗解释</strong>：决定了你每一次更新参数时变化有多大。</li>
-<li><strong>典型值</strong>：<code>0.1</code>, <code>0.01</code>。SGD
-需要较大的 <code>lr</code> 才能推动模型前进。</li>
-</ul></li>
-<li><strong><code>momentum</code> (动量)</strong>
-<ul>
-<li><strong>含义</strong>：模拟物理中的“惯性”。</li>
-<li><strong>通俗解释</strong>：如果之前一直是下坡，那么这次不仅要看当前的坡度，还要加上之前的速度冲下去。这有助于冲过局部的平坦区域（鞍点）或小坑。</li>
-<li><strong>典型值</strong>：<code>0.9</code>。这意味着当前的更新方向有
-90% 来自之前的积累，10% 来自当前的梯度。</li>
-</ul></li>
-<li><strong><code>weight_decay</code> (权重衰减)</strong>
-<ul>
-<li><strong>含义</strong>：L2 正则化。</li>
-<li><strong>通俗解释</strong>：一种“惩罚机制”。为了防止模型为了拟合数据而变得过于复杂（参数值过大），我们在损失函数里加了一项惩罚。它就像给模型加了“刹车”，防止过拟合。</li>
-<li><strong>典型值</strong>：<code>1e-4</code> (0.0001) 或
-<code>5e-4</code>。</li>
-</ul></li>
-</ol>
-<h3 id="adam-的关键参数">Adam 的关键参数</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adam(model.parameters(), lr=<span class="number">0.001</span>, betas=(<span class="number">0.9</span>, <span class="number">0.999</span>), eps=<span class="number">1e-8</span>)</span><br></pre></td></tr></table></figure>
-<ol type="1">
-<li><strong><code>lr</code> (Learning Rate)</strong>
-<ul>
-<li><strong>注意</strong>：Adam 的学习率通常比 SGD 小得多。</li>
-<li><strong>典型值</strong>：<code>0.001</code> (1e-3) 或
-<code>3e-4</code>。这是因为 Adam
-内部会自动根据梯度的一阶矩和二阶矩放大更新幅度。</li>
-</ul></li>
-<li><strong><code>betas</code> (Beta1, Beta2)</strong>
-<ul>
-<li><strong>含义</strong>：控制两个“记忆”的衰减率。</li>
-<li><strong><code>beta1</code> (默认 0.9)</strong>：对应
-<strong>一阶矩估计</strong>（即动量
-Momentum）。控制“惯性”保持多久。</li>
-<li><strong><code>beta2</code> (默认 0.999)</strong>：对应
-<strong>二阶矩估计</strong>（即梯度的平方）。用来衡量“路况”的平稳程度，从而实现自适应步长。</li>
-<li><strong>调参建议</strong>：通常保持默认即可。</li>
-</ul></li>
-<li><strong><code>eps</code> (Epsilon)</strong>
-<ul>
-<li><strong>含义</strong>：数值稳定性项。</li>
-<li><strong>作用</strong>：防止分母为零。在计算自适应步长时，分母是梯度的平方根，加一个极小数
-<code>eps</code> 避免除零错误。</li>
-</ul></li>
-</ol>
-<h2 id="实战避坑为什么会梯度爆炸">实战避坑：为什么会梯度爆炸？</h2>
-<p>在实际开发中，一个最常见的错误就是<strong>将 SGD 的经验直接套用到
-Adam 上</strong>。</p>
-<h3 id="典型事故现场">典型事故现场</h3>
-<p>假设你习惯了训练 ResNet，配置了 <code>lr=0.1</code>。然后你想尝试一下
-Transformer，于是把优化器改成了
-Adam，但<strong>忘记了修改学习率</strong>。</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    Config[&quot;配置: Adam 优化器&quot;] --&gt; Input[&quot;输入: SGD 级别的学习率 (0.1)&quot;]
-    Input -- &quot;对于 Adam 来说&quot; --&gt; Mechanism[&quot;Adam 内部的自适应放大机制&quot;]
-    Mechanism --&gt; Result[&quot;实际更新步长过大 (相当于 SGD 的 100 倍)&quot;]
-    Result --&gt; Boom[&quot;参数变为 NaN &#x2F; Infinity&quot;]
-    Boom --&gt; Loss[&quot;Loss 震荡或不收敛&quot;]
-</code>
-</pre>
-<p><strong>原因分析</strong>： Adam 自带“助推器”（自适应调整）。对于
-Adam 来说，<code>0.001</code> 已经是很快的速度了。如果你给它
-<code>0.1</code>
-的初始推力，相当于给一辆法拉利加了火箭燃料，瞬间就会因为步长过大冲出赛道，导致参数变成
-<code>NaN</code> (Not a Number) 或无穷大。</p>
-<p><strong>修正方案</strong>： 一旦切换到 Adam，务必将学习率降低 1-2
-个数量级（从 <code>0.1</code> 降到 <code>0.001</code>）。</p>
-<h2 id="选型指南我该用哪个">选型指南：我该用哪个？</h2>
-<p>没有绝对的“最好”，只有“最适合”。</p>
-<h3 id="选择-sgd-的场景">✅ 选择 SGD 的场景</h3>
-<ul>
-<li><strong>任务</strong>：计算机视觉标准任务（图像分类、物体检测、分割）。</li>
-<li><strong>代表模型</strong>：ResNet, VGG, YOLO。</li>
-<li><strong>理由</strong>：虽然收敛慢，需要配合学习率衰减策略（Learning
-Rate Scheduler），但往往能收敛到更优的解，测试集准确率更高。</li>
-<li><strong>推荐配置</strong>：<code>SGD(lr=0.1, momentum=0.9, weight_decay=5e-4)</code></li>
-</ul>
-<h3 id="选择-adam-的场景">✅ 选择 Adam 的场景</h3>
-<ul>
-<li><strong>任务</strong>：自然语言处理（NLP）、强化学习、生成对抗网络（GAN）、或快速原型开发。</li>
-<li><strong>代表模型</strong>：Transformer, BERT, GPT, ViT。</li>
-<li><strong>理由</strong>：收敛速度极快，对超参数（Hyper-parameters）不那么敏感，开箱即用。</li>
-<li><strong>推荐配置</strong>：<code>Adam(lr=1e-3)</code> 或
-<code>AdamW(lr=3e-4)</code></li>
-</ul>
-<h3 id="小贴士adamw-是什么">💡 小贴士：AdamW 是什么？</h3>
-<p>你可能会在现在的代码中经常看到 <code>AdamW</code>。它是 Adam
-的修正版。简单来说，Adam 在处理
-<code>weight_decay</code>（权重衰减）时存在一个理论上的
-Bug，<code>AdamW</code> 修复了这个问题，使得它在训练 Transformer
-等大模型时效果更好、更稳定。</p>
-<h2 id="总结">总结</h2>
-<ul>
-<li><strong>SGD</strong>
-像手动挡赛车，上限高，但需要精细的油门控制（调参）。</li>
-<li><strong>Adam</strong>
-像自动挡跑车，起步快，省心，但在某些赛道上可能不如手动挡精准。</li>
-<li><strong>切记</strong>：换车（优化器）的时候，千万别忘了换挡（调整学习率）！</li>
-</ul>
-<h2 id="拓展其他常见优化器一览">拓展：其他常见优化器一览</h2>
-<p>除了 SGD 和
-Adam，深度学习工具箱中还有许多其他优化器。了解它们有助于在特定场景下做出更合适的选择。</p>
-<h3 id="rmsprop-root-mean-square-propagation">📊 RMSprop (Root Mean
-Square Propagation)</h3>
-<p><strong>诞生背景</strong>：为了解决 AdaGrad
-学习率过早衰减的问题。</p>
-<p><strong>核心思想</strong>：使用梯度的<strong>移动平均平方</strong>（而非累积平方）来调整学习率，这样可以让学习率在训练后期仍然保持活力。</p>
-<p><strong>下山比喻</strong>：就像一个经验丰富的登山者，会根据最近一段路的情况（而不是整段路程）来判断下一步的步长。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.RMSprop(model.parameters(), lr=<span class="number">0.01</span>, alpha=<span class="number">0.99</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>关键参数</strong>：</p>
-<ul>
-<li><strong><code>lr</code></strong>：学习率，典型值
-<code>0.01</code></li>
-<li><strong><code>alpha</code></strong>：平滑常数，控制历史梯度的衰减速度，默认
-<code>0.99</code></li>
-</ul>
-<p><strong>适用场景</strong>：RNN（循环神经网络）训练，是 Adam
-出现之前的主流选择。</p>
-<h3 id="adagrad-adaptive-gradient">📈 AdaGrad (Adaptive Gradient)</h3>
-<p><strong>核心思想</strong>：为每个参数维护一个<strong>累积的梯度平方和</strong>，频繁更新的参数会获得更小的学习率，稀疏参数会获得更大的学习率。</p>
-<p><strong>下山比喻</strong>：如果某个方向你经常走（梯度大），说明这个方向可能已经接近目标了，就放慢脚步；如果某个方向很少走（梯度小），就加快探索。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adagrad(model.parameters(), lr=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>优点</strong>：对稀疏梯度友好，适合处理稀疏数据。</li>
-<li><strong>缺点</strong>：学习率会单调递减，训练后期可能过小导致无法继续学习。</li>
-</ul>
-<p><strong>适用场景</strong>：自然语言处理中的稀疏特征学习，但现在已较少使用。</p>
-<h3 id="adadelta">🔄 AdaDelta</h3>
-<p><strong>诞生背景</strong>：AdaGrad
-的改进版，解决了学习率过早衰减的问题。</p>
-<p><strong>核心创新</strong>：不需要手动设置学习率！它会根据参数更新的历史信息自动调整。</p>
-<p><strong>下山比喻</strong>：完全自动驾驶，不仅会根据路况调整速度，还会根据之前走过的路来预测下一步该走多远。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.Adadelta(model.parameters(), rho=<span class="number">0.9</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>关键参数</strong>：</p>
-<ul>
-<li><strong><code>rho</code></strong>：衰减率，控制历史信息的权重，默认
-<code>0.9</code></li>
-</ul>
-<p><strong>特点</strong>：</p>
-<ul>
-<li><strong>优点</strong>：无需设置学习率，对超参数不敏感。</li>
-<li><strong>缺点</strong>：收敛速度可能较慢，实际使用中不如 Adam
-受欢迎。</li>
-</ul>
-<h3 id="adamw-adam-with-weight-decay-fix">⚡ AdamW (Adam with Weight
-Decay Fix)</h3>
-<p><strong>核心改进</strong>：修复了 Adam 在处理权重衰减（Weight
-Decay）时的理论缺陷。</p>
-<p><strong>技术细节</strong>：在原始 Adam 中，<code>weight_decay</code>
-被错误地应用到了梯度上，而不是直接应用到参数上。AdamW
-将权重衰减与梯度更新<strong>解耦</strong>，使得正则化效果更符合 L2
-正则化的原始意图。</p>
-<p><strong>下山比喻</strong>：Adam
-在刹车（权重衰减）时，刹车片和油门混在一起了；AdamW
-把刹车系统独立出来，刹车更精准。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">optimizer = torch.optim.AdamW(model.parameters(), lr=<span class="number">3e-4</span>, weight_decay=<span class="number">0.01</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>关键参数</strong>：</p>
-<ul>
-<li><strong><code>lr</code></strong>：学习率，典型值
-<code>3e-4</code>（比 Adam 稍小）</li>
-<li><strong><code>weight_decay</code></strong>：权重衰减，典型值
-<code>0.01</code>（可以比 Adam 中设置得更大）</li>
-</ul>
-<p><strong>适用场景</strong>：</p>
-<ul>
-<li><strong>Transformer 模型</strong>：BERT、GPT 等大模型的标准选择</li>
-<li><strong>计算机视觉</strong>：ViT（Vision Transformer）等</li>
-<li><strong>现代深度学习</strong>：几乎成为新项目的默认选择</li>
-</ul>
-<p><strong>为什么现在更推荐 AdamW？</strong></p>
-<ol type="1">
-<li>理论更严谨：权重衰减的实现方式更符合数学原理</li>
-<li>泛化性能更好：在大多数任务上测试集表现更优</li>
-<li>超参数更稳定:对 <code>weight_decay</code> 的敏感性更低</li>
-</ol>
-<h3 id="其他新兴优化器">🎯 其他新兴优化器</h3>
-<h4 id="nadam-nesterov-accelerated-adam">NAdam (Nesterov-accelerated
-Adam)</h4>
-<p>结合了 Nesterov 动量和 Adam
-的优点，在收敛速度和稳定性之间取得更好的平衡。</p>
-<h4 id="radam-rectified-adam">RAdam (Rectified Adam)</h4>
-<p>解决了 Adam
-在训练初期可能不稳定的问题，通过动态调整学习率来保证训练的稳定性。</p>
-<h4 id="lookahead">Lookahead</h4>
-<p>一种<strong>元优化器</strong>，可以包装在任何优化器（如
-Adam、SGD）外面，通过向前看的策略来稳定训练过程。</p>
-<h3 id="快速对比表">📋 快速对比表</h3>
-<table>
-<thead>
-<tr>
-<th>优化器</th>
-<th>学习率需求</th>
-<th>收敛速度</th>
-<th>超参数敏感性</th>
-<th>主要应用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>SGD</strong></td>
-<td>较大 (0.1)</td>
-<td>慢</td>
-<td>高</td>
-<td>CV 任务 (ResNet)</td>
-</tr>
-<tr>
-<td><strong>Adam</strong></td>
-<td>较小 (0.001)</td>
-<td>快</td>
-<td>中</td>
-<td>NLP、GAN、快速原型</td>
-</tr>
-<tr>
-<td><strong>AdamW</strong></td>
-<td>较小 (3e-4)</td>
-<td>快</td>
-<td>低</td>
-<td>Transformer、现代大模型</td>
-</tr>
-<tr>
-<td><strong>RMSprop</strong></td>
-<td>中等 (0.01)</td>
-<td>中</td>
-<td>中</td>
-<td>RNN（历史选择）</td>
-</tr>
-<tr>
-<td><strong>AdaGrad</strong></td>
-<td>中等 (0.01)</td>
-<td>慢（后期）</td>
-<td>低</td>
-<td>稀疏数据（较少使用）</td>
-</tr>
-<tr>
-<td><strong>AdaDelta</strong></td>
-<td>无需设置</td>
-<td>中</td>
-<td>低</td>
-<td>理论研究（较少使用）</td>
-</tr>
-</tbody>
-</table>
-<h3 id="实用建议">📌 实用建议</h3>
-<ol type="1">
-<li><strong>新手入门</strong>：直接使用
-<code>AdamW(lr=3e-4)</code>，这是 2024 年最稳妥的选择。</li>
-<li><strong>CV 任务追求极致</strong>：尝试
-<code>SGD(lr=0.1, momentum=0.9)</code> 配合学习率调度器。</li>
-<li><strong>大模型训练</strong>：优先考虑 <code>AdamW</code>，配合
-<code>weight_decay=0.1</code>。</li>
-<li><strong>实验阶段</strong>：先用 AdamW
-快速验证想法，再根据任务特点微调。记住：<strong>没有万能的优化器，只有最适合你任务的优化器</strong>。理解原理比盲目选择更重要！</li>
-</ol>
-]]></content>
-      <tags>
-        <tag>PyTorch</tag>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
-        <tag>优化器</tag>
       </tags>
   </entry>
   <entry>
@@ -14486,335 +14486,6 @@ DHCP 服务器</h4>
       </tags>
   </entry>
   <entry>
-    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
-    <url>/posts/18f02423/</url>
-    <content><![CDATA[<p>CUDA
-报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Host</td>
-<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
-<td>下命令的人</td>
-</tr>
-<tr>
-<td>Device</td>
-<td>GPU 端代码，真正执行 kernel 的一侧。</td>
-<td>干活的人</td>
-</tr>
-<tr>
-<td>Kernel</td>
-<td>在 GPU 上并行执行的函数。</td>
-<td>GPU 任务</td>
-</tr>
-<tr>
-<td>Stream</td>
-<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
-<td>GPU 队列</td>
-</tr>
-<tr>
-<td>Synchronize</td>
-<td>CPU 停下来等 GPU 做完前面的任务。</td>
-<td>等结果</td>
-</tr>
-<tr>
-<td>CUDA error code</td>
-<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
-<td>一句错误摘要</td>
-</tr>
-</tbody>
-</table>
-<p>省流：</p>
-<blockquote>
-<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
-真正在哪里出错”。</strong></p>
-</blockquote>
-<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
-<p>CUDA 程序里通常有两条时间线：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
-<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
-队列，然后自己继续往下跑。</p>
-<p>也就是说：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
-<p>这行代码返回成功，通常只能说明：</p>
-<blockquote>
-<p>kernel launch 请求成功提交了。</p>
-</blockquote>
-<p>它不等价于：</p>
-<blockquote>
-<p>kernel 已经在 GPU 上执行成功了。</p>
-</blockquote>
-<p>这就是 CUDA 异步报错的根源。</p>
-<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
-<p>一个简化版流程如下：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
-<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
-<p>普通 CPU 函数调用更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
-<p>CUDA kernel launch 更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
-<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
-kernel。</p>
-<h3 id="stream-是什么">🧩 Stream 是什么</h3>
-<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
-<p>同一个 stream 里的任务通常按顺序执行。但 CPU
-提交任务时不一定等待每个任务结束：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
-<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
-done。</p>
-<p>这在 PyTorch 里很常见：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
-<p>前面几行可能只是不断向 GPU 提交算子。到了
-<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
-GPU，于是错误可能在这里才爆出来。</p>
-<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
-<p>假设某个 kernel 里有越界写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>CPU 端这样调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
-<p>可能的结果是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>报错位置看起来在：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
-<p>但真正的事故现场可能是前面的：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
-<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
-工作完成，CPU 到这里才第一次认真问 GPU：</p>
-<blockquote>
-<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
-</blockquote>
-<p>GPU/driver 这时返回：</p>
-<blockquote>
-<p>前面那个 kernel 已经出错了。</p>
-</blockquote>
-<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
-<p>默认情况下，GPU 端错误通常不是像 CPU
-异常一样立刻带着完整调用栈抛回来。</p>
-<p>更接近下面这个过程：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
-<p>所以你看到的经常是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
-<p>例如：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
-<ul>
-<li>哪个 kernel 的哪一行出错；</li>
-<li>哪个 block/thread 出错；</li>
-<li>GPU 上完整的调用链是什么；</li>
-<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
-</ul>
-<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
-<p>当 PyTorch 报错栈指向：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>它通常表示：</p>
-<blockquote>
-<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
-</blockquote>
-<p>它不必然表示：</p>
-<blockquote>
-<p>这个 API 自己就是根因。</p>
-</blockquote>
-<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
-<p>常见通知点包括：</p>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 75%" />
-</colgroup>
-<thead>
-<tr>
-<th>操作</th>
-<th>为什么会暴露错误</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>明确等待 GPU 之前的任务完成。</td>
-</tr>
-<tr>
-<td><code>cudaStreamSynchronize(stream)</code></td>
-<td>等某个 stream 完成。</td>
-</tr>
-<tr>
-<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
-<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
-</tr>
-<tr>
-<td><code>tensor.cpu()</code></td>
-<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
-</tr>
-<tr>
-<td><code>loss.item()</code></td>
-<td>需要把 GPU 标量读到 Python 数值。</td>
-</tr>
-<tr>
-<td>后续 CUDA API</td>
-<td>发现当前 CUDA context 已经有错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么-gpu-错误默认信息这么少">🔍 为什么 GPU
-错误默认信息这么少</h3>
-<p>CPU 异常容易打印调用栈，是因为 CPU
-线程有清晰的栈帧和同步执行路径。</p>
-<p>GPU kernel 不一样：</p>
-<ul>
-<li>一个 kernel 可能有成千上万个线程同时执行；</li>
-<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
-<li>错误可能只发生在某个 thread；</li>
-<li>kernel launch 和 kernel 执行在时间线上分离；</li>
-<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
-调试模式。</li>
-</ul>
-<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
-<p>这些描述很有用，但它们不是完整定位结果。</p>
-<h3 id="cuda_launch_blocking1-做了什么">🛠️
-<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
-<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
-<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
-<p>默认情况：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>开启后：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
-的位置。</p>
-<p>代价是程序会明显变慢，因为 CPU/GPU
-原本可以重叠执行的部分被压平了。</p>
-<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
-<p>分类任务里，<code>target</code> 必须在
-<code>[0, num_classes - 1]</code> 范围内。</p>
-<p>例如模型输出 10 类：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
-<p>但 <code>target</code> 里出现了非法类别：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
-<p>这时：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
-<p>GPU kernel 可能触发 device-side
-assert。你看到的报错位置却可能在：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
-<p>真正要查的是：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
-<p>如果是 <code>cross_entropy</code>，优先确认：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
-<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
-<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>区别是：</p>
-<table>
-<colgroup>
-<col style="width: 26%" />
-<col style="width: 73%" />
-</colgroup>
-<thead>
-<tr>
-<th>API</th>
-<th>主要检查什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaGetLastError()</code></td>
-<td>kernel launch 是否成功，比如配置、参数、符号等 launch
-阶段错误。</td>
-</tr>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
-</tr>
-</tbody>
-</table>
-<p>如果要进一步定位到源码行，可以用更重的工具：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
-<p>典型报告可能会给出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
-<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
-事故现场。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
-写错了。</td>
-<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
-</tr>
-<tr>
-<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
-<td>launch 成功只代表提交成功，不代表执行成功。</td>
-</tr>
-<tr>
-<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
-<td>它只是让报错更同步、更容易定位。</td>
-</tr>
-<tr>
-<td>GPU 报错信息太少，所以没法查。</td>
-<td>默认信息少，但可以用同步、断言、Compute
-Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
-</tr>
-<tr>
-<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
-<td>一个早期 GPU 错误可能污染后续 CUDA
-context，后面只是连续发现错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
-<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
-<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
-<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
-错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
-往往在更早提交的任务里。</p>
-</blockquote>
-<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
-和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
-Sanitizer。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>PyTorch</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：从编译环境到 HelloWorld</title>
     <url>/posts/c4f8a2d1/</url>
     <content><![CDATA[<p>最近想系统补一下计算机基础，从 c/c++ 开始吧。</p>
@@ -15521,6 +15192,335 @@ flowchart TD
         <tag>C/C++</tag>
         <tag>编译器</tag>
         <tag>HelloWorld</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
+    <url>/posts/18f02423/</url>
+    <content><![CDATA[<p>CUDA
+报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
+<td>下命令的人</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU 端代码，真正执行 kernel 的一侧。</td>
+<td>干活的人</td>
+</tr>
+<tr>
+<td>Kernel</td>
+<td>在 GPU 上并行执行的函数。</td>
+<td>GPU 任务</td>
+</tr>
+<tr>
+<td>Stream</td>
+<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
+<td>GPU 队列</td>
+</tr>
+<tr>
+<td>Synchronize</td>
+<td>CPU 停下来等 GPU 做完前面的任务。</td>
+<td>等结果</td>
+</tr>
+<tr>
+<td>CUDA error code</td>
+<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
+<td>一句错误摘要</td>
+</tr>
+</tbody>
+</table>
+<p>省流：</p>
+<blockquote>
+<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
+真正在哪里出错”。</strong></p>
+</blockquote>
+<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
+<p>CUDA 程序里通常有两条时间线：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
+<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
+队列，然后自己继续往下跑。</p>
+<p>也就是说：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
+<p>这行代码返回成功，通常只能说明：</p>
+<blockquote>
+<p>kernel launch 请求成功提交了。</p>
+</blockquote>
+<p>它不等价于：</p>
+<blockquote>
+<p>kernel 已经在 GPU 上执行成功了。</p>
+</blockquote>
+<p>这就是 CUDA 异步报错的根源。</p>
+<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
+<p>一个简化版流程如下：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
+<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
+<p>普通 CPU 函数调用更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
+<p>CUDA kernel launch 更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
+<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
+kernel。</p>
+<h3 id="stream-是什么">🧩 Stream 是什么</h3>
+<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
+<p>同一个 stream 里的任务通常按顺序执行。但 CPU
+提交任务时不一定等待每个任务结束：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
+<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
+done。</p>
+<p>这在 PyTorch 里很常见：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
+<p>前面几行可能只是不断向 GPU 提交算子。到了
+<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
+GPU，于是错误可能在这里才爆出来。</p>
+<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
+<p>假设某个 kernel 里有越界写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>CPU 端这样调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
+<p>可能的结果是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>报错位置看起来在：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
+<p>但真正的事故现场可能是前面的：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
+<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
+工作完成，CPU 到这里才第一次认真问 GPU：</p>
+<blockquote>
+<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
+</blockquote>
+<p>GPU/driver 这时返回：</p>
+<blockquote>
+<p>前面那个 kernel 已经出错了。</p>
+</blockquote>
+<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
+<p>默认情况下，GPU 端错误通常不是像 CPU
+异常一样立刻带着完整调用栈抛回来。</p>
+<p>更接近下面这个过程：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
+<p>所以你看到的经常是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
+<ul>
+<li>哪个 kernel 的哪一行出错；</li>
+<li>哪个 block/thread 出错；</li>
+<li>GPU 上完整的调用链是什么；</li>
+<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
+</ul>
+<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
+<p>当 PyTorch 报错栈指向：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>它通常表示：</p>
+<blockquote>
+<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
+</blockquote>
+<p>它不必然表示：</p>
+<blockquote>
+<p>这个 API 自己就是根因。</p>
+</blockquote>
+<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
+<p>常见通知点包括：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 75%" />
+</colgroup>
+<thead>
+<tr>
+<th>操作</th>
+<th>为什么会暴露错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>明确等待 GPU 之前的任务完成。</td>
+</tr>
+<tr>
+<td><code>cudaStreamSynchronize(stream)</code></td>
+<td>等某个 stream 完成。</td>
+</tr>
+<tr>
+<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
+<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
+</tr>
+<tr>
+<td><code>tensor.cpu()</code></td>
+<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
+</tr>
+<tr>
+<td><code>loss.item()</code></td>
+<td>需要把 GPU 标量读到 Python 数值。</td>
+</tr>
+<tr>
+<td>后续 CUDA API</td>
+<td>发现当前 CUDA context 已经有错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么-gpu-错误默认信息这么少">🔍 为什么 GPU
+错误默认信息这么少</h3>
+<p>CPU 异常容易打印调用栈，是因为 CPU
+线程有清晰的栈帧和同步执行路径。</p>
+<p>GPU kernel 不一样：</p>
+<ul>
+<li>一个 kernel 可能有成千上万个线程同时执行；</li>
+<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
+<li>错误可能只发生在某个 thread；</li>
+<li>kernel launch 和 kernel 执行在时间线上分离；</li>
+<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
+调试模式。</li>
+</ul>
+<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
+<p>这些描述很有用，但它们不是完整定位结果。</p>
+<h3 id="cuda_launch_blocking1-做了什么">🛠️
+<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
+<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
+<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
+<p>默认情况：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>开启后：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
+的位置。</p>
+<p>代价是程序会明显变慢，因为 CPU/GPU
+原本可以重叠执行的部分被压平了。</p>
+<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
+<p>分类任务里，<code>target</code> 必须在
+<code>[0, num_classes - 1]</code> 范围内。</p>
+<p>例如模型输出 10 类：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
+<p>但 <code>target</code> 里出现了非法类别：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
+<p>这时：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
+<p>GPU kernel 可能触发 device-side
+assert。你看到的报错位置却可能在：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
+<p>真正要查的是：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
+<p>如果是 <code>cross_entropy</code>，优先确认：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
+<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
+<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>区别是：</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 73%" />
+</colgroup>
+<thead>
+<tr>
+<th>API</th>
+<th>主要检查什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaGetLastError()</code></td>
+<td>kernel launch 是否成功，比如配置、参数、符号等 launch
+阶段错误。</td>
+</tr>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
+</tr>
+</tbody>
+</table>
+<p>如果要进一步定位到源码行，可以用更重的工具：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
+<p>典型报告可能会给出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
+<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
+事故现场。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
+写错了。</td>
+<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
+</tr>
+<tr>
+<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
+<td>launch 成功只代表提交成功，不代表执行成功。</td>
+</tr>
+<tr>
+<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
+<td>它只是让报错更同步、更容易定位。</td>
+</tr>
+<tr>
+<td>GPU 报错信息太少，所以没法查。</td>
+<td>默认信息少，但可以用同步、断言、Compute
+Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
+</tr>
+<tr>
+<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
+<td>一个早期 GPU 错误可能污染后续 CUDA
+context，后面只是连续发现错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
+<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
+<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
+<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
+错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
+往往在更早提交的任务里。</p>
+</blockquote>
+<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
+和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
+Sanitizer。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>PyTorch</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
@@ -17231,438 +17231,6 @@ flowchart TD
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：STL 容器</title>
-    <url>/posts/e9f3b7c2/</url>
-    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
-提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>STL</td>
-<td>Standard Template Library，标准模板库</td>
-<td>C++ 标准库的容器 + 算法</td>
-</tr>
-<tr>
-<td>容器（container）</td>
-<td>存储和管理一组元素的数据结构</td>
-<td>装数据的东西</td>
-</tr>
-<tr>
-<td><code>vector</code></td>
-<td>动态数组，内存连续，自动扩容</td>
-<td>自动扩容的数组</td>
-</tr>
-<tr>
-<td><code>string</code></td>
-<td>字符串类型，自动管理字符内存</td>
-<td>好用的字符串</td>
-</tr>
-<tr>
-<td><code>map</code></td>
-<td>键值对映射，按键有序</td>
-<td>字典/映射</td>
-</tr>
-<tr>
-<td><code>set</code></td>
-<td>不重复元素的有序集合</td>
-<td>去重 + 有序</td>
-</tr>
-<tr>
-<td>迭代器（iterator）</td>
-<td>遍历容器的指针式对象</td>
-<td>容器的通用游标</td>
-</tr>
-<tr>
-<td>范围 for</td>
-<td><code>for (auto x : c)</code> 遍历语法</td>
-<td>简单遍历</td>
-</tr>
-</tbody>
-</table>
-<h3 id="stl-是什么">🧩 STL 是什么</h3>
-<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
-<table>
-<thead>
-<tr>
-<th>组成</th>
-<th>作用</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>容器</td>
-<td>存储数据</td>
-<td><code>vector</code>、<code>map</code>、<code>set</code></td>
-</tr>
-<tr>
-<td>算法</td>
-<td>操作数据</td>
-<td><code>sort</code>、<code>find</code></td>
-</tr>
-<tr>
-<td>迭代器</td>
-<td>连接容器和算法</td>
-<td><code>begin()</code>、<code>end()</code></td>
-</tr>
-</tbody>
-</table>
-<p>STL
-用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[容器] &lt;--&gt; B[迭代器]
-    B &lt;--&gt; C[算法]
-    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
-    C --&gt; E[sort&#x2F;find&#x2F;count]
-</code>
-</pre>
-<p>先记住一个总原则：<strong>能用 STL
-容器解决的，不要自己造轮子</strong>。</p>
-<h3 id="vector动态数组">🧮 vector：动态数组</h3>
-<h4 id="基本用法">基本用法</h4>
-<p><code>vector</code>
-是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以在创建时直接给初始值：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>size()</code> 返回的是
-<code>size_t</code>（无符号整数），所以循环变量建议也用
-<code>size_t</code>，避免有符号/无符号比较的警告。</p>
-</blockquote>
-<h4 id="常用接口">常用接口</h4>
-<table>
-<thead>
-<tr>
-<th>接口</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>push_back(x)</code></td>
-<td>尾部追加元素</td>
-</tr>
-<tr>
-<td><code>pop_back()</code></td>
-<td>删除尾部元素</td>
-</tr>
-<tr>
-<td><code>size()</code></td>
-<td>元素个数</td>
-</tr>
-<tr>
-<td><code>empty()</code></td>
-<td>是否为空</td>
-</tr>
-<tr>
-<td><code>front()</code> / <code>back()</code></td>
-<td>第一个 / 最后一个元素</td>
-</tr>
-<tr>
-<td><code>v[i]</code></td>
-<td>按下标访问，<strong>不检查越界</strong></td>
-</tr>
-<tr>
-<td><code>v.at(i)</code></td>
-<td>按下标访问，越界抛异常</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>v[i]</code>
-越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
-<code>v.at(i)</code> 更安全。</p>
-</blockquote>
-<h3 id="string常用接口与互转">📝 string：常用接口与互转</h3>
-<h4 id="常用接口-1">常用接口</h4>
-<p><code>string</code> 是 C++
-的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>find</code> 找不到时返回
-<code>string::npos</code>，判断要用它：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="与-c-字符串互转">与 C 字符串互转</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
-<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
-省去了手动管理长度、手动拼接的麻烦：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>C 风格 <code>char[]</code></th>
-<th><code>string</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>拼接</td>
-<td><code>strcat</code>，要保证空间够</td>
-<td><code>s1 + s2</code></td>
-</tr>
-<tr>
-<td>比较</td>
-<td><code>strcmp</code></td>
-<td><code>==</code></td>
-</tr>
-<tr>
-<td>长度</td>
-<td><code>strlen</code></td>
-<td><code>.size()</code></td>
-</tr>
-<tr>
-<td>拷贝</td>
-<td><code>strcpy</code></td>
-<td><code>=</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="map键值对">🗺️ map：键值对</h3>
-<h4 id="基本用法-1">基本用法</h4>
-<p><code>map</code>
-保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出（按键排序）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
-<h4 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h4>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>键不存在时</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>scores["Bob"]</code></td>
-<td>自动插入一个默认值（0）</td>
-<td>需要写入时</td>
-</tr>
-<tr>
-<td><code>scores.find("Bob")</code></td>
-<td>返回 <code>end()</code>，不插入</td>
-<td>只查询时</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
-<code>count</code>，避免误插入脏数据：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="set去重与有序">🧹 set：去重与有序</h3>
-<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th><code>vector</code></th>
-<th><code>set</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>顺序</td>
-<td>保持插入顺序</td>
-<td>自动排序</td>
-</tr>
-<tr>
-<td>重复</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>按下标访问</td>
-<td>可以</td>
-<td>不可以，用迭代器</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>需要去重 + 有序时用
-<code>set</code>；需要保持插入顺序、按下标访问时用
-<code>vector</code>。</p>
-</blockquote>
-<h3 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h3>
-<h4 id="基本概念">基本概念</h4>
-<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
-指向第一个元素，<code>end()</code>
-指向最后一个元素的下一个位置（不指向有效元素）。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[begin 指向第一个元素] --&gt; B[元素...]
-    B --&gt; C[end 指向末尾之后]
-</code>
-</pre>
-<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
-的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
-<code>it-&gt;second</code> 访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="迭代器失效问题">迭代器失效问题</h4>
-<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
-<p>最典型的例子是 <code>vector</code> 扩容：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
-<p>什么时候要警惕：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>是否可能使旧迭代器失效</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
-<td>可能失效</td>
-</tr>
-<tr>
-<td><code>vector</code> 中间插入/删除</td>
-<td>受影响位置之后失效</td>
-</tr>
-<tr>
-<td><code>map</code>/<code>set</code> 插入</td>
-<td>通常不失效</td>
-</tr>
-<tr>
-<td>遍历中删除当前元素</td>
-<td>当前迭代器失效</td>
-</tr>
-</tbody>
-</table>
-<p>范围 for
-内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
-<h3 id="sort-算法">🔀 sort 算法</h3>
-<h4 id="默认排序">默认排序</h4>
-<p><code>sort</code> 属于 STL
-算法，对迭代器范围内的元素排序，默认升序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>降序可以用标准库提供的比较器：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
-<h4 id="自定义比较函数">自定义比较函数</h4>
-<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
-<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
-前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
-<code>&gt;=</code> 这种包含等号的条件。</p>
-<h4 id="小结">小结</h4>
-<table>
-<thead>
-<tr>
-<th>用法</th>
-<th>代码</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>升序</td>
-<td><code>sort(v.begin(), v.end())</code></td>
-</tr>
-<tr>
-<td>降序</td>
-<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
-</tr>
-<tr>
-<td>按自定义规则</td>
-<td><code>sort(v.begin(), v.end(), lambda)</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 下标越界会报错</td>
-<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
-会抛异常</td>
-</tr>
-<tr>
-<td><code>string</code> 就是 <code>char[]</code></td>
-<td><code>string</code> 自动管理内存，支持
-<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
-</tr>
-<tr>
-<td>用 <code>map[]</code> 查询很安全</td>
-<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
-<code>find</code>/<code>count</code></td>
-</tr>
-<tr>
-<td><code>set</code> 和 <code>vector</code> 都能去重</td>
-<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
-</tr>
-<tr>
-<td>范围 for 遍历时随便删元素</td>
-<td>删除元素可能导致迭代器失效，需小心处理</td>
-</tr>
-<tr>
-<td><code>sort</code> 只能排数字</td>
-<td>传自定义比较函数就能排任意类型</td>
-</tr>
-<tr>
-<td>STL 容器都要自己管理内存</td>
-<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>STL
-三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
-</blockquote>
-<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
-管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
-自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>STL</tag>
-        <tag>vector</tag>
-        <tag>string</tag>
-        <tag>map</tag>
-        <tag>set</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：动态内存管理</title>
     <url>/posts/d6a2e8f1/</url>
     <content><![CDATA[<p>栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。</p>
@@ -18096,6 +17664,438 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：STL 容器</title>
+    <url>/posts/e9f3b7c2/</url>
+    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
+提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STL</td>
+<td>Standard Template Library，标准模板库</td>
+<td>C++ 标准库的容器 + 算法</td>
+</tr>
+<tr>
+<td>容器（container）</td>
+<td>存储和管理一组元素的数据结构</td>
+<td>装数据的东西</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td>动态数组，内存连续，自动扩容</td>
+<td>自动扩容的数组</td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>字符串类型，自动管理字符内存</td>
+<td>好用的字符串</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>键值对映射，按键有序</td>
+<td>字典/映射</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>不重复元素的有序集合</td>
+<td>去重 + 有序</td>
+</tr>
+<tr>
+<td>迭代器（iterator）</td>
+<td>遍历容器的指针式对象</td>
+<td>容器的通用游标</td>
+</tr>
+<tr>
+<td>范围 for</td>
+<td><code>for (auto x : c)</code> 遍历语法</td>
+<td>简单遍历</td>
+</tr>
+</tbody>
+</table>
+<h3 id="stl-是什么">🧩 STL 是什么</h3>
+<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
+<table>
+<thead>
+<tr>
+<th>组成</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>容器</td>
+<td>存储数据</td>
+<td><code>vector</code>、<code>map</code>、<code>set</code></td>
+</tr>
+<tr>
+<td>算法</td>
+<td>操作数据</td>
+<td><code>sort</code>、<code>find</code></td>
+</tr>
+<tr>
+<td>迭代器</td>
+<td>连接容器和算法</td>
+<td><code>begin()</code>、<code>end()</code></td>
+</tr>
+</tbody>
+</table>
+<p>STL
+用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[容器] &lt;--&gt; B[迭代器]
+    B &lt;--&gt; C[算法]
+    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
+    C --&gt; E[sort&#x2F;find&#x2F;count]
+</code>
+</pre>
+<p>先记住一个总原则：<strong>能用 STL
+容器解决的，不要自己造轮子</strong>。</p>
+<h3 id="vector动态数组">🧮 vector：动态数组</h3>
+<h4 id="基本用法">基本用法</h4>
+<p><code>vector</code>
+是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以在创建时直接给初始值：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>size()</code> 返回的是
+<code>size_t</code>（无符号整数），所以循环变量建议也用
+<code>size_t</code>，避免有符号/无符号比较的警告。</p>
+</blockquote>
+<h4 id="常用接口">常用接口</h4>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_back(x)</code></td>
+<td>尾部追加元素</td>
+</tr>
+<tr>
+<td><code>pop_back()</code></td>
+<td>删除尾部元素</td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>empty()</code></td>
+<td>是否为空</td>
+</tr>
+<tr>
+<td><code>front()</code> / <code>back()</code></td>
+<td>第一个 / 最后一个元素</td>
+</tr>
+<tr>
+<td><code>v[i]</code></td>
+<td>按下标访问，<strong>不检查越界</strong></td>
+</tr>
+<tr>
+<td><code>v.at(i)</code></td>
+<td>按下标访问，越界抛异常</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>v[i]</code>
+越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
+<code>v.at(i)</code> 更安全。</p>
+</blockquote>
+<h3 id="string常用接口与互转">📝 string：常用接口与互转</h3>
+<h4 id="常用接口-1">常用接口</h4>
+<p><code>string</code> 是 C++
+的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>find</code> 找不到时返回
+<code>string::npos</code>，判断要用它：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="与-c-字符串互转">与 C 字符串互转</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
+<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
+省去了手动管理长度、手动拼接的麻烦：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>C 风格 <code>char[]</code></th>
+<th><code>string</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拼接</td>
+<td><code>strcat</code>，要保证空间够</td>
+<td><code>s1 + s2</code></td>
+</tr>
+<tr>
+<td>比较</td>
+<td><code>strcmp</code></td>
+<td><code>==</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td><code>strlen</code></td>
+<td><code>.size()</code></td>
+</tr>
+<tr>
+<td>拷贝</td>
+<td><code>strcpy</code></td>
+<td><code>=</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="map键值对">🗺️ map：键值对</h3>
+<h4 id="基本用法-1">基本用法</h4>
+<p><code>map</code>
+保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出（按键排序）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
+<h4 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h4>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>键不存在时</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scores["Bob"]</code></td>
+<td>自动插入一个默认值（0）</td>
+<td>需要写入时</td>
+</tr>
+<tr>
+<td><code>scores.find("Bob")</code></td>
+<td>返回 <code>end()</code>，不插入</td>
+<td>只查询时</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
+<code>count</code>，避免误插入脏数据：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="set去重与有序">🧹 set：去重与有序</h3>
+<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th><code>vector</code></th>
+<th><code>set</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>顺序</td>
+<td>保持插入顺序</td>
+<td>自动排序</td>
+</tr>
+<tr>
+<td>重复</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>按下标访问</td>
+<td>可以</td>
+<td>不可以，用迭代器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>需要去重 + 有序时用
+<code>set</code>；需要保持插入顺序、按下标访问时用
+<code>vector</code>。</p>
+</blockquote>
+<h3 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h3>
+<h4 id="基本概念">基本概念</h4>
+<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
+指向第一个元素，<code>end()</code>
+指向最后一个元素的下一个位置（不指向有效元素）。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[begin 指向第一个元素] --&gt; B[元素...]
+    B --&gt; C[end 指向末尾之后]
+</code>
+</pre>
+<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
+的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
+<code>it-&gt;second</code> 访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="迭代器失效问题">迭代器失效问题</h4>
+<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
+<p>最典型的例子是 <code>vector</code> 扩容：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
+<p>什么时候要警惕：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>是否可能使旧迭代器失效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
+<td>可能失效</td>
+</tr>
+<tr>
+<td><code>vector</code> 中间插入/删除</td>
+<td>受影响位置之后失效</td>
+</tr>
+<tr>
+<td><code>map</code>/<code>set</code> 插入</td>
+<td>通常不失效</td>
+</tr>
+<tr>
+<td>遍历中删除当前元素</td>
+<td>当前迭代器失效</td>
+</tr>
+</tbody>
+</table>
+<p>范围 for
+内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
+<h3 id="sort-算法">🔀 sort 算法</h3>
+<h4 id="默认排序">默认排序</h4>
+<p><code>sort</code> 属于 STL
+算法，对迭代器范围内的元素排序，默认升序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>降序可以用标准库提供的比较器：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
+<h4 id="自定义比较函数">自定义比较函数</h4>
+<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
+<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
+前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
+<code>&gt;=</code> 这种包含等号的条件。</p>
+<h4 id="小结">小结</h4>
+<table>
+<thead>
+<tr>
+<th>用法</th>
+<th>代码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升序</td>
+<td><code>sort(v.begin(), v.end())</code></td>
+</tr>
+<tr>
+<td>降序</td>
+<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
+</tr>
+<tr>
+<td>按自定义规则</td>
+<td><code>sort(v.begin(), v.end(), lambda)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 下标越界会报错</td>
+<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
+会抛异常</td>
+</tr>
+<tr>
+<td><code>string</code> 就是 <code>char[]</code></td>
+<td><code>string</code> 自动管理内存，支持
+<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+</tr>
+<tr>
+<td>用 <code>map[]</code> 查询很安全</td>
+<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
+<code>find</code>/<code>count</code></td>
+</tr>
+<tr>
+<td><code>set</code> 和 <code>vector</code> 都能去重</td>
+<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+</tr>
+<tr>
+<td>范围 for 遍历时随便删元素</td>
+<td>删除元素可能导致迭代器失效，需小心处理</td>
+</tr>
+<tr>
+<td><code>sort</code> 只能排数字</td>
+<td>传自定义比较函数就能排任意类型</td>
+</tr>
+<tr>
+<td>STL 容器都要自己管理内存</td>
+<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>STL
+三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+</blockquote>
+<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
+管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
+自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>STL</tag>
+        <tag>vector</tag>
+        <tag>string</tag>
+        <tag>map</tag>
+        <tag>set</tag>
       </tags>
   </entry>
   <entry>
@@ -19496,6 +19496,338 @@ flowchart TD
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：多文件工程</title>
+    <url>/posts/b8d3f6a1/</url>
+    <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
+里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>声明（declaration）</td>
+<td>告诉编译器存在某个函数/变量，不给出实现</td>
+<td>说存在</td>
+</tr>
+<tr>
+<td>定义（definition）</td>
+<td>给出函数体或变量本体</td>
+<td>说怎么做</td>
+</tr>
+<tr>
+<td>头文件</td>
+<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
+<td>接口</td>
+</tr>
+<tr>
+<td>源文件</td>
+<td>放实现的 <code>.cpp</code> 文件</td>
+<td>实现</td>
+</tr>
+<tr>
+<td>include guard</td>
+<td>防止头文件被重复包含的宏保护</td>
+<td>只包含一次</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>另一种防止重复包含的写法</td>
+<td>简化版守卫</td>
+</tr>
+<tr>
+<td>编译单元</td>
+<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
+<td>独立编译的单位</td>
+</tr>
+<tr>
+<td>符号（symbol）</td>
+<td>函数/变量的名字标识</td>
+<td>链接的钥匙</td>
+</tr>
+<tr>
+<td>未定义引用</td>
+<td>声明了但找不到实现的符号</td>
+<td><code>undefined reference</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
+<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
+可执行程序。多文件工程就是把源码这一步拆成多个文件，每个
+<code>.cpp</code> 单独编译成
+<code>.o</code>，最后由链接器拼成可执行程序。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp] --&gt; A1[main.o]
+    B[math.cpp] --&gt; B1[math.o]
+    C[utils.cpp] --&gt; C1[utils.o]
+    A1 --&gt; D[链接]
+    B1 --&gt; D
+    C1 --&gt; D
+    D --&gt; E[可执行程序]
+</code>
+</pre>
+<p>拆文件的收益：</p>
+<table>
+<thead>
+<tr>
+<th>好处</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>可读性</td>
+<td>每个文件只负责一块功能</td>
+</tr>
+<tr>
+<td>复用</td>
+<td>编译好的 <code>.o</code> 或库可以给别人用</td>
+</tr>
+<tr>
+<td>编译速度</td>
+<td>只改一个文件时，只需重编那一个</td>
+</tr>
+<tr>
+<td>协作</td>
+<td>多人各改各的文件，冲突少</td>
+</tr>
+</tbody>
+</table>
+<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
+<h4 id="标准模式">标准模式</h4>
+<p>一个模块通常拆成头文件（声明）+ 源文件（实现）两个文件。</p>
+<p>以一个小工具 <code>add</code> 为例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译时把多个源文件一起交给编译器：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<p>也可以分步编译，先各自生成目标文件再链接：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
+<h4 id="声明与定义的区别">声明与定义的区别</h4>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>类型</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int add(int a, int b);</code></td>
+<td>声明</td>
+<td>告诉编译器有这个函数</td>
+</tr>
+<tr>
+<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
+<td>定义</td>
+<td>给出函数体</td>
+</tr>
+</tbody>
+</table>
+<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
+<code>#include "math.h"</code> 就能调用
+<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
+章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
+<h3 id="头文件规范">🛡️ 头文件规范</h3>
+<h4 id="include-guard">include guard</h4>
+<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
+<p>原理：第一次包含时定义 <code>MATH_H</code>
+并展开内容；之后再次包含时，<code>MATH_H</code>
+已存在，整个内容被跳过。</p>
+<h4 id="pragma-once">#pragma once</h4>
+<p>另一种写法更简洁：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>优点</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#ifndef</code> 守卫</td>
+<td>标准 C++，所有编译器都支持</td>
+<td>宏名要唯一，别重名</td>
+</tr>
+<tr>
+<td><code>#pragma once</code></td>
+<td>简单、不易写错</td>
+<td>非标准，但主流编译器都支持</td>
+</tr>
+</tbody>
+</table>
+<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
+<h4 id="最小包含">最小包含</h4>
+<p>头文件里尽量只 <code>#include</code>
+真正需要的内容，能不放就不放：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
+<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
+<h3 id="编译单元">🧊 编译单元</h3>
+<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
+<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
+    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
+</code>
+</pre>
+<p>理解编译单元是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
+<code>.cpp</code>
+都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
+<blockquote>
+<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
+<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
+</blockquote>
+<h3 id="链接基础">🔗 链接基础</h3>
+<p>编译阶段每个 <code>.cpp</code>
+独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
+<table>
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>链接错误</th>
+<th>原因</th>
+<th>解决</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>undefined reference</code>（未定义引用）</td>
+<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
+<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
+</tr>
+<tr>
+<td><code>multiple definition</code>（重复定义）</td>
+<td>同一个函数/全局变量被定义了两份</td>
+<td>定义只留一处，或把定义移出头文件</td>
+</tr>
+<tr>
+<td>找不到库</td>
+<td><code>-l</code> 参数写错或库未安装</td>
+<td>检查库名和链接参数</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
+<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
+<h4 id="循环包含">循环包含</h4>
+<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
+<code>a.h</code>，会形成死循环展开。include guard
+能挡住重复展开，但解决不了互相依赖本身。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
+<h4 id="头文件写实现">头文件写实现</h4>
+<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
+包含它，链接时就是重复定义：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
+<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
+<code>inline</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>inline</code>
+的字面意思是内联：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
+C++ 里，<code>inline</code>
+对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
+<code>.cpp</code>
+包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
+<blockquote>
+<p>现代编译器对是否真的内联展开有自己的判断，<code>inline</code>
+更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
+getter/setter）可以加 <code>inline</code>
+放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
+</blockquote>
+<h4 id="全局变量重复定义">全局变量重复定义</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
+<p>正解是头文件里只声明，源文件里定义：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>头文件里可以随便写实现</td>
+<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
+包含会重复定义</td>
+</tr>
+<tr>
+<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
+<td>两种都可以，保持一种习惯即可</td>
+</tr>
+<tr>
+<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
+<td>最小包含，只用需要的</td>
+</tr>
+<tr>
+<td>链接错误也是编译器错误</td>
+<td>编译已通过，链接失败是符号重复或找不到</td>
+</tr>
+<tr>
+<td>全局变量定义放头文件没问题</td>
+<td>每个编译单元各有一份，链接报重复定义</td>
+</tr>
+<tr>
+<td><code>#include</code> 越多越好，反正不会错</td>
+<td>增加编译依赖和冲突面，保持最小包含</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>多文件工程的骨架是头文件放声明、源文件放实现；每个 <code>.cpp</code>
+独立编译成目标文件，链接器负责把符号拼起来；头文件要加 include
+guard、保持最小包含，警惕重复定义和循环包含。</p>
+</blockquote>
+<p>到这一章，从第 1 章的编译流程到现在的多文件工程，已经把 C/C++
+工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
+管理这些编译命令。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>头文件</tag>
+        <tag>编译单元</tag>
+        <tag>链接</tag>
+        <tag>工程结构</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：拓展选学</title>
     <url>/posts/c6e1a9f2/</url>
     <content><![CDATA[<p>入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、<code>shared_ptr</code>
@@ -20524,338 +20856,6 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
         <tag>面向对象</tag>
         <tag>运算符重载</tag>
         <tag>静态成员</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：多文件工程</title>
-    <url>/posts/b8d3f6a1/</url>
-    <content><![CDATA[<p>代码写到一定规模，塞在单个 <code>.cpp</code>
-里就会又长又乱；把代码拆成多个文件，是每个 C/C++ 工程的第一步。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>声明（declaration）</td>
-<td>告诉编译器存在某个函数/变量，不给出实现</td>
-<td>说存在</td>
-</tr>
-<tr>
-<td>定义（definition）</td>
-<td>给出函数体或变量本体</td>
-<td>说怎么做</td>
-</tr>
-<tr>
-<td>头文件</td>
-<td>通常放声明的 <code>.h</code>/<code>.hpp</code> 文件</td>
-<td>接口</td>
-</tr>
-<tr>
-<td>源文件</td>
-<td>放实现的 <code>.cpp</code> 文件</td>
-<td>实现</td>
-</tr>
-<tr>
-<td>include guard</td>
-<td>防止头文件被重复包含的宏保护</td>
-<td>只包含一次</td>
-</tr>
-<tr>
-<td><code>#pragma once</code></td>
-<td>另一种防止重复包含的写法</td>
-<td>简化版守卫</td>
-</tr>
-<tr>
-<td>编译单元</td>
-<td>一个 <code>.cpp</code> 经过预处理后的整体</td>
-<td>独立编译的单位</td>
-</tr>
-<tr>
-<td>符号（symbol）</td>
-<td>函数/变量的名字标识</td>
-<td>链接的钥匙</td>
-</tr>
-<tr>
-<td>未定义引用</td>
-<td>声明了但找不到实现的符号</td>
-<td><code>undefined reference</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么要拆分文件">🧩 为什么要拆分文件</h3>
-<p>第 1 章讲过完整的构建流程：源码 → 目标文件 → 链接 →
-可执行程序。多文件工程就是把源码这一步拆成多个文件，每个
-<code>.cpp</code> 单独编译成
-<code>.o</code>，最后由链接器拼成可执行程序。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[main.cpp] --&gt; A1[main.o]
-    B[math.cpp] --&gt; B1[math.o]
-    C[utils.cpp] --&gt; C1[utils.o]
-    A1 --&gt; D[链接]
-    B1 --&gt; D
-    C1 --&gt; D
-    D --&gt; E[可执行程序]
-</code>
-</pre>
-<p>拆文件的收益：</p>
-<table>
-<thead>
-<tr>
-<th>好处</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>可读性</td>
-<td>每个文件只负责一块功能</td>
-</tr>
-<tr>
-<td>复用</td>
-<td>编译好的 <code>.o</code> 或库可以给别人用</td>
-</tr>
-<tr>
-<td>编译速度</td>
-<td>只改一个文件时，只需重编那一个</td>
-</tr>
-<tr>
-<td>协作</td>
-<td>多人各改各的文件，冲突少</td>
-</tr>
-</tbody>
-</table>
-<h3 id="源文件拆分声明与实现分离">📂 源文件拆分：声明与实现分离</h3>
-<h4 id="标准模式">标准模式</h4>
-<p>一个模块通常拆成头文件（声明）+ 源文件（实现）两个文件。</p>
-<p>以一个小工具 <code>add</code> 为例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h —— 头文件：只放声明</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.cpp —— 源文件：放实现</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// main.cpp —— 使用方：包含头文件即可</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math.h&quot;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">2</span>, <span class="number">3</span>) &lt;&lt; endl;   <span class="comment">// 5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译时把多个源文件一起交给编译器：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -std=c++17 -Wall -Wextra main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
-<p>也可以分步编译，先各自生成目标文件再链接：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 每个 .cpp 独立编译成 .o</span></span><br><span class="line">g++ -c main.cpp -o main.o</span><br><span class="line">g++ -c math.cpp -o math.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接成可执行程序</span></span><br><span class="line">g++ main.o math.o -o app</span><br></pre></td></tr></table></figure>
-<h4 id="声明与定义的区别">声明与定义的区别</h4>
-<table>
-<thead>
-<tr>
-<th>代码</th>
-<th>类型</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int add(int a, int b);</code></td>
-<td>声明</td>
-<td>告诉编译器有这个函数</td>
-</tr>
-<tr>
-<td><code>int add(int a, int b) &#123; ... &#125;</code></td>
-<td>定义</td>
-<td>给出函数体</td>
-</tr>
-</tbody>
-</table>
-<p>头文件里放声明，源文件里放定义，<code>main.cpp</code> 只要
-<code>#include "math.h"</code> 就能调用
-<code>add</code>，具体实现由链接阶段接上。这正好呼应第 1
-章”头文件让编译器知道有什么，真正实现由链接阶段接入”。</p>
-<h3 id="头文件规范">🛡️ 头文件规范</h3>
-<h4 id="include-guard">include guard</h4>
-<p>头文件可能被多个文件包含，甚至被间接包含多次。如果头文件里没有保护，同一个声明会被展开多次（多数情况无害，但定义就会报错）。所以每个头文件都要加保护：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> MATH_H            <span class="comment">// 如果没定义过 MATH_H</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> MATH_H            <span class="comment">// 就定义它</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span>                    <span class="comment">// 结束</span></span></span><br></pre></td></tr></table></figure>
-<p>原理：第一次包含时定义 <code>MATH_H</code>
-并展开内容；之后再次包含时，<code>MATH_H</code>
-已存在，整个内容被跳过。</p>
-<h4 id="pragma-once">#pragma once</h4>
-<p>另一种写法更简洁：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>优点</th>
-<th>注意</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#ifndef</code> 守卫</td>
-<td>标准 C++，所有编译器都支持</td>
-<td>宏名要唯一，别重名</td>
-</tr>
-<tr>
-<td><code>#pragma once</code></td>
-<td>简单、不易写错</td>
-<td>非标准，但主流编译器都支持</td>
-</tr>
-</tbody>
-</table>
-<p>两种都常见。入门阶段选一种坚持用，保持一致即可。</p>
-<h4 id="最小包含">最小包含</h4>
-<p>头文件里尽量只 <code>#include</code>
-真正需要的内容，能不放就不放：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 只需要指针/引用时，用前置声明代替 include</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Student</span>;          <span class="comment">// 前置声明</span></span><br><span class="line"></span><br><span class="line"><span class="function">Student* <span class="title">createStudent</span><span class="params">()</span></span>;        <span class="comment">// 可以，只用到指针</span></span><br><span class="line"><span class="comment">// Student s;                    // 不行：需要完整定义才能创建对象</span></span><br></pre></td></tr></table></figure>
-<p>原则：<strong>头文件包含越少，编译依赖越少，改一个头文件波及的文件就越少</strong>。</p>
-<h3 id="编译单元">🧊 编译单元</h3>
-<p>每个 <code>.cpp</code> 文件是一个独立的编译单元。编译器处理它时，先把
-<code>#include</code> 的内容原样展开进来，再整体编译成一个目标文件。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[main.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; B[编译] --&gt; C[main.o]
-    D[math.cpp&lt;br&#x2F;&gt;+ 展开的头文件内容] --&gt; E[编译] --&gt; F[math.o]
-</code>
-</pre>
-<p>理解编译单元是独立编译的，就能解释很多工程错误：比如函数定义写在头文件里，两个
-<code>.cpp</code>
-都包含它，那么两个编译单元各自生成了一份函数，链接时就出现<strong>重复定义</strong>。</p>
-<blockquote>
-<p>例外：<code>inline</code> 函数允许定义在头文件里，因为编译器对
-<code>inline</code> 有特殊处理，多个编译单元各有一份也不报错。</p>
-</blockquote>
-<h3 id="链接基础">🔗 链接基础</h3>
-<p>编译阶段每个 <code>.cpp</code>
-独立处理，互相不知道对方的存在；链接阶段链接器把各目标文件里的符号（函数名、变量名）对上号。</p>
-<table>
-<colgroup>
-<col style="width: 45%" />
-<col style="width: 27%" />
-<col style="width: 27%" />
-</colgroup>
-<thead>
-<tr>
-<th>链接错误</th>
-<th>原因</th>
-<th>解决</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>undefined reference</code>（未定义引用）</td>
-<td>声明了函数但没实现，或漏编译/漏链接了对应的 <code>.cpp</code></td>
-<td>补实现，或把对应 <code>.o</code>/源文件加进编译命令</td>
-</tr>
-<tr>
-<td><code>multiple definition</code>（重复定义）</td>
-<td>同一个函数/全局变量被定义了两份</td>
-<td>定义只留一处，或把定义移出头文件</td>
-</tr>
-<tr>
-<td>找不到库</td>
-<td><code>-l</code> 参数写错或库未安装</td>
-<td>检查库名和链接参数</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 漏掉 math.cpp 时，链接报 undefined reference to &#x27;add(int, int)&#x27;</span></span><br><span class="line">g++ main.cpp -o app</span><br></pre></td></tr></table></figure>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 正确：把 math.cpp 一起编译链接</span></span><br><span class="line">g++ main.cpp math.cpp -o app</span><br></pre></td></tr></table></figure>
-<h3 id="常见工程错误">⚠️ 常见工程错误</h3>
-<h4 id="循环包含">循环包含</h4>
-<p><code>a.h</code> 包含 <code>b.h</code>，<code>b.h</code> 又包含
-<code>a.h</code>，会形成死循环展开。include guard
-能挡住重复展开，但解决不了互相依赖本身。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// a.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> A_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;b.h&quot;</span>     <span class="comment">// a 依赖 b</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// b.h</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifndef</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> B_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;a.h&quot;</span>     <span class="comment">// b 又依赖 a —— 循环</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<p>优先用<strong>前置声明</strong>打破循环，或重新设计让依赖变成单向。</p>
-<h4 id="头文件写实现">头文件写实现</h4>
-<p>非 <code>inline</code> 的函数定义放在头文件里，两个 <code>.cpp</code>
-包含它，链接时就是重复定义：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// bad.h —— 不要这样写</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;    <span class="comment">// 定义在头文件里</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>正解是头文件只放声明，实现放 <code>.cpp</code>。</p>
-<p>但你可能见过头文件里直接写函数实现的代码，能这样是因为
-<code>inline</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math.h</span></span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span>     <span class="comment">// inline 函数可以定义在头文件里</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>inline</code>
-的字面意思是内联：告诉编译器这个函数很小，调用处可以直接把函数体展开，省去一次函数调用。不过在
-C++ 里，<code>inline</code>
-对本文更重要的含义是：<strong>它允许函数定义出现在头文件里</strong>，多个
-<code>.cpp</code>
-包含同一份定义也不会重复定义——链接器会把多份副本合并成一份。</p>
-<blockquote>
-<p>现代编译器对是否真的内联展开有自己的判断，<code>inline</code>
-更多是给编译器一个建议。对初学者来说，先记住：短小函数（比如
-getter/setter）可以加 <code>inline</code>
-放头文件；普通函数还是声明放头文件、实现放 <code>.cpp</code>。</p>
-</blockquote>
-<h4 id="全局变量重复定义">全局变量重复定义</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h —— 不要这样写</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;   <span class="comment">// 定义放头文件，每个包含它的 .cpp 各有一份</span></span><br></pre></td></tr></table></figure>
-<p>正解是头文件里只声明，源文件里定义：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// config.h</span></span><br><span class="line"><span class="keyword">extern</span> <span class="type">int</span> globalCount;    <span class="comment">// 声明：告诉编译器&quot;别处有定义&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// config.cpp</span></span><br><span class="line"><span class="type">int</span> globalCount = <span class="number">0</span>;       <span class="comment">// 定义：只此一份</span></span><br></pre></td></tr></table></figure>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>头文件里可以随便写实现</td>
-<td>非 <code>inline</code> 函数在头文件定义，多个 <code>.cpp</code>
-包含会重复定义</td>
-</tr>
-<tr>
-<td>include guard 和 <code>#pragma once</code> 只能二选一</td>
-<td>两种都可以，保持一种习惯即可</td>
-</tr>
-<tr>
-<td>每个 <code>.cpp</code> 要把所有头文件都 include 一遍</td>
-<td>最小包含，只用需要的</td>
-</tr>
-<tr>
-<td>链接错误也是编译器错误</td>
-<td>编译已通过，链接失败是符号重复或找不到</td>
-</tr>
-<tr>
-<td>全局变量定义放头文件没问题</td>
-<td>每个编译单元各有一份，链接报重复定义</td>
-</tr>
-<tr>
-<td><code>#include</code> 越多越好，反正不会错</td>
-<td>增加编译依赖和冲突面，保持最小包含</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>多文件工程的骨架是头文件放声明、源文件放实现；每个 <code>.cpp</code>
-独立编译成目标文件，链接器负责把符号拼起来；头文件要加 include
-guard、保持最小包含，警惕重复定义和循环包含。</p>
-</blockquote>
-<p>到这一章，从第 1 章的编译流程到现在的多文件工程，已经把 C/C++
-工程的最小骨架走通了。下一步自然是第 1 章总结里提到的构建工具——用 CMake
-管理这些编译命令。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>头文件</tag>
-        <tag>编译单元</tag>
-        <tag>链接</tag>
-        <tag>工程结构</tag>
       </tags>
   </entry>
   <entry>
@@ -22749,228 +22749,6 @@ class="uri">https://os.phil-opp.com/</a></li>
       </tags>
   </entry>
   <entry>
-    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
-    <url>/posts/a5117577/</url>
-    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
-只是地图上的一种东西。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
-href="/posts/5d0b788d/">Rust OS
-入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
-需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
-为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
-</blockquote>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>物理内存（Physical Memory）</td>
-<td>真正的 RAM 硬件</td>
-<td>可读写的存储芯片</td>
-</tr>
-<tr>
-<td>物理地址（Physical Address）</td>
-<td>CPU 访问物理资源时产生的地址</td>
-<td>不一定是 RAM 的地址</td>
-</tr>
-<tr>
-<td>物理地址空间（Physical Address Space）</td>
-<td>CPU 眼中全部地址的集合</td>
-<td>一张地址地图，RAM 只是其中一种</td>
-</tr>
-<tr>
-<td>MMIO（Memory-Mapped I/O）</td>
-<td>把设备寄存器映射进地址空间</td>
-<td>读写内存 = 操作硬件</td>
-</tr>
-<tr>
-<td>Memory Map</td>
-<td>记录地址区域用途的地图</td>
-<td>Kernel 靠它分辨能碰/不能碰</td>
-</tr>
-<tr>
-<td>Reserved</td>
-<td>地址空间里存在但 OS 不能用的区域</td>
-<td>千万别拿来当 RAM</td>
-</tr>
-<tr>
-<td>虚拟地址（Virtual Address）</td>
-<td>程序看到的地址，经 MMU 翻译</td>
-<td>程序眼里的地址是假的</td>
-</tr>
-</tbody>
-</table>
-<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
-<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
-RAM，那确实很简单：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
-<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
-时产生的地址叫<strong>物理地址（Physical
-Address）</strong>，而<strong>这个地址背后的东西不一定是
-RAM</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
-只是其中一种资源。</strong></p>
-</blockquote>
-<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
-<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
-<p>逐个来看：</p>
-<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
-本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
-<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
-附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
-访问它时路径是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
-<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
-ROM</strong>。</p>
-<p><strong>MMIO</strong>：见下一节。</p>
-<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
-<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
-<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
-的思想很简单：</p>
-<blockquote>
-<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
-</blockquote>
-<p>硬件工程师的思路是：CPU 本来就有读地址 /
-写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
-就不需要额外的指令来访问设备了。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
-<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
-<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
-附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
-MMIO，只是地址和机制更复杂。</p>
-<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
-<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
-<ul>
-<li>被硬件使用</li>
-<li>被固件使用</li>
-<li>对应 MMIO</li>
-<li>有特殊用途</li>
-<li>芯片组保留区域</li>
-</ul>
-<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
-<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
-= 硬件。</p>
-<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
-Map：Bootloader 为什么要传给 Kernel</h3>
-<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
-Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
-不能靠猜</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
-<p>它需要一张地图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
-<p>整个启动链路串起来就是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
-<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
-Allocator</h3>
-<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
-为例，下一步就是 <strong>Frame
-Allocator（物理页帧分配器）</strong>：</p>
-<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
-是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
-frame</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
-<p>之后所有内存需求都从这里申请：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
-<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
-Memory</strong> 就是接下来最自然的学习路线。</p>
-<h3 id="虚拟地址程序看到的地址是假的">🕳️
-虚拟地址：程序看到的地址是假的</h3>
-<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
-<p>通常<strong>并不是 RAM
-的物理地址</strong>，而是<strong>虚拟地址（Virtual
-Address）</strong>。现代操作系统的地址翻译链路是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
-<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
-<code>0x7FFF0000</code>，实际过程是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
-<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
-个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>层级</th>
-<th>内容</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>第一层：虚拟地址空间</td>
-<td>程序看到的地址</td>
-<td><code>0x7FFF0000</code></td>
-</tr>
-<tr>
-<td>第二层：物理地址空间</td>
-<td>MMU 翻译后的地址</td>
-<td><code>0x12345000</code></td>
-</tr>
-<tr>
-<td>第三层：真正的硬件</td>
-<td>地址最终对应的东西</td>
-<td>RAM / MMIO / Firmware / Reserved</td>
-</tr>
-</tbody>
-</table>
-<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
-<ul>
-<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
-Stack/Heap、Page Tables、各进程的
-Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
-<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
-RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
-控制区域等。</li>
-</ul>
-<p><strong>这两处提到的内存内容不是一回事。</strong></p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
-只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
-分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
-Allocator，进而进入虚拟内存的世界。</p>
-</blockquote>
-<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
-Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
-Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>内存管理</tag>
-        <tag>物理地址</tag>
-        <tag>MMIO</tag>
-        <tag>Memory Map</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Rust OS 入门：从按下电源键到内核接管</title>
     <url>/posts/5d0b788d/</url>
     <content><![CDATA[<p>按下电源键时，RAM
@@ -23388,6 +23166,228 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
         <tag>实模式</tag>
         <tag>Rust</tag>
         <tag>Bootloader</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
+    <url>/posts/a5117577/</url>
+    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
+只是地图上的一种东西。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
+href="/posts/5d0b788d/">Rust OS
+入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
+需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
+</blockquote>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理内存（Physical Memory）</td>
+<td>真正的 RAM 硬件</td>
+<td>可读写的存储芯片</td>
+</tr>
+<tr>
+<td>物理地址（Physical Address）</td>
+<td>CPU 访问物理资源时产生的地址</td>
+<td>不一定是 RAM 的地址</td>
+</tr>
+<tr>
+<td>物理地址空间（Physical Address Space）</td>
+<td>CPU 眼中全部地址的集合</td>
+<td>一张地址地图，RAM 只是其中一种</td>
+</tr>
+<tr>
+<td>MMIO（Memory-Mapped I/O）</td>
+<td>把设备寄存器映射进地址空间</td>
+<td>读写内存 = 操作硬件</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>记录地址区域用途的地图</td>
+<td>Kernel 靠它分辨能碰/不能碰</td>
+</tr>
+<tr>
+<td>Reserved</td>
+<td>地址空间里存在但 OS 不能用的区域</td>
+<td>千万别拿来当 RAM</td>
+</tr>
+<tr>
+<td>虚拟地址（Virtual Address）</td>
+<td>程序看到的地址，经 MMU 翻译</td>
+<td>程序眼里的地址是假的</td>
+</tr>
+</tbody>
+</table>
+<h3 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h3>
+<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
+RAM，那确实很简单：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
+<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
+时产生的地址叫<strong>物理地址（Physical
+Address）</strong>，而<strong>这个地址背后的东西不一定是
+RAM</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
+只是其中一种资源。</strong></p>
+</blockquote>
+<h3 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h3>
+<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
+<p>逐个来看：</p>
+<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
+本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
+<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
+附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
+访问它时路径是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
+<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
+ROM</strong>。</p>
+<p><strong>MMIO</strong>：见下一节。</p>
+<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
+<h3 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h3>
+<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
+的思想很简单：</p>
+<blockquote>
+<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
+</blockquote>
+<p>硬件工程师的思路是：CPU 本来就有读地址 /
+写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
+就不需要额外的指令来访问设备了。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
+<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
+<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
+附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
+MMIO，只是地址和机制更复杂。</p>
+<h3 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h3>
+<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
+<ul>
+<li>被硬件使用</li>
+<li>被固件使用</li>
+<li>对应 MMIO</li>
+<li>有特殊用途</li>
+<li>芯片组保留区域</li>
+</ul>
+<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
+<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
+= 硬件。</p>
+<h3 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</h3>
+<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
+Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
+不能靠猜</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
+<p>它需要一张地图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>整个启动链路串起来就是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
+<h3 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
+Allocator</h3>
+<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
+为例，下一步就是 <strong>Frame
+Allocator（物理页帧分配器）</strong>：</p>
+<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
+是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
+frame</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
+<p>之后所有内存需求都从这里申请：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
+<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
+Memory</strong> 就是接下来最自然的学习路线。</p>
+<h3 id="虚拟地址程序看到的地址是假的">🕳️
+虚拟地址：程序看到的地址是假的</h3>
+<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
+<p>通常<strong>并不是 RAM
+的物理地址</strong>，而是<strong>虚拟地址（Virtual
+Address）</strong>。现代操作系统的地址翻译链路是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
+<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
+<code>0x7FFF0000</code>，实际过程是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
+<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
+个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一层：虚拟地址空间</td>
+<td>程序看到的地址</td>
+<td><code>0x7FFF0000</code></td>
+</tr>
+<tr>
+<td>第二层：物理地址空间</td>
+<td>MMU 翻译后的地址</td>
+<td><code>0x12345000</code></td>
+</tr>
+<tr>
+<td>第三层：真正的硬件</td>
+<td>地址最终对应的东西</td>
+<td>RAM / MMIO / Firmware / Reserved</td>
+</tr>
+</tbody>
+</table>
+<h3 id="一张图串起全部">🎨 一张图串起全部</h3>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
+<ul>
+<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
+Stack/Heap、Page Tables、各进程的
+Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
+<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
+RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
+控制区域等。</li>
+</ul>
+<p><strong>这两处提到的内存内容不是一回事。</strong></p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
+只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
+分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
+Allocator，进而进入虚拟内存的世界。</p>
+</blockquote>
+<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
+Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
+Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>内存管理</tag>
+        <tag>物理地址</tag>
+        <tag>MMIO</tag>
+        <tag>Memory Map</tag>
       </tags>
   </entry>
   <entry>
@@ -26766,7 +26766,7 @@ Qwen2.5-0.5B-Instruct 和 GPT-2 的公开 <code>tokenizer.json</code>。</p>
 </table>
 <h2 id="一次推理里数据长什么样">🧭 一次推理里，数据长什么样</h2>
 <p>先看全景。下面这条链路上每一层的输出形态都不一样，后面每一节都对应其中的一段：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ tokenizer.encode()</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">用户输入的文字</span><br><span class="line">   ↓ UTF-8 编码（本文那句 prompt：32 个字符 → 68 字节）</span><br><span class="line">字节</span><br><span class="line">   ↓ tokenizer.encode()：BPE 合并 + 查表</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Token IDs    │  ← 19 个整数，4 字节一个，共 76 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ PCIe / DMA</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Embedding    │  ← 查表得到 19 x 896 的向量，bf16 共 33 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Transformer  │  ← 24 层，注意力 + FFN 反复变换这些向量</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ LM Head      │  ← 896 维映射到 151936 维</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ softmax</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Logits       │  ← 151936 个数，fp32 约 594 KiB</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 采样</span><br><span class="line">┌──────────────┐</span><br><span class="line">│ Next Token   │  ← 1 个 id，4 B</span><br><span class="line">└──────┬───────┘</span><br><span class="line">       ↓ 追加进上下文，回到 Embedding 继续下一轮</span><br><span class="line">   ...（循环到停止条件）</span><br><span class="line">       ↓ tokenizer.decode()：id → 字节 → 拼接 → UTF-8</span><br><span class="line">回答的文字</span><br></pre></td></tr></table></figure>
 <p>能看出来整条链上的数量级变化：<strong>76 B 的编号 → 33 KiB 的向量 →
 594 KiB 的分数 → 又是 4 B
 的编号</strong>。抓包看到的往往是两头的小数据，中间的大块计算留在显存里。</p>
@@ -26833,6 +26833,49 @@ token；GPT-2 的 50257 条里已经包含了
 <p><strong>初始单位是 256 个字节，不是字符</strong>。这是 byte-level BPE
 的关键：任何文本（汉字、emoji、二进制残留）先转成 UTF-8 字节，都能被这
 256 个基本单位表示，于是永远不会有 OOV，也永远能还原。</p>
+<h3 id="从文字到字节再到-token">从文字到字节，再到 token</h3>
+<p>这几个层次容易混在一起，拿 你好 两个字过一遍就清楚了：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你看到的文字：你好</span><br><span class="line">   ↓ UTF-8 编码，一个汉字 3 个字节</span><br><span class="line">字节：e4 bd a0 e5 a5 bd</span><br><span class="line">   ↓ byte-level BPE 按频率合并字节对</span><br><span class="line">token：ä½łå¥½                      ← 词表里正好有这一整块</span><br><span class="line">   ↓ 查词表</span><br><span class="line">token id：108386</span><br><span class="line">   ↓</span><br><span class="line">模型真正看到的：108386</span><br></pre></td></tr></table></figure>
+<p>同一段文字，不同模型切出来的结果差得很多（实测）：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>token 数</th>
+<th>切出来的片段</th>
+<th>对应 id</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen2.5</td>
+<td>1</td>
+<td><code>ä½łå¥½</code>（整块 你好）</td>
+<td>108386</td>
+</tr>
+<tr>
+<td>GPT-2</td>
+<td>4</td>
+<td><code>ä½</code> <code>ł</code> <code>å¥</code> <code>½</code></td>
+<td>19526 / 254 / 25001 / 121</td>
+</tr>
+</tbody>
+</table>
+<p>Qwen2.5 词表里把 你好 当成一个整体，一个 token 装下两个字；GPT-2
+词表里几乎没有中文，只能退回字节，6 个字节被切成 4 段——你 的三个字节
+<code>e4 bd a0</code> 被拆成了 <code>e4 bd</code> 和 <code>a0</code>
+两段。</p>
+<p>三点值得记住：</p>
+<ul>
+<li><strong>字节层是永远有路可退的那一层</strong>。词表里没有的字符，BPE
+就退回单字节表示，所以任何文本都能编码，也都能还原——后面关于可逆性的讨论都建立在这上面。</li>
+<li><strong>token 数不等于字符数</strong>。同样两个汉字，Qwen2.5 用 1 个
+token，GPT-2 要 4 个。</li>
+<li><strong>模型看到的只有 id</strong>。文字、字节、token
+片段都是中间形态，真正进网络的是 108386 这个整数。</li>
+</ul>
+<p>抓包时能看到的也是最后那一层：一串 id。要把它变回文字，靠的就是从 id
+反查回字节的那张表。</p>
 <h3 id="一次真实切分">一次真实切分</h3>
 <p>拿一句中英混合的话做实验：</p>
 <figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> tokenizers <span class="keyword">import</span> Tokenizer</span><br><span class="line"></span><br><span class="line">tok = Tokenizer.from_file(<span class="string">&quot;qwen.json&quot;</span>)</span><br><span class="line">enc = tok.encode(<span class="string">&quot;PCIe 链路上抓到的 token id，能还原出原来的问题吗？&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(enc.ids), enc.ids[:<span class="number">8</span>], enc.tokens[:<span class="number">5</span>])</span><br><span class="line"><span class="comment"># 19 [53702, 68, 18137, 241, 122, 100309, 99745, 26939] [&#x27;PCI&#x27;, &#x27;e&#x27;, &#x27;Ġé&#x27;, &#x27;ĵ&#x27;, &#x27;¾&#x27;]</span></span><br></pre></td></tr></table></figure>
