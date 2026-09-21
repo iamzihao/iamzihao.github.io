@@ -30,7 +30,7 @@
 <meta property="og:description" content="链路上抓到一串整数时，它很可能就是 token id——大模型不认字，只认编号。要把这串编号变回人能读的文本，需要的只是一张 id 到字节 的对照表，本文称之为转换表；而这张表在不同模型之间并不通用。 本文的落点就是反查这一步。为了讲清它，前面会先把编码侧的形态走一遍（文字 → UTF-8 字节 → token → id），中间说明 id 进 GPU 之后发生了什么——那部分只是背景，反查用不到模">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-17T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-17T08:52:45.280Z">
+<meta property="article:modified_time" content="2026-09-21T02:58:42.102Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="LLM">
 <meta property="article:tag" content="PCIe">
@@ -263,9 +263,15 @@ decode：两种流量形态</span></a></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-09-17 11:00:00 / Modified: 16:52:45" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+      <time title="Created: 2026-09-17 11:00:00" itemprop="dateCreated datePublished" datetime="2026-09-17T11:00:00+08:00">2026-09-17</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-09-21 10:58:42" itemprop="dateModified" datetime="2026-09-21T10:58:42+08:00">2026-09-21</time>
     </span>
 
   
@@ -638,8 +644,9 @@ BPE token 硬拆成字节。GPT-2
 字节）：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Token IDs  [53702, 68, 18137, ...]</span><br><span class="line">     │</span><br><span class="line">     │ 每个 id 当行号，取出表里对应的一行</span><br><span class="line">     ↓</span><br><span class="line">┌────────────────────────────────┐</span><br><span class="line">│ Embedding Table   151936 x 896 │  ← 权重的一部分，加载时一次性搬进显存</span><br><span class="line">│  row 53702  -&gt; vector 0        │</span><br><span class="line">│  row 68     -&gt; vector 1        │</span><br><span class="line">│  row 18137  -&gt; vector 2        │</span><br><span class="line">└───────────────┬────────────────┘</span><br><span class="line">                ↓</span><br><span class="line">           19 x 896 矩阵</span><br></pre></td></tr></table></figure>
 <p>整张表按 bfloat16 算是 259.7 MiB（151936 x 896 x 2 B），比链路上那 76
-字节的 id 大了好几个数量级。这一步在实现上是 <strong>gather
-而不是矩阵乘法</strong>：id 就是行号，取哪几行完全由 id 决定。</p>
+字节的 id 大了好几个数量级。这一步在实现上是
+<strong>gather（按索引取数，<code>out[i] = table[ids[i]]</code>）而不是矩阵乘法</strong>：id
+就是行号，取出对应的那几行即可，不需要任何乘法。</p>
 <h3 id="从-id-到下一个-id">从 id 到下一个 id</h3>
 <p>embedding 的输出是一张 n_tokens x 896 的矩阵，之后穿过 24 层
 Transformer，最后一个位置的向量过 <strong>LM
@@ -1062,7 +1069,7 @@ href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">13:30</span>
+    <span title="Reading time total">13:31</span>
   </span>
 </div>
 <div class="busuanzi-count">
