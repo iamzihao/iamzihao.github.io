@@ -8396,88 +8396,6 @@ index）或轮数（epoch index）。</li>
       </tags>
   </entry>
   <entry>
-    <title>了解RNN</title>
-    <url>/posts/da4b49ae/</url>
-    <content><![CDATA[<p>卷积神经网络适合处理图片信息，那文字信息怎么办呢？首先要明白，对于计算机，或者说神经网络来说，文字都是要转换为数字之后再进行处理的。那么我们要面对的第一个问题就是：如何将文字转换为数字？</p>
-<span id="more"></span>
-<h2 id="文字转数字的朴素思想">文字转数字的朴素思想</h2>
-<p>有一种简单粗暴的方法：每一个文字或词组都用一个数字来代表，建一个非常大的映射关系表。</p>
-<p>但这样有几个显而易见的缺点：</p>
-<ol type="1">
-<li>只用一个数字表示，不仅要建的表很大，维度也很低（只有一维）。</li>
-<li>数字和数字之间无法表示字与字、词与词之间的联系。</li>
-</ol>
-<p>为了解决维度低的问题，有人提出了 <strong>one-hot
-编码</strong>，即准备一个维度非常高的向量，每个字只有向量中一个位置是
-1，其余全是
-0。虽然维度低的问题被解决了，但是维度好像又太高了，并且依然没有解决之前的第二个问题。</p>
-<h2 id="更好的方案词嵌入">更好的方案：词嵌入</h2>
-<p>那有没有能解决以上两种问题的方法呢？有的，这种方法就是
-<strong>词嵌入（Word Embedding）</strong>。</p>
-<p><img src="/assets/image-20251010224631451.png" /></p>
-<p>通过词嵌入的方式得到的词向量，维度不高不低，每个位置可以理解为一个特征值，但这个特征是通过训练得到的，我们并不知道代表着什么。那这种方式如何表示词与词之间的语义相关性呢？可以用两个向量的点积或余弦相似度来表示向量之间的相关性，进而表示词语之间的相关性。</p>
-<p>这样就将自然语言之间的联系转为可以用数学公式计算的方式。同时，一些数学上的计算结果可能反映出一些很微妙的关系，例如一个训练好的词嵌入矩阵，很可能使得
-<code>桌子 - 椅子 = 鼠标 - 键盘</code>。</p>
-<p>把所有词向量组成一个大矩阵，这个大矩阵就叫做
-<strong>嵌入矩阵</strong>，每一列表示一个词向量。</p>
-<p>矩阵中的值由训练得到，比较经典的方法是
-word2vec，这里不展开讲解。虽然这样表示的维度比起 one-hot
-已经大大下降，但是也超过了人能直接理解的二维、三维，我们管这些向量所在的空间叫做
-<strong>潜空间</strong>。</p>
-<p>我们无法理解潜空间中的位置关系，但是也有一些方法能够把潜空间降维至
-2-3 维，方便我们直观看到词与词之间的关系。</p>
-<h2 id="rnn-如何处理序列信息">RNN 如何处理序列信息</h2>
-<p>这样我们的第一个问题就算是解决了，我们可以用词嵌入的方法将文本转为数据，但这样就可以了吗？举个例子，一句话中的五个词转为
-5 个词向量，每个词向量假设为 300 维度，那么输入层就要有 1500
-个神经元。当然是可以的，但是有两个新问题：</p>
-<ol type="1">
-<li>输入层太大了，并且长度不固定；</li>
-<li>无法体现词语的先后顺序，参考之前无法体现图片像素的位置关系。</li>
-</ol>
-<p>在之前的图像处理中，我们可以通过卷积的方式来解决这一问题，那现在呢？</p>
-<p>让我们回到经典的神经网络，但是不是一次输入一句话，而是输入一个词。</p>
-<p>可以发现在第二个词的计算过程中，完全没有让第一个词的任何信息参与进来，怎么办呢？我们可以让它先输出一个隐藏状态，然后再经过一次非线性变换，得到输出
-Y。这就是 <strong>循环神经网络 RNN（Recurrent Neural
-Network）</strong>。</p>
-<p><img src="/assets/image-20251010224853203.png" /></p>
-<p>这个 RNN
-模型就具备了理解词与词之间先后顺序的能力，可以判断一句话中各个单词的褒贬词性，还能给出一句话，不断生成下一个字，以及完成翻译等自然语言处理工作。</p>
-<p><img src="/assets/image-20251010224930822.png" /></p>
-<h2 id="rnn-的局限性">RNN 的局限性</h2>
-<p>那么 RNN 是否就完美了呢？当然不，RNN 依旧存在两个问题：</p>
-<ol type="1">
-<li><strong>长期依赖问题</strong>：信息会随着时间步的增多而逐渐丢失，无法捕捉长期依赖，而有的语句的关键信息恰好在很远的地方。</li>
-<li><strong>顺序处理限制</strong>：RNN
-必须顺序处理，每个时间步必须依赖上一个时间步的隐藏状态的计算结果，这限制了并行计算的能力。</li>
-</ol>
-<p>为了解决这些问题，研究者们提出了多种 RNN 的变体。其中最著名的就是
-<strong>长短期记忆网络（LSTM）</strong> 和
-<strong>门控循环单元（GRU）</strong>。</p>
-<ul>
-<li><strong>LSTM</strong>：通过引入“门”机制（输入门、遗忘门、输出门）来控制信息的流动。这使得网络可以有选择地学习、记忆或遗忘信息，从而更好地捕捉序列中的长期依赖关系。</li>
-<li><strong>GRU</strong>：作为 LSTM
-的一种简化变体，它将输入门和遗忘门合并为“更新门”，并引入了“重置门”。GRU
-的结构更简单，计算效率更高，在许多任务上也能取得与 LSTM
-相近的效果。</li>
-</ul>
-<p>这些改进在很大程度上缓解了 RNN
-的梯度消失问题，但它们仍然需要按顺序处理数据，未能解决并行计算的限制。那么，是否有一个可以彻底抛弃按顺序计算的新方案呢？</p>
-<p>有的，那就是 <strong>Transformer</strong>！</p>
-<blockquote>
-<p>参考自 <a
-href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
-飞天闪客</a></p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
-        <tag>RNN</tag>
-        <tag>NLP</tag>
-        <tag>词嵌入</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>pytorch train 模板</title>
     <url>/posts/14ba9e2c/</url>
     <content><![CDATA[<p>本文提供了一个完整、通用的 PyTorch
@@ -8708,6 +8626,88 @@ href="https://www.bilibili.com/video/BV1hE411t7RN?spm_id_from=333.788.videopod.e
         <tag>深度学习</tag>
         <tag>AI</tag>
         <tag>训练模板</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>了解RNN</title>
+    <url>/posts/da4b49ae/</url>
+    <content><![CDATA[<p>卷积神经网络适合处理图片信息，那文字信息怎么办呢？首先要明白，对于计算机，或者说神经网络来说，文字都是要转换为数字之后再进行处理的。那么我们要面对的第一个问题就是：如何将文字转换为数字？</p>
+<span id="more"></span>
+<h2 id="文字转数字的朴素思想">文字转数字的朴素思想</h2>
+<p>有一种简单粗暴的方法：每一个文字或词组都用一个数字来代表，建一个非常大的映射关系表。</p>
+<p>但这样有几个显而易见的缺点：</p>
+<ol type="1">
+<li>只用一个数字表示，不仅要建的表很大，维度也很低（只有一维）。</li>
+<li>数字和数字之间无法表示字与字、词与词之间的联系。</li>
+</ol>
+<p>为了解决维度低的问题，有人提出了 <strong>one-hot
+编码</strong>，即准备一个维度非常高的向量，每个字只有向量中一个位置是
+1，其余全是
+0。虽然维度低的问题被解决了，但是维度好像又太高了，并且依然没有解决之前的第二个问题。</p>
+<h2 id="更好的方案词嵌入">更好的方案：词嵌入</h2>
+<p>那有没有能解决以上两种问题的方法呢？有的，这种方法就是
+<strong>词嵌入（Word Embedding）</strong>。</p>
+<p><img src="/assets/image-20251010224631451.png" /></p>
+<p>通过词嵌入的方式得到的词向量，维度不高不低，每个位置可以理解为一个特征值，但这个特征是通过训练得到的，我们并不知道代表着什么。那这种方式如何表示词与词之间的语义相关性呢？可以用两个向量的点积或余弦相似度来表示向量之间的相关性，进而表示词语之间的相关性。</p>
+<p>这样就将自然语言之间的联系转为可以用数学公式计算的方式。同时，一些数学上的计算结果可能反映出一些很微妙的关系，例如一个训练好的词嵌入矩阵，很可能使得
+<code>桌子 - 椅子 = 鼠标 - 键盘</code>。</p>
+<p>把所有词向量组成一个大矩阵，这个大矩阵就叫做
+<strong>嵌入矩阵</strong>，每一列表示一个词向量。</p>
+<p>矩阵中的值由训练得到，比较经典的方法是
+word2vec，这里不展开讲解。虽然这样表示的维度比起 one-hot
+已经大大下降，但是也超过了人能直接理解的二维、三维，我们管这些向量所在的空间叫做
+<strong>潜空间</strong>。</p>
+<p>我们无法理解潜空间中的位置关系，但是也有一些方法能够把潜空间降维至
+2-3 维，方便我们直观看到词与词之间的关系。</p>
+<h2 id="rnn-如何处理序列信息">RNN 如何处理序列信息</h2>
+<p>这样我们的第一个问题就算是解决了，我们可以用词嵌入的方法将文本转为数据，但这样就可以了吗？举个例子，一句话中的五个词转为
+5 个词向量，每个词向量假设为 300 维度，那么输入层就要有 1500
+个神经元。当然是可以的，但是有两个新问题：</p>
+<ol type="1">
+<li>输入层太大了，并且长度不固定；</li>
+<li>无法体现词语的先后顺序，参考之前无法体现图片像素的位置关系。</li>
+</ol>
+<p>在之前的图像处理中，我们可以通过卷积的方式来解决这一问题，那现在呢？</p>
+<p>让我们回到经典的神经网络，但是不是一次输入一句话，而是输入一个词。</p>
+<p>可以发现在第二个词的计算过程中，完全没有让第一个词的任何信息参与进来，怎么办呢？我们可以让它先输出一个隐藏状态，然后再经过一次非线性变换，得到输出
+Y。这就是 <strong>循环神经网络 RNN（Recurrent Neural
+Network）</strong>。</p>
+<p><img src="/assets/image-20251010224853203.png" /></p>
+<p>这个 RNN
+模型就具备了理解词与词之间先后顺序的能力，可以判断一句话中各个单词的褒贬词性，还能给出一句话，不断生成下一个字，以及完成翻译等自然语言处理工作。</p>
+<p><img src="/assets/image-20251010224930822.png" /></p>
+<h2 id="rnn-的局限性">RNN 的局限性</h2>
+<p>那么 RNN 是否就完美了呢？当然不，RNN 依旧存在两个问题：</p>
+<ol type="1">
+<li><strong>长期依赖问题</strong>：信息会随着时间步的增多而逐渐丢失，无法捕捉长期依赖，而有的语句的关键信息恰好在很远的地方。</li>
+<li><strong>顺序处理限制</strong>：RNN
+必须顺序处理，每个时间步必须依赖上一个时间步的隐藏状态的计算结果，这限制了并行计算的能力。</li>
+</ol>
+<p>为了解决这些问题，研究者们提出了多种 RNN 的变体。其中最著名的就是
+<strong>长短期记忆网络（LSTM）</strong> 和
+<strong>门控循环单元（GRU）</strong>。</p>
+<ul>
+<li><strong>LSTM</strong>：通过引入“门”机制（输入门、遗忘门、输出门）来控制信息的流动。这使得网络可以有选择地学习、记忆或遗忘信息，从而更好地捕捉序列中的长期依赖关系。</li>
+<li><strong>GRU</strong>：作为 LSTM
+的一种简化变体，它将输入门和遗忘门合并为“更新门”，并引入了“重置门”。GRU
+的结构更简单，计算效率更高，在许多任务上也能取得与 LSTM
+相近的效果。</li>
+</ul>
+<p>这些改进在很大程度上缓解了 RNN
+的梯度消失问题，但它们仍然需要按顺序处理数据，未能解决并行计算的限制。那么，是否有一个可以彻底抛弃按顺序计算的新方案呢？</p>
+<p>有的，那就是 <strong>Transformer</strong>！</p>
+<blockquote>
+<p>参考自 <a
+href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
+飞天闪客</a></p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+        <tag>RNN</tag>
+        <tag>NLP</tag>
+        <tag>词嵌入</tag>
       </tags>
   </entry>
   <entry>
@@ -19828,535 +19828,6 @@ guard、保持最小包含，警惕重复定义和循环包含。</p>
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：运算符重载与静态成员</title>
-    <url>/posts/e2c8a5f6/</url>
-    <content><![CDATA[<p>类的成员不只是数据和函数：还能让自定义类型的对象像 <code>int</code>
-一样用
-<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>，也能让某些成员属于类而不是某个对象。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>运算符重载（operator overloading）</td>
-<td>给自定义类型定义运算符的行为</td>
-<td>对象也能加减比较</td>
-</tr>
-<tr>
-<td><code>operator+</code></td>
-<td>重载 <code>+</code> 运算符的成员函数</td>
-<td>定义加法</td>
-</tr>
-<tr>
-<td><code>operator&lt;&lt;</code></td>
-<td>重载输出运算符</td>
-<td>对象直接 cout</td>
-</tr>
-<tr>
-<td><code>operator==</code></td>
-<td>重载相等比较</td>
-<td>定义相等</td>
-</tr>
-<tr>
-<td>静态成员变量</td>
-<td>属于类而不是某个对象的变量</td>
-<td>全类共享一份</td>
-</tr>
-<tr>
-<td>静态成员函数</td>
-<td>不依赖具体对象、用类名调用的函数</td>
-<td>类级操作</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么需要运算符重载">🧩 为什么需要运算符重载</h3>
-<p>没有运算符重载时，比较两个自定义对象要写函数调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point a&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">Point b&#123;<span class="number">3</span>, <span class="number">4</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Point c = a + b;          // 不支持：+ 不知道 Point 怎么加</span></span><br><span class="line">Point c = <span class="built_in">add</span>(a, b);          <span class="comment">// 只能这样</span></span><br></pre></td></tr></table></figure>
-<p>运算符重载让自定义类型用起来像内置类型，代码更直观：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point c = a + b;              <span class="comment">// 直观</span></span><br><span class="line"><span class="keyword">if</span> (a == b) &#123; ... &#125;           <span class="comment">// 直接比较</span></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;            <span class="comment">// 直接输出</span></span><br></pre></td></tr></table></figure>
-<h3 id="运算符重载基础">➕ 运算符重载基础</h3>
-<p>重载运算符的成员函数写法：<code>operator</code> 后跟运算符符号。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 +：返回两个点坐标相加的新点</span></span><br><span class="line">    Point <span class="keyword">operator</span>+(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">Point</span>(x + other.x, y + other.y);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 ==：坐标都相等才算相等</span></span><br><span class="line">    <span class="type">bool</span> <span class="keyword">operator</span>==(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> x == other.x &amp;&amp; y == other.y;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">a</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    <span class="function">Point <span class="title">b</span><span class="params">(<span class="number">3</span>, <span class="number">4</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    Point c = a + b;              <span class="comment">// 调用 a.operator+(b)</span></span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; c.<span class="built_in">getY</span>() &lt;&lt; endl;   <span class="comment">// 4 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (a == b) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;不相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>关键点：</p>
-<ol type="1">
-<li><code>operator+</code> 是成员函数，<code>a + b</code> 等价于调用
-<code>a.operator+(b)</code>，左操作数就是 <code>this</code>；</li>
-<li>返回新对象而不是修改自身；</li>
-<li><code>const</code> 成员函数保证比较或加法不修改对象。</li>
-</ol>
-<h3 id="重载输出运算符">🖨️ 重载输出运算符 <code>&lt;&lt;</code></h3>
-<p><code>&lt;&lt;</code> 不能作为成员函数重载（左操作数是
-<code>cout</code>，不是我们的类），要写成<strong>非成员函数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 非成员函数：左操作数是 ostream&amp;，右操作数是 Point</span></span><br><span class="line">ostream&amp; <span class="keyword">operator</span>&lt;&lt;(ostream&amp; out, <span class="type">const</span> Point&amp; p)</span><br><span class="line">&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;(&quot;</span> &lt;&lt; p.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; p.<span class="built_in">getY</span>() &lt;&lt; <span class="string">&quot;)&quot;</span>;</span><br><span class="line">    <span class="keyword">return</span> out;   <span class="comment">// 返回 out 才能连续输出</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">p</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; p &lt;&lt; endl;          <span class="comment">// (1, 2)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>返回 <code>ostream&amp;</code>
-是为了支持链式输出：<code>cout &lt;&lt; p &lt;&lt; " " &lt;&lt; q</code>。</p>
-<h3 id="重载下标运算符">🧮 重载下标运算符 <code>[]</code></h3>
-<p>容器类常用，比如让自定义类能像数组一样按下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">IntArray</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> data[<span class="number">10</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>&amp; <span class="keyword">operator</span>[](<span class="type">int</span> index)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> data[index];   <span class="comment">// 返回引用，才能赋值</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">IntArray arr;</span><br><span class="line">arr[<span class="number">3</span>] = <span class="number">42</span>;                   <span class="comment">// 调用 operator[]</span></span><br><span class="line">cout &lt;&lt; arr[<span class="number">3</span>] &lt;&lt; endl;        <span class="comment">// 42</span></span><br></pre></td></tr></table></figure>
-<h3 id="静态成员变量">🧱 静态成员变量</h3>
-<p>静态成员变量<strong>属于类</strong>，所有对象共享同一份，而不是每个对象各有一份。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Counter</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">static</span> <span class="type">int</span> count;          <span class="comment">// 声明：属于类的变量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Counter</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        count++;               <span class="comment">// 每创建一个对象，计数加一</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">getCount</span><span class="params">()</span>      <span class="comment">// 静态成员函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> count;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 类外定义并初始化：静态成员变量必须在这里给一次定义</span></span><br><span class="line"><span class="type">int</span> Counter::count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Counter a;</span><br><span class="line">    Counter b;</span><br><span class="line">    Counter c;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; Counter::<span class="built_in">getCount</span>() &lt;&lt; endl;   <span class="comment">// 3，用类名调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>要点：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通成员变量</th>
-<th>静态成员变量</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>归属</td>
-<td>每个对象一份</td>
-<td>整个类共享一份</td>
-</tr>
-<tr>
-<td>访问</td>
-<td>通过对象</td>
-<td>通过类名 <code>类名::变量</code> 或对象</td>
-</tr>
-<tr>
-<td>定义</td>
-<td>类内自动创建</td>
-<td>需要在类外定义一次</td>
-</tr>
-</tbody>
-</table>
-<h3 id="静态成员函数">⚙️ 静态成员函数</h3>
-<p>静态成员函数不依赖具体对象，用类名直接调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MathUtils</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> x * x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> r = MathUtils::<span class="built_in">square</span>(<span class="number">5</span>);   <span class="comment">// 不需要创建对象</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>静态成员函数的限制：<strong>没有 <code>this</code>
-指针</strong>，所以不能访问普通成员变量（不知道操作哪个对象的），只能访问静态成员和其他静态函数。</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通成员函数</th>
-<th>静态成员函数</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>依赖对象</td>
-<td>是，有 <code>this</code></td>
-<td>否，没有 <code>this</code></td>
-</tr>
-<tr>
-<td>调用方式</td>
-<td>对象调用</td>
-<td>类名调用</td>
-</tr>
-<tr>
-<td>能访问普通成员</td>
-<td>能</td>
-<td>不能</td>
-</tr>
-<tr>
-<td>能访问静态成员</td>
-<td>能</td>
-<td>能</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>运算符重载是给内置类型用的</td>
-<td>内置类型运算符是固定的，重载只针对自定义类型</td>
-</tr>
-<tr>
-<td><code>&lt;&lt;</code> 重载必须是成员函数</td>
-<td><code>&lt;&lt;</code> 左操作数是流对象，要用非成员函数形式</td>
-</tr>
-<tr>
-<td>重载 <code>+</code> 应该修改左操作数</td>
-<td>通常返回新对象，<code>a + b</code> 不应改变 <code>a</code></td>
-</tr>
-<tr>
-<td>静态成员变量每个对象一份</td>
-<td>全类共享一份，且在类外定义一次</td>
-</tr>
-<tr>
-<td>静态成员函数能访问普通成员变量</td>
-<td>静态函数没有 <code>this</code>，只能访问静态成员</td>
-</tr>
-<tr>
-<td>重载运算符可以随便改语义</td>
-<td>应保持直觉语义（<code>+</code> 是加法、<code>==</code>
-是相等），别滥用</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>运算符重载让自定义类型用起来像内置类型（<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>、<code>[]</code>），静态成员让数据或操作属于类本身；两者的共同点是让类的表达力更强。</p>
-</blockquote>
-<p>这一章补上了类与对象（第 7
-章）之后的两块常用拼图。接下来无论是写容器类、工具类，还是做计数统计，都有了对应的语法。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>面向对象</tag>
-        <tag>运算符重载</tag>
-        <tag>静态成员</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：文件 IO 流</title>
-    <url>/posts/a7c2e9d4/</url>
-    <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
-stream）就是 C++ 读写文件的通道。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>文件流（file stream）</td>
-<td>把文件当成数据流的输入输出对象</td>
-<td>读写文件的通道</td>
-</tr>
-<tr>
-<td><code>ifstream</code></td>
-<td>输入文件流，从文件读数据</td>
-<td>读</td>
-</tr>
-<tr>
-<td><code>ofstream</code></td>
-<td>输出文件流，向文件写数据</td>
-<td>写</td>
-</tr>
-<tr>
-<td><code>fstream</code></td>
-<td>可读可写的文件流</td>
-<td>读写</td>
-</tr>
-<tr>
-<td>文本文件</td>
-<td>以字符形式存储，人能直接阅读</td>
-<td>记事本能打开</td>
-</tr>
-<tr>
-<td>二进制文件</td>
-<td>按内存中的字节原样存储</td>
-<td>紧凑、机器可读</td>
-</tr>
-<tr>
-<td>序列化（serialization）</td>
-<td>把对象转成可存储/传输的字节序列</td>
-<td>对象存盘</td>
-</tr>
-<tr>
-<td>反序列化（deserialization）</td>
-<td>从字节序列恢复出对象</td>
-<td>从盘恢复对象</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
-<p>之前用的 <code>cout</code>、<code>cin</code>
-是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[程序] --&gt; B[ofstream 输出流]
-    B --&gt; C[文件]
-    C --&gt; D[ifstream 输入流]
-    D --&gt; A
-</code>
-</pre>
-<table>
-<thead>
-<tr>
-<th>流对象</th>
-<th>头文件</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ifstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>从文件读</td>
-</tr>
-<tr>
-<td><code>ofstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>向文件写</td>
-</tr>
-<tr>
-<td><code>fstream</code></td>
-<td><code>&lt;fstream&gt;</code></td>
-<td>既读又写</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
-<h4 id="写文件ofstream">写文件：ofstream</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>ofstream</code>
-默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
-<h4 id="读文件ifstream">读文件：ifstream</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>close()</code>
-也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
-<code>close()</code>
-能让文件何时关闭更清晰，也方便在同一个作用域里重新打开别的文件。</p>
-</blockquote>
-<h4 id="常用打开模式">常用打开模式</h4>
-<table>
-<thead>
-<tr>
-<th>模式</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ios::in</code></td>
-<td>读模式（<code>ifstream</code> 默认）</td>
-</tr>
-<tr>
-<td><code>ios::out</code></td>
-<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
-</tr>
-<tr>
-<td><code>ios::app</code></td>
-<td>追加写</td>
-</tr>
-<tr>
-<td><code>ios::binary</code></td>
-<td>二进制模式</td>
-</tr>
-<tr>
-<td><code>ios::trunc</code></td>
-<td>打开即清空文件</td>
-</tr>
-</tbody>
-</table>
-<h3 id="文本文件读写">📝 文本文件读写</h3>
-<h4 id="逐行读取">逐行读取</h4>
-<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>getline</code>
-读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
-<h4 id="格式化写入">格式化写入</h4>
-<p>文本写入就是把要保存的字段拼成可读文本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>写出的文件内容：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
-<p>反过来读回时，用 <code>getline</code> 按行读，再用
-<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
-<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
-<h4 id="基本用法">基本用法</h4>
-<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
-<code>read</code>/<code>write</code> 操作：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>write</code>/<code>read</code> 的参数都是字符指针 +
-字节数，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
-转换。</p>
-<h4 id="重要限制">重要限制</h4>
-<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
-<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p><code>string</code>、<code>vector</code>
-内部管理堆内存，把整个对象字节写进文件，存进去的是指针地址，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
-<table>
-<thead>
-<tr>
-<th>数据</th>
-<th>二进制直接读写</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int</code>、<code>double</code>、POD 结构体</td>
-<td>可以</td>
-<td>字节布局稳定</td>
-</tr>
-<tr>
-<td><code>string</code>、<code>vector</code></td>
-<td>不行</td>
-<td>内部有指针，要序列化</td>
-</tr>
-</tbody>
-</table>
-<h3 id="对象持久化">💾 对象持久化</h3>
-<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
-<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
-<p>把对象的每个字段转成文本，逐字段保存：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
-<h4 id="版本兼容意识">版本兼容意识</h4>
-<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是老文件还能被新程序读的基础意识。</p>
-<blockquote>
-<p>序列化是很大的话题，工程里常用 JSON、protobuf
-等现成格式。入门阶段先理解把字段存下来、再读回来这件事本身。</p>
-</blockquote>
-<h3 id="错误处理">⚠️ 错误处理</h3>
-<h4 id="打开失败">打开失败</h4>
-<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="读写状态">读写状态</h4>
-<p>流对象内部记录着状态标志：</p>
-<table>
-<thead>
-<tr>
-<th>状态</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>good()</code></td>
-<td>一切正常</td>
-</tr>
-<tr>
-<td><code>eof()</code></td>
-<td>读到文件末尾（正常情况）</td>
-</tr>
-<tr>
-<td><code>fail()</code></td>
-<td>操作失败，比如类型不匹配、打开失败</td>
-</tr>
-<tr>
-<td><code>bad()</code></td>
-<td>严重错误，比如底层 IO 故障</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>把读取操作本身当作判断条件，是最稳妥的写法。</p>
-<h4 id="路径问题">路径问题</h4>
-<table>
-<thead>
-<tr>
-<th>问题</th>
-<th>建议</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>相对路径</td>
-<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
-</tr>
-<tr>
-<td>绝对路径</td>
-<td>最稳妥，但换机器要改</td>
-</tr>
-<tr>
-<td>目录不存在</td>
-<td>文件流不会自动创建目录，先建目录再打开</td>
-</tr>
-<tr>
-<td>权限不足</td>
-<td>只读文件用写模式打开会失败，先检查权限</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>文件一定能打开成功</td>
-<td>路径、权限、目录都可能失败，必须检查打开结果</td>
-</tr>
-<tr>
-<td><code>string</code> 可以直接二进制 <code>write</code></td>
-<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
-</tr>
-<tr>
-<td>忘写 <code>close()</code> 会立刻出问题</td>
-<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
-</tr>
-<tr>
-<td>读到 EOF 是错误</td>
-<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
-</tr>
-<tr>
-<td>二进制数据用文本模式读写没关系</td>
-<td>二进制文件要加
-<code>ios::binary</code>，否则可能被换行符转换破坏</td>
-</tr>
-<tr>
-<td>文件格式随便定，反正自己用</td>
-<td>加版本号，为以后格式变更留余地</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
-写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
-POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
-</blockquote>
-<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
-的又一次体现；配合第 10 章的
-<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>文件</tag>
-        <tag>文件流</tag>
-        <tag>序列化</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：拓展选学</title>
     <url>/posts/c6e1a9f2/</url>
     <content><![CDATA[<p>入门主线走完，最后补五块常用的进阶拼图：CMake、模板、异常、<code>shared_ptr</code>
@@ -20856,6 +20327,535 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
         <tag>智能指针</tag>
         <tag>模板</tag>
         <tag>异常</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：文件 IO 流</title>
+    <url>/posts/a7c2e9d4/</url>
+    <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
+stream）就是 C++ 读写文件的通道。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件流（file stream）</td>
+<td>把文件当成数据流的输入输出对象</td>
+<td>读写文件的通道</td>
+</tr>
+<tr>
+<td><code>ifstream</code></td>
+<td>输入文件流，从文件读数据</td>
+<td>读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td>输出文件流，向文件写数据</td>
+<td>写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td>可读可写的文件流</td>
+<td>读写</td>
+</tr>
+<tr>
+<td>文本文件</td>
+<td>以字符形式存储，人能直接阅读</td>
+<td>记事本能打开</td>
+</tr>
+<tr>
+<td>二进制文件</td>
+<td>按内存中的字节原样存储</td>
+<td>紧凑、机器可读</td>
+</tr>
+<tr>
+<td>序列化（serialization）</td>
+<td>把对象转成可存储/传输的字节序列</td>
+<td>对象存盘</td>
+</tr>
+<tr>
+<td>反序列化（deserialization）</td>
+<td>从字节序列恢复出对象</td>
+<td>从盘恢复对象</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件流的基本模型">🧩 文件流的基本模型</h3>
+<p>之前用的 <code>cout</code>、<code>cin</code>
+是标准输入输出流，数据通往控制台。文件流把数据的去向换成文件：程序通过流对象读写，流对象负责和文件打交道。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[程序] --&gt; B[ofstream 输出流]
+    B --&gt; C[文件]
+    C --&gt; D[ifstream 输入流]
+    D --&gt; A
+</code>
+</pre>
+<table>
+<thead>
+<tr>
+<th>流对象</th>
+<th>头文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ifstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>从文件读</td>
+</tr>
+<tr>
+<td><code>ofstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>向文件写</td>
+</tr>
+<tr>
+<td><code>fstream</code></td>
+<td><code>&lt;fstream&gt;</code></td>
+<td>既读又写</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文件输入输出">🛠️ 文件输入输出</h3>
+<h4 id="写文件ofstream">写文件：ofstream</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开文件准备写入（不存在则创建）</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    out &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;world&quot;</span> &lt;&lt; <span class="number">42</span> &lt;&lt; endl;   <span class="comment">// 和 cout 用法一样</span></span><br><span class="line"></span><br><span class="line">    out.<span class="built_in">close</span>();   <span class="comment">// 关闭文件</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>ofstream</code>
+默认会<strong>覆盖</strong>已有文件内容。想追加写，加一个打开模式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>, ios::app)</span></span>;   <span class="comment">// append：追加到末尾</span></span><br></pre></td></tr></table></figure>
+<h4 id="读文件ifstream">读文件：ifstream</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string word;</span><br><span class="line">    <span class="keyword">while</span> (in &gt;&gt; word) &#123;          <span class="comment">// 按空白分隔逐个读取</span></span><br><span class="line">        cout &lt;&lt; word &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>close()</code>
+也可以不写：文件流对象析构时会自动关闭文件（RAII，第 9 章讲过）。但显式
+<code>close()</code>
+能让文件何时关闭更清晰，也方便在同一个作用域里重新打开别的文件。</p>
+</blockquote>
+<h4 id="常用打开模式">常用打开模式</h4>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ios::in</code></td>
+<td>读模式（<code>ifstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::out</code></td>
+<td>写模式，覆盖（<code>ofstream</code> 默认）</td>
+</tr>
+<tr>
+<td><code>ios::app</code></td>
+<td>追加写</td>
+</tr>
+<tr>
+<td><code>ios::binary</code></td>
+<td>二进制模式</td>
+</tr>
+<tr>
+<td><code>ios::trunc</code></td>
+<td>打开即清空文件</td>
+</tr>
+</tbody>
+</table>
+<h3 id="文本文件读写">📝 文本文件读写</h3>
+<h4 id="逐行读取">逐行读取</h4>
+<p><code>getline</code> 一次读一整行，适合按行处理配置文件、日志等：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    string line;</span><br><span class="line">    <span class="type">int</span> lineNo = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">getline</span>(in, line)) &#123;     <span class="comment">// 读到一行就处理一行</span></span><br><span class="line">        cout &lt;&lt; lineNo++ &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; line &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>getline</code>
+读到文件末尾时返回假值，循环自然结束，不需要手动判断 EOF。</p>
+<h4 id="格式化写入">格式化写入</h4>
+<p>文本写入就是把要保存的字段拼成可读文本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;students.txt&quot;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 每个字段用分隔符隔开，一行一个学生</span></span><br><span class="line">    out &lt;&lt; s.name &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.age &lt;&lt; <span class="string">&quot;,&quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>写出的文件内容：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice,18,92.5</span><br></pre></td></tr></table></figure>
+<p>反过来读回时，用 <code>getline</code> 按行读，再用
+<code>find</code>/<code>substr</code>（第 10 章学过）按逗号拆字段。</p>
+<h3 id="二进制文件读写">🧱 二进制文件读写</h3>
+<h4 id="基本用法">基本用法</h4>
+<p>二进制文件按内存中的字节原样保存，紧凑且读写快，用
+<code>read</code>/<code>write</code> 操作：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Record</span> &#123;</span><br><span class="line">    <span class="type">int</span> id;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Record r = &#123;<span class="number">1001</span>, <span class="number">88.5</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入：把 r 的内存字节直接写进文件</span></span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!out) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    out.<span class="built_in">write</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r), <span class="built_in">sizeof</span>(r));</span><br><span class="line">    out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读回</span></span><br><span class="line">    Record r2;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;record.bin&quot;</span>, ios::binary)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (!in) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">read</span>(<span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(&amp;r2), <span class="built_in">sizeof</span>(r2));</span><br><span class="line"></span><br><span class="line">    <span class="comment">// r2.id == 1001, r2.score == 88.5</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>write</code>/<code>read</code> 的参数都是字符指针 +
+字节数，所以结构体要先用 <code>reinterpret_cast&lt;char*&gt;</code>
+转换。</p>
+<h4 id="重要限制">重要限制</h4>
+<p>二进制直接读写<strong>只适合普通数据（POD）结构体</strong>——成员都是
+<code>int</code>、<code>double</code>、固定大小数组这类值类型。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Bad</span> &#123;</span><br><span class="line">    string name;      <span class="comment">// 内部有指针，直接 write 存的是地址不是内容</span></span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;    <span class="comment">// 同理</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><code>string</code>、<code>vector</code>
+内部管理堆内存，把整个对象字节写进文件，存进去的是指针地址，下次运行时地址早已失效。这类对象必须走序列化（下一节）。</p>
+<table>
+<thead>
+<tr>
+<th>数据</th>
+<th>二进制直接读写</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code>、<code>double</code>、POD 结构体</td>
+<td>可以</td>
+<td>字节布局稳定</td>
+</tr>
+<tr>
+<td><code>string</code>、<code>vector</code></td>
+<td>不行</td>
+<td>内部有指针，要序列化</td>
+</tr>
+</tbody>
+</table>
+<h3 id="对象持久化">💾 对象持久化</h3>
+<p>持久化（persistence）就是把对象保存到文件里，下次程序启动时再恢复。核心是序列化和反序列化。</p>
+<h4 id="字段序列化文本方案">字段序列化：文本方案</h4>
+<p>把对象的每个字段转成文本，逐字段保存：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fstream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">double</span> score;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 序列化：写进文件</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">        out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 反序列化：从文件读回</span></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">load</span><span class="params">(ifstream&amp; in)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (!<span class="built_in">getline</span>(in, name)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; age)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">if</span> (!(in &gt;&gt; score)) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Student s = &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">18</span>, <span class="number">92.5</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">s.<span class="built_in">save</span>(out);</span><br><span class="line">out.<span class="built_in">close</span>();</span><br><span class="line"></span><br><span class="line">Student t;</span><br><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;student.txt&quot;</span>)</span></span>;</span><br><span class="line">t.<span class="built_in">load</span>(in);</span><br><span class="line"><span class="comment">// t 恢复了 name/age/score</span></span><br></pre></td></tr></table></figure>
+<h4 id="版本兼容意识">版本兼容意识</h4>
+<p>文件格式一旦定下来，旧的存档和新的程序就可能对不上。写文件时建议带一个<strong>版本号</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">save</span><span class="params">(ofstream&amp; out)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;v1&quot;</span> &lt;&lt; endl;    <span class="comment">// 版本标记</span></span><br><span class="line">    out &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; age &lt;&lt; endl;</span><br><span class="line">    out &lt;&lt; score &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>以后格式变了（比如新增字段、改字段顺序），读的时候先看版本号，再做对应的解析。这是老文件还能被新程序读的基础意识。</p>
+<blockquote>
+<p>序列化是很大的话题，工程里常用 JSON、protobuf
+等现成格式。入门阶段先理解把字段存下来、再读回来这件事本身。</p>
+</blockquote>
+<h3 id="错误处理">⚠️ 错误处理</h3>
+<h4 id="打开失败">打开失败</h4>
+<p>文件打开失败非常常见：路径写错、文件不存在、没有权限。<strong>打开后第一件事就是检查</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">ifstream <span class="title">in</span><span class="params">(<span class="string">&quot;data.txt&quot;</span>)</span></span>;</span><br><span class="line"><span class="keyword">if</span> (!in) &#123;                 <span class="comment">// 或 !in.is_open()</span></span><br><span class="line">    cerr &lt;&lt; <span class="string">&quot;打开文件失败&quot;</span> &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="读写状态">读写状态</h4>
+<p>流对象内部记录着状态标志：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>good()</code></td>
+<td>一切正常</td>
+</tr>
+<tr>
+<td><code>eof()</code></td>
+<td>读到文件末尾（正常情况）</td>
+</tr>
+<tr>
+<td><code>fail()</code></td>
+<td>操作失败，比如类型不匹配、打开失败</td>
+</tr>
+<tr>
+<td><code>bad()</code></td>
+<td>严重错误，比如底层 IO 故障</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x;</span><br><span class="line"><span class="keyword">if</span> (in &gt;&gt; x) &#123;</span><br><span class="line">    <span class="comment">// 读取成功</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// 读取失败或到达末尾</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>把读取操作本身当作判断条件，是最稳妥的写法。</p>
+<h4 id="路径问题">路径问题</h4>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>相对路径</td>
+<td>相对的是程序的工作目录，不是可执行文件所在目录</td>
+</tr>
+<tr>
+<td>绝对路径</td>
+<td>最稳妥，但换机器要改</td>
+</tr>
+<tr>
+<td>目录不存在</td>
+<td>文件流不会自动创建目录，先建目录再打开</td>
+</tr>
+<tr>
+<td>权限不足</td>
+<td>只读文件用写模式打开会失败，先检查权限</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件一定能打开成功</td>
+<td>路径、权限、目录都可能失败，必须检查打开结果</td>
+</tr>
+<tr>
+<td><code>string</code> 可以直接二进制 <code>write</code></td>
+<td><code>string</code> 内部有指针，直接写存的是地址，要序列化</td>
+</tr>
+<tr>
+<td>忘写 <code>close()</code> 会立刻出问题</td>
+<td>析构会自动关闭，但显式 <code>close()</code> 更清晰</td>
+</tr>
+<tr>
+<td>读到 EOF 是错误</td>
+<td><code>eof()</code> 是正常结束状态，读操作失败才需要处理</td>
+</tr>
+<tr>
+<td>二进制数据用文本模式读写没关系</td>
+<td>二进制文件要加
+<code>ios::binary</code>，否则可能被换行符转换破坏</td>
+</tr>
+<tr>
+<td>文件格式随便定，反正自己用</td>
+<td>加版本号，为以后格式变更留余地</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>文件流三件套各司其职：<code>ifstream</code> 读、<code>ofstream</code>
+写、<code>fstream</code> 读写；文本文件逐行处理，二进制文件只适合
+POD，对象持久化要序列化并带版本意识；任何文件操作先检查打开状态。</p>
+</blockquote>
+<p>配合第 9 章的 RAII，文件流对象的自动关闭正好是 RAII
+的又一次体现；配合第 10 章的
+<code>string</code>/<code>vector</code>，文本解析也不再费力。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>文件</tag>
+        <tag>文件流</tag>
+        <tag>序列化</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：运算符重载与静态成员</title>
+    <url>/posts/e2c8a5f6/</url>
+    <content><![CDATA[<p>类的成员不只是数据和函数：还能让自定义类型的对象像 <code>int</code>
+一样用
+<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>，也能让某些成员属于类而不是某个对象。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运算符重载（operator overloading）</td>
+<td>给自定义类型定义运算符的行为</td>
+<td>对象也能加减比较</td>
+</tr>
+<tr>
+<td><code>operator+</code></td>
+<td>重载 <code>+</code> 运算符的成员函数</td>
+<td>定义加法</td>
+</tr>
+<tr>
+<td><code>operator&lt;&lt;</code></td>
+<td>重载输出运算符</td>
+<td>对象直接 cout</td>
+</tr>
+<tr>
+<td><code>operator==</code></td>
+<td>重载相等比较</td>
+<td>定义相等</td>
+</tr>
+<tr>
+<td>静态成员变量</td>
+<td>属于类而不是某个对象的变量</td>
+<td>全类共享一份</td>
+</tr>
+<tr>
+<td>静态成员函数</td>
+<td>不依赖具体对象、用类名调用的函数</td>
+<td>类级操作</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要运算符重载">🧩 为什么需要运算符重载</h3>
+<p>没有运算符重载时，比较两个自定义对象要写函数调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point a&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">Point b&#123;<span class="number">3</span>, <span class="number">4</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Point c = a + b;          // 不支持：+ 不知道 Point 怎么加</span></span><br><span class="line">Point c = <span class="built_in">add</span>(a, b);          <span class="comment">// 只能这样</span></span><br></pre></td></tr></table></figure>
+<p>运算符重载让自定义类型用起来像内置类型，代码更直观：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point c = a + b;              <span class="comment">// 直观</span></span><br><span class="line"><span class="keyword">if</span> (a == b) &#123; ... &#125;           <span class="comment">// 直接比较</span></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;            <span class="comment">// 直接输出</span></span><br></pre></td></tr></table></figure>
+<h3 id="运算符重载基础">➕ 运算符重载基础</h3>
+<p>重载运算符的成员函数写法：<code>operator</code> 后跟运算符符号。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 +：返回两个点坐标相加的新点</span></span><br><span class="line">    Point <span class="keyword">operator</span>+(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">Point</span>(x + other.x, y + other.y);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 ==：坐标都相等才算相等</span></span><br><span class="line">    <span class="type">bool</span> <span class="keyword">operator</span>==(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> x == other.x &amp;&amp; y == other.y;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">a</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    <span class="function">Point <span class="title">b</span><span class="params">(<span class="number">3</span>, <span class="number">4</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    Point c = a + b;              <span class="comment">// 调用 a.operator+(b)</span></span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; c.<span class="built_in">getY</span>() &lt;&lt; endl;   <span class="comment">// 4 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (a == b) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;不相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>关键点：</p>
+<ol type="1">
+<li><code>operator+</code> 是成员函数，<code>a + b</code> 等价于调用
+<code>a.operator+(b)</code>，左操作数就是 <code>this</code>；</li>
+<li>返回新对象而不是修改自身；</li>
+<li><code>const</code> 成员函数保证比较或加法不修改对象。</li>
+</ol>
+<h3 id="重载输出运算符">🖨️ 重载输出运算符 <code>&lt;&lt;</code></h3>
+<p><code>&lt;&lt;</code> 不能作为成员函数重载（左操作数是
+<code>cout</code>，不是我们的类），要写成<strong>非成员函数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 非成员函数：左操作数是 ostream&amp;，右操作数是 Point</span></span><br><span class="line">ostream&amp; <span class="keyword">operator</span>&lt;&lt;(ostream&amp; out, <span class="type">const</span> Point&amp; p)</span><br><span class="line">&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;(&quot;</span> &lt;&lt; p.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; p.<span class="built_in">getY</span>() &lt;&lt; <span class="string">&quot;)&quot;</span>;</span><br><span class="line">    <span class="keyword">return</span> out;   <span class="comment">// 返回 out 才能连续输出</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">p</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; p &lt;&lt; endl;          <span class="comment">// (1, 2)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>返回 <code>ostream&amp;</code>
+是为了支持链式输出：<code>cout &lt;&lt; p &lt;&lt; " " &lt;&lt; q</code>。</p>
+<h3 id="重载下标运算符">🧮 重载下标运算符 <code>[]</code></h3>
+<p>容器类常用，比如让自定义类能像数组一样按下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">IntArray</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> data[<span class="number">10</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>&amp; <span class="keyword">operator</span>[](<span class="type">int</span> index)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> data[index];   <span class="comment">// 返回引用，才能赋值</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">IntArray arr;</span><br><span class="line">arr[<span class="number">3</span>] = <span class="number">42</span>;                   <span class="comment">// 调用 operator[]</span></span><br><span class="line">cout &lt;&lt; arr[<span class="number">3</span>] &lt;&lt; endl;        <span class="comment">// 42</span></span><br></pre></td></tr></table></figure>
+<h3 id="静态成员变量">🧱 静态成员变量</h3>
+<p>静态成员变量<strong>属于类</strong>，所有对象共享同一份，而不是每个对象各有一份。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Counter</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">static</span> <span class="type">int</span> count;          <span class="comment">// 声明：属于类的变量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Counter</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        count++;               <span class="comment">// 每创建一个对象，计数加一</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">getCount</span><span class="params">()</span>      <span class="comment">// 静态成员函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> count;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 类外定义并初始化：静态成员变量必须在这里给一次定义</span></span><br><span class="line"><span class="type">int</span> Counter::count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Counter a;</span><br><span class="line">    Counter b;</span><br><span class="line">    Counter c;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; Counter::<span class="built_in">getCount</span>() &lt;&lt; endl;   <span class="comment">// 3，用类名调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>要点：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通成员变量</th>
+<th>静态成员变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>归属</td>
+<td>每个对象一份</td>
+<td>整个类共享一份</td>
+</tr>
+<tr>
+<td>访问</td>
+<td>通过对象</td>
+<td>通过类名 <code>类名::变量</code> 或对象</td>
+</tr>
+<tr>
+<td>定义</td>
+<td>类内自动创建</td>
+<td>需要在类外定义一次</td>
+</tr>
+</tbody>
+</table>
+<h3 id="静态成员函数">⚙️ 静态成员函数</h3>
+<p>静态成员函数不依赖具体对象，用类名直接调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MathUtils</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> x * x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> r = MathUtils::<span class="built_in">square</span>(<span class="number">5</span>);   <span class="comment">// 不需要创建对象</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>静态成员函数的限制：<strong>没有 <code>this</code>
+指针</strong>，所以不能访问普通成员变量（不知道操作哪个对象的），只能访问静态成员和其他静态函数。</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通成员函数</th>
+<th>静态成员函数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>依赖对象</td>
+<td>是，有 <code>this</code></td>
+<td>否，没有 <code>this</code></td>
+</tr>
+<tr>
+<td>调用方式</td>
+<td>对象调用</td>
+<td>类名调用</td>
+</tr>
+<tr>
+<td>能访问普通成员</td>
+<td>能</td>
+<td>不能</td>
+</tr>
+<tr>
+<td>能访问静态成员</td>
+<td>能</td>
+<td>能</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运算符重载是给内置类型用的</td>
+<td>内置类型运算符是固定的，重载只针对自定义类型</td>
+</tr>
+<tr>
+<td><code>&lt;&lt;</code> 重载必须是成员函数</td>
+<td><code>&lt;&lt;</code> 左操作数是流对象，要用非成员函数形式</td>
+</tr>
+<tr>
+<td>重载 <code>+</code> 应该修改左操作数</td>
+<td>通常返回新对象，<code>a + b</code> 不应改变 <code>a</code></td>
+</tr>
+<tr>
+<td>静态成员变量每个对象一份</td>
+<td>全类共享一份，且在类外定义一次</td>
+</tr>
+<tr>
+<td>静态成员函数能访问普通成员变量</td>
+<td>静态函数没有 <code>this</code>，只能访问静态成员</td>
+</tr>
+<tr>
+<td>重载运算符可以随便改语义</td>
+<td>应保持直觉语义（<code>+</code> 是加法、<code>==</code>
+是相等），别滥用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>运算符重载让自定义类型用起来像内置类型（<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>、<code>[]</code>），静态成员让数据或操作属于类本身；两者的共同点是让类的表达力更强。</p>
+</blockquote>
+<p>这一章补上了类与对象（第 7
+章）之后的两块常用拼图。接下来无论是写容器类、工具类，还是做计数统计，都有了对应的语法。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>面向对象</tag>
+        <tag>运算符重载</tag>
+        <tag>静态成员</tag>
       </tags>
   </entry>
   <entry>
@@ -27652,8 +27652,12 @@ GPU）只保留回应包，其余类型先丢掉。然后再把同一个 Tag
 </ol>
 <p>换句话说：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">sort key(P3) = packet_id(P1)</span><br><span class="line">               │  └─ 请求包发出的先后，代表 DNN 层真正的执行顺序</span><br><span class="line">               └──── 落到合并后的数据包上，成为重排依据</span><br></pre></td></tr></table></figure>
-<p>这一步是后面所有分析的地基：<strong>排序键的顺序，就是 GPU 执行 DNN
-的顺序</strong>。</p>
+<p>这一步是后面所有分析的地基：<strong>排序键还原出的是命令提交的顺序，也就是
+DNN 的层序——乱的是包到达的先后，不是 GPU 执行本身。</strong></p>
+<p>定序为什么用请求包而不是回应包：乱序发生在生成端，主机侧对多个正在飞行中的读请求，完成顺序不受
+PCIe
+约束；而同一方向上的请求包在链路上不会重排，所以请求包的先后可靠地对应
+GPU 索取数据的先后。</p>
 <h3 id="d-command-与-k-command">⌨️ D Command 与 K Command</h3>
 <p>GPU 命令也由两部分组成：Header 说明这是什么命令、数据有多长；Data
 是命令携带的值。论文把所有命令归成两类，只关心这两类：</p>
