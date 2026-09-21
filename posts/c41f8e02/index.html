@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
-<meta property="article:modified_time" content="2026-09-21T11:45:56.299Z">
+<meta property="article:modified_time" content="2026-09-21T11:49:17.954Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -186,7 +186,7 @@ Command</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a clas
 DNN Layer</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#kernel-%E6%98%AF%E4%BB%80%E4%B9%88%E6%80%8E%E4%B9%88%E8%BF%9B%E5%88%B0-gpu"><span class="nav-number">1.</span> <span class="nav-text">🧱 Kernel 是什么，怎么进到 GPU</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E6%9D%A1%E8%A7%82%E5%AF%9F%E4%B8%80%E4%B8%AA%E5%8F%8D%E5%90%91%E5%AE%9A%E4%BD%8D"><span class="nav-number">2.</span> <span class="nav-text">🔎 两条观察，一个反向定位</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%B9%E9%BD%90-cuda-trace%E5%BB%BA%E7%AB%8B-kernel-%E5%88%B0-layer-%E7%9A%84%E6%98%A0%E5%B0%84"><span class="nav-number">3.</span> <span class="nav-text">🗂️ 对齐 CUDA
 trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E5%B1%82%E6%8A%8A-weight-%E5%92%8C-bias-%E5%8F%96%E5%87%BA%E6%9D%A5"><span class="nav-number"></span> <span class="nav-text">💰 第三层：把 Weight 和 Bias
 取出来</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E6%8A%8A-d-command-%E7%9A%84%E6%95%B0%E6%8D%AE%E5%85%A8%E5%BD%93%E6%9D%83%E9%87%8D"><span class="nav-number">1.</span> <span class="nav-text">❓为什么不能把 D command
-的数据全当权重</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E5%91%BD%E4%BB%A4%E8%BF%9E%E6%88%90%E7%9A%84%E5%8F%8D%E6%8E%A8%E9%93%BE"><span class="nav-number">2.</span> <span class="nav-text">🔁 三个命令连成的反推链</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8B%BC%E8%A3%85%E4%BB%8E%E6%95%B0%E6%8D%AE%E6%B5%81%E5%9B%BE%E6%81%A2%E5%A4%8D%E5%AE%8C%E6%95%B4%E6%A8%A1%E5%9E%8B"><span class="nav-number"></span> <span class="nav-text">🧱 拼装：从数据流图恢复完整模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#kernel-%E6%98%AF%E9%A1%B6%E7%82%B9%E6%95%B0%E6%8D%AE%E6%90%AC%E8%BF%90%E6%98%AF%E8%BE%B9"><span class="nav-number">1.</span> <span class="nav-text">🕸️ Kernel 是顶点，数据搬运是边</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%8F%82%E6%95%B0%E7%9A%84%E4%B8%A4%E6%9D%A1%E6%81%A2%E5%A4%8D%E8%B7%AF%E5%BE%84"><span class="nav-number">2.</span> <span class="nav-text">🧾 超参数的两条恢复路径</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#resnet-%E7%9A%84-shortcut-%E6%80%8E%E4%B9%88%E6%81%A2%E5%A4%8D"><span class="nav-number">3.</span> <span class="nav-text">➕ ResNet 的 shortcut 怎么恢复</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%8D%E5%BB%BA%E7%BB%93%E6%9E%9C%E4%B8%8E%E5%8E%9F%E6%A8%A1%E5%9E%8B%E7%9A%84%E4%B8%A4%E5%A4%84%E5%B7%AE%E5%BC%82"><span class="nav-number">4.</span> <span class="nav-text">🧮 重建结果与原模型的两处差异</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8Clossless-%E5%88%B0%E5%BA%95%E6%8C%87%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧪 实验：Lossless 到底指什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E8%AE%BE%E7%BD%AE"><span class="nav-number">1.</span> <span class="nav-text">🔧 实验设置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%9C%80%E8%A6%81%E5%A4%9A%E5%B0%91%E5%8C%85%E5%A4%9A%E5%B0%91%E6%97%B6%E9%97%B4"><span class="nav-number">2.</span> <span class="nav-text">⏱️ 需要多少包、多少时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B2%BE%E5%BA%A6%E4%B8%8E%E6%8E%A8%E7%90%86%E6%97%B6%E9%97%B4"><span class="nav-number">3.</span> <span class="nav-text">🎯 精度与推理时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#lossless-%E7%9A%84%E5%90%AB%E4%B9%89"><span class="nav-number">4.</span> <span class="nav-text">📌 Lossless 的含义</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%B9%E7%95%8Chermes-%E5%81%9A%E4%B8%8D%E5%88%B0%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🚧 边界：Hermes 做不到什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%AD%E7%BB%83%E6%9C%9F%E7%9A%84%E4%BF%A1%E6%81%AF%E6%8B%BF%E4%B8%8D%E5%88%B0"><span class="nav-number">1.</span> <span class="nav-text">🚫 训练期的信息拿不到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%A4%A7%E6%A8%A1%E5%9E%8B%E4%B8%8E%E6%8A%93%E5%8C%85-buffer"><span class="nav-number">2.</span> <span class="nav-text">💾 超大模型与抓包 buffer</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B9%B3%E5%8F%B0%E6%A1%86%E6%9E%B6%E4%B8%8E%E5%A4%9A%E4%BB%BB%E5%8A%A1"><span class="nav-number">3.</span> <span class="nav-text">🖥️ 平台、框架与多任务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E6%88%90%E7%AB%8B%E7%9A%84%E5%89%8D%E6%8F%90"><span class="nav-number">4.</span> <span class="nav-text">🧱 攻击成立的前提</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E6%8F%90%E5%87%BA%E7%9A%84%E7%BC%93%E8%A7%A3%E6%80%9D%E8%B7%AF"><span class="nav-number"></span> <span class="nav-text">🛡️ 论文提出的缓解思路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8A%8A%E6%95%B4%E6%9D%A1%E6%94%BB%E5%87%BB%E9%93%BE%E4%B8%B2%E8%B5%B7%E6%9D%A5"><span class="nav-number"></span> <span class="nav-text">🗺️ 把整条攻击链串起来</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%88%91%E7%9A%84%E7%90%86%E8%A7%A3hermes-%E5%88%A9%E7%94%A8%E7%9A%84%E6%98%AF%E8%AF%AD%E4%B9%89%E6%B3%84%E6%BC%8F"><span class="nav-number"></span> <span class="nav-text">🧠 我的理解：Hermes
+的数据全当权重</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E5%91%BD%E4%BB%A4%E8%BF%9E%E6%88%90%E7%9A%84%E5%8F%8D%E6%8E%A8%E9%93%BE"><span class="nav-number">2.</span> <span class="nav-text">🔁 三个命令连成的反推链</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8B%BC%E8%A3%85%E4%BB%8E%E6%95%B0%E6%8D%AE%E6%B5%81%E5%9B%BE%E6%81%A2%E5%A4%8D%E5%AE%8C%E6%95%B4%E6%A8%A1%E5%9E%8B"><span class="nav-number"></span> <span class="nav-text">🧱 拼装：从数据流图恢复完整模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#kernel-%E6%98%AF%E9%A1%B6%E7%82%B9%E6%95%B0%E6%8D%AE%E6%90%AC%E8%BF%90%E6%98%AF%E8%BE%B9"><span class="nav-number">1.</span> <span class="nav-text">🕸️ Kernel 是顶点，数据搬运是边</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%8F%82%E6%95%B0%E7%9A%84%E4%B8%A4%E6%9D%A1%E6%81%A2%E5%A4%8D%E8%B7%AF%E5%BE%84"><span class="nav-number">2.</span> <span class="nav-text">🧾 超参数的两条恢复路径</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#resnet-%E7%9A%84-shortcut-%E6%80%8E%E4%B9%88%E6%81%A2%E5%A4%8D"><span class="nav-number">3.</span> <span class="nav-text">➕ ResNet 的 shortcut 怎么恢复</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%8D%E5%BB%BA%E7%BB%93%E6%9E%9C%E4%B8%8E%E5%8E%9F%E6%A8%A1%E5%9E%8B%E7%9A%84%E4%B8%A4%E5%A4%84%E5%B7%AE%E5%BC%82"><span class="nav-number">4.</span> <span class="nav-text">🧮 重建结果与原模型的两处差异</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8Clossless-%E5%88%B0%E5%BA%95%E6%8C%87%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧪 实验：Lossless 到底指什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E8%AE%BE%E7%BD%AE"><span class="nav-number">1.</span> <span class="nav-text">🔧 实验设置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%9C%80%E8%A6%81%E5%A4%9A%E5%B0%91%E5%8C%85%E5%A4%9A%E5%B0%91%E6%97%B6%E9%97%B4"><span class="nav-number">2.</span> <span class="nav-text">⏱️ 需要多少包、多少时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B2%BE%E5%BA%A6%E4%B8%8E%E6%8E%A8%E7%90%86%E6%97%B6%E9%97%B4"><span class="nav-number">3.</span> <span class="nav-text">🎯 精度与推理时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#lossless-%E7%9A%84%E5%90%AB%E4%B9%89"><span class="nav-number">4.</span> <span class="nav-text">📌 Lossless 的含义</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%B9%E7%95%8Chermes-%E5%81%9A%E4%B8%8D%E5%88%B0%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🚧 边界：Hermes 做不到什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%AD%E7%BB%83%E6%9C%9F%E7%9A%84%E4%BF%A1%E6%81%AF%E6%8B%BF%E4%B8%8D%E5%88%B0"><span class="nav-number">1.</span> <span class="nav-text">🚫 训练期的信息拿不到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%A4%A7%E6%A8%A1%E5%9E%8B%E4%B8%8E%E6%8A%93%E5%8C%85-buffer"><span class="nav-number">2.</span> <span class="nav-text">💾 超大模型与抓包 buffer</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B9%B3%E5%8F%B0%E6%A1%86%E6%9E%B6%E4%B8%8E%E5%A4%9A%E4%BB%BB%E5%8A%A1"><span class="nav-number">3.</span> <span class="nav-text">🖥️ 平台、框架与多任务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E6%88%90%E7%AB%8B%E7%9A%84%E5%89%8D%E6%8F%90"><span class="nav-number">4.</span> <span class="nav-text">🧱 攻击成立的前提</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%80%89%E7%A1%AC%E4%BB%B6%E6%8A%93%E5%8C%85"><span class="nav-number">5.</span> <span class="nav-text">🔌 为什么选硬件抓包</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E6%8F%90%E5%87%BA%E7%9A%84%E7%BC%93%E8%A7%A3%E6%80%9D%E8%B7%AF"><span class="nav-number"></span> <span class="nav-text">🛡️ 论文提出的缓解思路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8A%8A%E6%95%B4%E6%9D%A1%E6%94%BB%E5%87%BB%E9%93%BE%E4%B8%B2%E8%B5%B7%E6%9D%A5"><span class="nav-number"></span> <span class="nav-text">🗺️ 把整条攻击链串起来</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%88%91%E7%9A%84%E7%90%86%E8%A7%A3hermes-%E5%88%A9%E7%94%A8%E7%9A%84%E6%98%AF%E8%AF%AD%E4%B9%89%E6%B3%84%E6%BC%8F"><span class="nav-number"></span> <span class="nav-text">🧠 我的理解：Hermes
 利用的是语义泄漏</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%8E%E5%B7%B2%E6%9C%89%E6%A8%A1%E5%9E%8B%E6%8A%BD%E5%8F%96%E5%B7%A5%E4%BD%9C%E7%9A%84%E5%AF%B9%E6%AF%94"><span class="nav-number"></span> <span class="nav-text">📊 与已有模型抽取工作的对比</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">1.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
@@ -273,7 +273,7 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-21 12:30:00 / Modified: 19:45:56" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
+      <time title="Created: 2026-09-21 12:30:00 / Modified: 19:49:17" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
     </span>
 
   
@@ -290,14 +290,14 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>16k</span>
+      <span>18k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>29 mins.</span>
+      <span>32 mins.</span>
     </span>
 </div>
 
@@ -1208,6 +1208,126 @@ CPU，那些层就不会出现在流量里）；</li>
 限制）。</li>
 </ol>
 <p>缺任何一条，攻击要么失败、要么只能恢复部分模型。</p>
+<h3 id="为什么选硬件抓包">🔌 为什么选硬件抓包</h3>
+<p>上面第 1
+条前提是插入抓包设备，值得单独说清楚：<strong>这不是因为硬件更高级，而是因为在论文的威胁模型下，软件路径先被自己的前提排除了。</strong></p>
+<p>先看清一件事：TLP 是 Root Complex 与 Endpoint
+之间的点对点事务，事务完成后，它的语义（Tag、Requester
+ID、拆分与到达顺序）在硬件内部就被消费掉了。<strong>操作系统并没有把链路报文暴露给软件的接口</strong>，软件能看到的是结果——某块内存被
+DMA 写过了、某个 ioctl 返回了。</p>
+<p>软件侧能走的路，逐条看缺口：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>软件路径</th>
+<th>能看到什么</th>
+<th>缺口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内核模块 hook 驱动（<code>ioctl</code>、命令缓冲）</td>
+<td>驱动收到的 API 级参数</td>
+<td>需要 root 并改软件栈；看不到 completion 乱序与 Tag 配对；GPU
+自主发起的 DMA 事务没有 hook 点</td>
+</tr>
+<tr>
+<td>GPU 厂商 profiler（nvprof、Nsight）</td>
+<td>kernel 名与参数（API 语义，不是链路上的 K command）</td>
+<td>需要 root、需要注入目标进程、依赖厂商工具；加固环境里用不了</td>
+</tr>
+<tr>
+<td>AER（Advanced Error Reporting）的 TLP Header Log</td>
+<td>出错事务的 4 个 DW header</td>
+<td>覆盖不到正常事务，也没有 payload</td>
+</tr>
+<tr>
+<td>平台互连 trace（部分 SoC 的 trace hub、ARM CoreSight）</td>
+<td>有限的事务记录</td>
+<td>依赖平台与固件，面向调试，字段残缺</td>
+</tr>
+<tr>
+<td>恶意 PCIe 设备做 DMA（PCILeech 这类）</td>
+<td>读的是内存内容，不是链路流量</td>
+<td>被 IOMMU 与 Secure Boot
+挡住；而且一旦能读内存，就不需要做这套重建了</td>
+</tr>
+</tbody>
+</table>
+<p>把这张表连起来看，软件路径真正的门槛不是看不到，而是<strong>要权限</strong>。论文的部署场景里，设备在第三方客户手里：攻击者可能是客户内部的工程师，能拆机，但要在被保护的
+victim 主机上装内核模块或注入进程，就要先过 Secure Boot、完整性校验和
+TEE 这一关——而威胁模型的假设正是这些防线都成立。</p>
+<p>还有一层更实际的：<strong>如果攻击者真能在 victim 主机上拿到
+root，攻击早就结束了</strong>。模型参数就在显存和进程内存里，直接读走即可，根本不需要做
+kernel 到 layer 的语义重建。Hermes
+的价值恰恰在于它假设攻击者没有这个权限。</p>
+<p>硬件抓包的优势，也就落在<strong>零权限</strong>与<strong>无损</strong>这两点上：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>优势</th>
+<th>软件为何替代不了</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>零权限、零软件改动</td>
+<td>只插一个分析仪，不改 OS、不装驱动、不动
+CUDA，这是主机受保护时唯一还成立的通道</td>
+</tr>
+<tr>
+<td>全字段的线上报文</td>
+<td>逆向出来的 9 DW command header（DW3 地址、DW5 大小、DW9
+类型）只存在于链路上</td>
+</tr>
+<tr>
+<td>顺序与配对保真</td>
+<td>completion 乱序、一个请求被拆进多个 completion、Tag
+配对关系，都是链路层事实，软件视角里已经被抹平</td>
+</tr>
+<tr>
+<td>覆盖 GPU 主动发起的事务</td>
+<td>GPU 自己发的读请求与 DMA 直写，在 CPU
+看来只是内存控制器上的一次访问，软件没有介入点</td>
+</tr>
+<tr>
+<td>被动、不可检测</td>
+<td>只听不发（interposer 或 mid-bus probe），victim
+软件栈感知不到，也不影响时序；软件方案要常驻，容易留下痕迹</td>
+</tr>
+<tr>
+<td>与闭源驱动解耦</td>
+<td>直接看驱动最终推给 GPU 的命令，不必先啃那些未文档化的内部结构</td>
+</tr>
+</tbody>
+</table>
+<p>硬件的代价，论文自己也承认：</p>
+<ul>
+<li>需要<strong>物理接触并拆机</strong>：插
+interposer（插在插槽之间的转接卡），或者把 mid-bus probe
+焊在链路上；</li>
+<li>协议分析仪是数万美元量级的<strong>专用仪器</strong>；</li>
+<li><strong>buffer 是硬上限</strong>（8GB，每方向
+4GB），这正是前面超大模型那一节问题的来源；</li>
+<li>链路一旦加密，硬件只看得到密文。</li>
+</ul>
+<p>最后这点值得对照着看。论文把软件与硬件两条路分别用在了两个阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">离线阶段（攻击者拥有白盒模型 + 自己的机器）</span><br><span class="line">   跑 nvprof 采 CUDA trace        → 纯软件，建立 kernel → layer 对照表</span><br><span class="line"></span><br><span class="line">在线阶段（攻击者只有物理接触 + victim 主机受保护）</span><br><span class="line">   用协议分析仪抓链路流量         → 纯硬件，查表重建模型</span><br></pre></td></tr></table></figure>
+<p>所以硬件不是信息量的最优解，而是<strong>威胁模型下唯一可行的那条路</strong>。这也解释了论文第
+5.3 节的立场：唯一从根上解决问题的对策是加密 PCIe
+链路。加密之后，硬件抓包只能拿到密文，而软件 hook
+又需要它拿不到的权限——<a
+href="https://iamzihao.github.io/posts/25a4a786/">ccAI 精读（二）</a> 里
+PCIe-SC 在 CPU 与 xPU 之间做的那件事，正好落在这个位置上。</p>
 <h2 id="论文提出的缓解思路">🛡️ 论文提出的缓解思路</h2>
 <p>论文第 5.3 节列了几条对策，也顺带说明了各自的问题：</p>
 <table>
@@ -1479,13 +1599,13 @@ Models with Lossless Inference Accuracy</em>
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">461k</span>
+    <span title="Word count total">463k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">13:59</span>
+    <span title="Reading time total">14:02</span>
   </span>
 </div>
 <div class="busuanzi-count">
