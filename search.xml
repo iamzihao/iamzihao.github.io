@@ -6777,6 +6777,279 @@ kernel，开 Debug 构建 + 小输入，定位报文 → 回溯源码 → 修复
       </tags>
   </entry>
   <entry>
+    <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
+    <url>/posts/f1a2b3c4/</url>
+    <content><![CDATA[<p>本文介绍
+FaaS（函数即服务）的诞生背景、核心概念与应用场景，并演示如何部署第一个云函数。</p>
+<span id="more"></span>
+<h3 id="一faas-的诞生我们为何需要它">一、FaaS
+的诞生：我们为何需要它？</h3>
+<p>要理解 FaaS
+为何会横空出世，我们得先坐上时光机，回顾一下应用部署方式的“进化史”。</p>
+<p><strong>第一站：物理服务器时代</strong></p>
+<p>在遥远的“刀耕火种”年代，我们要部署一个网站，得先去机房买一台（或几台）物理服务器。这意味着漫长的采购周期、高昂的硬件成本，以及复杂的机器运维。最头疼的是，为了应对业务高峰，我们必须按最高标准购买硬件，导致服务器在大部分时间里都处于“摸鱼”状态，造成了巨大的资源浪费。</p>
+<p><strong>第二站：虚拟机 (IaaS) 时代</strong></p>
+<p>云计算的出现带来了转机。以 AWS EC2
+为代表的虚拟机服务，让我们告别了实体硬件，可以在云端“租”服务器。这极大地提高了灵活性，几分钟内就能创建一台虚拟机。但问题并没有完全解决：我们依然要为整台虚拟机买单，哪怕上面的应用空闲着。同时，操作系统的维护、安全补丁的更新，这些运维工作一样也没少。</p>
+<p><strong>第三站：容器 (PaaS/CaaS) 时代</strong></p>
+<p>Docker 和 Kubernetes
+的风靡，让部署进入了容器化时代。我们将应用和它的依赖打包成一个轻量的“集装箱”，实现了环境的标准化和交付的敏捷性。但新的“烦恼”也随之而来：为了运行这些容器，我们得维护一个庞大而复杂的
+Kubernetes 集群。容量规划、节点扩容、网络配置…
+我们似乎从“应用运维”的坑，跳进了“集群运维”的坑。</p>
+<p>兜兜转转，开发者们始终有一个终极梦想：<strong>我们能只关心业务代码，而彻底不用管服务器吗？</strong></p>
+<p>FaaS 响亮地回答了：“能！”</p>
+<p>它的核心思想简单而彻底：<strong>让开发者回归最纯粹的编程，将服务器及相关的一切运维工作，都交给云平台</strong>。无论是操作系统、运行时环境，还是弹性伸缩、高可用，你通通不用管。你的世界里，只剩下你的“函数”——那段实现核心业务逻辑的代码。</p>
+<p>简单来说，FaaS
+将付费模式从“为服务器资源付费”，进化到了“<strong>为代码的实际执行付费</strong>”。这不只是一次技术升级，更是一场开发思想的革命。</p>
+<h3 id="二拨开云雾faas-核心概念详解">二、拨开云雾：FaaS
+核心概念详解</h3>
+<p>理解了 FaaS 的“初心”，我们再来拆解几个围绕着它的核心概念。</p>
+<ul>
+<li><p><strong>FaaS (Function-as-a-Service, 函数即服务)</strong>
+这是我们要掌握的核心。我喜欢用一个比喻：<strong>租厨房，而不是租公寓</strong>。
+在传统模式下，为了做顿饭，你得先租下一整套公寓（服务器），自己装修（配环境）、打扫（运维）。而
+FaaS
+就像一个共享厨房，你只需带着菜谱（代码）进去，锅碗瓢盆（运行环境）一应俱全。你只为炒菜的几分钟付费，完事就走，绝不为厨房的闲置时间买单。</p></li>
+<li><p><strong>Serverless (无服务器架构)</strong>
+这是一个更宏大的理念，FaaS 只是它最广为人知的“代言人”。Serverless
+并非真的没有服务器，而是强调一种<strong>开发者无需关心服务器</strong>的架构思想。
+如果说 FaaS 是共享厨房，那 Serverless
+就是整个美食广场。这个广场里除了厨房（FaaS），还有现成的食材超市（BaaS -
+数据库服务）、统一的安保系统（BaaS - 身份验证服务）等等。Serverless
+的目标，就是让你作为大厨，能心无旁骛地专注于“炒菜”这一件事上。</p></li>
+<li><p><strong>事件驱动 (Event-Driven)</strong> 这是 FaaS
+的灵魂。你的函数并非 24
+小时待命，而是像个“懒汉”，<strong>“有事才干，没事歇着”</strong>。
+你可以把函数想象成一个装了门铃的房间。只有当“事件”发生时——比如有人按门铃（HTTP
+请求）、信箱里有新信件（文件上传）、手机闹钟响了（定时任务）——它才会被唤醒去开门（执行函数）。这种模式确保了资源不会被空耗。</p></li>
+<li><p><strong>冷启动 (Cold Start)</strong> 这是 FaaS
+的一个独特挑战。如果你的函数长时间没被调用（没人按门铃），平台为了节约资源，会把它“请回家休息”（回收实例）。当下一个请求突然到来时，平台需要重新给它分配资源、加载代码、初始化环境…
+这个过程就像大冬天里发动一台冷了很久的汽车，会有一个明显的延迟，这就是“冷启动”。
+一旦启动完毕，后续的连续请求就会非常快（这叫“热启动”），直到它再次因为“没人理”而进入休眠。</p></li>
+<li><p><strong>BaaS (Backend-as-a-Service, 后端即服务)</strong>
+前面提到，这是 Serverless
+美食广场的另一半。它提供了各种开箱即用的后端能力，比如数据库
+(<code>Firebase</code>)、对象存储 (<code>AWS S3</code>)、用户认证
+(<code>Auth0</code>) 等。FaaS 函数通常和 BaaS
+服务配合，一个主内（负责无状态的计算逻辑），一个主外（负责有状态的数据存储），共同构建出一个完整的
+Serverless 应用。</p></li>
+</ul>
+<h3 id="三身手初试faas-的真实应用场景">三、身手初试：FaaS
+的真实应用场景</h3>
+<p>理论听起来很棒，那 FaaS 在实际工作中到底能用来做什么呢？</p>
+<h4 id="场景一网站或小程序的后端-api">场景一：网站或小程序的后端
+API</h4>
+<p>这是 FaaS
+最经典的用法。假设你要为个人博客或小程序开发一个后端，但又不想为了偶尔的访问量，而去维护一台
+24 小时开机的服务器。</p>
+<ul>
+<li><strong>实例</strong>：一个“用户注册”接口。当用户在前端页面提交注册信息后，会调用一个
+API 网关，这个网关会触发我们的 FaaS
+函数。函数接收到用户信息，执行数据校验、写入数据库等操作，然后返回结果。整个过程可能只花费几百毫秒，你就只需要为这短暂的计算付费，经济又省心。</li>
+</ul>
+<h4 id="场景二自动化的数据处理">场景二：自动化的数据处理</h4>
+<p>FaaS 的事件驱动特性，让它成为自动化工作流的“神器”，尤其适合“当 A
+发生时，自动执行 B”这类任务。</p>
+<ul>
+<li><strong>实例</strong>：图片自动生成缩略图。在社交或电商网站，用户上传一张高清原图后，我们往往需要大、中、小等不同尺寸的缩略图。通过
+FaaS，我们可以设定一个规则：每当有图片上传到指定的存储桶（如 AWS
+S3），就自动触发一个函数。这个函数会读取原图，批量生成所需的缩略图，再存回存储桶。整个流程全自动，无需人工干预。</li>
+</ul>
+<h4 id="场景三轻量级的定时任务-cron-job">场景三：轻量级的定时任务 (Cron
+Job)</h4>
+<p>几乎每个系统都需要一些定期执行的任务，比如每日数据备份、定时发送报表等。</p>
+<ul>
+<li><strong>实例</strong>：生成每日运营报表。你可以设置一个定时触发器，比如每天凌晨
+2 点，准时调用一个 FaaS
+函数。这个函数会自动连接数据库，抓取前一天的用户增长、订单量等数据，生成一份精美的报表，并通过邮件发送给相关同事。</li>
+</ul>
+<h4 id="场景四物联网-iot-数据处理">场景四：物联网 (IoT) 数据处理</h4>
+<p>在物联网场景中，成千上万的设备可能会在瞬间产生海量数据，对后端的弹性伸缩能力是极大的考验。</p>
+<ul>
+<li><strong>实例</strong>：共享单车位置上报。每辆单车上的 GPS
+设备会定时将位置信息发送到一个消息队列中。FaaS
+函数可以订阅这个队列，每当有新消息进入，就触发一次执行，将最新的单车位置解析并更新到地图数据库中。FaaS
+的自动伸缩能力，能完美应对早晚高峰期的并发洪流。</li>
+</ul>
+<p>通过这些场景，不难发现 FaaS
+特别适合那些<strong>无状态、短执行、事件触发</strong>类型的任务。</p>
+<h3 id="四庖丁解牛faas-架构与上线实战">四、庖丁解牛：FaaS
+架构与上线实战</h3>
+<p>理论和场景都清楚了，是时候深入 FaaS
+平台的内部，看看它究竟是如何工作的，并亲手上线一个函数了。</p>
+<h4 id="架构解剖以-aws-lambda-为例">架构解剖（以 AWS Lambda 为例）</h4>
+<p>我们以目前最流行的 FaaS 平台 AWS Lambda 为例，看看一个典型的 FaaS
+调用流程包含哪些组件。 <pre>
+<code class="mermaid">
+
+graph LR
+EVT[&quot;事件源&lt;br&#x2F;&gt;S3 &#x2F; API Gateway &#x2F; MQ&quot;] --&gt; TRG(&quot;触发器&quot;)
+TRG --&gt; LBD[&quot;Lambda 托管 Runtime&quot;]
+LBD --&gt; ENI[(&quot;弹性网络&quot;)]
+LBD --&gt; LOG[&quot;CloudWatch Logs&quot;]
+LBD --&gt; DLQ[&quot;死信队列&lt;br&#x2F;&gt;(可选)&quot;]
+</code>
+</pre></p>
+<ul>
+<li><strong>事件源</strong>：触发函数执行的“扳机”，可以是 S3
+的文件上传、API Gateway 的 HTTP 请求，或是消息队列里的新消息。</li>
+<li><strong>触发器</strong>：连接事件源和函数的“遥控器”，负责监听事件并调用目标函数。</li>
+<li><strong>Runtime</strong>：函数的运行环境，平台内置了 Node.js,
+Python, Go 等多种语言环境，也支持通过自定义镜像（Custom
+Runtime）运行任何语言。</li>
+<li><strong>弹性网络
+(ENI)</strong>：如果函数需要访问你私有网络（VPC）里的数据库等资源，平台会为其挂载一个弹性网络接口。</li>
+<li><strong>监控与日志 (CloudWatch
+Logs)</strong>：函数运行期间产生的日志（比如
+<code>console.log</code>）和各项指标（调用次数、执行时长等）会被自动收集起来，方便排查问题。</li>
+</ul>
+<blockquote>
+<p><strong>解密冷启动</strong>：从上面的流程可以看出，一次冷启动的耗时主要来自：拉取代码镜像
+→ 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
+</blockquote>
+<h4 id="开发到上线五步法">开发到上线：五步法</h4>
+<p>接下来，我们用一个经典的 Hello World
+示例，走完从开发到上线的完整流程。</p>
+<ol type="1">
+<li><p><strong>初始化工程</strong>
+首先，在本地创建一个项目目录，并编写一个简单的 Node.js 函数。
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> hello-faas &amp;&amp; <span class="built_in">cd</span> <span class="variable">$_</span></span><br><span class="line"><span class="comment"># 创建一个 index.js 文件，内容如下</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;exports.handler = async (event) =&gt; &quot;Hello from FaaS!&quot;;&#x27;</span> &gt; index.js</span><br><span class="line"><span class="comment"># 将项目打包成 zip 文件</span></span><br><span class="line">zip -r function.zip .</span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>创建函数</strong>
+登录云厂商控制台（或使用命令行工具），创建一个新函数。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS CLI 为例</span></span><br><span class="line">aws lambda create-function \</span><br><span class="line">    --function-name hello-world \</span><br><span class="line">    --runtime nodejs20.x \</span><br><span class="line">    --handler index.handler \</span><br><span class="line">    --zip-file fileb://function.zip \</span><br><span class="line">    --role &lt;your-lambda-execution-role-arn&gt;</span><br></pre></td></tr></table></figure>
+这里需要指定函数名、运行时、入口文件
+(<code>index.js</code>里的<code>handler</code>方法)，并上传代码包。</p></li>
+<li><p><strong>配置触发器</strong>
+函数创建好了，但还不知道“听谁的号令”。我们需要为它配置一个触发器，比如一个公开的
+HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS API Gateway v2 为例，此步骤在控制台操作更直观</span></span><br><span class="line">aws apigatewayv2 create-api --name hello-api --protocol-type HTTP</span><br><span class="line"><span class="comment"># ... 此处省略若干步骤，建议在控制台界面完成 API Gateway 与 Lambda 的集成</span></span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>版本与灰度</strong>
+在生产环境中，直接更新线上代码是危险的。FaaS
+平台通常支持版本管理和别名（Alias）功能，你可以先发布一个新版本，然后让
+10% 的流量指向新版本，90%
+的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
+<li><p><strong>监控与告警</strong>
+函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
+5 分钟超过 1% 时，立即发短信通知我。</p></li>
+</ol>
+<h3
+id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h3>
+<p>FaaS
+的一大魅力在于其极致的成本效益，让我们来看看它是如何计费的，以及在使用中会遇到哪些“坑”。</p>
+<h4 id="计费模型对比">计费模型对比</h4>
+<p>各大云厂商的 FaaS 计费方式大同小异，通常都包含两个维度：</p>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 20%" />
+<col style="width: 24%" />
+<col style="width: 13%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr>
+<th>厂商</th>
+<th>最小计量（时长/内存）</th>
+<th>每月免费额度（调用/资源）</th>
+<th>计费维度</th>
+<th>关键备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWS Lambda</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 GB-秒</td>
+<td>调用次数 + GB-秒</td>
+<td>ARM 架构单价更低</td>
+</tr>
+<tr>
+<td>Azure Functions</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 GB-秒</td>
+<td>同上</td>
+<td>分为多种计划 (Plan)</td>
+</tr>
+<tr>
+<td>GCP Cloud Functions</td>
+<td>100 ms / 256 MB</td>
+<td>200 万次 / 40 万 GB-秒</td>
+<td>同上</td>
+<td>Gen2 冷启动优化明显</td>
+</tr>
+<tr>
+<td>阿里云函数计算</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 CU-秒</td>
+<td>调用次数 + CU-秒</td>
+<td>CU 是资源的综合单位</td>
+</tr>
+</tbody>
+</table>
+<p><strong>通用计费公式</strong>：<code>总费用 = 调用次数 × 次数单价 + (函数执行总时长 × 内存配置) × 资源单价</code></p>
+<p>可以看出，厂商们都在用慷慨的免费额度吸引开发者，对于个人项目或小型应用来说，很可能一个月都花不了几块钱。</p>
+<h4 id="常见坑与对策">常见“坑”与对策</h4>
+<p>在享受 FaaS 带来的便利时，也要小心避开下面这些常见的“坑”。</p>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 29%" />
+<col style="width: 54%" />
+</colgroup>
+<thead>
+<tr>
+<th>症状</th>
+<th>可能根因</th>
+<th>应对策略</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>冷启动太慢</strong> (1-3s)</td>
+<td>代码包过大、依赖库复杂、VPC 网络挂载</td>
+<td>1. <strong>瘦身</strong>：精简代码和依赖。 <br> 2.
+<strong>选型</strong>：选择 Go, Rust 等编译型语言。<br> 3.
+<strong>预热</strong>：开启预置并发（Provisioned Concurrency）。</td>
+</tr>
+<tr>
+<td><strong>并发被限流</strong></td>
+<td>达到账户并发上限或突发流量过大</td>
+<td>1. <strong>提额</strong>：联系云厂商提高并发额度。<br> 2.
+<strong>预留</strong>：为核心函数配置“预留并发”（Reserved
+Concurrency）。</td>
+</tr>
+<tr>
+<td><strong>本地调试困难</strong></td>
+<td>依赖云端服务，难以模拟触发事件</td>
+<td>使用官方模拟工具，如 AWS SAM, LocalStack, Midway FaaS 等。</td>
+</tr>
+<tr>
+<td><strong>配置管理混乱</strong></td>
+<td>多函数间配置散落，难以维护</td>
+<td>1. <strong>IaC</strong>：使用 Terraform, CDK
+等工具进行“基础设施即代码”管理。<br> 2.
+<strong>环境变量</strong>：将配置统一存储在环境变量或配置中心。</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>友情提示</strong>：FaaS
+虽好，但非万能。它特别适合短平快、无状态的计算任务。对于需要长连接（如
+WebSocket）、或对延迟极其敏感（如实时对战游戏）的应用，传统的容器或虚拟机方案可能依然是更好的选择。</p>
+</blockquote>
+<h3 id="小结">✨ 小结</h3>
+<p>让我们回到最初的问题：FaaS 究竟是什么？</p>
+<p>现在，我们可以更自信地回答：它是一种<strong>将应用拆解为微小、独立的函数，并由云平台全权负责其运行、伸缩和计费的现代化架构模式</strong>。</p>
+<p>它继承了 Serverless
+的核心思想，让开发者从繁重的服务器运维中彻底解放出来，将宝贵的精力聚焦于业务创新本身。</p>
+<p>当然，它也有冷启动这样的挑战，但通过合理的架构设计和优化手段，我们完全可以扬长避短。如果你正准备开启一个新项目，或希望重构一个老旧的单体应用，不妨给
+FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
+]]></content>
+      <tags>
+        <tag>Serverless</tag>
+        <tag>FaaS</tag>
+        <tag>云原生</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>NVBit 插桩：从 0 到可用</title>
     <url>/posts/d4c3b2a1/</url>
     <content><![CDATA[<p>NVBit 是 NVIDIA 开源的 CUDA
@@ -7213,279 +7486,6 @@ NVBit“在哪些指令前，插入哪些函数调用”。</p>
         <tag>调试与性能</tag>
         <tag>NVBit</tag>
         <tag>插桩</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
-    <url>/posts/f1a2b3c4/</url>
-    <content><![CDATA[<p>本文介绍
-FaaS（函数即服务）的诞生背景、核心概念与应用场景，并演示如何部署第一个云函数。</p>
-<span id="more"></span>
-<h3 id="一faas-的诞生我们为何需要它">一、FaaS
-的诞生：我们为何需要它？</h3>
-<p>要理解 FaaS
-为何会横空出世，我们得先坐上时光机，回顾一下应用部署方式的“进化史”。</p>
-<p><strong>第一站：物理服务器时代</strong></p>
-<p>在遥远的“刀耕火种”年代，我们要部署一个网站，得先去机房买一台（或几台）物理服务器。这意味着漫长的采购周期、高昂的硬件成本，以及复杂的机器运维。最头疼的是，为了应对业务高峰，我们必须按最高标准购买硬件，导致服务器在大部分时间里都处于“摸鱼”状态，造成了巨大的资源浪费。</p>
-<p><strong>第二站：虚拟机 (IaaS) 时代</strong></p>
-<p>云计算的出现带来了转机。以 AWS EC2
-为代表的虚拟机服务，让我们告别了实体硬件，可以在云端“租”服务器。这极大地提高了灵活性，几分钟内就能创建一台虚拟机。但问题并没有完全解决：我们依然要为整台虚拟机买单，哪怕上面的应用空闲着。同时，操作系统的维护、安全补丁的更新，这些运维工作一样也没少。</p>
-<p><strong>第三站：容器 (PaaS/CaaS) 时代</strong></p>
-<p>Docker 和 Kubernetes
-的风靡，让部署进入了容器化时代。我们将应用和它的依赖打包成一个轻量的“集装箱”，实现了环境的标准化和交付的敏捷性。但新的“烦恼”也随之而来：为了运行这些容器，我们得维护一个庞大而复杂的
-Kubernetes 集群。容量规划、节点扩容、网络配置…
-我们似乎从“应用运维”的坑，跳进了“集群运维”的坑。</p>
-<p>兜兜转转，开发者们始终有一个终极梦想：<strong>我们能只关心业务代码，而彻底不用管服务器吗？</strong></p>
-<p>FaaS 响亮地回答了：“能！”</p>
-<p>它的核心思想简单而彻底：<strong>让开发者回归最纯粹的编程，将服务器及相关的一切运维工作，都交给云平台</strong>。无论是操作系统、运行时环境，还是弹性伸缩、高可用，你通通不用管。你的世界里，只剩下你的“函数”——那段实现核心业务逻辑的代码。</p>
-<p>简单来说，FaaS
-将付费模式从“为服务器资源付费”，进化到了“<strong>为代码的实际执行付费</strong>”。这不只是一次技术升级，更是一场开发思想的革命。</p>
-<h3 id="二拨开云雾faas-核心概念详解">二、拨开云雾：FaaS
-核心概念详解</h3>
-<p>理解了 FaaS 的“初心”，我们再来拆解几个围绕着它的核心概念。</p>
-<ul>
-<li><p><strong>FaaS (Function-as-a-Service, 函数即服务)</strong>
-这是我们要掌握的核心。我喜欢用一个比喻：<strong>租厨房，而不是租公寓</strong>。
-在传统模式下，为了做顿饭，你得先租下一整套公寓（服务器），自己装修（配环境）、打扫（运维）。而
-FaaS
-就像一个共享厨房，你只需带着菜谱（代码）进去，锅碗瓢盆（运行环境）一应俱全。你只为炒菜的几分钟付费，完事就走，绝不为厨房的闲置时间买单。</p></li>
-<li><p><strong>Serverless (无服务器架构)</strong>
-这是一个更宏大的理念，FaaS 只是它最广为人知的“代言人”。Serverless
-并非真的没有服务器，而是强调一种<strong>开发者无需关心服务器</strong>的架构思想。
-如果说 FaaS 是共享厨房，那 Serverless
-就是整个美食广场。这个广场里除了厨房（FaaS），还有现成的食材超市（BaaS -
-数据库服务）、统一的安保系统（BaaS - 身份验证服务）等等。Serverless
-的目标，就是让你作为大厨，能心无旁骛地专注于“炒菜”这一件事上。</p></li>
-<li><p><strong>事件驱动 (Event-Driven)</strong> 这是 FaaS
-的灵魂。你的函数并非 24
-小时待命，而是像个“懒汉”，<strong>“有事才干，没事歇着”</strong>。
-你可以把函数想象成一个装了门铃的房间。只有当“事件”发生时——比如有人按门铃（HTTP
-请求）、信箱里有新信件（文件上传）、手机闹钟响了（定时任务）——它才会被唤醒去开门（执行函数）。这种模式确保了资源不会被空耗。</p></li>
-<li><p><strong>冷启动 (Cold Start)</strong> 这是 FaaS
-的一个独特挑战。如果你的函数长时间没被调用（没人按门铃），平台为了节约资源，会把它“请回家休息”（回收实例）。当下一个请求突然到来时，平台需要重新给它分配资源、加载代码、初始化环境…
-这个过程就像大冬天里发动一台冷了很久的汽车，会有一个明显的延迟，这就是“冷启动”。
-一旦启动完毕，后续的连续请求就会非常快（这叫“热启动”），直到它再次因为“没人理”而进入休眠。</p></li>
-<li><p><strong>BaaS (Backend-as-a-Service, 后端即服务)</strong>
-前面提到，这是 Serverless
-美食广场的另一半。它提供了各种开箱即用的后端能力，比如数据库
-(<code>Firebase</code>)、对象存储 (<code>AWS S3</code>)、用户认证
-(<code>Auth0</code>) 等。FaaS 函数通常和 BaaS
-服务配合，一个主内（负责无状态的计算逻辑），一个主外（负责有状态的数据存储），共同构建出一个完整的
-Serverless 应用。</p></li>
-</ul>
-<h3 id="三身手初试faas-的真实应用场景">三、身手初试：FaaS
-的真实应用场景</h3>
-<p>理论听起来很棒，那 FaaS 在实际工作中到底能用来做什么呢？</p>
-<h4 id="场景一网站或小程序的后端-api">场景一：网站或小程序的后端
-API</h4>
-<p>这是 FaaS
-最经典的用法。假设你要为个人博客或小程序开发一个后端，但又不想为了偶尔的访问量，而去维护一台
-24 小时开机的服务器。</p>
-<ul>
-<li><strong>实例</strong>：一个“用户注册”接口。当用户在前端页面提交注册信息后，会调用一个
-API 网关，这个网关会触发我们的 FaaS
-函数。函数接收到用户信息，执行数据校验、写入数据库等操作，然后返回结果。整个过程可能只花费几百毫秒，你就只需要为这短暂的计算付费，经济又省心。</li>
-</ul>
-<h4 id="场景二自动化的数据处理">场景二：自动化的数据处理</h4>
-<p>FaaS 的事件驱动特性，让它成为自动化工作流的“神器”，尤其适合“当 A
-发生时，自动执行 B”这类任务。</p>
-<ul>
-<li><strong>实例</strong>：图片自动生成缩略图。在社交或电商网站，用户上传一张高清原图后，我们往往需要大、中、小等不同尺寸的缩略图。通过
-FaaS，我们可以设定一个规则：每当有图片上传到指定的存储桶（如 AWS
-S3），就自动触发一个函数。这个函数会读取原图，批量生成所需的缩略图，再存回存储桶。整个流程全自动，无需人工干预。</li>
-</ul>
-<h4 id="场景三轻量级的定时任务-cron-job">场景三：轻量级的定时任务 (Cron
-Job)</h4>
-<p>几乎每个系统都需要一些定期执行的任务，比如每日数据备份、定时发送报表等。</p>
-<ul>
-<li><strong>实例</strong>：生成每日运营报表。你可以设置一个定时触发器，比如每天凌晨
-2 点，准时调用一个 FaaS
-函数。这个函数会自动连接数据库，抓取前一天的用户增长、订单量等数据，生成一份精美的报表，并通过邮件发送给相关同事。</li>
-</ul>
-<h4 id="场景四物联网-iot-数据处理">场景四：物联网 (IoT) 数据处理</h4>
-<p>在物联网场景中，成千上万的设备可能会在瞬间产生海量数据，对后端的弹性伸缩能力是极大的考验。</p>
-<ul>
-<li><strong>实例</strong>：共享单车位置上报。每辆单车上的 GPS
-设备会定时将位置信息发送到一个消息队列中。FaaS
-函数可以订阅这个队列，每当有新消息进入，就触发一次执行，将最新的单车位置解析并更新到地图数据库中。FaaS
-的自动伸缩能力，能完美应对早晚高峰期的并发洪流。</li>
-</ul>
-<p>通过这些场景，不难发现 FaaS
-特别适合那些<strong>无状态、短执行、事件触发</strong>类型的任务。</p>
-<h3 id="四庖丁解牛faas-架构与上线实战">四、庖丁解牛：FaaS
-架构与上线实战</h3>
-<p>理论和场景都清楚了，是时候深入 FaaS
-平台的内部，看看它究竟是如何工作的，并亲手上线一个函数了。</p>
-<h4 id="架构解剖以-aws-lambda-为例">架构解剖（以 AWS Lambda 为例）</h4>
-<p>我们以目前最流行的 FaaS 平台 AWS Lambda 为例，看看一个典型的 FaaS
-调用流程包含哪些组件。 <pre>
-<code class="mermaid">
-
-graph LR
-EVT[&quot;事件源&lt;br&#x2F;&gt;S3 &#x2F; API Gateway &#x2F; MQ&quot;] --&gt; TRG(&quot;触发器&quot;)
-TRG --&gt; LBD[&quot;Lambda 托管 Runtime&quot;]
-LBD --&gt; ENI[(&quot;弹性网络&quot;)]
-LBD --&gt; LOG[&quot;CloudWatch Logs&quot;]
-LBD --&gt; DLQ[&quot;死信队列&lt;br&#x2F;&gt;(可选)&quot;]
-</code>
-</pre></p>
-<ul>
-<li><strong>事件源</strong>：触发函数执行的“扳机”，可以是 S3
-的文件上传、API Gateway 的 HTTP 请求，或是消息队列里的新消息。</li>
-<li><strong>触发器</strong>：连接事件源和函数的“遥控器”，负责监听事件并调用目标函数。</li>
-<li><strong>Runtime</strong>：函数的运行环境，平台内置了 Node.js,
-Python, Go 等多种语言环境，也支持通过自定义镜像（Custom
-Runtime）运行任何语言。</li>
-<li><strong>弹性网络
-(ENI)</strong>：如果函数需要访问你私有网络（VPC）里的数据库等资源，平台会为其挂载一个弹性网络接口。</li>
-<li><strong>监控与日志 (CloudWatch
-Logs)</strong>：函数运行期间产生的日志（比如
-<code>console.log</code>）和各项指标（调用次数、执行时长等）会被自动收集起来，方便排查问题。</li>
-</ul>
-<blockquote>
-<p><strong>解密冷启动</strong>：从上面的流程可以看出，一次冷启动的耗时主要来自：拉取代码镜像
-→ 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
-</blockquote>
-<h4 id="开发到上线五步法">开发到上线：五步法</h4>
-<p>接下来，我们用一个经典的 Hello World
-示例，走完从开发到上线的完整流程。</p>
-<ol type="1">
-<li><p><strong>初始化工程</strong>
-首先，在本地创建一个项目目录，并编写一个简单的 Node.js 函数。
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> hello-faas &amp;&amp; <span class="built_in">cd</span> <span class="variable">$_</span></span><br><span class="line"><span class="comment"># 创建一个 index.js 文件，内容如下</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;exports.handler = async (event) =&gt; &quot;Hello from FaaS!&quot;;&#x27;</span> &gt; index.js</span><br><span class="line"><span class="comment"># 将项目打包成 zip 文件</span></span><br><span class="line">zip -r function.zip .</span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>创建函数</strong>
-登录云厂商控制台（或使用命令行工具），创建一个新函数。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS CLI 为例</span></span><br><span class="line">aws lambda create-function \</span><br><span class="line">    --function-name hello-world \</span><br><span class="line">    --runtime nodejs20.x \</span><br><span class="line">    --handler index.handler \</span><br><span class="line">    --zip-file fileb://function.zip \</span><br><span class="line">    --role &lt;your-lambda-execution-role-arn&gt;</span><br></pre></td></tr></table></figure>
-这里需要指定函数名、运行时、入口文件
-(<code>index.js</code>里的<code>handler</code>方法)，并上传代码包。</p></li>
-<li><p><strong>配置触发器</strong>
-函数创建好了，但还不知道“听谁的号令”。我们需要为它配置一个触发器，比如一个公开的
-HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS API Gateway v2 为例，此步骤在控制台操作更直观</span></span><br><span class="line">aws apigatewayv2 create-api --name hello-api --protocol-type HTTP</span><br><span class="line"><span class="comment"># ... 此处省略若干步骤，建议在控制台界面完成 API Gateway 与 Lambda 的集成</span></span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>版本与灰度</strong>
-在生产环境中，直接更新线上代码是危险的。FaaS
-平台通常支持版本管理和别名（Alias）功能，你可以先发布一个新版本，然后让
-10% 的流量指向新版本，90%
-的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
-<li><p><strong>监控与告警</strong>
-函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
-5 分钟超过 1% 时，立即发短信通知我。</p></li>
-</ol>
-<h3
-id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h3>
-<p>FaaS
-的一大魅力在于其极致的成本效益，让我们来看看它是如何计费的，以及在使用中会遇到哪些“坑”。</p>
-<h4 id="计费模型对比">计费模型对比</h4>
-<p>各大云厂商的 FaaS 计费方式大同小异，通常都包含两个维度：</p>
-<table>
-<colgroup>
-<col style="width: 18%" />
-<col style="width: 20%" />
-<col style="width: 24%" />
-<col style="width: 13%" />
-<col style="width: 21%" />
-</colgroup>
-<thead>
-<tr>
-<th>厂商</th>
-<th>最小计量（时长/内存）</th>
-<th>每月免费额度（调用/资源）</th>
-<th>计费维度</th>
-<th>关键备注</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AWS Lambda</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 GB-秒</td>
-<td>调用次数 + GB-秒</td>
-<td>ARM 架构单价更低</td>
-</tr>
-<tr>
-<td>Azure Functions</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 GB-秒</td>
-<td>同上</td>
-<td>分为多种计划 (Plan)</td>
-</tr>
-<tr>
-<td>GCP Cloud Functions</td>
-<td>100 ms / 256 MB</td>
-<td>200 万次 / 40 万 GB-秒</td>
-<td>同上</td>
-<td>Gen2 冷启动优化明显</td>
-</tr>
-<tr>
-<td>阿里云函数计算</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 CU-秒</td>
-<td>调用次数 + CU-秒</td>
-<td>CU 是资源的综合单位</td>
-</tr>
-</tbody>
-</table>
-<p><strong>通用计费公式</strong>：<code>总费用 = 调用次数 × 次数单价 + (函数执行总时长 × 内存配置) × 资源单价</code></p>
-<p>可以看出，厂商们都在用慷慨的免费额度吸引开发者，对于个人项目或小型应用来说，很可能一个月都花不了几块钱。</p>
-<h4 id="常见坑与对策">常见“坑”与对策</h4>
-<p>在享受 FaaS 带来的便利时，也要小心避开下面这些常见的“坑”。</p>
-<table>
-<colgroup>
-<col style="width: 16%" />
-<col style="width: 29%" />
-<col style="width: 54%" />
-</colgroup>
-<thead>
-<tr>
-<th>症状</th>
-<th>可能根因</th>
-<th>应对策略</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>冷启动太慢</strong> (1-3s)</td>
-<td>代码包过大、依赖库复杂、VPC 网络挂载</td>
-<td>1. <strong>瘦身</strong>：精简代码和依赖。 <br> 2.
-<strong>选型</strong>：选择 Go, Rust 等编译型语言。<br> 3.
-<strong>预热</strong>：开启预置并发（Provisioned Concurrency）。</td>
-</tr>
-<tr>
-<td><strong>并发被限流</strong></td>
-<td>达到账户并发上限或突发流量过大</td>
-<td>1. <strong>提额</strong>：联系云厂商提高并发额度。<br> 2.
-<strong>预留</strong>：为核心函数配置“预留并发”（Reserved
-Concurrency）。</td>
-</tr>
-<tr>
-<td><strong>本地调试困难</strong></td>
-<td>依赖云端服务，难以模拟触发事件</td>
-<td>使用官方模拟工具，如 AWS SAM, LocalStack, Midway FaaS 等。</td>
-</tr>
-<tr>
-<td><strong>配置管理混乱</strong></td>
-<td>多函数间配置散落，难以维护</td>
-<td>1. <strong>IaC</strong>：使用 Terraform, CDK
-等工具进行“基础设施即代码”管理。<br> 2.
-<strong>环境变量</strong>：将配置统一存储在环境变量或配置中心。</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>友情提示</strong>：FaaS
-虽好，但非万能。它特别适合短平快、无状态的计算任务。对于需要长连接（如
-WebSocket）、或对延迟极其敏感（如实时对战游戏）的应用，传统的容器或虚拟机方案可能依然是更好的选择。</p>
-</blockquote>
-<h3 id="小结">✨ 小结</h3>
-<p>让我们回到最初的问题：FaaS 究竟是什么？</p>
-<p>现在，我们可以更自信地回答：它是一种<strong>将应用拆解为微小、独立的函数，并由云平台全权负责其运行、伸缩和计费的现代化架构模式</strong>。</p>
-<p>它继承了 Serverless
-的核心思想，让开发者从繁重的服务器运维中彻底解放出来，将宝贵的精力聚焦于业务创新本身。</p>
-<p>当然，它也有冷启动这样的挑战，但通过合理的架构设计和优化手段，我们完全可以扬长避短。如果你正准备开启一个新项目，或希望重构一个老旧的单体应用，不妨给
-FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
-]]></content>
-      <tags>
-        <tag>Serverless</tag>
-        <tag>FaaS</tag>
-        <tag>云原生</tag>
       </tags>
   </entry>
   <entry>
@@ -8396,88 +8396,6 @@ index）或轮数（epoch index）。</li>
       </tags>
   </entry>
   <entry>
-    <title>了解RNN</title>
-    <url>/posts/da4b49ae/</url>
-    <content><![CDATA[<p>卷积神经网络适合处理图片信息，那文字信息怎么办呢？首先要明白，对于计算机，或者说神经网络来说，文字都是要转换为数字之后再进行处理的。那么我们要面对的第一个问题就是：如何将文字转换为数字？</p>
-<span id="more"></span>
-<h2 id="文字转数字的朴素思想">文字转数字的朴素思想</h2>
-<p>有一种简单粗暴的方法：每一个文字或词组都用一个数字来代表，建一个非常大的映射关系表。</p>
-<p>但这样有几个显而易见的缺点：</p>
-<ol type="1">
-<li>只用一个数字表示，不仅要建的表很大，维度也很低（只有一维）。</li>
-<li>数字和数字之间无法表示字与字、词与词之间的联系。</li>
-</ol>
-<p>为了解决维度低的问题，有人提出了 <strong>one-hot
-编码</strong>，即准备一个维度非常高的向量，每个字只有向量中一个位置是
-1，其余全是
-0。虽然维度低的问题被解决了，但是维度好像又太高了，并且依然没有解决之前的第二个问题。</p>
-<h2 id="更好的方案词嵌入">更好的方案：词嵌入</h2>
-<p>那有没有能解决以上两种问题的方法呢？有的，这种方法就是
-<strong>词嵌入（Word Embedding）</strong>。</p>
-<p><img src="/assets/image-20251010224631451.png" /></p>
-<p>通过词嵌入的方式得到的词向量，维度不高不低，每个位置可以理解为一个特征值，但这个特征是通过训练得到的，我们并不知道代表着什么。那这种方式如何表示词与词之间的语义相关性呢？可以用两个向量的点积或余弦相似度来表示向量之间的相关性，进而表示词语之间的相关性。</p>
-<p>这样就将自然语言之间的联系转为可以用数学公式计算的方式。同时，一些数学上的计算结果可能反映出一些很微妙的关系，例如一个训练好的词嵌入矩阵，很可能使得
-<code>桌子 - 椅子 = 鼠标 - 键盘</code>。</p>
-<p>把所有词向量组成一个大矩阵，这个大矩阵就叫做
-<strong>嵌入矩阵</strong>，每一列表示一个词向量。</p>
-<p>矩阵中的值由训练得到，比较经典的方法是
-word2vec，这里不展开讲解。虽然这样表示的维度比起 one-hot
-已经大大下降，但是也超过了人能直接理解的二维、三维，我们管这些向量所在的空间叫做
-<strong>潜空间</strong>。</p>
-<p>我们无法理解潜空间中的位置关系，但是也有一些方法能够把潜空间降维至
-2-3 维，方便我们直观看到词与词之间的关系。</p>
-<h2 id="rnn-如何处理序列信息">RNN 如何处理序列信息</h2>
-<p>这样我们的第一个问题就算是解决了，我们可以用词嵌入的方法将文本转为数据，但这样就可以了吗？举个例子，一句话中的五个词转为
-5 个词向量，每个词向量假设为 300 维度，那么输入层就要有 1500
-个神经元。当然是可以的，但是有两个新问题：</p>
-<ol type="1">
-<li>输入层太大了，并且长度不固定；</li>
-<li>无法体现词语的先后顺序，参考之前无法体现图片像素的位置关系。</li>
-</ol>
-<p>在之前的图像处理中，我们可以通过卷积的方式来解决这一问题，那现在呢？</p>
-<p>让我们回到经典的神经网络，但是不是一次输入一句话，而是输入一个词。</p>
-<p>可以发现在第二个词的计算过程中，完全没有让第一个词的任何信息参与进来，怎么办呢？我们可以让它先输出一个隐藏状态，然后再经过一次非线性变换，得到输出
-Y。这就是 <strong>循环神经网络 RNN（Recurrent Neural
-Network）</strong>。</p>
-<p><img src="/assets/image-20251010224853203.png" /></p>
-<p>这个 RNN
-模型就具备了理解词与词之间先后顺序的能力，可以判断一句话中各个单词的褒贬词性，还能给出一句话，不断生成下一个字，以及完成翻译等自然语言处理工作。</p>
-<p><img src="/assets/image-20251010224930822.png" /></p>
-<h2 id="rnn-的局限性">RNN 的局限性</h2>
-<p>那么 RNN 是否就完美了呢？当然不，RNN 依旧存在两个问题：</p>
-<ol type="1">
-<li><strong>长期依赖问题</strong>：信息会随着时间步的增多而逐渐丢失，无法捕捉长期依赖，而有的语句的关键信息恰好在很远的地方。</li>
-<li><strong>顺序处理限制</strong>：RNN
-必须顺序处理，每个时间步必须依赖上一个时间步的隐藏状态的计算结果，这限制了并行计算的能力。</li>
-</ol>
-<p>为了解决这些问题，研究者们提出了多种 RNN 的变体。其中最著名的就是
-<strong>长短期记忆网络（LSTM）</strong> 和
-<strong>门控循环单元（GRU）</strong>。</p>
-<ul>
-<li><strong>LSTM</strong>：通过引入“门”机制（输入门、遗忘门、输出门）来控制信息的流动。这使得网络可以有选择地学习、记忆或遗忘信息，从而更好地捕捉序列中的长期依赖关系。</li>
-<li><strong>GRU</strong>：作为 LSTM
-的一种简化变体，它将输入门和遗忘门合并为“更新门”，并引入了“重置门”。GRU
-的结构更简单，计算效率更高，在许多任务上也能取得与 LSTM
-相近的效果。</li>
-</ul>
-<p>这些改进在很大程度上缓解了 RNN
-的梯度消失问题，但它们仍然需要按顺序处理数据，未能解决并行计算的限制。那么，是否有一个可以彻底抛弃按顺序计算的新方案呢？</p>
-<p>有的，那就是 <strong>Transformer</strong>！</p>
-<blockquote>
-<p>参考自 <a
-href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
-飞天闪客</a></p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
-        <tag>RNN</tag>
-        <tag>NLP</tag>
-        <tag>词嵌入</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>pytorch train 模板</title>
     <url>/posts/14ba9e2c/</url>
     <content><![CDATA[<p>本文提供了一个完整、通用的 PyTorch
@@ -8708,6 +8626,88 @@ href="https://www.bilibili.com/video/BV1hE411t7RN?spm_id_from=333.788.videopod.e
         <tag>深度学习</tag>
         <tag>AI</tag>
         <tag>训练模板</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>了解RNN</title>
+    <url>/posts/da4b49ae/</url>
+    <content><![CDATA[<p>卷积神经网络适合处理图片信息，那文字信息怎么办呢？首先要明白，对于计算机，或者说神经网络来说，文字都是要转换为数字之后再进行处理的。那么我们要面对的第一个问题就是：如何将文字转换为数字？</p>
+<span id="more"></span>
+<h2 id="文字转数字的朴素思想">文字转数字的朴素思想</h2>
+<p>有一种简单粗暴的方法：每一个文字或词组都用一个数字来代表，建一个非常大的映射关系表。</p>
+<p>但这样有几个显而易见的缺点：</p>
+<ol type="1">
+<li>只用一个数字表示，不仅要建的表很大，维度也很低（只有一维）。</li>
+<li>数字和数字之间无法表示字与字、词与词之间的联系。</li>
+</ol>
+<p>为了解决维度低的问题，有人提出了 <strong>one-hot
+编码</strong>，即准备一个维度非常高的向量，每个字只有向量中一个位置是
+1，其余全是
+0。虽然维度低的问题被解决了，但是维度好像又太高了，并且依然没有解决之前的第二个问题。</p>
+<h2 id="更好的方案词嵌入">更好的方案：词嵌入</h2>
+<p>那有没有能解决以上两种问题的方法呢？有的，这种方法就是
+<strong>词嵌入（Word Embedding）</strong>。</p>
+<p><img src="/assets/image-20251010224631451.png" /></p>
+<p>通过词嵌入的方式得到的词向量，维度不高不低，每个位置可以理解为一个特征值，但这个特征是通过训练得到的，我们并不知道代表着什么。那这种方式如何表示词与词之间的语义相关性呢？可以用两个向量的点积或余弦相似度来表示向量之间的相关性，进而表示词语之间的相关性。</p>
+<p>这样就将自然语言之间的联系转为可以用数学公式计算的方式。同时，一些数学上的计算结果可能反映出一些很微妙的关系，例如一个训练好的词嵌入矩阵，很可能使得
+<code>桌子 - 椅子 = 鼠标 - 键盘</code>。</p>
+<p>把所有词向量组成一个大矩阵，这个大矩阵就叫做
+<strong>嵌入矩阵</strong>，每一列表示一个词向量。</p>
+<p>矩阵中的值由训练得到，比较经典的方法是
+word2vec，这里不展开讲解。虽然这样表示的维度比起 one-hot
+已经大大下降，但是也超过了人能直接理解的二维、三维，我们管这些向量所在的空间叫做
+<strong>潜空间</strong>。</p>
+<p>我们无法理解潜空间中的位置关系，但是也有一些方法能够把潜空间降维至
+2-3 维，方便我们直观看到词与词之间的关系。</p>
+<h2 id="rnn-如何处理序列信息">RNN 如何处理序列信息</h2>
+<p>这样我们的第一个问题就算是解决了，我们可以用词嵌入的方法将文本转为数据，但这样就可以了吗？举个例子，一句话中的五个词转为
+5 个词向量，每个词向量假设为 300 维度，那么输入层就要有 1500
+个神经元。当然是可以的，但是有两个新问题：</p>
+<ol type="1">
+<li>输入层太大了，并且长度不固定；</li>
+<li>无法体现词语的先后顺序，参考之前无法体现图片像素的位置关系。</li>
+</ol>
+<p>在之前的图像处理中，我们可以通过卷积的方式来解决这一问题，那现在呢？</p>
+<p>让我们回到经典的神经网络，但是不是一次输入一句话，而是输入一个词。</p>
+<p>可以发现在第二个词的计算过程中，完全没有让第一个词的任何信息参与进来，怎么办呢？我们可以让它先输出一个隐藏状态，然后再经过一次非线性变换，得到输出
+Y。这就是 <strong>循环神经网络 RNN（Recurrent Neural
+Network）</strong>。</p>
+<p><img src="/assets/image-20251010224853203.png" /></p>
+<p>这个 RNN
+模型就具备了理解词与词之间先后顺序的能力，可以判断一句话中各个单词的褒贬词性，还能给出一句话，不断生成下一个字，以及完成翻译等自然语言处理工作。</p>
+<p><img src="/assets/image-20251010224930822.png" /></p>
+<h2 id="rnn-的局限性">RNN 的局限性</h2>
+<p>那么 RNN 是否就完美了呢？当然不，RNN 依旧存在两个问题：</p>
+<ol type="1">
+<li><strong>长期依赖问题</strong>：信息会随着时间步的增多而逐渐丢失，无法捕捉长期依赖，而有的语句的关键信息恰好在很远的地方。</li>
+<li><strong>顺序处理限制</strong>：RNN
+必须顺序处理，每个时间步必须依赖上一个时间步的隐藏状态的计算结果，这限制了并行计算的能力。</li>
+</ol>
+<p>为了解决这些问题，研究者们提出了多种 RNN 的变体。其中最著名的就是
+<strong>长短期记忆网络（LSTM）</strong> 和
+<strong>门控循环单元（GRU）</strong>。</p>
+<ul>
+<li><strong>LSTM</strong>：通过引入“门”机制（输入门、遗忘门、输出门）来控制信息的流动。这使得网络可以有选择地学习、记忆或遗忘信息，从而更好地捕捉序列中的长期依赖关系。</li>
+<li><strong>GRU</strong>：作为 LSTM
+的一种简化变体，它将输入门和遗忘门合并为“更新门”，并引入了“重置门”。GRU
+的结构更简单，计算效率更高，在许多任务上也能取得与 LSTM
+相近的效果。</li>
+</ul>
+<p>这些改进在很大程度上缓解了 RNN
+的梯度消失问题，但它们仍然需要按顺序处理数据，未能解决并行计算的限制。那么，是否有一个可以彻底抛弃按顺序计算的新方案呢？</p>
+<p>有的，那就是 <strong>Transformer</strong>！</p>
+<blockquote>
+<p>参考自 <a
+href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
+飞天闪客</a></p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+        <tag>RNN</tag>
+        <tag>NLP</tag>
+        <tag>词嵌入</tag>
       </tags>
   </entry>
   <entry>
@@ -17034,6 +17034,203 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：数组</title>
+    <url>/posts/d9e4b7a3/</url>
+    <content><![CDATA[<p>变量一次只能保存一个值，要存一组同类型的数据，最简单的办法就是数组（array）。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数组</td>
+<td>一段连续内存里存放的多个同类型元素</td>
+<td>同类型数据排队</td>
+</tr>
+<tr>
+<td>元素（element）</td>
+<td>数组里的每一个数据</td>
+<td>队伍中的一员</td>
+</tr>
+<tr>
+<td>下标（index）</td>
+<td>元素在数组里的位置编号，从 0 开始</td>
+<td>第几个</td>
+</tr>
+<tr>
+<td>数组长度</td>
+<td>数组能容纳的元素个数</td>
+<td>队伍长度</td>
+</tr>
+<tr>
+<td>多维数组</td>
+<td>数组的元素还是数组，比如二维数组</td>
+<td>表格</td>
+</tr>
+<tr>
+<td>数组名</td>
+<td>数组的名字，使用时通常退化为首元素地址</td>
+<td>队伍的队首</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
+<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[数组 scores] --&gt; B[下标 0]
+    A --&gt; C[下标 1]
+    A --&gt; D[下标 2]
+    A --&gt; E[...]
+    A --&gt; F[下标 n-1]
+</code>
+</pre>
+<p>数组的两个基本事实：</p>
+<ol type="1">
+<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
+<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
+的，非常快。</li>
+</ol>
+<h3 id="一维数组">🧮 一维数组</h3>
+<h4 id="定义与初始化">定义与初始化</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>需要运行时才知道大小的数组，用第 9 章的 <code>new[]</code> 或
+<code>vector</code>，不要用变长数组写法。</p>
+</blockquote>
+<h4 id="下标访问">下标访问</h4>
+<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以结合数组长度求法：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
+<h3 id="数组与函数">📦 数组与函数</h3>
+<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="多维数组">🗺️ 多维数组</h3>
+<p>二维数组可以理解成数组的数组，适合表示表格、矩阵：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
+<p>双重循环遍历：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
+    A --&gt; C[第 2 行: 5 6 7 8]
+    A --&gt; D[第 3 行: 9 10 11 12]
+</code>
+</pre>
+<p>三维及以上同理，只是现实中用得较少。</p>
+<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>错误</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arr[5]</code>（长度 5 的数组）</td>
+<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
+</tr>
+<tr>
+<td>忘记初始化就用</td>
+<td>读到不确定的值</td>
+</tr>
+<tr>
+<td>数组长度用运行时变量</td>
+<td>变长数组写法不可移植</td>
+</tr>
+<tr>
+<td>函数里只传数组名不传长度</td>
+<td>函数不知道数组多大，容易越界</td>
+</tr>
+</tbody>
+</table>
+<p>C/C++
+<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
+<code>vector</code> 最大的差别之一——<code>vector</code> 有
+<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
+<blockquote>
+<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
+章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
+代码打交道时。</p>
+</blockquote>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>下标从 1 开始</td>
+<td>C/C++ 下标从 0 开始</td>
+</tr>
+<tr>
+<td>数组越界会报错</td>
+<td>不检查越界，是未定义行为</td>
+</tr>
+<tr>
+<td>传数组给函数是拷贝</td>
+<td>传的是首元素地址，函数内修改影响原数组</td>
+</tr>
+<tr>
+<td>数组名可以随便赋值</td>
+<td>数组名是常量地址，不能整体赋值</td>
+</tr>
+<tr>
+<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
+<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
+得到的是指针大小</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
+开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
+</blockquote>
+<p>学完数组，下一步的指针、字符串会大量建立在数组名是首元素地址这个事实上；而需要动态大小、自动管理内存时，记得有
+<code>vector</code> 这个更省心的选择。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>数组</tag>
+        <tag>多维数组</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：STL 容器</title>
     <url>/posts/e9f3b7c2/</url>
     <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
@@ -17466,9 +17663,10 @@ flowchart LR
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：数组</title>
-    <url>/posts/d9e4b7a3/</url>
-    <content><![CDATA[<p>变量一次只能保存一个值，要存一组同类型的数据，最简单的办法就是数组（array）。</p>
+    <title>C/C++ 入门：引用</title>
+    <url>/posts/a1f6b3c4/</url>
+    <content><![CDATA[<p>学完指针之后，引用就是 C++
+给“给变量起别名”这件事提供的更直接写法。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
@@ -17481,141 +17679,320 @@ flowchart LR
 </thead>
 <tbody>
 <tr>
-<td>数组</td>
-<td>一段连续内存里存放的多个同类型元素</td>
-<td>同类型数据排队</td>
+<td>引用</td>
+<td>已有对象的别名</td>
+<td>同一个变量的另一个名字</td>
 </tr>
 <tr>
-<td>元素（element）</td>
-<td>数组里的每一个数据</td>
-<td>队伍中的一员</td>
+<td>左值引用</td>
+<td>绑定到可定位对象的引用，写作 <code>T&amp;</code></td>
+<td>常见引用</td>
 </tr>
 <tr>
-<td>下标（index）</td>
-<td>元素在数组里的位置编号，从 0 开始</td>
-<td>第几个</td>
+<td>绑定</td>
+<td>让引用和某个对象关联起来</td>
+<td>起别名</td>
 </tr>
 <tr>
-<td>数组长度</td>
-<td>数组能容纳的元素个数</td>
-<td>队伍长度</td>
+<td>实参</td>
+<td>函数调用时传入的真实对象</td>
+<td>真正的数据</td>
 </tr>
 <tr>
-<td>多维数组</td>
-<td>数组的元素还是数组，比如二维数组</td>
-<td>表格</td>
+<td>形参</td>
+<td>函数定义里接收参数的名字</td>
+<td>函数里的入口</td>
 </tr>
 <tr>
-<td>数组名</td>
-<td>数组的名字，使用时通常退化为首元素地址</td>
-<td>队伍的队首</td>
+<td>const 引用</td>
+<td>只读引用，写作 <code>const T&amp;</code></td>
+<td>不改对象，还能少拷贝</td>
+</tr>
+<tr>
+<td>临时对象</td>
+<td>表达式产生的短生命周期对象</td>
+<td>临时值</td>
 </tr>
 </tbody>
 </table>
-<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
-<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
+<h3 id="引用的基本模型">🧩 引用的基本模型</h3>
+<p>引用不是新建一个独立变量，而是给已有对象再起一个名字。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; ref = x;</span><br><span class="line"></span><br><span class="line">ref = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; x &lt;&lt; endl;    <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; ref &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
 <p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x   ----+</span><br><span class="line">       |  同一个 int 对象</span><br><span class="line">ref ----+</span><br></pre></td></tr></table></figure>
+<p><code>x</code> 和 <code>ref</code>
+是两个名字，但它们访问的是同一个对象。修改
+<code>ref</code>，本质上就是修改 <code>x</code>。</p>
+<p>引用最常见的用途是做函数参数：</p>
 <pre>
 <code class="mermaid">
 
 flowchart LR
-    A[数组 scores] --&gt; B[下标 0]
-    A --&gt; C[下标 1]
-    A --&gt; D[下标 2]
-    A --&gt; E[...]
-    A --&gt; F[下标 n-1]
+    A[实参对象] --&gt; B[引用形参]
+    B --&gt; C[函数内部直接操作原对象]
 </code>
 </pre>
-<p>数组的两个基本事实：</p>
-<ol type="1">
-<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
-<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
-的，非常快。</li>
-</ol>
-<h3 id="一维数组">🧮 一维数组</h3>
-<h4 id="定义与初始化">定义与初始化</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
+<h3 id="左值引用">🔗 左值引用</h3>
+<h4 id="定义">定义</h4>
+<p>左值引用的一般形式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">类型&amp; 引用名 = 已有变量;</span><br></pre></td></tr></table></figure>
+<p>示例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; alias = value;</span><br></pre></td></tr></table></figure>
+<p><code>alias</code> 是 <code>value</code> 的引用，也就是
+<code>value</code> 的别名。</p>
 <blockquote>
-<p>需要运行时才知道大小的数组，用第 9 章的 <code>new[]</code> 或
-<code>vector</code>，不要用变长数组写法。</p>
+<p><code>&amp;</code> 在这里不是取地址，而是引用声明的一部分。</p>
 </blockquote>
-<h4 id="下标访问">下标访问</h4>
-<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以结合数组长度求法：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
-<h3 id="数组与函数">📦 数组与函数</h3>
-<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="多维数组">🗺️ 多维数组</h3>
-<p>二维数组可以理解成数组的数组，适合表示表格、矩阵：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
-<p>双重循环遍历：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
-    A --&gt; C[第 2 行: 5 6 7 8]
-    A --&gt; D[第 3 行: 9 10 11 12]
-</code>
-</pre>
-<p>三维及以上同理，只是现实中用得较少。</p>
-<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
+<h4 id="绑定规则">绑定规则</h4>
+<p>普通左值引用只能绑定到可以长期存在、可以定位的对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;       <span class="comment">// 正确：x 是一个普通变量</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; a = 10;   // 错误：普通左值引用不能绑定到字面量</span></span><br><span class="line"><span class="comment">// int&amp; b = x + 1;// 错误：x + 1 是临时结果</span></span><br></pre></td></tr></table></figure>
+<p>初学阶段可以先把左值粗略理解成：<strong>有名字、能取地址、表达式结束后还存在的对象</strong>。</p>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
-<th>错误</th>
-<th>后果</th>
+<th>表达式</th>
+<th>能否绑定到 <code>int&amp;</code></th>
+<th>原因</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>arr[5]</code>（长度 5 的数组）</td>
-<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
+<td><code>x</code></td>
+<td>可以</td>
+<td>普通变量，有稳定位置</td>
 </tr>
 <tr>
-<td>忘记初始化就用</td>
-<td>读到不确定的值</td>
+<td><code>arr[0]</code></td>
+<td>可以</td>
+<td>数组元素，有稳定位置</td>
 </tr>
 <tr>
-<td>数组长度用运行时变量</td>
-<td>变长数组写法不可移植</td>
+<td><code>10</code></td>
+<td>不可以</td>
+<td>字面量不是可修改对象</td>
 </tr>
 <tr>
-<td>函数里只传数组名不传长度</td>
-<td>函数不知道数组多大，容易越界</td>
+<td><code>x + 1</code></td>
+<td>不可以</td>
+<td>表达式结果是临时值</td>
 </tr>
 </tbody>
 </table>
-<p>C/C++
-<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
-<code>vector</code> 最大的差别之一——<code>vector</code> 有
-<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
-<blockquote>
-<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
-章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
-代码打交道时。</p>
-</blockquote>
-<h3 id="常见误区">❓ 常见误区</h3>
+<h4 id="必须初始化">必须初始化</h4>
+<p>引用定义时必须立刻绑定到一个对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;     <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; bad;    // 错误：引用必须初始化</span></span><br></pre></td></tr></table></figure>
+<p>原因很简单：引用的意义就是“某个对象的别名”。如果没有对象可以绑定，这个别名就没有意义。</p>
+<h4 id="不能重新绑定">不能重新绑定</h4>
+<p>引用一旦绑定到某个对象，就不能再改成另一个对象的别名。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p><code>r = b;</code> 不是让 <code>r</code> 改为引用
+<code>b</code>，而是把 <code>b</code> 的值赋给 <code>r</code>
+当前绑定的对象，也就是 <code>a</code>。</p>
+<h3 id="引用做函数参数">🛠️ 引用做函数参数</h3>
+<h4 id="值传递会拷贝">值传递会拷贝</h4>
+<p>先看普通值传递：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>addOne</code> 里的 <code>x</code> 是 <code>number</code>
+的副本。函数内部改的是副本，不会影响外面的 <code>number</code>。</p>
+<h4 id="引用参数可以修改实参">引用参数可以修改实参</h4>
+<p>如果希望函数直接修改外面的变量，可以使用引用参数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 11</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>x</code> 是 <code>number</code> 的引用。函数内部修改
+<code>x</code>，就是修改 <code>number</code>。</p>
+<p>调用过程可以理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">number = 10</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">addOne(int&amp; x)</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x 是 number 的别名</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x = x + 1  等价于  number = number + 1</span><br></pre></td></tr></table></figure>
+<h4 id="避免大对象拷贝">避免大对象拷贝</h4>
+<p>引用参数还可以避免拷贝大对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>上面这种写法会把传入的 <code>string</code>
+拷贝一份。对于很短的字符串影响不大，但如果对象很大，拷贝成本就会变高。</p>
+<p>如果函数只是读取，不需要修改，可以先写成引用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>但这还不够好，因为 <code>string&amp;</code> 暗示函数可能会修改
+<code>name</code>。更好的写法是
+<code>const string&amp;</code>，下一节展开。</p>
+<h3 id="const-引用">🧊 const 引用</h3>
+<h4 id="只读传参">只读传参</h4>
+<p><code>const</code> 引用表示：通过这个引用不能修改绑定的对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(<span class="type">const</span> string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    <span class="comment">// name = &quot;new name&quot;;  // 错误：const 引用不能修改对象</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string userName = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line">    <span class="built_in">printName</span>(userName);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>const string&amp; name</code> 同时表达了两层意思：</p>
+<table>
+<thead>
+<tr>
+<th>目的</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>避免拷贝</td>
+<td>不复制整个 <code>string</code> 对象</td>
+</tr>
+<tr>
+<td>保持只读</td>
+<td>函数不会通过 <code>name</code> 修改实参</td>
+</tr>
+</tbody>
+</table>
+<p>这也是 C++ 里非常常见的参数写法。</p>
+<h4 id="绑定临时对象">绑定临时对象</h4>
+<p>普通左值引用不能绑定临时对象，但 <code>const</code> 引用可以。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; a = <span class="number">10</span>;      <span class="comment">// 正确</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; b = <span class="number">3</span> + <span class="number">4</span>;   <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;      <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;      <span class="comment">// 7</span></span><br></pre></td></tr></table></figure>
+<p>这条规则让下面这种调用变得自然：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printText</span><span class="params">(<span class="type">const</span> string&amp; text)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; text &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string name = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printText</span>(name);             <span class="comment">// 绑定已有 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(<span class="string">&quot;hello&quot;</span>);          <span class="comment">// 绑定临时 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(name + <span class="string">&quot; Smith&quot;</span>);  <span class="comment">// 绑定表达式产生的临时对象</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果参数写成 <code>string&amp;</code>，后两种调用就不适合；写成
+<code>const string&amp;</code>，既能接收已有对象，也能接收临时对象。</p>
+<h4 id="什么时候用-const-引用">什么时候用 const 引用</h4>
+<p>初学阶段可以按这个规则判断：</p>
+<table>
+<thead>
+<tr>
+<th>参数类型</th>
+<th>适合场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int x</code></td>
+<td>小的基础类型，直接拷贝即可</td>
+</tr>
+<tr>
+<td><code>double x</code></td>
+<td>小的基础类型，直接拷贝即可</td>
+</tr>
+<tr>
+<td><code>string x</code></td>
+<td>函数需要自己保留一份副本</td>
+</tr>
+<tr>
+<td><code>const string&amp; x</code></td>
+<td>只读取字符串，避免拷贝</td>
+</tr>
+<tr>
+<td><code>vector&lt;int&gt;&amp; x</code></td>
+<td>需要修改传入的容器</td>
+</tr>
+<tr>
+<td><code>const vector&lt;int&gt;&amp; x</code></td>
+<td>只读取容器，避免拷贝</td>
+</tr>
+</tbody>
+</table>
+<p>不是所有参数都要写引用。像
+<code>int</code>、<code>double</code>、<code>char</code>、<code>bool</code>
+这种小类型，值传递通常更简单。</p>
+<h3 id="引用与指针对比">🆚 引用与指针对比</h3>
+<p>引用和指针都可以间接访问对象，但它们的语义不同。</p>
 <table>
 <colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
 </colgroup>
+<thead>
+<tr>
+<th>对比项</th>
+<th>引用</th>
+<th>指针</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>核心语义</td>
+<td>对象的别名</td>
+<td>保存地址的变量</td>
+</tr>
+<tr>
+<td>是否必须初始化</td>
+<td>必须初始化</td>
+<td>可以先不指向有效对象</td>
+</tr>
+<tr>
+<td>是否可空</td>
+<td>通常不能表示空</td>
+<td>可以是 <code>nullptr</code></td>
+</tr>
+<tr>
+<td>是否能重新绑定</td>
+<td>不能重新绑定</td>
+<td>可以改为指向别的对象</td>
+</tr>
+<tr>
+<td>使用方式</td>
+<td>像普通变量一样用</td>
+<td>常用 <code>*</code> 解引用、<code>-&gt;</code> 访问成员</td>
+</tr>
+<tr>
+<td>常见场景</td>
+<td>函数参数、返回已有对象别名</td>
+<td>可选对象、动态内存、底层地址操作</td>
+</tr>
+</tbody>
+</table>
+<h4 id="语义差异">语义差异</h4>
+<p>引用强调“这个参数就是那个对象本身”。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>指针强调“我手里有一个地址，需要沿着地址去访问对象”。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>* p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        *p = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>两者都能修改外部变量：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line"><span class="built_in">reset</span>(value);   <span class="comment">// 引用版本</span></span><br><span class="line"><span class="built_in">reset</span>(&amp;value);  <span class="comment">// 指针版本</span></span><br></pre></td></tr></table></figure>
+<p>引用版本调用更像普通函数；指针版本调用时显式写
+<code>&amp;value</code>，更能提醒读者“这里传的是地址”。</p>
+<h4 id="可空性">可空性</h4>
+<p>指针可以是空指针：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
+<p>所以使用指针前经常要检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>引用一般不表达“没有对象”这个状态：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">const</span> <span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果函数要求一定有一个有效对象，引用通常更合适；如果“可能没有对象”是合法状态，指针更直接。</p>
+<h4 id="重新绑定">重新绑定</h4>
+<p>指针可以改变指向：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* p = &amp;a;</span><br><span class="line">p = &amp;b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p>引用不能重新绑定：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;              <span class="comment">// 赋值给 a，不是改绑到 b</span></span><br></pre></td></tr></table></figure>
+<p>这一点是引用和指针最重要的区别之一。</p>
+<h4 id="使用场景">使用场景</h4>
+<p>可以先按下面的方式选择：</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>推荐</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数需要修改实参</td>
+<td><code>T&amp;</code></td>
+</tr>
+<tr>
+<td>函数只读大对象</td>
+<td><code>const T&amp;</code></td>
+</tr>
+<tr>
+<td>参数可能为空</td>
+<td><code>T*</code></td>
+</tr>
+<tr>
+<td>需要动态申请和释放内存</td>
+<td>指针或智能指针</td>
+</tr>
+<tr>
+<td>需要换成指向另一个对象</td>
+<td>指针</td>
+</tr>
+<tr>
+<td>只是给已有对象起别名</td>
+<td>引用</td>
+</tr>
+</tbody>
+</table>
+<p>现代 C++ 里，普通业务代码会大量使用引用和 <code>const</code>
+引用；裸指针更多出现在底层接口、和 C
+交互、动态内存或“可空参数”语义里。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
 <thead>
 <tr>
 <th>误区</th>
@@ -17624,42 +18001,43 @@ flowchart TD
 </thead>
 <tbody>
 <tr>
-<td>下标从 1 开始</td>
-<td>C/C++ 下标从 0 开始</td>
+<td>引用是对象的副本</td>
+<td>引用是别名，修改引用就是修改原对象</td>
 </tr>
 <tr>
-<td>数组越界会报错</td>
-<td>不检查越界，是未定义行为</td>
+<td>引用可以先声明后绑定</td>
+<td>引用必须定义时初始化</td>
 </tr>
 <tr>
-<td>传数组给函数是拷贝</td>
-<td>传的是首元素地址，函数内修改影响原数组</td>
+<td><code>r = b</code> 会让引用改绑到 <code>b</code></td>
+<td>这是赋值，会修改 <code>r</code> 当前绑定的对象</td>
 </tr>
 <tr>
-<td>数组名可以随便赋值</td>
-<td>数组名是常量地址，不能整体赋值</td>
+<td>所有函数参数都应该用引用</td>
+<td>小的基础类型直接值传递更简单</td>
 </tr>
 <tr>
-<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
-<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
-得到的是指针大小</td>
+<td><code>const T&amp;</code> 只能绑定普通变量</td>
+<td><code>const T&amp;</code> 也能绑定临时对象</td>
+</tr>
+<tr>
+<td>引用和指针只是语法不同</td>
+<td>两者在可空性、重新绑定和语义表达上不同</td>
 </tr>
 </tbody>
 </table>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
-<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
-开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
+<p>引用就是对象的别名，最常用在函数参数里：要修改实参用
+<code>T&amp;</code>，只读大对象用 <code>const T&amp;</code>。</p>
 </blockquote>
-<p>学完数组，下一步的指针、字符串会大量建立在数组名是首元素地址这个事实上；而需要动态大小、自动管理内存时，记得有
-<code>vector</code> 这个更省心的选择。</p>
+<p>学到这里，可以把函数、指针和引用连起来看：值传递适合简单副本，引用适合直接操作已有对象，指针适合表达地址、可空和更底层的内存操作。</p>
 <p>Happy Hacking! 🎉</p>
 ]]></content>
       <tags>
         <tag>C/C++</tag>
         <tag>编程入门</tag>
-        <tag>数组</tag>
-        <tag>多维数组</tag>
+        <tag>引用</tag>
       </tags>
   </entry>
   <entry>
@@ -18096,384 +18474,6 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：引用</title>
-    <url>/posts/a1f6b3c4/</url>
-    <content><![CDATA[<p>学完指针之后，引用就是 C++
-给“给变量起别名”这件事提供的更直接写法。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>引用</td>
-<td>已有对象的别名</td>
-<td>同一个变量的另一个名字</td>
-</tr>
-<tr>
-<td>左值引用</td>
-<td>绑定到可定位对象的引用，写作 <code>T&amp;</code></td>
-<td>常见引用</td>
-</tr>
-<tr>
-<td>绑定</td>
-<td>让引用和某个对象关联起来</td>
-<td>起别名</td>
-</tr>
-<tr>
-<td>实参</td>
-<td>函数调用时传入的真实对象</td>
-<td>真正的数据</td>
-</tr>
-<tr>
-<td>形参</td>
-<td>函数定义里接收参数的名字</td>
-<td>函数里的入口</td>
-</tr>
-<tr>
-<td>const 引用</td>
-<td>只读引用，写作 <code>const T&amp;</code></td>
-<td>不改对象，还能少拷贝</td>
-</tr>
-<tr>
-<td>临时对象</td>
-<td>表达式产生的短生命周期对象</td>
-<td>临时值</td>
-</tr>
-</tbody>
-</table>
-<h3 id="引用的基本模型">🧩 引用的基本模型</h3>
-<p>引用不是新建一个独立变量，而是给已有对象再起一个名字。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; ref = x;</span><br><span class="line"></span><br><span class="line">ref = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; x &lt;&lt; endl;    <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; ref &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x   ----+</span><br><span class="line">       |  同一个 int 对象</span><br><span class="line">ref ----+</span><br></pre></td></tr></table></figure>
-<p><code>x</code> 和 <code>ref</code>
-是两个名字，但它们访问的是同一个对象。修改
-<code>ref</code>，本质上就是修改 <code>x</code>。</p>
-<p>引用最常见的用途是做函数参数：</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[实参对象] --&gt; B[引用形参]
-    B --&gt; C[函数内部直接操作原对象]
-</code>
-</pre>
-<h3 id="左值引用">🔗 左值引用</h3>
-<h4 id="定义">定义</h4>
-<p>左值引用的一般形式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">类型&amp; 引用名 = 已有变量;</span><br></pre></td></tr></table></figure>
-<p>示例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; alias = value;</span><br></pre></td></tr></table></figure>
-<p><code>alias</code> 是 <code>value</code> 的引用，也就是
-<code>value</code> 的别名。</p>
-<blockquote>
-<p><code>&amp;</code> 在这里不是取地址，而是引用声明的一部分。</p>
-</blockquote>
-<h4 id="绑定规则">绑定规则</h4>
-<p>普通左值引用只能绑定到可以长期存在、可以定位的对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;       <span class="comment">// 正确：x 是一个普通变量</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; a = 10;   // 错误：普通左值引用不能绑定到字面量</span></span><br><span class="line"><span class="comment">// int&amp; b = x + 1;// 错误：x + 1 是临时结果</span></span><br></pre></td></tr></table></figure>
-<p>初学阶段可以先把左值粗略理解成：<strong>有名字、能取地址、表达式结束后还存在的对象</strong>。</p>
-<table>
-<thead>
-<tr>
-<th>表达式</th>
-<th>能否绑定到 <code>int&amp;</code></th>
-<th>原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>x</code></td>
-<td>可以</td>
-<td>普通变量，有稳定位置</td>
-</tr>
-<tr>
-<td><code>arr[0]</code></td>
-<td>可以</td>
-<td>数组元素，有稳定位置</td>
-</tr>
-<tr>
-<td><code>10</code></td>
-<td>不可以</td>
-<td>字面量不是可修改对象</td>
-</tr>
-<tr>
-<td><code>x + 1</code></td>
-<td>不可以</td>
-<td>表达式结果是临时值</td>
-</tr>
-</tbody>
-</table>
-<h4 id="必须初始化">必须初始化</h4>
-<p>引用定义时必须立刻绑定到一个对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;     <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; bad;    // 错误：引用必须初始化</span></span><br></pre></td></tr></table></figure>
-<p>原因很简单：引用的意义就是“某个对象的别名”。如果没有对象可以绑定，这个别名就没有意义。</p>
-<h4 id="不能重新绑定">不能重新绑定</h4>
-<p>引用一旦绑定到某个对象，就不能再改成另一个对象的别名。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p><code>r = b;</code> 不是让 <code>r</code> 改为引用
-<code>b</code>，而是把 <code>b</code> 的值赋给 <code>r</code>
-当前绑定的对象，也就是 <code>a</code>。</p>
-<h3 id="引用做函数参数">🛠️ 引用做函数参数</h3>
-<h4 id="值传递会拷贝">值传递会拷贝</h4>
-<p>先看普通值传递：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>addOne</code> 里的 <code>x</code> 是 <code>number</code>
-的副本。函数内部改的是副本，不会影响外面的 <code>number</code>。</p>
-<h4 id="引用参数可以修改实参">引用参数可以修改实参</h4>
-<p>如果希望函数直接修改外面的变量，可以使用引用参数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 11</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>x</code> 是 <code>number</code> 的引用。函数内部修改
-<code>x</code>，就是修改 <code>number</code>。</p>
-<p>调用过程可以理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">number = 10</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">addOne(int&amp; x)</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x 是 number 的别名</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x = x + 1  等价于  number = number + 1</span><br></pre></td></tr></table></figure>
-<h4 id="避免大对象拷贝">避免大对象拷贝</h4>
-<p>引用参数还可以避免拷贝大对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>上面这种写法会把传入的 <code>string</code>
-拷贝一份。对于很短的字符串影响不大，但如果对象很大，拷贝成本就会变高。</p>
-<p>如果函数只是读取，不需要修改，可以先写成引用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>但这还不够好，因为 <code>string&amp;</code> 暗示函数可能会修改
-<code>name</code>。更好的写法是
-<code>const string&amp;</code>，下一节展开。</p>
-<h3 id="const-引用">🧊 const 引用</h3>
-<h4 id="只读传参">只读传参</h4>
-<p><code>const</code> 引用表示：通过这个引用不能修改绑定的对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(<span class="type">const</span> string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    <span class="comment">// name = &quot;new name&quot;;  // 错误：const 引用不能修改对象</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string userName = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line">    <span class="built_in">printName</span>(userName);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>const string&amp; name</code> 同时表达了两层意思：</p>
-<table>
-<thead>
-<tr>
-<th>目的</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>避免拷贝</td>
-<td>不复制整个 <code>string</code> 对象</td>
-</tr>
-<tr>
-<td>保持只读</td>
-<td>函数不会通过 <code>name</code> 修改实参</td>
-</tr>
-</tbody>
-</table>
-<p>这也是 C++ 里非常常见的参数写法。</p>
-<h4 id="绑定临时对象">绑定临时对象</h4>
-<p>普通左值引用不能绑定临时对象，但 <code>const</code> 引用可以。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; a = <span class="number">10</span>;      <span class="comment">// 正确</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; b = <span class="number">3</span> + <span class="number">4</span>;   <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;      <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;      <span class="comment">// 7</span></span><br></pre></td></tr></table></figure>
-<p>这条规则让下面这种调用变得自然：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printText</span><span class="params">(<span class="type">const</span> string&amp; text)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; text &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string name = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printText</span>(name);             <span class="comment">// 绑定已有 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(<span class="string">&quot;hello&quot;</span>);          <span class="comment">// 绑定临时 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(name + <span class="string">&quot; Smith&quot;</span>);  <span class="comment">// 绑定表达式产生的临时对象</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>如果参数写成 <code>string&amp;</code>，后两种调用就不适合；写成
-<code>const string&amp;</code>，既能接收已有对象，也能接收临时对象。</p>
-<h4 id="什么时候用-const-引用">什么时候用 const 引用</h4>
-<p>初学阶段可以按这个规则判断：</p>
-<table>
-<thead>
-<tr>
-<th>参数类型</th>
-<th>适合场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int x</code></td>
-<td>小的基础类型，直接拷贝即可</td>
-</tr>
-<tr>
-<td><code>double x</code></td>
-<td>小的基础类型，直接拷贝即可</td>
-</tr>
-<tr>
-<td><code>string x</code></td>
-<td>函数需要自己保留一份副本</td>
-</tr>
-<tr>
-<td><code>const string&amp; x</code></td>
-<td>只读取字符串，避免拷贝</td>
-</tr>
-<tr>
-<td><code>vector&lt;int&gt;&amp; x</code></td>
-<td>需要修改传入的容器</td>
-</tr>
-<tr>
-<td><code>const vector&lt;int&gt;&amp; x</code></td>
-<td>只读取容器，避免拷贝</td>
-</tr>
-</tbody>
-</table>
-<p>不是所有参数都要写引用。像
-<code>int</code>、<code>double</code>、<code>char</code>、<code>bool</code>
-这种小类型，值传递通常更简单。</p>
-<h3 id="引用与指针对比">🆚 引用与指针对比</h3>
-<p>引用和指针都可以间接访问对象，但它们的语义不同。</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>对比项</th>
-<th>引用</th>
-<th>指针</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>核心语义</td>
-<td>对象的别名</td>
-<td>保存地址的变量</td>
-</tr>
-<tr>
-<td>是否必须初始化</td>
-<td>必须初始化</td>
-<td>可以先不指向有效对象</td>
-</tr>
-<tr>
-<td>是否可空</td>
-<td>通常不能表示空</td>
-<td>可以是 <code>nullptr</code></td>
-</tr>
-<tr>
-<td>是否能重新绑定</td>
-<td>不能重新绑定</td>
-<td>可以改为指向别的对象</td>
-</tr>
-<tr>
-<td>使用方式</td>
-<td>像普通变量一样用</td>
-<td>常用 <code>*</code> 解引用、<code>-&gt;</code> 访问成员</td>
-</tr>
-<tr>
-<td>常见场景</td>
-<td>函数参数、返回已有对象别名</td>
-<td>可选对象、动态内存、底层地址操作</td>
-</tr>
-</tbody>
-</table>
-<h4 id="语义差异">语义差异</h4>
-<p>引用强调“这个参数就是那个对象本身”。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>指针强调“我手里有一个地址，需要沿着地址去访问对象”。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>* p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        *p = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>两者都能修改外部变量：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line"><span class="built_in">reset</span>(value);   <span class="comment">// 引用版本</span></span><br><span class="line"><span class="built_in">reset</span>(&amp;value);  <span class="comment">// 指针版本</span></span><br></pre></td></tr></table></figure>
-<p>引用版本调用更像普通函数；指针版本调用时显式写
-<code>&amp;value</code>，更能提醒读者“这里传的是地址”。</p>
-<h4 id="可空性">可空性</h4>
-<p>指针可以是空指针：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
-<p>所以使用指针前经常要检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>引用一般不表达“没有对象”这个状态：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">const</span> <span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>如果函数要求一定有一个有效对象，引用通常更合适；如果“可能没有对象”是合法状态，指针更直接。</p>
-<h4 id="重新绑定">重新绑定</h4>
-<p>指针可以改变指向：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* p = &amp;a;</span><br><span class="line">p = &amp;b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p>引用不能重新绑定：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;              <span class="comment">// 赋值给 a，不是改绑到 b</span></span><br></pre></td></tr></table></figure>
-<p>这一点是引用和指针最重要的区别之一。</p>
-<h4 id="使用场景">使用场景</h4>
-<p>可以先按下面的方式选择：</p>
-<table>
-<thead>
-<tr>
-<th>需求</th>
-<th>推荐</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数需要修改实参</td>
-<td><code>T&amp;</code></td>
-</tr>
-<tr>
-<td>函数只读大对象</td>
-<td><code>const T&amp;</code></td>
-</tr>
-<tr>
-<td>参数可能为空</td>
-<td><code>T*</code></td>
-</tr>
-<tr>
-<td>需要动态申请和释放内存</td>
-<td>指针或智能指针</td>
-</tr>
-<tr>
-<td>需要换成指向另一个对象</td>
-<td>指针</td>
-</tr>
-<tr>
-<td>只是给已有对象起别名</td>
-<td>引用</td>
-</tr>
-</tbody>
-</table>
-<p>现代 C++ 里，普通业务代码会大量使用引用和 <code>const</code>
-引用；裸指针更多出现在底层接口、和 C
-交互、动态内存或“可空参数”语义里。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>引用是对象的副本</td>
-<td>引用是别名，修改引用就是修改原对象</td>
-</tr>
-<tr>
-<td>引用可以先声明后绑定</td>
-<td>引用必须定义时初始化</td>
-</tr>
-<tr>
-<td><code>r = b</code> 会让引用改绑到 <code>b</code></td>
-<td>这是赋值，会修改 <code>r</code> 当前绑定的对象</td>
-</tr>
-<tr>
-<td>所有函数参数都应该用引用</td>
-<td>小的基础类型直接值传递更简单</td>
-</tr>
-<tr>
-<td><code>const T&amp;</code> 只能绑定普通变量</td>
-<td><code>const T&amp;</code> 也能绑定临时对象</td>
-</tr>
-<tr>
-<td>引用和指针只是语法不同</td>
-<td>两者在可空性、重新绑定和语义表达上不同</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>引用就是对象的别名，最常用在函数参数里：要修改实参用
-<code>T&amp;</code>，只读大对象用 <code>const T&amp;</code>。</p>
-</blockquote>
-<p>学到这里，可以把函数、指针和引用连起来看：值传递适合简单副本，引用适合直接操作已有对象，指针适合表达地址、可空和更底层的内存操作。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>引用</tag>
       </tags>
   </entry>
   <entry>
