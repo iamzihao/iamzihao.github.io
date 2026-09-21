@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
-<meta property="article:modified_time" content="2026-09-21T03:45:54.334Z">
+<meta property="article:modified_time" content="2026-09-21T03:46:57.903Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -273,7 +273,7 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-21 12:30:00 / Modified: 11:45:54" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
+      <time title="Created: 2026-09-21 12:30:00 / Modified: 11:46:57" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
     </span>
 
   
@@ -453,7 +453,8 @@ size、padding</td>
 rate、momentum、epochs、batch size 也算进
 hyper-parameters（这是机器学习里的通用定义），但攻击目标里的
 hyper-parameters 指的是<strong>推理期被用到</strong>的那一类，也就是
-stride、kernel size、filters。两者不同，前者拿不到，后者能拿到——第 3.4.2
+stride、kernel size、filters。两者不同，前者拿不到，后者能拿到——论文第
+3.4.2
 节明确说，控制训练过程的超参数无法从推理期流量里恢复。读完后面会更清楚，这个区分决定了
 Hermes 的能力边界。</p>
 <p>另一件必须强调的事：论文里的 <strong>parameters
@@ -586,18 +587,18 @@ GPU）只保留回应包，其余类型先丢掉。然后再把同一个 Tag
 kernel</strong>，所以既是 K command 的一种，行为上又是数据搬运。</p>
 <h3 id="离线摸清-command-header">🔍 离线摸清 Command Header</h3>
 <p>要按类型过滤命令，就得知道 Header 长什么样，而 GPU
-的命令格式没有文档。论文的办法是<strong>离线构造实验做差分</strong>，思路可以概括成一句话：只改一个变量，看哪个字段跟着变。</p>
+的命令格式没有文档。论文的办法是<strong>离线构造实验做差分</strong>，思路很朴素：只改一个变量，看哪个字段跟着变。</p>
 <ul>
 <li>摸 D
-command：反复在预分配的显存和主存之间搬运构造好的数据，对抓到的包做模式匹配；</li>
+command：反复在预分配的显存和主存之间搬运构造好的数据，对抓到的包做模式匹配。</li>
 <li>摸 K command：反复用准备好的参数启动 kernel，比对包的变化。</li>
 </ul>
 <p>最后得到一条命令的 Header 是 9 个 DW（Double Word，4
 字节），其中三个字段最有用：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐</span><br><span class="line">│ DW1  │ DW2  │ DW3  │ DW4  │ DW5  │ DW6  │ DW7  │ DW8  │ DW9  │</span><br><span class="line">│      │      │ addr │      │ size │      │      │      │ type │</span><br><span class="line">└──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘</span><br><span class="line"> DW3  = GPU memory address</span><br><span class="line"> DW5  = data size in bytes</span><br><span class="line"> DW9  = command type</span><br><span class="line">        6D204860 表示 Kepler 上的 kernel launch</span><br></pre></td></tr></table></figure>
 <ul>
-<li><strong>DW3</strong>：这条命令在 GPU 内存里的地址；</li>
-<li><strong>DW5</strong>：数据段的字节数；</li>
+<li><strong>DW3</strong>：这条命令在 GPU 内存里的地址。</li>
+<li><strong>DW5</strong>：数据段的字节数。</li>
 <li><strong>DW9</strong>：命令类型，例如 <code>6D204860</code> 是 Kepler
 架构上 kernel launch 的签名（论文把签名对应的位级语义引向了 Envytools
 的逆向工作）。</li>
@@ -904,7 +905,7 @@ kernel（<code>Eigen::internal::scalar_sum_op</code>）</strong>，这就是分�
 <li><strong>GPU 平台</strong>：NVIDIA Geforce GT 730、GTX 1080 Ti、RTX
 2080 Ti，每次实验主板上只挂一块 GPU，走 PCIe 3.0，CUDA 10.1；</li>
 <li><strong>抓包设备</strong>：Teledyne LeCroy Summit T3-16 PCIe
-协议分析仪（论文 5.1 节里同一台设备的型号写作 Summit T3-26，自带 8GB
+协议分析仪（论文第 5.1 节里同一台设备的型号写作 Summit T3-26，自带 8GB
 buffer，每个方向 4GB）；</li>
 <li><strong>受害者模型</strong>：MNIST、VGG16、ResNet20，用 Keras 加
 TensorFlow 后端跑推理，实验中被当作黑盒，只用于事后核对。</li>
@@ -1101,7 +1102,7 @@ packet，其中约 20,000
 <blockquote>
 <p><strong>重建出来的模型，推理精度与原模型一字不差；与原模型精度高不高无关。</strong></p>
 </blockquote>
-<p>论文 5
+<p>论文第 5
 节开头把这一点说得很直白：无论受害者模型精度如何，重建模型都与它一致；激活函数的数量、模型层数也不会影响攻击的成功。这比早期的模型抽取工作强一个量级——那些工作在预测式攻击下精度会掉，在搜索式攻击下拿不到定制模型，而且都只能恢复模型的一部分。</p>
 <h2 id="边界hermes-做不到什么">🚧 边界：Hermes 做不到什么</h2>
 <p>精读不能只写攻击有多强，还要写它的前提与天花板。论文自己讨论了这些限制。</p>
@@ -1210,7 +1211,7 @@ CPU，那些层就不会出现在流量里）；</li>
 </ol>
 <p>缺任何一条，攻击要么失败、要么只能恢复部分模型。</p>
 <h2 id="论文提出的缓解思路">🛡️ 论文提出的缓解思路</h2>
-<p>论文 5.3 节列了几条对策，也顺带说明了各自的问题：</p>
+<p>论文第 5.3 节列了几条对策，也顺带说明了各自的问题：</p>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -1416,7 +1417,7 @@ PCIe；只要加速器与主机之间还有未加密的高速链路，同类问�
 <p><strong>Hermes Attack 用离线逆向换来的知识，把一次推理的明文 PCIe
 流量还原成完整 DNN：命令 header 认路，kernel
 二进制认层，数据流图认结构，地址追踪认权重。</strong></p>
-<p>如果只记一句话，我记这句：<strong>层与层的连接关系不在命令里，而在显存地址的流向里。</strong></p>
+<p>留一个要点：<strong>层与层的连接关系不在命令里，而在显存地址的流向里。</strong></p>
 <p>对防御方的启示也很直接：模型文件加密、主机开 SGX、GPU
 独占，这些都不能替代链路加密——只要 CPU 与 GPU
 之间还在传明文，模型就仍然暴露在一个可以被旁路监听的位置上。</p>
