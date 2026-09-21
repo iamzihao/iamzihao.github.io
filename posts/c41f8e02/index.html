@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型">
+<meta property="og:url" content="https://iamzihao.github.io/posts/c41f8e02/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
+<meta property="article:modified_time" content="2026-09-21T03:45:54.334Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="CUDA">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="模型窃取">
+<meta property="article:tag" content="侧信道">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/c41f8e02/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/c41f8e02/","path":"posts/c41f8e02/","title":"Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E6%A8%A1%E5%9E%8B%E6%96%87%E4%BB%B6%E6%B2%A1%E4%B8%A2%E6%A8%A1%E5%9E%8B%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E6%98%AF%E4%B8%A2%E4%BA%86"><span class="nav-number"></span> <span class="nav-text">🎯
+起点：模型文件没丢，模型为什么还是丢了</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E5%88%86%E6%B8%85%E4%B8%89%E4%B8%AA%E8%AF%8D%E7%BB%93%E6%9E%84%E8%B6%85%E5%8F%82%E6%95%B0%E5%8F%82%E6%95%B0"><span class="nav-number">1.</span> <span class="nav-text">🧭
+先分清三个词：结构、超参数、参数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E6%98%AF%E6%80%8E%E4%B9%88%E8%B7%91%E5%88%B0-gpu-%E4%B8%8A%E7%9A%84"><span class="nav-number">2.</span> <span class="nav-text">🏗️ 模型是怎么跑到 GPU 上的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E9%9A%BE%E7%82%B9"><span class="nav-number">3.</span> <span class="nav-text">🚧 三个难点</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E5%B1%82%E4%BB%8E-pcie-%E6%8A%A5%E6%96%87%E5%88%B0-gpu-command"><span class="nav-number"></span> <span class="nav-text">📦 第一层：从 PCIe 报文到 GPU
+Command</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E6%AC%A1%E8%AF%BB%E6%93%8D%E4%BD%9C%E6%B6%89%E5%8F%8A%E5%93%AA%E4%B8%A4%E4%B8%AA%E5%8C%85"><span class="nav-number">1.</span> <span class="nav-text">🔗 一次读操作涉及哪两个包</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81-merge-%E5%92%8C-sort"><span class="nav-number">2.</span> <span class="nav-text">🧵 为什么要 Merge 和 Sort</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#d-command-%E4%B8%8E-k-command"><span class="nav-number">3.</span> <span class="nav-text">⌨️ D Command 与 K Command</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A6%BB%E7%BA%BF%E6%91%B8%E6%B8%85-command-header"><span class="nav-number">4.</span> <span class="nav-text">🔍 离线摸清 Command Header</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%99%AA%E5%A3%B0%E8%BF%87%E6%BB%A4%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80%E4%B8%8D%E8%BF%9E%E7%BB%AD%E6%80%8E%E4%B9%88%E5%8A%9E"><span class="nav-number">5.</span> <span class="nav-text">🧹
+噪声过滤：物理地址不连续怎么办</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E5%B1%82%E4%BB%8E-gpu-kernel-%E5%88%B0-dnn-layer"><span class="nav-number"></span> <span class="nav-text">🧩 第二层：从 GPU Kernel 到
+DNN Layer</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#kernel-%E6%98%AF%E4%BB%80%E4%B9%88%E6%80%8E%E4%B9%88%E8%BF%9B%E5%88%B0-gpu"><span class="nav-number">1.</span> <span class="nav-text">🧱 Kernel 是什么，怎么进到 GPU</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E6%9D%A1%E8%A7%82%E5%AF%9F%E4%B8%80%E4%B8%AA%E5%8F%8D%E5%90%91%E5%AE%9A%E4%BD%8D"><span class="nav-number">2.</span> <span class="nav-text">🔎 两条观察，一个反向定位</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%B9%E9%BD%90-cuda-trace%E5%BB%BA%E7%AB%8B-kernel-%E5%88%B0-layer-%E7%9A%84%E6%98%A0%E5%B0%84"><span class="nav-number">3.</span> <span class="nav-text">🗂️ 对齐 CUDA
+trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E5%B1%82%E6%8A%8A-weight-%E5%92%8C-bias-%E5%8F%96%E5%87%BA%E6%9D%A5"><span class="nav-number"></span> <span class="nav-text">💰 第三层：把 Weight 和 Bias
+取出来</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E6%8A%8A-d-command-%E7%9A%84%E6%95%B0%E6%8D%AE%E5%85%A8%E5%BD%93%E6%9D%83%E9%87%8D"><span class="nav-number">1.</span> <span class="nav-text">❓为什么不能把 D command
+的数据全当权重</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E5%91%BD%E4%BB%A4%E8%BF%9E%E6%88%90%E7%9A%84%E5%8F%8D%E6%8E%A8%E9%93%BE"><span class="nav-number">2.</span> <span class="nav-text">🔁 三个命令连成的反推链</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8B%BC%E8%A3%85%E4%BB%8E%E6%95%B0%E6%8D%AE%E6%B5%81%E5%9B%BE%E6%81%A2%E5%A4%8D%E5%AE%8C%E6%95%B4%E6%A8%A1%E5%9E%8B"><span class="nav-number"></span> <span class="nav-text">🧱 拼装：从数据流图恢复完整模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#kernel-%E6%98%AF%E9%A1%B6%E7%82%B9%E6%95%B0%E6%8D%AE%E6%90%AC%E8%BF%90%E6%98%AF%E8%BE%B9"><span class="nav-number">1.</span> <span class="nav-text">🕸️ Kernel 是顶点，数据搬运是边</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%8F%82%E6%95%B0%E7%9A%84%E4%B8%A4%E6%9D%A1%E6%81%A2%E5%A4%8D%E8%B7%AF%E5%BE%84"><span class="nav-number">2.</span> <span class="nav-text">🧾 超参数的两条恢复路径</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#resnet-%E7%9A%84-shortcut-%E6%80%8E%E4%B9%88%E6%81%A2%E5%A4%8D"><span class="nav-number">3.</span> <span class="nav-text">➕ ResNet 的 shortcut 怎么恢复</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%8D%E5%BB%BA%E7%BB%93%E6%9E%9C%E4%B8%8E%E5%8E%9F%E6%A8%A1%E5%9E%8B%E7%9A%84%E4%B8%A4%E5%A4%84%E5%B7%AE%E5%BC%82"><span class="nav-number">4.</span> <span class="nav-text">🧮 重建结果与原模型的两处差异</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8Clossless-%E5%88%B0%E5%BA%95%E6%8C%87%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🧪 实验：Lossless 到底指什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E8%AE%BE%E7%BD%AE"><span class="nav-number">1.</span> <span class="nav-text">🔧 实验设置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%9C%80%E8%A6%81%E5%A4%9A%E5%B0%91%E5%8C%85%E5%A4%9A%E5%B0%91%E6%97%B6%E9%97%B4"><span class="nav-number">2.</span> <span class="nav-text">⏱️ 需要多少包、多少时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B2%BE%E5%BA%A6%E4%B8%8E%E6%8E%A8%E7%90%86%E6%97%B6%E9%97%B4"><span class="nav-number">3.</span> <span class="nav-text">🎯 精度与推理时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#lossless-%E7%9A%84%E5%90%AB%E4%B9%89"><span class="nav-number">4.</span> <span class="nav-text">📌 Lossless 的含义</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%B9%E7%95%8Chermes-%E5%81%9A%E4%B8%8D%E5%88%B0%E4%BB%80%E4%B9%88"><span class="nav-number"></span> <span class="nav-text">🚧 边界：Hermes 做不到什么</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%AD%E7%BB%83%E6%9C%9F%E7%9A%84%E4%BF%A1%E6%81%AF%E6%8B%BF%E4%B8%8D%E5%88%B0"><span class="nav-number">1.</span> <span class="nav-text">🚫 训练期的信息拿不到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%A4%A7%E6%A8%A1%E5%9E%8B%E4%B8%8E%E6%8A%93%E5%8C%85-buffer"><span class="nav-number">2.</span> <span class="nav-text">💾 超大模型与抓包 buffer</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B9%B3%E5%8F%B0%E6%A1%86%E6%9E%B6%E4%B8%8E%E5%A4%9A%E4%BB%BB%E5%8A%A1"><span class="nav-number">3.</span> <span class="nav-text">🖥️ 平台、框架与多任务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E6%88%90%E7%AB%8B%E7%9A%84%E5%89%8D%E6%8F%90"><span class="nav-number">4.</span> <span class="nav-text">🧱 攻击成立的前提</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E6%8F%90%E5%87%BA%E7%9A%84%E7%BC%93%E8%A7%A3%E6%80%9D%E8%B7%AF"><span class="nav-number"></span> <span class="nav-text">🛡️ 论文提出的缓解思路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8A%8A%E6%95%B4%E6%9D%A1%E6%94%BB%E5%87%BB%E9%93%BE%E4%B8%B2%E8%B5%B7%E6%9D%A5"><span class="nav-number"></span> <span class="nav-text">🗺️ 把整条攻击链串起来</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%88%91%E7%9A%84%E7%90%86%E8%A7%A3hermes-%E5%88%A9%E7%94%A8%E7%9A%84%E6%98%AF%E8%AF%AD%E4%B9%89%E6%B3%84%E6%BC%8F"><span class="nav-number"></span> <span class="nav-text">🧠 我的理解：Hermes
+利用的是语义泄漏</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%8E%E5%B7%B2%E6%9C%89%E6%A8%A1%E5%9E%8B%E6%8A%BD%E5%8F%96%E5%B7%A5%E4%BD%9C%E7%9A%84%E5%AF%B9%E6%AF%94"><span class="nav-number"></span> <span class="nav-text">📊 与已有模型抽取工作的对比</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">1.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">86</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">213</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/c41f8e02/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-21 12:30:00 / Modified: 11:45:54" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>16k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>29 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>论文：<strong>Hermes Attack: Steal DNN Models with Lossless Inference
+Accuracy</strong>（USENIX Security 2021）</p>
+<p>作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu
+Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）</p>
+<p>概括成一段话：<strong>在 CPU 与 GPU 之间那条没有加密的 PCIe
+总线上抓包，从 GPU 命令与数据搬运里反推出受害者 DNN
+的结构、超参数和全部权重，重建出的模型推理精度与原模型完全一致。</strong></p>
+</blockquote>
+<p>模型文件放在加密盘里、主机开了 SGX、GPU
+也独占不共享，模型文件一个字节都没泄露。但模型仍然可能被整个偷走——Hermes
+Attack 盯上的不是模型文件，而是模型在 GPU 上跑推理时留下的 PCIe
+通信痕迹。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PCIe</strong></td>
+<td>主机与 GPU、SSD、网卡之间的高速串行总线</td>
+<td>攻击面：明文，可被物理抓包</td>
+</tr>
+<tr>
+<td><strong>TLP</strong></td>
+<td>Transaction Layer Packet，事务层包</td>
+<td>PCIe 上数据传输的基本单位</td>
+</tr>
+<tr>
+<td><strong>Tag</strong></td>
+<td>TLP 头部字段，请求与回应的配对凭据</td>
+<td>用它把 Request 和 Completion 对上</td>
+</tr>
+<tr>
+<td><strong>D command</strong></td>
+<td>Data movement command，数据搬运命令</td>
+<td>权重就是从它的 payload 里捞出来的</td>
+</tr>
+<tr>
+<td><strong>K command</strong></td>
+<td>Kernel launch command，内核启动命令</td>
+<td>决定 GPU 此刻在算哪一层</td>
+</tr>
+<tr>
+<td><strong>KD2D</strong></td>
+<td>设备内同步拷贝（也是一条 K command）</td>
+<td>参数被复制了一份，追踪必须往回走</td>
+</tr>
+<tr>
+<td><strong>Kernel</strong></td>
+<td>编译成 GPU 机器码、在 GPU 上运行的计算程序</td>
+<td>每一类 DNN 层对应固定的 kernel</td>
+</tr>
+<tr>
+<td><strong>Architecture</strong></td>
+<td>层的数量、类型、维度与连接拓扑</td>
+<td>由数据流图恢复</td>
+</tr>
+<tr>
+<td><strong>Hyper-parameters</strong></td>
+<td>推理时用到的 kernel size、stride、filters 等</td>
+<td>从 K command 参数或 kernel 存在性恢复</td>
+</tr>
+<tr>
+<td><strong>Parameters</strong></td>
+<td>训练得到的 weight 与 bias</td>
+<td>由 D / KD2D 的数据流恢复</td>
+</tr>
+</tbody>
+</table>
+<h2 id="起点模型文件没丢模型为什么还是丢了">🎯
+起点：模型文件没丢，模型为什么还是丢了</h2>
+<p>先把场景摆出来。一家 AI 公司把训练好的 DNN 打包进一台带 GPU
+的设备，卖给第三方客户：智能摄像头、车载域控制器、工业质检机，都是这个形态。模型是公司的核心资产，只给使用权，按年收许可费。</p>
+<p>站在模型提供方角度，能做的防护基本都做了：</p>
+<ul>
+<li>主机侧：Secure Boot、全盘加密，模型文件本身再用 TEE（比如 Intel
+SGX）护起来；</li>
+<li>GPU 侧：不做多租户共享，整块卡只跑自己的任务；</li>
+<li>网络侧：设备不出网，模型文件不会被外传。</li>
+</ul>
+<p>这三条都成立，模型文件确实拿不到。但攻击者不需要拿文件——他就在设备现场，可以打开机箱，在
+CPU 和 GPU 之间的 PCIe
+链路上插一个协议分析仪，把这条链路上跑过的每一个包记下来。</p>
+<p>于是问题变成：</p>
+<blockquote>
+<p><strong>只看 CPU 与 GPU
+之间来回的二进制流量，能不能把整个神经网络扒出来？</strong></p>
+</blockquote>
+<p>这个问题的答案，就是 Hermes Attack。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────────────┐       ┌───────────────────────────┐</span><br><span class="line">│  Host                │       │  GPU (Device)             │</span><br><span class="line">│                      │       │                           │</span><br><span class="line">│  1. Secure Boot      │       │  DNN Model                │  ← 受害者模型与参数在这里</span><br><span class="line">│  2. Disk Encryption  │       │  Weight / Bias            │  ← 参数明文进出显存</span><br><span class="line">│  3. TEE (SGX)        │       │                           │</span><br><span class="line">│                      │       │  no multi-tenant sharing  │</span><br><span class="line">└──────────┬───────────┘       └─────────────┬─────────────┘</span><br><span class="line">           │                                 │</span><br><span class="line">           └────────────────┬────────────────┘</span><br><span class="line">                            ↓</span><br><span class="line">             ════════════ PCIe ════════════  ← 未加密，攻击者可在此抓包</span><br><span class="line">                            ↓</span><br><span class="line">               ┌────────────┴─────────────┐</span><br><span class="line">               │  PCIe Protocol Analyzer  │</span><br><span class="line">               │                          │</span><br><span class="line">               │  Attacker                │  ← 插入链路，记录每个包</span><br><span class="line">               └──────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>论文的威胁模型（论文 Figure 4）就建立在这条链路上：主机和 GPU
+各自都被保护得很好，唯独中间那条 PCIe
+是明文，而攻击者能物理接触到它。注意这里没有假设任何软件漏洞——不需要提权，不需要
+rooting，不需要攻破
+SGX。<strong>攻击者拿到的只是一段总线上的流量录音。</strong></p>
+<h3 id="先分清三个词结构超参数参数">🧭
+先分清三个词：结构、超参数、参数</h3>
+<p>要偷一个 DNN，得先说清楚偷的是什么。论文把模型拆成三块：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>内容</th>
+<th>论文里的叫法</th>
+<th>具体指什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>结构</td>
+<td>Architecture</td>
+<td>层的数量、每层的类型与维度、层之间的连接拓扑</td>
+</tr>
+<tr>
+<td>超参数</td>
+<td>Hyper-parameters</td>
+<td>推理时真正用到的那些配置，如 kernel size、stride、filters、pool
+size、padding</td>
+</tr>
+<tr>
+<td>参数</td>
+<td>Parameters</td>
+<td>训练得到的 weight 与 bias</td>
+</tr>
+</tbody>
+</table>
+<p>这里有个容易读岔的地方：论文 Background 一节把 learning
+rate、momentum、epochs、batch size 也算进
+hyper-parameters（这是机器学习里的通用定义），但攻击目标里的
+hyper-parameters 指的是<strong>推理期被用到</strong>的那一类，也就是
+stride、kernel size、filters。两者不同，前者拿不到，后者能拿到——第 3.4.2
+节明确说，控制训练过程的超参数无法从推理期流量里恢复。读完后面会更清楚，这个区分决定了
+Hermes 的能力边界。</p>
+<p>另一件必须强调的事：论文里的 <strong>parameters
+专指模型参数（权重与偏置）</strong>，不是函数参数；<strong>kernel 专指
+GPU kernel</strong>，不是操作系统内核。后文沿用同样的约定。</p>
+<h3 id="模型是怎么跑到-gpu-上的">🏗️ 模型是怎么跑到 GPU 上的</h3>
+<p>一个 DNN 从框架代码到 GPU
+硬件，中间要穿过四层软件。这条路径决定了模型信息最后会以什么形式出现在总线上（论文
+Figure 1）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">┌─────────────────────────┐</span><br><span class="line">│  DNN Framework          │  ← 模型与训练/推理脚本都在这一层，调用 GPU API</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  CUDA / OpenCL Runtime  │  ← 把 API 调用翻译成一条条 GPU Command</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  Runtime Backend        │  ← 通过 ioctl 把命令交给驱动</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  Device Driver          │  ← 把命令提交给 GPU 硬件</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">══════════ PCIe ═══════════  ← 明文总线，Hermes 的监听点</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  GPU                    │</span><br><span class="line">│                         │</span><br><span class="line">│  runs the DNN kernels   │  ← 模型执行发生在这里</span><br><span class="line">└─────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>关键在最后一步：<strong>高层计算任务最终都变成了底层的 PCIe
+包</strong>。反过来说，PCIe
+包是这台机器上唯一一份能被外人在旁路完整看到的、与模型执行相关的数据。</p>
+<p>对攻击者来说，这里有个天然的不对称：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>角色</th>
+<th>能看到什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU 侧软件</td>
+<td>知道层类型（Conv2D、ReLU、Softmax），但拿不到（攻击者视角下）</td>
+</tr>
+<tr>
+<td>PCIe 总线</td>
+<td>只有命令与地址，层类型的语义在 CPU 侧就已经被消掉了</td>
+</tr>
+<tr>
+<td>GPU 侧</td>
+<td>只认 kernel 二进制和地址，不知道自己在跑什么网络</td>
+</tr>
+</tbody>
+</table>
+<p>Hermes 要做的，就是把这三份信息缝起来。</p>
+<h3 id="三个难点">🚧 三个难点</h3>
+<p>论文自己列了三条挑战，后面的设计全是为了对付它们：</p>
+<ol type="1">
+<li><strong>闭源与未文档化的数据结构</strong>：CUDA runtime、驱动、GPU
+内部全是闭源，数据搬运和 kernel 启动涉及的关键结构没有文档；GPU kernel
+与 command 还各用一套指令集，反汇编不现实。破解靠的是大量逆向工程。</li>
+<li><strong>语义在 PCIe
+层丢失</strong>：层类型不会出现在流量里，因为它是在 CPU
+侧解析的。少了这个信息，模型只能恢复一半。</li>
+<li><strong>包的噪声与乱序</strong>：一次单图推理就能产生上百万个包，论文实测只有
+<strong>1%～2%</strong> 的包对重建有用；而 CUDA
+是异步流水线，回应包的到达顺序与它在 DNN 语义上的顺序并不一致。越新的
+GPU（例如 RTX 2080
+Ti）在这点上越麻烦，因为引入了统一显存与主机内存的新特性。</li>
+</ol>
+<h2 id="第一层从-pcie-报文到-gpu-command">📦 第一层：从 PCIe 报文到 GPU
+Command</h2>
+<h3 id="一次读操作涉及哪两个包">🔗 一次读操作涉及哪两个包</h3>
+<p>PCIe 上的通信都以 TLP 为单位。CPU
+读外设内存时，链路上会出现两个包（论文 Figure 2、Figure 3）：</p>
+<ul>
+<li><strong>读请求包（Memory Read Request）</strong>：CPU
+发出，指明要读哪个地址，Header 里带 Tag；</li>
+<li><strong>回应包（Completion with Data）</strong>：外设返回，payload
+里就是数据，Header 里的 Tag 与请求包相同。</li>
+</ul>
+<p>Tag 是配对的唯一依据。写操作则简单一些：一个 Memory Write 包，Header
+加 payload 就完事。</p>
+<p>论文在流量处理阶段做了一次简化：上游（GPU 到 CPU）只保留 GPU
+的读请求包，下游（CPU 到
+GPU）只保留回应包，其余类型先丢掉。然后再把同一个 Tag
+的请求包与回应包<strong>合并成一条 data packet</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Request (Tag=100, Addr=0x5000)</span><br><span class="line">Completion (Tag=100, Data=...)</span><br><span class="line">        ↓  按 Tag 合并</span><br><span class="line">Data Packet = 地址 0x5000 + 该地址上的数据</span><br></pre></td></tr></table></figure>
+<p>这样每条 data packet
+自带了地址和数据，后面的分析只需要面对这一种结构。</p>
+<h3 id="为什么要-merge-和-sort">🧵 为什么要 Merge 和 Sort</h3>
+<p>PCIe
+协议不保证多个连续请求的回应顺序，一次读请求的结果还可能被拆进多个回应包里。所以抓到的原始顺序不能直接用，Hermes
+用两步修正：</p>
+<p><strong>合并（Merge）</strong>：按 Tag
+找到请求包对应的所有回应包，补全 Tag 字段，相邻的同 Tag
+包拼成一个包，payload 顺次连接。</p>
+<p><strong>排序（Sort）</strong>（论文 Figure 6）：</p>
+<ol type="1">
+<li>默认所有包按 packet ID 从小到大排列；</li>
+<li>取一个请求包记为 P1，向后找第一个 Tag 与它相同的包，记为 P2；</li>
+<li>在与 P2 相同 packet ID 的 data packet 里找到 P3；</li>
+<li>把 P1 的 packet ID 写进 P3 作为<strong>排序键</strong>；</li>
+<li>重复直到所有 data packet 都有排序键，最后按排序键重排。</li>
+</ol>
+<p>换句话说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sort key(P3) = packet_id(P1)</span><br><span class="line">               │  └─ 请求包发出的先后，代表 DNN 层真正的执行顺序</span><br><span class="line">               └──── 落到合并后的数据包上，成为重排依据</span><br></pre></td></tr></table></figure>
+<p>这一步是后面所有分析的地基：<strong>排序键的顺序，就是 GPU 执行 DNN
+的顺序</strong>。</p>
+<h3 id="d-command-与-k-command">⌨️ D Command 与 K Command</h3>
+<p>GPU 命令也由两部分组成：Header 说明这是什么命令、数据有多长；Data
+是命令携带的值。论文把所有命令归成两类，只关心这两类：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>命令</th>
+<th>含义</th>
+<th>论文中的变体</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>D command</strong></td>
+<td>数据搬运</td>
+<td>D、KD2D、Dasyn</td>
+<td>传输入、传中间结果，也传权重</td>
+</tr>
+<tr>
+<td><strong>K command</strong></td>
+<td>启动 GPU kernel</td>
+<td>K、KD2D</td>
+<td>决定 GPU 在跑哪个 kernel，也就是哪一层</td>
+</tr>
+</tbody>
+</table>
+<p>注意 KD2D 两边都沾：它是<strong>启动一个做设备内拷贝的
+kernel</strong>，所以既是 K command 的一种，行为上又是数据搬运。</p>
+<h3 id="离线摸清-command-header">🔍 离线摸清 Command Header</h3>
+<p>要按类型过滤命令，就得知道 Header 长什么样，而 GPU
+的命令格式没有文档。论文的办法是<strong>离线构造实验做差分</strong>，思路可以概括成一句话：只改一个变量，看哪个字段跟着变。</p>
+<ul>
+<li>摸 D
+command：反复在预分配的显存和主存之间搬运构造好的数据，对抓到的包做模式匹配；</li>
+<li>摸 K command：反复用准备好的参数启动 kernel，比对包的变化。</li>
+</ul>
+<p>最后得到一条命令的 Header 是 9 个 DW（Double Word，4
+字节），其中三个字段最有用：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐</span><br><span class="line">│ DW1  │ DW2  │ DW3  │ DW4  │ DW5  │ DW6  │ DW7  │ DW8  │ DW9  │</span><br><span class="line">│      │      │ addr │      │ size │      │      │      │ type │</span><br><span class="line">└──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘</span><br><span class="line"> DW3  = GPU memory address</span><br><span class="line"> DW5  = data size in bytes</span><br><span class="line"> DW9  = command type</span><br><span class="line">        6D204860 表示 Kepler 上的 kernel launch</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>DW3</strong>：这条命令在 GPU 内存里的地址；</li>
+<li><strong>DW5</strong>：数据段的字节数；</li>
+<li><strong>DW9</strong>：命令类型，例如 <code>6D204860</code> 是 Kepler
+架构上 kernel launch 的签名（论文把签名对应的位级语义引向了 Envytools
+的逆向工作）。</li>
+</ul>
+<p>论文还做了穷举测试，确认 Header 结构在不同 GPU
+与整机组合上稳定可用，并把结果存进 profiling
+数据库，后续分析直接查表。</p>
+<h3 id="噪声过滤物理地址不连续怎么办">🧹
+噪声过滤：物理地址不连续怎么办</h3>
+<p>按 Header 过滤出 D / K command 之后，每条命令的 payload
+仍然混着噪声。论文把它们分成两类：</p>
+<ul>
+<li><strong>外部噪声（external
+noise）</strong>：不属于当前命令的包。一条数据量大的命令要几千个包才传完，中间很容易插进别的命令；更麻烦的是命令
+Header 自己可能被拆进两个包，噪声包就卡在中间。</li>
+<li><strong>内部噪声（internal noise）</strong>：包内某个固定 DW
+位置上的干扰字段。论文把这类模式全部列了出来，抽取 payload
+时直接剔除。</li>
+</ul>
+<p>最直觉的过滤方法是检查地址连续性——同一命令的数据在内存里通常连续。但这招不完全可靠：包里的地址是物理地址，CUDA
+程序用的虚拟连续空间可能被切成多段物理内存，相邻两个包地址不连续是正常的；反过来，一条命令的数据太大时也会跨越多个物理块。</p>
+<p>于是论文引入了一个启发式阈值 <code>MAX_SCAN_DISTANCE</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">遇到地址断点</span><br><span class="line">   ↓ 在 MAX_SCAN_DISTANCE 范围内向后扫描</span><br><span class="line">找到与前一段地址接得上的包 → 认定它才是相邻包，丢弃中间扫过的包</span><br><span class="line">           否则            → 把这个断点当作物理地址分段，继续累积 payload</span><br><span class="line">   ↓</span><br><span class="line">累积字节数 == Header 里声明的数据大小  → 本条命令抽取完毕</span><br></pre></td></tr></table></figure>
+<p>用 Header
+里声明的大小作为终止条件，这一条很关键：它让抽取有了明确的对错判据，而不是靠猜。</p>
+<h2 id="第二层从-gpu-kernel-到-dnn-layer">🧩 第二层：从 GPU Kernel 到
+DNN Layer</h2>
+<p>层类型在 CPU 侧就被解析掉了，PCIe 上根本没有这个信息。Hermes
+靠一个关键观察把语义补回来：<strong>每一类 DNN
+层，最终都对应着一批固定的 GPU kernel 二进制。</strong></p>
+<h3 id="kernel-是什么怎么进到-gpu">🧱 Kernel 是什么，怎么进到 GPU</h3>
+<p>nvcc 把 kernel 编译成硬件相关的可执行代码（CUDA
+Fatbin），嵌在宿主可执行文件的专用 section 里（例如
+<code>libcudnn.so</code> 的
+<code>nv_fatbin</code>）。运行到某次调用时，这段二进制被搬到显存里，再被启动执行。</p>
+<p>这里有一个很好用的性质：大家都倾向用厂商高度优化的标准库（cuDNN、Eigen），所以<strong>kernel
+二进制相对稳定</strong>。比如卷积层调用
+<code>cudnn::detail::implicit_convolve_sgemm</code>，这段二进制就躺在
+<code>libcudnn.so</code>
+里。二进制稳定，意味着离线阶段建立的那张对照表可以反复使用。</p>
+<h3 id="两条观察一个反向定位">🔎 两条观察，一个反向定位</h3>
+<p>论文给出两条观察：</p>
+<blockquote>
+<p><strong>观察 1</strong>：每个 kernel 是通过一条 D command 加载到 GPU
+上的，这条 D command 的数据段就是 kernel 二进制。</p>
+<p><strong>观察 2</strong>：每条 K command
+里都有一个地址，指向将要启动的 kernel 二进制。</p>
+</blockquote>
+<p>顺着这两条就能把 kernel
+二进制捞出来，方法是<strong>反着走</strong>（论文 Figure 10）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">正向（GPU 实际执行）：</span><br><span class="line">   D command 把 kernel 二进制放到显存 405ECF01</span><br><span class="line">              ↓</span><br><span class="line">   K command 带着地址 405ECF01 启动 kernel</span><br><span class="line"></span><br><span class="line">反向（Hermes 的分析）：</span><br><span class="line">   1. 在 K command 的数据段里按固定偏移取出地址 405ECF01</span><br><span class="line">   2. 拿这个地址回到 D command 的数据段，dump 出 kernel 二进制</span><br></pre></td></tr></table></figure>
+<p>把所有 K command 走一遍，就得到<strong>一串按启动顺序排列的 kernel
+二进制</strong>。这个顺序本身就是 DNN 的执行顺序。</p>
+<h3 id="对齐-cuda-trace建立-kernel-到-layer-的映射">🗂️ 对齐 CUDA
+trace，建立 kernel 到 layer 的映射</h3>
+<p>接下来是离线阶段的核心动作：拿白盒模型跑一遍，用 nvprof 采集 CUDA
+trace，把 trace 里的层序列与刚才那串 kernel
+二进制对齐，于是每一段二进制都挂上了明确的层类型。</p>
+<p>结果存成一张哈希表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">key   = kernel binary</span><br><span class="line">value = layer type</span><br></pre></td></tr></table></figure>
+<p>同一个思路还能再往下挖一层。那些携带超参数的 kernel，其 K command
+数据段里就放着 stride、kernel size
+这类值。论文用已知模型循环扫描数据段，找出这些值出现的位置，于是又得到第二张表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;kernel, offset of hyper-parameters&gt;</span><br></pre></td></tr></table></figure>
+<p>论文 Table 2 给出了每一类层对应的 kernel。摘录一部分：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>层</th>
+<th>对应的 kernel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conv2D</td>
+<td><code>cudnn::detail::implicit_convolve_sgemm</code>、<code>cudnn::winograd::winograd3x3Kernel</code>、<code>ShuffleInTensor3Simple</code>
+等</td>
+</tr>
+<tr>
+<td>BatchNorm</td>
+<td><code>cudnn::detail::bn_fw_inf_1C11_kernel_new</code></td>
+</tr>
+<tr>
+<td>Dense</td>
+<td><code>gemv2N_kernel_val</code>、<code>gemvNSP_kernel_val</code></td>
+</tr>
+<tr>
+<td>Flatten</td>
+<td><code>BlockReduceKernel</code></td>
+</tr>
+<tr>
+<td>MaxPool</td>
+<td><code>cudnn::detail::pooling_fw_4d_kernel</code></td>
+</tr>
+<tr>
+<td>AvgPool</td>
+<td><code>Eigen::internal::AvgPoolMeanReducer</code></td>
+</tr>
+<tr>
+<td>ZeroPad</td>
+<td><code>PadInputCustomKernelNHWC</code></td>
+</tr>
+<tr>
+<td>Add</td>
+<td><code>Eigen::internal::scalar_sum_op</code></td>
+</tr>
+<tr>
+<td>ReLU</td>
+<td><code>Eigen::internal::scalar_max_op</code></td>
+</tr>
+<tr>
+<td>Softmax</td>
+<td><code>softmax_op_gpu_cu_compute_70</code></td>
+</tr>
+<tr>
+<td>辅助</td>
+<td><code>SwapDimension1And2InTensor3UsingTiles</code>（恢复数据流用）、<code>BiasNCHWKernel</code>、<code>BiasNHWCKernel</code>（判断是否用
+bias，并定位 bias 地址偏移）</td>
+</tr>
+</tbody>
+</table>
+<p>这张表的用法是整个攻击链的中枢：<strong>看到某个 kernel
+被启动，就等于知道 GPU 正在算哪一层。</strong></p>
+<h2 id="第三层把-weight-和-bias-取出来">💰 第三层：把 Weight 和 Bias
+取出来</h2>
+<p>结构与超参数有了，还差参数。参数和前面几样不同——它是<strong>明文搬到
+GPU 上的</strong>，所以从数据搬运命令里就能直接读到数值。难度在于：D
+command 不只搬参数，还搬输入、搬中间结果，怎么把参数挑出来。</p>
+<h3 id="为什么不能把-d-command-的数据全当权重">❓为什么不能把 D command
+的数据全当权重</h3>
+<p>一个自然的想法是：把所有 D command 的 payload
+都当作候选参数，逐一验证。但这行不通，因为大量 K command 压根不用 D
+command 搬来的数据，它们用的是<strong>别的 K command
+新造出来的地址</strong>。跟 CUDA trace 对齐后，论文发现这些 K command
+在做设备内存到设备内存的拷贝，于是给出第三条观察：</p>
+<blockquote>
+<p><strong>观察 3</strong>：CUDA 会用 K command
+做设备内的同步拷贝，论文称之为 <strong>KD2D</strong>。DNN 参数由 D
+command 送进 GPU 后，经常被 KD2D
+再复制一份，<strong>真正参与层计算的是那份副本，原址的数据保持不动</strong>。</p>
+</blockquote>
+<p>为什么要有这份副本？论文的解释是：设备内拷贝用 kernel 比用 D
+command（受 DMA
+控制）高效得多；而保留原址是为了避免推理过程中原始权重被覆盖污染。</p>
+<p>这条观察直接决定了恢复参数的路径：<strong>参数被复制过，就必须从使用方往回追，追到最初的来源。</strong></p>
+<h3 id="三个命令连成的反推链">🔁 三个命令连成的反推链</h3>
+<p>论文 Figure 11 给出一个最小例子，三个命令正好构成一条链：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1. D command        ... 00512D01 ...       ← 权重首次落到显存 00512D01</span><br><span class="line">2. KD2D command     00130C01, 00512D01     ← 目的地址 00130C01，源地址 00512D01</span><br><span class="line">3. K command        ... 00130C01 ...       ← kernel 用的是副本 00130C01</span><br><span class="line"></span><br><span class="line">恢复顺序（完全反向）：</span><br><span class="line">3 → 2 → 1</span><br><span class="line">从 K command 取出目的地址 → 拿它去 KD2D 命令里找源地址 → 到 D command 里 dump 权重</span><br></pre></td></tr></table></figure>
+<p>对应到每层多少个数值，论文还有两件事要处理：</p>
+<p><strong>一是大参数块的异步传输。</strong> 参数量特别大的层不会用普通
+D command 搬，而是走一种 Header 结构不同的异步传输命令（论文称之为
+<code>Dasyn</code>）。这样能把大数据量传输的延迟从关键路径上挪开，但给分析带来两个新麻烦：</p>
+<ul>
+<li>Header 里<strong>没有数据大小</strong>字段；</li>
+<li>Header 和数据在地址不连续的包里，中间还可能插进别的命令。</li>
+</ul>
+<p>第一个问题用公式解决——先用已恢复的超参数算出这一层理论上有多少个数值：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">#Weights(conv)  = mw * mh * cin * cout</span><br><span class="line">#Bias(conv)     = cout</span><br><span class="line">#Weights(dense) = cout * cin</span><br><span class="line">#Bias(dense)    = cout</span><br></pre></td></tr></table></figure>
+<p>其中 <code>mw</code>、<code>mh</code>
+是卷积核的宽与高，<code>cin</code>、<code>cout</code>
+是输入与输出通道数（也就是 filters）。归一化层的权重数量不用算，直接从
+kernel 参数里读。</p>
+<p>第二个问题用排除法解决：先把所有普通命令和噪声滤掉，剩下的就是
+<code>Dasyn</code>；再按同一条命令的包在地址上连续这一性质，把 Header
+和数据段按顺序拼回去。</p>
+<p><strong>二是地址复用。</strong> 模型一大（VGG、ResNet
+这种），同一个显存地址会被反复覆盖，后面多条 K command
+引用同一地址，指的却是不同数据。论文用<strong>数据生命区间（data life
+range）</strong>来处理，看这个例子：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">1. D1(src)              ← src 写入</span><br><span class="line">2. KD2D1(src, dst1)     ← src 被复制到 dst1，dst1 生命区间开始</span><br><span class="line">3. D2(src)              ← src 被覆盖</span><br><span class="line">4. KD2D2(src, dst2)     ← 新的 src 被复制到 dst2</span><br><span class="line">5. K1(dst1)             ← 用 dst1</span><br><span class="line">6. K2(dst2)             ← 用 dst2</span><br><span class="line"></span><br><span class="line">dst1 的生命区间 = 1～2；dst2 的生命区间 = 3～4</span><br><span class="line">K1 的参数按 5 → 2 → 1 的顺序往回取</span><br></pre></td></tr></table></figure>
+<p><strong>从每一条 K command
+出发，只在它的生命区间内往回追</strong>，地址复用就不会张冠李戴。</p>
+<h2 id="拼装从数据流图恢复完整模型">🧱 拼装：从数据流图恢复完整模型</h2>
+<p>到这里，单条命令、单个
+kernel、单块参数都能解读了。最后一步是把碎片拼成模型。</p>
+<h3 id="kernel-是顶点数据搬运是边">🕸️ Kernel 是顶点，数据搬运是边</h3>
+<p>论文的重建思路是把 DNN 的执行看成一个<strong>数据流图（data flow
+graph）</strong>：</p>
+<ul>
+<li>每次 <strong>kernel 启动 = 一个顶点</strong>；</li>
+<li>每次<strong>数据搬运 = 一条边</strong>。</li>
+</ul>
+<p>每个 kernel
+至少读一个地址、写一个或多个地址。至于哪几个偏移是输入、哪几个是输出，靠离线阶段
+profile 好的语义（K command
+里输入输出地址的偏移）来判断。按输入地址连出、输出地址连入，图就建起来了。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">显存视角：  Memory A ──→ Kernel X ──→ Memory B ──→ Kernel Y ──→ Memory C</span><br><span class="line">DNN 视角：   Conv2D   ──→   BN     ──→   ReLU   ──→   Conv2D</span><br></pre></td></tr></table></figure>
+<p>有个细节不能想当然：<strong>一个 kernel 的输出地址未必等于后继 kernel
+的输入地址</strong>。两个地址可能落在同一个数据块里，也可能中间隔了一次
+D command 拷贝。所以建图时要迭代 D command
+来确认地址之间的传递关系。论文提到
+<code>SwapDimension1And2InTensor3UsingTiles</code> 这个 kernel
+就要专门记录，因为它参与了数据流的走向恢复。</p>
+<p>图建好之后，把每个顶点替换成查表得到的层类型，<strong>Architecture
+就出来了</strong>。</p>
+<h3 id="超参数的两条恢复路径">🧾 超参数的两条恢复路径</h3>
+<p>推理期用到的超参数，来源只有两种：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>来源</th>
+<th>例子</th>
+<th>做法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>K command 的参数</td>
+<td>stride、kernel size、filters、pool size</td>
+<td>按离线 profile 出的偏移，从 kernel 的 K command 数据段里取值</td>
+</tr>
+<tr>
+<td>某个 kernel 是否出现</td>
+<td><code>use_bias</code> 这类布尔量</td>
+<td>例如出现 <code>BiasNCHWKernel</code>，就判定这一层用了 bias</td>
+</tr>
+</tbody>
+</table>
+<p>论文 Table 3 给出了一张偏移表，摘录卷积层部分（偏移指 K command
+数据段里，从第一个 word 到目标超参数的距离，以 word 计）：</p>
+<table>
+<thead>
+<tr>
+<th>超参数</th>
+<th>主 kernel 编号</th>
+<th>GT 730</th>
+<th>1080 Ti</th>
+<th>2080 Ti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kernel Size</td>
+<td>2</td>
+<td>102, 103</td>
+<td>99, 100</td>
+<td>96, 97</td>
+</tr>
+<tr>
+<td>Strides</td>
+<td>2</td>
+<td>126, 127</td>
+<td>123, 124</td>
+<td>120, 121</td>
+</tr>
+<tr>
+<td>Filters</td>
+<td>2</td>
+<td>101</td>
+<td>98</td>
+<td>95</td>
+</tr>
+<tr>
+<td>Weights</td>
+<td>1</td>
+<td>83</td>
+<td>80</td>
+<td>80</td>
+</tr>
+<tr>
+<td>Bias</td>
+<td>17</td>
+<td>85</td>
+<td>82</td>
+<td>82</td>
+</tr>
+</tbody>
+</table>
+<p>这张表值得多看一眼：<strong>同一批超参数在不同 GPU
+上的偏移并不相同</strong>，同一层在不同实现下还可能对应不同的
+kernel。所以离线阶段必须换平台重做，数据库是<strong>按平台建立</strong>的，不能跨代套用。</p>
+<h3 id="resnet-的-shortcut-怎么恢复">➕ ResNet 的 shortcut 怎么恢复</h3>
+<p>前面都是链式结构，ResNet 不一样——它有
+shortcut，同一份数据会被主干之外的路径再用一次：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">             ┌──────────── shortcut ──────────┐</span><br><span class="line">             │                                ↓</span><br><span class="line">Input ──→ Conv ──→ Conv ──→ Add ──→ Output</span><br></pre></td></tr></table></figure>
+<p>在 PCIe 层看不到任何叫 shortcut
+的东西，但数据流图会暴露它：<strong>同一个地址被多个 kernel
+当作输入，或者某个地址上出现显式的加法
+kernel（<code>Eigen::internal::scalar_sum_op</code>）</strong>，这就是分支与汇合的痕迹。恢复出来的顶点与边只要忠实反映数据依赖，分支结构自然就出来了。</p>
+<p>这也是显存地址在 Hermes
+里如此重要的原因：<strong>层与层的连接关系不在命令里，而在地址的流向里。</strong></p>
+<h3 id="重建结果与原模型的两处差异">🧮 重建结果与原模型的两处差异</h3>
+<p>论文用 Figure 12
+对比了三个模型的原始结构与重建结构，结论是<strong>语义等价</strong>，有两处形式上的差异：</p>
+<ul>
+<li><strong>重建模型没有 dropout 层</strong>（MNIST、VGG
+上可见）。dropout 只在训练期生效，推理时被禁用，所以它根本不会在 PCIe
+上留下痕迹；也正因为推理时不起作用，缺了它不影响推理结果。</li>
+<li><strong>重建模型把每个激活函数当成独立的一层</strong>（MNIST、ResNet
+上可见）。这是实现风格差异：有的模型把激活函数写成层的超参数，有的写成单独的层。论文统一按独立层处理，同样不带来精度差异。</li>
+</ul>
+<h2 id="实验lossless-到底指什么">🧪 实验：Lossless 到底指什么</h2>
+<h3 id="实验设置">🔧 实验设置</h3>
+<ul>
+<li><strong>GPU 平台</strong>：NVIDIA Geforce GT 730、GTX 1080 Ti、RTX
+2080 Ti，每次实验主板上只挂一块 GPU，走 PCIe 3.0，CUDA 10.1；</li>
+<li><strong>抓包设备</strong>：Teledyne LeCroy Summit T3-16 PCIe
+协议分析仪（论文 5.1 节里同一台设备的型号写作 Summit T3-26，自带 8GB
+buffer，每个方向 4GB）；</li>
+<li><strong>受害者模型</strong>：MNIST、VGG16、ResNet20，用 Keras 加
+TensorFlow 后端跑推理，实验中被当作黑盒，只用于事后核对。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Victim 模型</th>
+<th>层数</th>
+<th>参数量</th>
+<th>训练数据集</th>
+<th>输入形状</th>
+<th>原始精度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MNIST</td>
+<td>8</td>
+<td>544,522</td>
+<td>mnist</td>
+<td>28 × 28 × 1</td>
+<td>98.25%</td>
+</tr>
+<tr>
+<td>VGG16</td>
+<td>60</td>
+<td>15,001,418</td>
+<td>cifar10</td>
+<td>32 × 32 × 3</td>
+<td>93.59%</td>
+</tr>
+<tr>
+<td>ResNet-20</td>
+<td>72</td>
+<td>274,442</td>
+<td>cifar10</td>
+<td>32 × 32 × 3</td>
+<td>91.45%</td>
+</tr>
+</tbody>
+</table>
+<p>实验只用了<strong>一张随机图片</strong>的推理流量。</p>
+<h3 id="需要多少包多少时间">⏱️ 需要多少包、多少时间</h3>
+<p>论文 Table 5 的统计（单张图片推理）：</p>
+<table>
+<thead>
+<tr>
+<th>平台</th>
+<th>D command 数</th>
+<th>K command 数</th>
+<th>回应包数</th>
+<th>重建时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MNIST / GT 730</td>
+<td>25,680</td>
+<td>216</td>
+<td>1,077,756</td>
+<td>5 分钟</td>
+</tr>
+<tr>
+<td>MNIST / 1080 Ti</td>
+<td>28,590</td>
+<td>139</td>
+<td>2,244,115</td>
+<td>8 分钟</td>
+</tr>
+<tr>
+<td>MNIST / 2080 Ti</td>
+<td>24,342</td>
+<td>181</td>
+<td>2,959,613</td>
+<td>11 分钟</td>
+</tr>
+<tr>
+<td>VGG / GT 730</td>
+<td>27,287</td>
+<td>903</td>
+<td>4,284,946</td>
+<td>17 分钟</td>
+</tr>
+<tr>
+<td>VGG / 1080 Ti</td>
+<td>27,677</td>
+<td>628</td>
+<td>2,615,895</td>
+<td>11 分钟</td>
+</tr>
+<tr>
+<td>VGG / 2080 Ti</td>
+<td>24,931</td>
+<td>793</td>
+<td>3,354,411</td>
+<td>12 分钟</td>
+</tr>
+<tr>
+<td>ResNet / GT 730</td>
+<td>28,433</td>
+<td>1,011</td>
+<td>975,257</td>
+<td>6 分钟</td>
+</tr>
+<tr>
+<td>ResNet / 1080 Ti</td>
+<td>28,518</td>
+<td>886</td>
+<td>2,052,657</td>
+<td>9 分钟</td>
+</tr>
+<tr>
+<td>ResNet / 2080 Ti</td>
+<td>25,577</td>
+<td>988</td>
+<td>2,717,451</td>
+<td>10 分钟</td>
+</tr>
+</tbody>
+</table>
+<p>两个规律：</p>
+<ul>
+<li><strong>D command 数量与模型关系不大</strong>，因为只有少量 D
+command 用来搬运模型信息，其余都是输入与杂项；而 <strong>K command
+数随模型复杂度上升</strong>——模型越深越复杂，启动的 kernel 越多；</li>
+<li><strong>重建时间主要取决于包的数量</strong>，包的数量又同时受平台与模型影响。总区间是
+5～17 分钟。</li>
+</ul>
+<p>顺便回看那条噪声比例：MNIST 在 GT 730 上产生 1,077,756 个 data
+packet，其中约 20,000
+个（2%）对重建有用，其余都是初始化、同步之类的信号。</p>
+<h3 id="精度与推理时间">🎯 精度与推理时间</h3>
+<p>论文 Table 4 对比了原模型与重建模型（10,000
+张测试图求平均精度）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>原模型</th>
+<th>重建（GT 730）</th>
+<th>重建（1080 Ti）</th>
+<th>重建（2080 Ti）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MNIST 精度</td>
+<td>98.25%</td>
+<td>98.25%</td>
+<td>98.25%</td>
+<td>98.25%</td>
+</tr>
+<tr>
+<td>VGG 精度</td>
+<td>93.59%</td>
+<td>93.59%</td>
+<td>93.59%</td>
+<td>93.59%</td>
+</tr>
+<tr>
+<td>ResNet 精度</td>
+<td>91.45%</td>
+<td>91.45%</td>
+<td>91.45%</td>
+<td>91.45%</td>
+</tr>
+<tr>
+<td>MNIST 推理耗时</td>
+<td>2.24 s</td>
+<td>2.39 s</td>
+<td>2.52 s</td>
+<td>2.38 s</td>
+</tr>
+<tr>
+<td>VGG 推理耗时</td>
+<td>65 s</td>
+<td>63 s</td>
+<td>63 s</td>
+<td>61 s</td>
+</tr>
+<tr>
+<td>ResNet 推理耗时</td>
+<td>20 s</td>
+<td>20 s</td>
+<td>20 s</td>
+<td>21 s</td>
+</tr>
+</tbody>
+</table>
+<p>精度一栏完全相同，推理耗时只有合理范围内的浮动。</p>
+<h3 id="lossless-的含义">📌 Lossless 的含义</h3>
+<p>标题里的 Lossless 容易被误读成 PCIe 数据无损，实际上论文指的是：</p>
+<blockquote>
+<p><strong>重建出来的模型，推理精度与原模型一字不差；与原模型精度高不高无关。</strong></p>
+</blockquote>
+<p>论文 5
+节开头把这一点说得很直白：无论受害者模型精度如何，重建模型都与它一致；激活函数的数量、模型层数也不会影响攻击的成功。这比早期的模型抽取工作强一个量级——那些工作在预测式攻击下精度会掉，在搜索式攻击下拿不到定制模型，而且都只能恢复模型的一部分。</p>
+<h2 id="边界hermes-做不到什么">🚧 边界：Hermes 做不到什么</h2>
+<p>精读不能只写攻击有多强，还要写它的前提与天花板。论文自己讨论了这些限制。</p>
+<h3 id="训练期的信息拿不到">🚫 训练期的信息拿不到</h3>
+<p>Hermes 是推理期攻击，只看到一次推理的流量。所以：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>信息</th>
+<th>能否恢复</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>训练超参数（learning rate、momentum、epochs、batch
+size、正则项）</td>
+<td>否</td>
+<td>只出现在训练过程，不出现在推理流量里</td>
+</tr>
+<tr>
+<td>dropout 层</td>
+<td>否</td>
+<td>推理时被禁用，不产生流量</td>
+</tr>
+<tr>
+<td>结构与推理用超参数</td>
+<td>能</td>
+<td>数据流图 + K command 参数</td>
+</tr>
+<tr>
+<td>weight 与 bias</td>
+<td>能</td>
+<td>D / KD2D 的数据搬运</td>
+</tr>
+</tbody>
+</table>
+<p>换句话说，攻击者拿到的是一个<strong>能直接部署、精度一致的推理模型</strong>，而不是一份能继续训练的完整训练配置。</p>
+<h3 id="超大模型与抓包-buffer">💾 超大模型与抓包 buffer</h3>
+<p>抓包设备的 buffer 是硬限制。论文用的分析仪 8GB（每方向 4GB），面对
+ImageNet 上训练的 VGG16 就不够用了：模型本身约 500MB，但 PCIe 与 GPU
+产生的大量元数据会把下游流量顶过 buffer 上限。</p>
+<p>两个出路：</p>
+<ul>
+<li><strong>换设备</strong>：例如 Summit T34 可把 buffer 扩到
+64GB，理论上能装下现有 DNN 的推理流量；</li>
+<li><strong>分段恢复</strong>：先抓前 n 层，下次跳过 k 层再抓（k ≤
+n），重复到最后一层，最后把各次恢复的层拼起来。这条路不依赖新硬件，但要求拦截窗口切得准，而且要有只有部分层数据时的恢复能力。</li>
+</ul>
+<h3 id="平台框架与多任务">🖥️ 平台、框架与多任务</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>变量</th>
+<th>影响</th>
+<th>应对</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>换 GPU 型号</td>
+<td>command header 结构可能变、指令集变导致 kernel 二进制变</td>
+<td>用离线阶段的方法重新摸 header、重建数据库</td>
+</tr>
+<tr>
+<td>换 DNN 框架</td>
+<td>每层的实现与 kernel 的对应关系会变</td>
+<td>只要层都在 GPU 上执行，重新建立层与 kernel 的映射即可</td>
+</tr>
+<tr>
+<td>换 NPU 等加速器</td>
+<td>底层机制不同</td>
+<td>论文认为 PCIe 与 GPU 的工作机制不变，攻击思路可迁移</td>
+</tr>
+<tr>
+<td>同卡多任务</td>
+<td>别的任务的数据会混进来</td>
+<td>每个进程有独立的 GPU context，每个 context 至少一条 channel
+发命令，按 context 过滤</td>
+</tr>
+</tbody>
+</table>
+<h3 id="攻击成立的前提">🧱 攻击成立的前提</h3>
+<p>把前提一次性列清楚：</p>
+<ol type="1">
+<li>攻击者能<strong>物理接触</strong>设备，并能在 CPU 与 GPU
+之间<strong>插入抓包设备</strong>；</li>
+<li>这条 PCIe 链路<strong>没有加密</strong>；</li>
+<li>攻击者能在<strong>同型号平台上</strong>跑离线
+profiling（为白盒模型建立对照数据库）；</li>
+<li>目标模型的各层<strong>都在 GPU
+上执行</strong>（论文假设如此；若某些层被搬到
+CPU，那些层就不会出现在流量里）；</li>
+<li>抓包设备能<strong>完整记录</strong>一次推理的流量（受 buffer
+限制）。</li>
+</ol>
+<p>缺任何一条，攻击要么失败、要么只能恢复部分模型。</p>
+<h2 id="论文提出的缓解思路">🛡️ 论文提出的缓解思路</h2>
+<p>论文 5.3 节列了几条对策，也顺带说明了各自的问题：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>缓解手段</th>
+<th>思路</th>
+<th>局限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PCIe 加密</td>
+<td>在链路上加密码引擎，让抓包拿到密文</td>
+<td>CPU 侧加容易，商用 GPU 普遍没有这个能力；缺少向后兼容</td>
+</tr>
+<tr>
+<td>数据混淆</td>
+<td>混淆命令、模型命令与参数</td>
+<td>需要扩展 kernel 来反混淆，只能抬高门槛，无法完全阻止</td>
+</tr>
+<tr>
+<td>软件侧噪声注入</td>
+<td>一个进程发数据、另一个进程发干扰命令</td>
+<td>可用 GPU channel 与 context 过滤掉</td>
+</tr>
+<tr>
+<td>动态 command header</td>
+<td>由驱动动态生成 header，而不是固定结构</td>
+<td>显著提高逆向成本，但仍是提高门槛</td>
+</tr>
+<tr>
+<td>把部分任务卸载到 CPU</td>
+<td>减少 PCIe 上暴露的信息</td>
+<td>CPU 算力远低于 GPU，频繁来回搬运会带来明显性能损失</td>
+</tr>
+</tbody>
+</table>
+<p>值得注意的是，这些手段里<strong>只有链路加密真正从根上解决问题</strong>，而它对商业
+GPU 的兼容性最差。这也解释了论文的立场：在明文 PCIe
+仍是常态的部署环境里，模型资产实际比人们以为的更脆弱。</p>
+<h2 id="把整条攻击链串起来">🗺️ 把整条攻击链串起来</h2>
+<p>最后用两张图收束。第一张是完整流程：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">┌────────────────────────────────────────────────────────────┐</span><br><span class="line">│  OFFLINE  (build the knowledge database first)             │</span><br><span class="line">│                                                            │</span><br><span class="line">│  1. White-box Models -&gt; PCIe Interceptor -&gt; GPU Profiler   │</span><br><span class="line">│  2. Header Extraction + Command Extraction                 │</span><br><span class="line">│  3. Database:                                              │  ← 离线换来的领域知识</span><br><span class="line">│       &lt;Command Header&gt;                                     │</span><br><span class="line">│       &lt;Kernel Binary, Layer Type&gt;                          │</span><br><span class="line">│       &lt;Kernel, Offset of Hyper-Parameters&gt;                 │</span><br><span class="line">└────────────────────────────────────────────────────────────┘</span><br><span class="line">                              ↓</span><br><span class="line">┌─────────────────────────────┴──────────────────────────────┐</span><br><span class="line">│  ONLINE  (run the victim model once)                       │</span><br><span class="line">│                                                            │</span><br><span class="line">│  1. PCIe Interceptor -&gt; Traffic Processing (Merge + Sort)  │</span><br><span class="line">│  2. Command Extraction  (keep D / K, drop noise)           │</span><br><span class="line">│  3. Model Reconstruction:                                  │  ← 重建出来的三样东西</span><br><span class="line">│       Architecture + Hyper-Parameters + Parameters         │</span><br><span class="line">└────────────────────────────────────────────────────────────┘</span><br><span class="line">                              ↓</span><br><span class="line">                   Reconstructed DNN Model</span><br></pre></td></tr></table></figure>
+<p>第二张是<strong>从二进制到模型语义</strong>的转化链，也是 Hermes
+真正在做的事情：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">PCIe Traffic（二进制）</span><br><span class="line">   ↓ Traffic Processing：Merge + Sort，恢复执行顺序</span><br><span class="line">GPU Command（D / K，带地址与大小）</span><br><span class="line">   ↓ Command Extraction：按 header 过滤命令，剔除噪声</span><br><span class="line">Kernel（二进制 + 启动顺序）</span><br><span class="line">   ↓ 查离线数据库：&lt;kernel binary, layer type&gt;</span><br><span class="line">DNN Layer（类型 + 顺序）</span><br><span class="line">   ↓ 数据流图：kernel 为顶点，数据搬运为边</span><br><span class="line">Architecture（层、维度、连接）</span><br><span class="line">   ↓ K command 参数偏移 + kernel 存在性</span><br><span class="line">Hyper-parameters（kernel size、stride、filters…）</span><br><span class="line">   ↓ K → KD2D → D 反向追踪 + 生命区间</span><br><span class="line">Parameters（weight 与 bias）</span><br><span class="line">   ↓</span><br><span class="line">Reconstructed DNN Model</span><br></pre></td></tr></table></figure>
+<h2 id="我的理解hermes-利用的是语义泄漏">🧠 我的理解：Hermes
+利用的是语义泄漏</h2>
+<p>读完这篇论文，我觉得它最值得记住的不是某个具体技巧，而是它把一次攻击拆成了三层语义还原。每一层解决一个不同的问题：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层次</th>
+<th>输入到输出</th>
+<th>回答的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报文层</td>
+<td>TLP → D / K command</td>
+<td>这串二进制是什么？（Merge + Sort + Header）</td>
+</tr>
+<tr>
+<td>命令层</td>
+<td>D / K command → kernel → layer</td>
+<td>GPU 在做什么？（kernel 二进制 ↔︎ 层类型）</td>
+</tr>
+<tr>
+<td>语义层</td>
+<td>地址与数据 → 参数与拓扑</td>
+<td>这些行为在 DNN 里意味着什么？（数据流图 + 反推参数）</td>
+</tr>
+</tbody>
+</table>
+<p>三层里，第一层靠的是协议知识（PCIe
+规范是公开的），第三层靠的是数据依赖推理（地址流向），<strong>最难的是中间那层</strong>——GPU
+命令格式没有文档，层类型在总线上不存在，这两件事只能靠离线差分实验和一张对照表硬啃下来。</p>
+<p>论文里几个设计我印象比较深：</p>
+<ul>
+<li><strong>用离线阶段换在线阶段的可行性。</strong>
+闭源逆向的结果被固化进数据库，在线阶段只做查表与重建，所以单张图片、十几分钟就能出完整模型。攻击的可扩展性其实来自这次成本转移。</li>
+<li><strong>每一条观察都直接对应一个实现难点。</strong> 观察 1、2 解决
+kernel 语义缺失，观察 3
+解决参数被复制的问题。这种从观察直接落到机制的写法，读起来很顺。</li>
+<li><strong>用 Header 声明的数据大小当抽取终止条件。</strong>
+物理地址碎片、命令交错、异步传输这些噪声都很脏，但只有一个明确的收敛条件，工程上才做得稳。</li>
+<li><strong>术语上的小心。</strong> 论文把训练超参数与推理超参数都叫
+hyper-parameters，但在攻击目标里只谈后者。这个区分看着琐碎，却正好划出了攻击的能力边界。</li>
+</ul>
+<p>最后一点感受：Hermes
+提醒我们，<strong>模型资产的安全性并不只取决于模型文件本身，还取决于它在执行过程中向外泄漏了什么</strong>。这次泄漏的通道是明文
+PCIe；只要加速器与主机之间还有未加密的高速链路，同类问题就还会以别的形式出现。</p>
+<h2 id="与已有模型抽取工作的对比">📊 与已有模型抽取工作的对比</h2>
+<p>论文 Table 6 把同期工作按信息来源做了对比（X = 可完整恢复，P =
+部分恢复，× = 不能恢复）：</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>工作</th>
+<th>信息来源</th>
+<th>方法</th>
+<th>Architecture</th>
+<th>Hyper-parameters</th>
+<th>Parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hu et al. 2019</td>
+<td>总线访问模式</td>
+<td>预测</td>
+<td>P</td>
+<td>×</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Yan et al. 2018（Cache Telepathy）</td>
+<td>Cache</td>
+<td>搜索</td>
+<td>×</td>
+<td>X</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Hua et al. 2018</td>
+<td>加速器</td>
+<td>搜索 + 推理</td>
+<td>X</td>
+<td>×</td>
+<td>P</td>
+</tr>
+<tr>
+<td>Xiang et al. 2019</td>
+<td>功耗</td>
+<td>预测</td>
+<td>X</td>
+<td>X</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Duddu et al. 2018</td>
+<td>时序</td>
+<td>搜索</td>
+<td>X</td>
+<td>×</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Wang et al. 2018</td>
+<td>参数</td>
+<td>推理</td>
+<td>×</td>
+<td>X</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Oh et al. 2018</td>
+<td>查询</td>
+<td>推理</td>
+<td>P</td>
+<td>P</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Roberts et al. 2018</td>
+<td>噪声输入</td>
+<td>预测 + 推理</td>
+<td>×</td>
+<td>×</td>
+<td>P</td>
+</tr>
+<tr>
+<td><strong>Hermes Attack</strong></td>
+<td><strong>PCIe 总线</strong></td>
+<td>推理</td>
+<td><strong>X</strong></td>
+<td><strong>X</strong></td>
+<td><strong>X</strong></td>
+</tr>
+</tbody>
+</table>
+<p>区别在于<strong>完整性</strong>：其他工作各自只能恢复一部分，且精度会掉；Hermes
+从一条此前没人当作攻击面的总线出发，一次性把三样都拿全了，而且精度不掉。</p>
+<h3 id="总结">✅ 总结</h3>
+<p><strong>Hermes Attack 用离线逆向换来的知识，把一次推理的明文 PCIe
+流量还原成完整 DNN：命令 header 认路，kernel
+二进制认层，数据流图认结构，地址追踪认权重。</strong></p>
+<p>如果只记一句话，我记这句：<strong>层与层的连接关系不在命令里，而在显存地址的流向里。</strong></p>
+<p>对防御方的启示也很直接：模型文件加密、主机开 SGX、GPU
+独占，这些都不能替代链路加密——只要 CPU 与 GPU
+之间还在传明文，模型就仍然暴露在一个可以被旁路监听的位置上。</p>
+<p>（本文为 USENIX Security 2021 论文 <em>Hermes Attack: Steal DNN
+Models with Lossless Inference Accuracy</em>
+的精读笔记，图号与表号均对应论文原文。）</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/CUDA/" rel="tag"># CUDA</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/%E6%A8%A1%E5%9E%8B%E7%AA%83%E5%8F%96/" rel="tag"># 模型窃取</a>
+              <a href="/tags/%E4%BE%A7%E4%BF%A1%E9%81%93/" rel="tag"># 侧信道</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/111c29d0/" rel="prev" title="从 Token ID 还原文本：Tokenizer、BPE 与转换表">
+                  <i class="fa fa-angle-left"></i> 从 Token ID 还原文本：Tokenizer、BPE 与转换表
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">461k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">13:59</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
