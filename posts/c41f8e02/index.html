@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
-<meta property="article:modified_time" content="2026-09-21T03:46:57.903Z">
+<meta property="article:modified_time" content="2026-09-21T11:45:56.299Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -273,7 +273,7 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-09-21 12:30:00 / Modified: 11:46:57" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
+      <time title="Created: 2026-09-21 12:30:00 / Modified: 19:45:56" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
     </span>
 
   
@@ -409,7 +409,7 @@ CPU 和 GPU 之间的 PCIe
 </blockquote>
 <p>这个问题的答案，就是 Hermes Attack。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────────────┐       ┌───────────────────────────┐</span><br><span class="line">│  Host                │       │  GPU (Device)             │</span><br><span class="line">│                      │       │                           │</span><br><span class="line">│  1. Secure Boot      │       │  DNN Model                │  ← 受害者模型与参数在这里</span><br><span class="line">│  2. Disk Encryption  │       │  Weight / Bias            │  ← 参数明文进出显存</span><br><span class="line">│  3. TEE (SGX)        │       │                           │</span><br><span class="line">│                      │       │  no multi-tenant sharing  │</span><br><span class="line">└──────────┬───────────┘       └─────────────┬─────────────┘</span><br><span class="line">           │                                 │</span><br><span class="line">           └────────────────┬────────────────┘</span><br><span class="line">                            ↓</span><br><span class="line">             ════════════ PCIe ════════════  ← 未加密，攻击者可在此抓包</span><br><span class="line">                            ↓</span><br><span class="line">               ┌────────────┴─────────────┐</span><br><span class="line">               │  PCIe Protocol Analyzer  │</span><br><span class="line">               │                          │</span><br><span class="line">               │  Attacker                │  ← 插入链路，记录每个包</span><br><span class="line">               └──────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>论文的威胁模型（论文 Figure 4）就建立在这条链路上：主机和 GPU
+<p>论文的威胁模型就建立在这条链路上：主机和 GPU
 各自都被保护得很好，唯独中间那条 PCIe
 是明文，而攻击者能物理接触到它。注意这里没有假设任何软件漏洞——不需要提权，不需要
 rooting，不需要攻破
@@ -462,8 +462,7 @@ Hermes 的能力边界。</p>
 GPU kernel</strong>，不是操作系统内核。后文沿用同样的约定。</p>
 <h3 id="模型是怎么跑到-gpu-上的">🏗️ 模型是怎么跑到 GPU 上的</h3>
 <p>一个 DNN 从框架代码到 GPU
-硬件，中间要穿过四层软件。这条路径决定了模型信息最后会以什么形式出现在总线上（论文
-Figure 1）：</p>
+硬件，中间要穿过四层软件。这条路径决定了模型信息最后会以什么形式出现在总线上：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">┌─────────────────────────┐</span><br><span class="line">│  DNN Framework          │  ← 模型与训练/推理脚本都在这一层，调用 GPU API</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  CUDA / OpenCL Runtime  │  ← 把 API 调用翻译成一条条 GPU Command</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  Runtime Backend        │  ← 通过 ioctl 把命令交给驱动</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  Device Driver          │  ← 把命令提交给 GPU 硬件</span><br><span class="line">└────────────┬────────────┘</span><br><span class="line">             ↓</span><br><span class="line">══════════ PCIe ═══════════  ← 明文总线，Hermes 的监听点</span><br><span class="line">             ↓</span><br><span class="line">┌─────────────────────────┐</span><br><span class="line">│  GPU                    │</span><br><span class="line">│                         │</span><br><span class="line">│  runs the DNN kernels   │  ← 模型执行发生在这里</span><br><span class="line">└─────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>关键在最后一步：<strong>高层计算任务最终都变成了底层的 PCIe
 包</strong>。反过来说，PCIe
@@ -515,7 +514,7 @@ Ti）在这点上越麻烦，因为引入了统一显存与主机内存的新特
 Command</h2>
 <h3 id="一次读操作涉及哪两个包">🔗 一次读操作涉及哪两个包</h3>
 <p>PCIe 上的通信都以 TLP 为单位。CPU
-读外设内存时，链路上会出现两个包（论文 Figure 2、Figure 3）：</p>
+读外设内存时，链路上会出现两个包：</p>
 <ul>
 <li><strong>读请求包（Memory Read Request）</strong>：CPU
 发出，指明要读哪个地址，Header 里带 Tag；</li>
@@ -538,7 +537,7 @@ GPU）只保留回应包，其余类型先丢掉。然后再把同一个 Tag
 <p><strong>合并（Merge）</strong>：按 Tag
 找到请求包对应的所有回应包，补全 Tag 字段，相邻的同 Tag
 包拼成一个包，payload 顺次连接。</p>
-<p><strong>排序（Sort）</strong>（论文 Figure 6）：</p>
+<p><strong>排序（Sort）</strong>：</p>
 <ol type="1">
 <li>默认所有包按 packet ID 从小到大排列；</li>
 <li>取一个请求包记为 P1，向后找第一个 Tag 与它相同的包，记为 P2；</li>
@@ -648,7 +647,7 @@ Fatbin），嵌在宿主可执行文件的专用 section 里（例如
 里都有一个地址，指向将要启动的 kernel 二进制。</p>
 </blockquote>
 <p>顺着这两条就能把 kernel
-二进制捞出来，方法是<strong>反着走</strong>（论文 Figure 10）：</p>
+二进制捞出来，方法是<strong>反着走</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">正向（GPU 实际执行）：</span><br><span class="line">   D command 把 kernel 二进制放到显存 405ECF01</span><br><span class="line">              ↓</span><br><span class="line">   K command 带着地址 405ECF01 启动 kernel</span><br><span class="line"></span><br><span class="line">反向（Hermes 的分析）：</span><br><span class="line">   1. 在 K command 的数据段里按固定偏移取出地址 405ECF01</span><br><span class="line">   2. 拿这个地址回到 D command 的数据段，dump 出 kernel 二进制</span><br></pre></td></tr></table></figure>
 <p>把所有 K command 走一遍，就得到<strong>一串按启动顺序排列的 kernel
 二进制</strong>。这个顺序本身就是 DNN 的执行顺序。</p>
@@ -749,7 +748,7 @@ command（受 DMA
 控制）高效得多；而保留原址是为了避免推理过程中原始权重被覆盖污染。</p>
 <p>这条观察直接决定了恢复参数的路径：<strong>参数被复制过，就必须从使用方往回追，追到最初的来源。</strong></p>
 <h3 id="三个命令连成的反推链">🔁 三个命令连成的反推链</h3>
-<p>论文 Figure 11 给出一个最小例子，三个命令正好构成一条链：</p>
+<p>论文给出了一个最小例子，三个命令正好构成一条链：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1. D command        ... 00512D01 ...       ← 权重首次落到显存 00512D01</span><br><span class="line">2. KD2D command     00130C01, 00512D01     ← 目的地址 00130C01，源地址 00512D01</span><br><span class="line">3. K command        ... 00130C01 ...       ← kernel 用的是副本 00130C01</span><br><span class="line"></span><br><span class="line">恢复顺序（完全反向）：</span><br><span class="line">3 → 2 → 1</span><br><span class="line">从 K command 取出目的地址 → 拿它去 KD2D 命令里找源地址 → 到 D command 里 dump 权重</span><br></pre></td></tr></table></figure>
 <p>对应到每层多少个数值，论文还有两件事要处理：</p>
 <p><strong>一是大参数块的异步传输。</strong> 参数量特别大的层不会用普通
@@ -890,8 +889,7 @@ kernel（<code>Eigen::internal::scalar_sum_op</code>）</strong>，这就是分�
 <p>这也是显存地址在 Hermes
 里如此重要的原因：<strong>层与层的连接关系不在命令里，而在地址的流向里。</strong></p>
 <h3 id="重建结果与原模型的两处差异">🧮 重建结果与原模型的两处差异</h3>
-<p>论文用 Figure 12
-对比了三个模型的原始结构与重建结构，结论是<strong>语义等价</strong>，有两处形式上的差异：</p>
+<p>论文对比了三个模型的原始结构与重建结构，结论是<strong>语义等价</strong>，有两处形式上的差异：</p>
 <ul>
 <li><strong>重建模型没有 dropout 层</strong>（MNIST、VGG
 上可见）。dropout 只在训练期生效，推理时被禁用，所以它根本不会在 PCIe
@@ -1423,7 +1421,7 @@ PCIe；只要加速器与主机之间还有未加密的高速链路，同类问�
 之间还在传明文，模型就仍然暴露在一个可以被旁路监听的位置上。</p>
 <p>（本文为 USENIX Security 2021 论文 <em>Hermes Attack: Steal DNN
 Models with Lossless Inference Accuracy</em>
-的精读笔记，图号与表号均对应论文原文。）</p>
+的精读笔记，正文表格内的数据取自论文原文。）</p>
 
     </div>
 
