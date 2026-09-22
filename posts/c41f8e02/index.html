@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
-<meta property="article:modified_time" content="2026-09-21T12:33:00.551Z">
+<meta property="article:modified_time" content="2026-09-22T01:41:18.162Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -271,9 +271,15 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-09-21 12:30:00 / Modified: 20:33:00" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
+      <time title="Created: 2026-09-21 12:30:00" itemprop="dateCreated datePublished" datetime="2026-09-21T12:30:00+08:00">2026-09-21</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-09-22 09:41:18" itemprop="dateModified" datetime="2026-09-22T09:41:18+08:00">2026-09-22</time>
     </span>
 
   
@@ -627,6 +633,50 @@ Header 自己可能被拆进两个包，噪声包就卡在中间。</li>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">遇到地址断点</span><br><span class="line">   ↓ 在 MAX_SCAN_DISTANCE 范围内向后扫描</span><br><span class="line">找到与前一段地址接得上的包 → 认定它才是相邻包，丢弃中间扫过的包</span><br><span class="line">           否则            → 把这个断点当作物理地址分段，继续累积 payload</span><br><span class="line">   ↓</span><br><span class="line">累积字节数 == Header 里声明的数据大小  → 本条命令抽取完毕</span><br></pre></td></tr></table></figure>
 <p>用 Header
 里声明的大小作为终止条件，这一条很关键：它让抽取有了明确的对错判据，而不是靠猜。</p>
+<p>论文用 Figure 8 和 Figure 9
+把这两种情况摆在一起对照，两张图用的是同一段地址（相邻包地址差
+<code>0x80</code>，即 128 字节）：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>对照项</th>
+<th>Figure 8：假断点</th>
+<th>Figure 9：真断点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>地址序列</td>
+<td><code>292B7F00</code> → <code>188B6700</code> →
+<code>292B7F80</code></td>
+<td><code>292B7F00</code>…<code>292BB880</code> → <code>188B6700</code>
+→ <code>188B6780</code></td>
+</tr>
+<tr>
+<td>断点后能否找到接得上的包</td>
+<td>能：<code>0x292B7F00 + 0x80 = 0x292B7F80</code></td>
+<td>不能：<code>188B6700</code> 与前面任何一个包都不接</td>
+</tr>
+<tr>
+<td>中间那个包的性质</td>
+<td>外部噪声，丢弃</td>
+<td>命令数据的下一个物理段，保留</td>
+</tr>
+<tr>
+<td>论文图注</td>
+<td>该包标注为 Noise</td>
+<td>该断点标注为 Gap，且 <code>188B6700 → 188B6780</code> 内部连续</td>
+</tr>
+</tbody>
+</table>
+<p>两张图最关键的一点：<strong>同一个地址断点，含义可以完全相反。</strong>
+Figure 8 里它是假象，噪声包夹在中间，跳过去就好；Figure 9
+里它是真的物理分段，必须收下。只看地址不连续这一个信号区分不了，所以才要再往后扫一段来确认。</p>
 <h2 id="第二层从-gpu-kernel-到-dnn-layer">🧩 第二层：从 GPU Kernel 到
 DNN Layer</h2>
 <p>层类型在 CPU 侧就被解析掉了，PCIe 上根本没有这个信息。Hermes
@@ -1645,7 +1695,7 @@ Models with Lossless Inference Accuracy</em>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">14:03</span>
+    <span title="Reading time total">14:04</span>
   </span>
 </div>
 <div class="busuanzi-count">
