@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
-<meta property="article:modified_time" content="2026-09-22T02:28:22.238Z">
+<meta property="article:modified_time" content="2026-09-22T02:47:04.225Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -279,7 +279,7 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-22 10:28:22" itemprop="dateModified" datetime="2026-09-22T10:28:22+08:00">2026-09-22</time>
+      <time title="Modified: 2026-09-22 10:47:04" itemprop="dateModified" datetime="2026-09-22T10:47:04+08:00">2026-09-22</time>
     </span>
 
   
@@ -296,14 +296,14 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>19k</span>
+      <span>20k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>35 mins.</span>
+      <span>36 mins.</span>
     </span>
 </div>
 
@@ -346,6 +346,11 @@ Attack 盯上的不是模型文件，而是模型在 GPU 上跑推理时留下�
 <td><strong>PCIe</strong></td>
 <td>主机与 GPU、SSD、网卡之间的高速串行总线</td>
 <td>攻击面：明文，可被物理抓包</td>
+</tr>
+<tr>
+<td><strong>Root Complex</strong></td>
+<td>CPU 或 SoC 内部的 PCIe 根模块</td>
+<td>链路的起点，不是独立芯片或插卡</td>
 </tr>
 <tr>
 <td><strong>TLP</strong></td>
@@ -1266,6 +1271,11 @@ CPU，那些层就不会出现在流量里）；</li>
 <h3 id="为什么选硬件抓包">🔌 为什么选硬件抓包</h3>
 <p>上面第 1
 条前提是插入抓包设备，值得单独说清楚：<strong>这不是因为硬件更高级，而是因为在论文的威胁模型下，软件路径先被自己的前提排除了。</strong></p>
+<p>这里先分清两个词。<strong>Root Complex（RC）</strong> 是 CPU 或 SoC
+内部的 PCIe 根模块：向上连内存子系统，向下扇出成若干 Root Port，每条
+Root Port 对应一条 PCIe
+链路；它不是一个独立芯片，也不是插在插槽上的卡。<strong>Endpoint（EP）</strong>
+是链路另一端的设备，也就是这里的 GPU。</p>
 <p>先看清一件事：TLP 是 Root Complex 与 Endpoint
 之间的点对点事务，事务完成后，它的语义（Tag、Requester
 ID、拆分与到达顺序）在硬件内部就被消费掉了。<strong>操作系统并没有把链路报文暴露给软件的接口</strong>，软件能看到的是结果——某块内存被
