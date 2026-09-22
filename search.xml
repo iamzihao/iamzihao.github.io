@@ -307,6 +307,484 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
+    <title>前端浏览器缓存机制</title>
+    <url>/posts/50ac740b/</url>
+    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
+<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
+<span id="more"></span>
+<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
+<h4 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h4>
+<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
+<ul>
+<li><p><strong>Expires</strong>:
+一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
+<li><p><strong>Cache-Control</strong>:
+这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
+<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
+<ul>
+<li><code>public</code>:
+资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
+<li><code>private</code>:
+资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
+<li><code>no-cache</code>:
+资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
+<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
+<code>200 (from cache)</code>。</p>
+<h4 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
+Caching）</h4>
+<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
+<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
+<ul>
+<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
+<ul>
+<li><strong>Last-Modified</strong>:
+服务器在响应头中返回资源的最后修改时间。</li>
+<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
+<code>Last-Modified</code>
+时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+<li><strong>ETag &amp; If-None-Match</strong>:
+<ul>
+<li><strong>ETag</strong>:
+服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
+<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
+值。服务器比较该值与当前资源的 ETag，如果匹配则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
+<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
+<h4 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h4>
+<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
+JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
+<p><strong>典型用法</strong>：</p>
+<ul>
+<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
+<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
+标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
+</ul>
+<p><strong>总结</strong>：</p>
+<ul>
+<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
+<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
+<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
+</ul>
+<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
+<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
+<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
+是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
+文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
+<h4 id="cdn的工作原理">CDN的工作原理</h4>
+<ol type="1">
+<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
+<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
+<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
+<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
+</ol>
+<h4 id="cdn的主要优势">CDN的主要优势</h4>
+<ol type="1">
+<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
+<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
+<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
+<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
+<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
+</ol>
+<h4 id="cdn的使用场景">CDN的使用场景</h4>
+<ul>
+<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
+<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
+<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
+文件等，通过CDN可以提升资源加载速度。</li>
+</ul>
+<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
+]]></content>
+      <tags>
+        <tag>前端</tag>
+        <tag>浏览器</tag>
+        <tag>缓存</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>编码</title>
+    <url>/posts/6f8a188e/</url>
+    <content><![CDATA[<h2 id="编码">编码</h2>
+<p>今天在复习编译原理的时候，发现对底层的编码都是还停留在听过或者见过的状态，所以决定学习一下有关编码的知识。</p>
+<span id="more"></span>
+<h3 id="编码概述">编码概述</h3>
+<ul>
+<li><strong>定义</strong>：编码是将信息从一种形式或格式转换为另一种形式的过程，以便信息能够被存储、传输或处理。在计算机科学中，编码通常指将人类可读的信息（如文本、图像、声音等）转换为计算机可识别的二进制形式。</li>
+<li><strong>目的</strong>：编码的主要目的是实现信息的有效存储、传输和处理。通过编码，信息可以在不同的系统、设备和网络之间进行交换和共享，同时还能对信息进行加密、压缩等操作以提高安全性、减少存储空间和传输带宽。</li>
+</ul>
+<h3 id="字符编码">字符编码</h3>
+<h4 id="ascii编码">ASCII编码</h4>
+<ul>
+<li><strong>背景与起源</strong>
+<ul>
+<li>1960年代，计算机开始普及，但不同厂商使用不同的编码标准，导致信息交换困难</li>
+<li>1967年，美国标准化组织制定ASCII，实现了计算机间的标准化通信</li>
+</ul></li>
+<li><strong>工作原理</strong>
+<ul>
+<li>使用7位二进制数，可以表示128个字符（2^7 = 128）</li>
+<li>0-31：控制字符（如换行符= 10，回车符 13）</li>
+<li>32-127：可打印字符（如’A’ = 65，‘a’ = 97，‘0’ = 48）</li>
+</ul></li>
+<li><strong>优点</strong>
+<ul>
+<li>简单易用，是最基础的编码标准</li>
+<li>至今仍被广泛使用，现代编码方案都兼容ASCII</li>
+</ul></li>
+<li><strong>缺点</strong>
+<ul>
+<li>只能表示英文字母和符号，无法表示其他语言字符</li>
+<li>例如：无法表示中文、日本語等字符</li>
+</ul></li>
+</ul>
+<h4 id="gb2312与gbk">GB2312与GBK</h4>
+<ul>
+<li><strong>GB2312</strong>
+<ul>
+<li><strong>起源</strong>：1980年，中国为解决计算机无法显示汉字问题而制定</li>
+<li><strong>原理</strong>：采用双字节编码
+<ul>
+<li>首字节范围0xA1-0xF7，次字节范围0xA1-0xFE</li>
+<li>加0xA1是为了避开ASCII码的0x00-0x7F区域，确保与ASCII兼容</li>
+<li>分区设计：
+<ul>
+<li>01-09区：特殊符号</li>
+<li>16-55区：一级汉字（3755个常用字）</li>
+<li>56-87区：二级汉字（3008个次常用字）</li>
+<li>10-15区：保留区</li>
+</ul></li>
+<li>每个区94个字符，共94个区</li>
+</ul></li>
+<li><strong>示例</strong>：
+<ul>
+<li><code>中</code>的GB2312编码为0xD6D0（第45区第60个汉字）</li>
+<li><code>国</code>的GB2312编码为0xB9FA（第16区第15个汉字）</li>
+</ul></li>
+</ul></li>
+<li><strong>优点</strong>：
+<ul>
+<li>完全兼容ASCII</li>
+<li>包含6763个常用汉字，满足基本需求</li>
+<li><strong>缺点</strong>：
+<ul>
+<li>汉字数量有限，部分生僻字无法表示</li>
+<li>不支持繁体中文、日韩文字</li>
+</ul></li>
+</ul></li>
+<li><strong>GBK</strong>
+<ul>
+<li><strong>起源</strong>：1995年推出，是GB2312的扩展</li>
+<li><strong>特点</strong>：
+<ul>
+<li>向下完全兼容GB2312</li>
+<li>收录21003个汉字，包括繁体字</li>
+</ul></li>
+<li><strong>示例</strong>：
+<ul>
+<li><code>㠭</code>（生僻字）在GB2312中无法表示，但GBK可以表示</li>
+</ul></li>
+<li><strong>优点</strong>：
+<ul>
+<li>字符集更大，能满足绝大多数中文处理需求</li>
+<li>兼容性好，在中国大陆使用广泛</li>
+</ul></li>
+<li><strong>缺点</strong>：
+<ul>
+<li>不是国际标准，在跨国际平台可能出现乱码</li>
+<li>无法表示其他国家的文字系统</li>
+</ul></li>
+</ul></li>
+</ul>
+<h4 id="unicode与utf编码">Unicode与UTF编码</h4>
+<ul>
+<li><strong>Unicode</strong>
+<ul>
+<li><strong>起源</strong>：
+<ul>
+<li>1991年推出，目标是统一全球所有字符编码</li>
+<li>由于各国编码标准不一，同一个二进制值在不同编码下可能表示不同字符，造成乱码</li>
+</ul></li>
+<li><strong>特点</strong>：
+<ul>
+<li>为每个字符分配唯一编码点（Code Point）</li>
+<li>编码空间从U+0000到U+10FFFF，共17个平面（Plane）</li>
+<li>第0平面（BMP，基本多语言平面）：U+0000至U+FFFF，收录最常用字符</li>
+<li>目前已收录超过14万个字符，包括各国文字、符号、emoji等</li>
+</ul></li>
+<li><strong>重要概念</strong>：
+<ul>
+<li>码点（Code Point）：字符在Unicode字符集中的唯一编号</li>
+<li>平面（Plane）：Unicode编码空间的逻辑分区，每个平面收录65536个字符</li>
+<li>代理对（Surrogate Pair）：使用两个16位值表示BMP之外的字符</li>
+</ul></li>
+<li><strong>示例</strong>：
+<ul>
+<li><code>A</code> → U+0041（基本拉丁字母）</li>
+<li><code>中</code> → U+4E2D（CJK统一表意文字）</li>
+<li><code>😀</code> → U+1F600（补充表意平面，表情符号）</li>
+</ul></li>
+</ul></li>
+<li><strong>UTF-8</strong>
+<ul>
+<li><strong>原理</strong>：变长编码方案，使用1-4个字节表示一个字符
+<ul>
+<li>对于单字节，最高位为0</li>
+<li>对于多字节，第一个字节以几个1开头，就使用几个字节编码</li>
+</ul></li>
+<li><strong>编码规则</strong>： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Unicode范围            UTF-8编码方式</span><br><span class="line">0000-007F: 0xxxxxxx</span><br><span class="line">0080-07FF: 110xxxxx 10xxxxxx</span><br><span class="line">0800-FFFF: 1110xxxx 10xxxxxx 10xxxxxx</span><br><span class="line">10000-10FFFF: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx</span><br></pre></td></tr></table></figure></li>
+<li><strong>示例</strong>： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">字符    Unicode编码点     UTF-8编码          二进制表示</span><br><span class="line">A       U+0041           41                01000001</span><br><span class="line">中      U+4E2D           E4 B8 AD          11100100 10111000 10101101</span><br><span class="line">😀      U+1F600          F0 9F 98 80      11110000 10011111 10011000 10000000</span><br></pre></td></tr></table></figure></li>
+<li><strong>优点</strong>：
+<ul>
+<li>完全兼容ASCII</li>
+<li>节省存储空间（常用字符占用字节少）</li>
+<li>自同步（可以从任意位置开始解码）</li>
+<li>无字节序问题</li>
+</ul></li>
+<li><strong>缺点</strong>：
+<ul>
+<li>变长编码使字符定位较慢</li>
+<li>在内存中操作不如定长编码方便</li>
+</ul></li>
+</ul></li>
+<li><strong>UTF-16</strong>
+<ul>
+<li><strong>原理</strong>：
+<ul>
+<li>BMP平面内字符：使用2个字节直接表示</li>
+<li>BMP平面外字符：使用4个字节的代理对（Surrogate Pair）表示</li>
+</ul></li>
+<li><strong>编码规则</strong>：
+<ul>
+<li>BMP字符：直接用16位表示</li>
+<li>非BMP字符：将码点转换为代理对
+<ol type="1">
+<li>码点减去0x10000得到20位数</li>
+<li>高10位加上0xD800得到高位代理</li>
+<li>低10位加上0xDC00得到低位代理</li>
+</ol></li>
+</ul></li>
+<li><strong>示例</strong>： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">字符    Unicode编码点     UTF-16编码        说明</span><br><span class="line">A       U+0041           00 41            BMP内字符</span><br><span class="line">中      U+4E2D           4E 2D            BMP内字符</span><br><span class="line">😀      U+1F600          D83D DE00        代理对表示</span><br></pre></td></tr></table></figure></li>
+<li><strong>优点</strong>：
+<ul>
+<li>处理中日韩文字效率高（大多在BMP平面内）</li>
+<li>Java、JavaScript等语言内部采用此编码</li>
+<li>定长编码便于字符定位</li>
+</ul></li>
+<li><strong>缺点</strong>：
+<ul>
+<li>不兼容ASCII</li>
+<li>存在大小端序问题（需要BOM标记）</li>
+<li>占用空间较大</li>
+<li>代理对处理复杂</li>
+</ul></li>
+</ul></li>
+</ul>
+<h3 id="数据编码">数据编码</h3>
+<ul>
+<li><strong>数字编码</strong>
+<ul>
+<li><strong>二进制编码</strong>：将数字转换为二进制形式，是计算机处理数字信息的基础。例如，十进制数10的二进制编码是1010。</li>
+<li><strong>BCD编码</strong>：二进制编码的十进制数，将十进制数的每一位分别转换为4位二进制数。例如，十进制数10的BCD编码是0001
+0000。</li>
+</ul></li>
+<li><strong>图像编码</strong>
+<ul>
+<li><strong>位图编码</strong>：将图像的每个像素点的颜色信息直接存储起来，常见的位图格式有BMP、PNG等。</li>
+<li><strong>压缩编码</strong>：通过减少图像数据的冗余信息来实现数据压缩，常见的压缩编码格式有JPEG、GIF等。JPEG采用离散余弦变换（DCT）和量化等技术，GIF采用LZW压缩算法。</li>
+</ul></li>
+<li><strong>音频编码</strong>
+<ul>
+<li><strong>PCM编码</strong>：脉冲编码调制，将模拟音频信号转换为数字信号，是音频数字化的基础。PCM编码的音频数据量较大。</li>
+<li><strong>压缩编码</strong>：通过减少音频数据的冗余信息来实现数据压缩，常见的压缩编码格式有MP3、AAC等。MP3采用心理声学模型和变换编码等技术，AAC是MP3的改进版本，具有更高的压缩效率和音质。</li>
+</ul></li>
+</ul>
+]]></content>
+      <tags>
+        <tag>编码</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>NFC Note</title>
+    <url>/posts/78289205/</url>
+    <content><![CDATA[<h2 id="什么是nfc">什么是NFC？</h2>
+<p>今天听实验室师兄的分享时提到了NFC技术，自己对这个技术也是一知半解，所以来记录一下。</p>
+<span id="more"></span>
+<p>NFC（Near Field
+Communication，近场通信）是一种短距离无线通信技术，工作频率为13.56MHz，最大通信距离通常在10厘米以内。这项技术继承了RFID（射频识别）的核心原理，但针对移动设备进行了优化和扩展。</p>
+<figure>
+<img src="/assets/NFC-image.png" alt="alt text" />
+<figcaption aria-hidden="true">alt text</figcaption>
+</figure>
+<h3 id="nfc是怎么工作的">NFC是怎么工作的？</h3>
+<p>想象一下，两个磁铁靠近时会相互影响。NFC的工作原理也差不多：</p>
+<ol type="1">
+<li><strong>基本原理</strong>
+<ul>
+<li>主动设备（比如刷卡机）通过天线产生13.56MHz的高频交变磁场</li>
+<li>被动设备（比如NFC标签）进入磁场后，通过电磁感应获得能量</li>
+<li>两个设备通过调制解调技术（ASK、PSK等）在磁场中编码和解码数据</li>
+<li>数据传输速率可达424Kbps</li>
+</ul></li>
+<li><strong>为什么要靠得这么近？</strong>
+<ul>
+<li>磁场强度与距离的平方成反比，超过10cm信号就急剧减弱</li>
+<li>近场通信使用感应耦合（而不是电磁波传播）</li>
+<li>这种物理特性自然形成了安全距离，防止远距离窃听</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>调制解调技术</strong></p>
+<p>想象用手电筒给远处的朋友发信号：</p>
+<ol type="1">
+<li><strong>什么是调制？</strong>
+<ul>
+<li>就像用手电筒发信号时，通过开关灯来传递信息</li>
+<li>NFC中主要使用两种调制方式：
+<ul>
+<li>ASK（幅度调制）：类似于调整手电筒的亮度</li>
+<li>PSK（相位调制）：类似于按固定节奏闪烁手电筒</li>
+</ul></li>
+</ul></li>
+<li><strong>为什么要调制？</strong>
+<ul>
+<li>原始数据（比如1和0）不能直接传输</li>
+<li>需要把数据搭载在13.56MHz的载波信号上</li>
+<li>就像把信息写在纸飞机上才能传递给别人</li>
+</ul></li>
+<li><strong>解调是什么？</strong>
+<ul>
+<li>接收方需要从收到的信号中提取出原始数据</li>
+<li>就像接收方要从纸飞机上读取信息</li>
+<li>或者从手电筒的闪烁中理解传递的含义</li>
+</ul></li>
+</ol>
+</blockquote>
+<h3 id="nfc能做什么">NFC能做什么？</h3>
+<p>NFC有三种常见的使用方式：</p>
+<ol type="1">
+<li><strong>读写模式</strong>
+<ul>
+<li>就像用手机碰一碰地铁站的时刻表海报</li>
+<li>或者用手机读取商品上的电子标签</li>
+</ul></li>
+<li><strong>手机支付模式</strong>
+<ul>
+<li>手机变身成公交卡、银行卡</li>
+<li>碰一碰就能付款</li>
+</ul></li>
+<li><strong>设备互联模式</strong>
+<ul>
+<li>两个手机之间传照片</li>
+<li>新耳机和手机快速配对</li>
+</ul></li>
+</ol>
+<h3 id="nfc的特点">NFC的特点</h3>
+<ol type="1">
+<li><strong>超级方便</strong>
+<ul>
+<li>采用即时配对（Peer-to-Peer）技术，无需复杂配对流程</li>
+<li>支持双向通信，设备可以自动切换读写角色</li>
+</ul></li>
+<li><strong>很安全</strong>
+<ul>
+<li>物理层：通信距离限制</li>
+<li>协议层：支持AES-128等加密算法</li>
+<li>应用层：可集成安全单元（SE）存储敏感数据</li>
+</ul></li>
+<li><strong>省电</strong>
+<ul>
+<li>被动设备（如NFC标签）利用电磁感应供电，无需电池</li>
+<li>主动设备仅在通信时开启RF场，待机功耗极低</li>
+<li>典型NFC操作仅需几毫秒，耗电量可忽略不计</li>
+</ul></li>
+</ol>
+<h3 id="生活中的nfc应用">生活中的NFC应用</h3>
+<ol type="1">
+<li><strong>支付场景</strong>
+<ul>
+<li>手机付款（Apple Pay、微信/支付宝碰一碰）</li>
+<li>刷公交地铁</li>
+<li>超市购物</li>
+</ul></li>
+<li><strong>智能家居</strong>
+<ul>
+<li>碰一碰开门</li>
+<li>碰一碰控制家电</li>
+<li>碰一碰自动设置手机模式（比如睡觉模式）</li>
+</ul></li>
+<li><strong>便捷生活</strong>
+<ul>
+<li>门禁卡</li>
+<li>打卡签到</li>
+<li>快速连接蓝牙设备</li>
+</ul></li>
+</ol>
+<h2 id="总结">总结</h2>
+<p>NFC作为一种成熟的近距离无线通信技术，已经在我们的日常生活中扮演着越来越重要的角色。它的高安全性、便捷性和广泛的应用场景使其成为移动支付和智能设备交互的首选技术之一。随着物联网技术的发展，NFC的应用领域将会进一步扩大。</p>
+]]></content>
+      <tags>
+        <tag>NFC</tag>
+        <tag>RFID</tag>
+        <tag>无线通信</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<figure>
+<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
+alt="78c665f7d532f73e4cf89e901284eb7f" />
+<figcaption
+aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
+</figure>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<figure>
+<img src="/assets/image-20240919184721228.png"
+alt="image-20240919184721228" />
+<figcaption aria-hidden="true">image-20240919184721228</figcaption>
+</figure>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1222,484 +1700,6 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<figure>
-<img src="/assets/78c665f7d532f73e4cf89e901284eb7f.png"
-alt="78c665f7d532f73e4cf89e901284eb7f" />
-<figcaption
-aria-hidden="true">78c665f7d532f73e4cf89e901284eb7f</figcaption>
-</figure>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<figure>
-<img src="/assets/image-20240919184721228.png"
-alt="image-20240919184721228" />
-<figcaption aria-hidden="true">image-20240919184721228</figcaption>
-</figure>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>前端浏览器缓存机制</title>
-    <url>/posts/50ac740b/</url>
-    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
-<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
-<span id="more"></span>
-<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
-<h4 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h4>
-<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
-<ul>
-<li><p><strong>Expires</strong>:
-一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
-<li><p><strong>Cache-Control</strong>:
-这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
-<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
-<ul>
-<li><code>public</code>:
-资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
-<li><code>private</code>:
-资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
-<li><code>no-cache</code>:
-资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
-<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
-<code>200 (from cache)</code>。</p>
-<h4 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
-Caching）</h4>
-<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
-<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
-<ul>
-<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
-<ul>
-<li><strong>Last-Modified</strong>:
-服务器在响应头中返回资源的最后修改时间。</li>
-<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
-<code>Last-Modified</code>
-时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-<li><strong>ETag &amp; If-None-Match</strong>:
-<ul>
-<li><strong>ETag</strong>:
-服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
-<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
-值。服务器比较该值与当前资源的 ETag，如果匹配则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
-<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
-<h4 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h4>
-<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
-JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
-<p><strong>典型用法</strong>：</p>
-<ul>
-<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
-<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
-标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
-</ul>
-<p><strong>总结</strong>：</p>
-<ul>
-<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
-<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
-<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
-</ul>
-<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
-<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
-<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
-是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
-文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
-<h4 id="cdn的工作原理">CDN的工作原理</h4>
-<ol type="1">
-<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
-<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
-<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
-<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
-</ol>
-<h4 id="cdn的主要优势">CDN的主要优势</h4>
-<ol type="1">
-<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
-<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
-<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
-<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
-<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
-</ol>
-<h4 id="cdn的使用场景">CDN的使用场景</h4>
-<ul>
-<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
-<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
-<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
-文件等，通过CDN可以提升资源加载速度。</li>
-</ul>
-<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
-]]></content>
-      <tags>
-        <tag>前端</tag>
-        <tag>浏览器</tag>
-        <tag>缓存</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>编码</title>
-    <url>/posts/6f8a188e/</url>
-    <content><![CDATA[<h2 id="编码">编码</h2>
-<p>今天在复习编译原理的时候，发现对底层的编码都是还停留在听过或者见过的状态，所以决定学习一下有关编码的知识。</p>
-<span id="more"></span>
-<h3 id="编码概述">编码概述</h3>
-<ul>
-<li><strong>定义</strong>：编码是将信息从一种形式或格式转换为另一种形式的过程，以便信息能够被存储、传输或处理。在计算机科学中，编码通常指将人类可读的信息（如文本、图像、声音等）转换为计算机可识别的二进制形式。</li>
-<li><strong>目的</strong>：编码的主要目的是实现信息的有效存储、传输和处理。通过编码，信息可以在不同的系统、设备和网络之间进行交换和共享，同时还能对信息进行加密、压缩等操作以提高安全性、减少存储空间和传输带宽。</li>
-</ul>
-<h3 id="字符编码">字符编码</h3>
-<h4 id="ascii编码">ASCII编码</h4>
-<ul>
-<li><strong>背景与起源</strong>
-<ul>
-<li>1960年代，计算机开始普及，但不同厂商使用不同的编码标准，导致信息交换困难</li>
-<li>1967年，美国标准化组织制定ASCII，实现了计算机间的标准化通信</li>
-</ul></li>
-<li><strong>工作原理</strong>
-<ul>
-<li>使用7位二进制数，可以表示128个字符（2^7 = 128）</li>
-<li>0-31：控制字符（如换行符= 10，回车符 13）</li>
-<li>32-127：可打印字符（如’A’ = 65，‘a’ = 97，‘0’ = 48）</li>
-</ul></li>
-<li><strong>优点</strong>
-<ul>
-<li>简单易用，是最基础的编码标准</li>
-<li>至今仍被广泛使用，现代编码方案都兼容ASCII</li>
-</ul></li>
-<li><strong>缺点</strong>
-<ul>
-<li>只能表示英文字母和符号，无法表示其他语言字符</li>
-<li>例如：无法表示中文、日本語等字符</li>
-</ul></li>
-</ul>
-<h4 id="gb2312与gbk">GB2312与GBK</h4>
-<ul>
-<li><strong>GB2312</strong>
-<ul>
-<li><strong>起源</strong>：1980年，中国为解决计算机无法显示汉字问题而制定</li>
-<li><strong>原理</strong>：采用双字节编码
-<ul>
-<li>首字节范围0xA1-0xF7，次字节范围0xA1-0xFE</li>
-<li>加0xA1是为了避开ASCII码的0x00-0x7F区域，确保与ASCII兼容</li>
-<li>分区设计：
-<ul>
-<li>01-09区：特殊符号</li>
-<li>16-55区：一级汉字（3755个常用字）</li>
-<li>56-87区：二级汉字（3008个次常用字）</li>
-<li>10-15区：保留区</li>
-</ul></li>
-<li>每个区94个字符，共94个区</li>
-</ul></li>
-<li><strong>示例</strong>：
-<ul>
-<li><code>中</code>的GB2312编码为0xD6D0（第45区第60个汉字）</li>
-<li><code>国</code>的GB2312编码为0xB9FA（第16区第15个汉字）</li>
-</ul></li>
-</ul></li>
-<li><strong>优点</strong>：
-<ul>
-<li>完全兼容ASCII</li>
-<li>包含6763个常用汉字，满足基本需求</li>
-<li><strong>缺点</strong>：
-<ul>
-<li>汉字数量有限，部分生僻字无法表示</li>
-<li>不支持繁体中文、日韩文字</li>
-</ul></li>
-</ul></li>
-<li><strong>GBK</strong>
-<ul>
-<li><strong>起源</strong>：1995年推出，是GB2312的扩展</li>
-<li><strong>特点</strong>：
-<ul>
-<li>向下完全兼容GB2312</li>
-<li>收录21003个汉字，包括繁体字</li>
-</ul></li>
-<li><strong>示例</strong>：
-<ul>
-<li><code>㠭</code>（生僻字）在GB2312中无法表示，但GBK可以表示</li>
-</ul></li>
-<li><strong>优点</strong>：
-<ul>
-<li>字符集更大，能满足绝大多数中文处理需求</li>
-<li>兼容性好，在中国大陆使用广泛</li>
-</ul></li>
-<li><strong>缺点</strong>：
-<ul>
-<li>不是国际标准，在跨国际平台可能出现乱码</li>
-<li>无法表示其他国家的文字系统</li>
-</ul></li>
-</ul></li>
-</ul>
-<h4 id="unicode与utf编码">Unicode与UTF编码</h4>
-<ul>
-<li><strong>Unicode</strong>
-<ul>
-<li><strong>起源</strong>：
-<ul>
-<li>1991年推出，目标是统一全球所有字符编码</li>
-<li>由于各国编码标准不一，同一个二进制值在不同编码下可能表示不同字符，造成乱码</li>
-</ul></li>
-<li><strong>特点</strong>：
-<ul>
-<li>为每个字符分配唯一编码点（Code Point）</li>
-<li>编码空间从U+0000到U+10FFFF，共17个平面（Plane）</li>
-<li>第0平面（BMP，基本多语言平面）：U+0000至U+FFFF，收录最常用字符</li>
-<li>目前已收录超过14万个字符，包括各国文字、符号、emoji等</li>
-</ul></li>
-<li><strong>重要概念</strong>：
-<ul>
-<li>码点（Code Point）：字符在Unicode字符集中的唯一编号</li>
-<li>平面（Plane）：Unicode编码空间的逻辑分区，每个平面收录65536个字符</li>
-<li>代理对（Surrogate Pair）：使用两个16位值表示BMP之外的字符</li>
-</ul></li>
-<li><strong>示例</strong>：
-<ul>
-<li><code>A</code> → U+0041（基本拉丁字母）</li>
-<li><code>中</code> → U+4E2D（CJK统一表意文字）</li>
-<li><code>😀</code> → U+1F600（补充表意平面，表情符号）</li>
-</ul></li>
-</ul></li>
-<li><strong>UTF-8</strong>
-<ul>
-<li><strong>原理</strong>：变长编码方案，使用1-4个字节表示一个字符
-<ul>
-<li>对于单字节，最高位为0</li>
-<li>对于多字节，第一个字节以几个1开头，就使用几个字节编码</li>
-</ul></li>
-<li><strong>编码规则</strong>： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">Unicode范围            UTF-8编码方式</span><br><span class="line">0000-007F: 0xxxxxxx</span><br><span class="line">0080-07FF: 110xxxxx 10xxxxxx</span><br><span class="line">0800-FFFF: 1110xxxx 10xxxxxx 10xxxxxx</span><br><span class="line">10000-10FFFF: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx</span><br></pre></td></tr></table></figure></li>
-<li><strong>示例</strong>： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">字符    Unicode编码点     UTF-8编码          二进制表示</span><br><span class="line">A       U+0041           41                01000001</span><br><span class="line">中      U+4E2D           E4 B8 AD          11100100 10111000 10101101</span><br><span class="line">😀      U+1F600          F0 9F 98 80      11110000 10011111 10011000 10000000</span><br></pre></td></tr></table></figure></li>
-<li><strong>优点</strong>：
-<ul>
-<li>完全兼容ASCII</li>
-<li>节省存储空间（常用字符占用字节少）</li>
-<li>自同步（可以从任意位置开始解码）</li>
-<li>无字节序问题</li>
-</ul></li>
-<li><strong>缺点</strong>：
-<ul>
-<li>变长编码使字符定位较慢</li>
-<li>在内存中操作不如定长编码方便</li>
-</ul></li>
-</ul></li>
-<li><strong>UTF-16</strong>
-<ul>
-<li><strong>原理</strong>：
-<ul>
-<li>BMP平面内字符：使用2个字节直接表示</li>
-<li>BMP平面外字符：使用4个字节的代理对（Surrogate Pair）表示</li>
-</ul></li>
-<li><strong>编码规则</strong>：
-<ul>
-<li>BMP字符：直接用16位表示</li>
-<li>非BMP字符：将码点转换为代理对
-<ol type="1">
-<li>码点减去0x10000得到20位数</li>
-<li>高10位加上0xD800得到高位代理</li>
-<li>低10位加上0xDC00得到低位代理</li>
-</ol></li>
-</ul></li>
-<li><strong>示例</strong>： <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">字符    Unicode编码点     UTF-16编码        说明</span><br><span class="line">A       U+0041           00 41            BMP内字符</span><br><span class="line">中      U+4E2D           4E 2D            BMP内字符</span><br><span class="line">😀      U+1F600          D83D DE00        代理对表示</span><br></pre></td></tr></table></figure></li>
-<li><strong>优点</strong>：
-<ul>
-<li>处理中日韩文字效率高（大多在BMP平面内）</li>
-<li>Java、JavaScript等语言内部采用此编码</li>
-<li>定长编码便于字符定位</li>
-</ul></li>
-<li><strong>缺点</strong>：
-<ul>
-<li>不兼容ASCII</li>
-<li>存在大小端序问题（需要BOM标记）</li>
-<li>占用空间较大</li>
-<li>代理对处理复杂</li>
-</ul></li>
-</ul></li>
-</ul>
-<h3 id="数据编码">数据编码</h3>
-<ul>
-<li><strong>数字编码</strong>
-<ul>
-<li><strong>二进制编码</strong>：将数字转换为二进制形式，是计算机处理数字信息的基础。例如，十进制数10的二进制编码是1010。</li>
-<li><strong>BCD编码</strong>：二进制编码的十进制数，将十进制数的每一位分别转换为4位二进制数。例如，十进制数10的BCD编码是0001
-0000。</li>
-</ul></li>
-<li><strong>图像编码</strong>
-<ul>
-<li><strong>位图编码</strong>：将图像的每个像素点的颜色信息直接存储起来，常见的位图格式有BMP、PNG等。</li>
-<li><strong>压缩编码</strong>：通过减少图像数据的冗余信息来实现数据压缩，常见的压缩编码格式有JPEG、GIF等。JPEG采用离散余弦变换（DCT）和量化等技术，GIF采用LZW压缩算法。</li>
-</ul></li>
-<li><strong>音频编码</strong>
-<ul>
-<li><strong>PCM编码</strong>：脉冲编码调制，将模拟音频信号转换为数字信号，是音频数字化的基础。PCM编码的音频数据量较大。</li>
-<li><strong>压缩编码</strong>：通过减少音频数据的冗余信息来实现数据压缩，常见的压缩编码格式有MP3、AAC等。MP3采用心理声学模型和变换编码等技术，AAC是MP3的改进版本，具有更高的压缩效率和音质。</li>
-</ul></li>
-</ul>
-]]></content>
-      <tags>
-        <tag>编码</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>NFC Note</title>
-    <url>/posts/78289205/</url>
-    <content><![CDATA[<h2 id="什么是nfc">什么是NFC？</h2>
-<p>今天听实验室师兄的分享时提到了NFC技术，自己对这个技术也是一知半解，所以来记录一下。</p>
-<span id="more"></span>
-<p>NFC（Near Field
-Communication，近场通信）是一种短距离无线通信技术，工作频率为13.56MHz，最大通信距离通常在10厘米以内。这项技术继承了RFID（射频识别）的核心原理，但针对移动设备进行了优化和扩展。</p>
-<figure>
-<img src="/assets/NFC-image.png" alt="alt text" />
-<figcaption aria-hidden="true">alt text</figcaption>
-</figure>
-<h3 id="nfc是怎么工作的">NFC是怎么工作的？</h3>
-<p>想象一下，两个磁铁靠近时会相互影响。NFC的工作原理也差不多：</p>
-<ol type="1">
-<li><strong>基本原理</strong>
-<ul>
-<li>主动设备（比如刷卡机）通过天线产生13.56MHz的高频交变磁场</li>
-<li>被动设备（比如NFC标签）进入磁场后，通过电磁感应获得能量</li>
-<li>两个设备通过调制解调技术（ASK、PSK等）在磁场中编码和解码数据</li>
-<li>数据传输速率可达424Kbps</li>
-</ul></li>
-<li><strong>为什么要靠得这么近？</strong>
-<ul>
-<li>磁场强度与距离的平方成反比，超过10cm信号就急剧减弱</li>
-<li>近场通信使用感应耦合（而不是电磁波传播）</li>
-<li>这种物理特性自然形成了安全距离，防止远距离窃听</li>
-</ul></li>
-</ol>
-<blockquote>
-<p><strong>调制解调技术</strong></p>
-<p>想象用手电筒给远处的朋友发信号：</p>
-<ol type="1">
-<li><strong>什么是调制？</strong>
-<ul>
-<li>就像用手电筒发信号时，通过开关灯来传递信息</li>
-<li>NFC中主要使用两种调制方式：
-<ul>
-<li>ASK（幅度调制）：类似于调整手电筒的亮度</li>
-<li>PSK（相位调制）：类似于按固定节奏闪烁手电筒</li>
-</ul></li>
-</ul></li>
-<li><strong>为什么要调制？</strong>
-<ul>
-<li>原始数据（比如1和0）不能直接传输</li>
-<li>需要把数据搭载在13.56MHz的载波信号上</li>
-<li>就像把信息写在纸飞机上才能传递给别人</li>
-</ul></li>
-<li><strong>解调是什么？</strong>
-<ul>
-<li>接收方需要从收到的信号中提取出原始数据</li>
-<li>就像接收方要从纸飞机上读取信息</li>
-<li>或者从手电筒的闪烁中理解传递的含义</li>
-</ul></li>
-</ol>
-</blockquote>
-<h3 id="nfc能做什么">NFC能做什么？</h3>
-<p>NFC有三种常见的使用方式：</p>
-<ol type="1">
-<li><strong>读写模式</strong>
-<ul>
-<li>就像用手机碰一碰地铁站的时刻表海报</li>
-<li>或者用手机读取商品上的电子标签</li>
-</ul></li>
-<li><strong>手机支付模式</strong>
-<ul>
-<li>手机变身成公交卡、银行卡</li>
-<li>碰一碰就能付款</li>
-</ul></li>
-<li><strong>设备互联模式</strong>
-<ul>
-<li>两个手机之间传照片</li>
-<li>新耳机和手机快速配对</li>
-</ul></li>
-</ol>
-<h3 id="nfc的特点">NFC的特点</h3>
-<ol type="1">
-<li><strong>超级方便</strong>
-<ul>
-<li>采用即时配对（Peer-to-Peer）技术，无需复杂配对流程</li>
-<li>支持双向通信，设备可以自动切换读写角色</li>
-</ul></li>
-<li><strong>很安全</strong>
-<ul>
-<li>物理层：通信距离限制</li>
-<li>协议层：支持AES-128等加密算法</li>
-<li>应用层：可集成安全单元（SE）存储敏感数据</li>
-</ul></li>
-<li><strong>省电</strong>
-<ul>
-<li>被动设备（如NFC标签）利用电磁感应供电，无需电池</li>
-<li>主动设备仅在通信时开启RF场，待机功耗极低</li>
-<li>典型NFC操作仅需几毫秒，耗电量可忽略不计</li>
-</ul></li>
-</ol>
-<h3 id="生活中的nfc应用">生活中的NFC应用</h3>
-<ol type="1">
-<li><strong>支付场景</strong>
-<ul>
-<li>手机付款（Apple Pay、微信/支付宝碰一碰）</li>
-<li>刷公交地铁</li>
-<li>超市购物</li>
-</ul></li>
-<li><strong>智能家居</strong>
-<ul>
-<li>碰一碰开门</li>
-<li>碰一碰控制家电</li>
-<li>碰一碰自动设置手机模式（比如睡觉模式）</li>
-</ul></li>
-<li><strong>便捷生活</strong>
-<ul>
-<li>门禁卡</li>
-<li>打卡签到</li>
-<li>快速连接蓝牙设备</li>
-</ul></li>
-</ol>
-<h2 id="总结">总结</h2>
-<p>NFC作为一种成熟的近距离无线通信技术，已经在我们的日常生活中扮演着越来越重要的角色。它的高安全性、便捷性和广泛的应用场景使其成为移动支付和智能设备交互的首选技术之一。随着物联网技术的发展，NFC的应用领域将会进一步扩大。</p>
-]]></content>
-      <tags>
-        <tag>NFC</tag>
-        <tag>RFID</tag>
-        <tag>无线通信</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>2.4G 无线通信笔记</title>
     <url>/posts/a25d78f8/</url>
     <content><![CDATA[<h2 id="什么是2.4g无线通信">什么是2.4G无线通信？</h2>
@@ -1891,6 +1891,115 @@ Communication，近场通信）是一种短距离无线通信技术，工作频�
       </tags>
   </entry>
   <entry>
+    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
+    <url>/posts/f520f9c/</url>
+    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
+<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
+<span id="more"></span>
+<h3 id="网络分层模型">网络分层模型</h3>
+<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
+<ul>
+<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
+<li>传输层:TCP、UDP等传输控制协议</li>
+<li>网络层:IP、ICMP等网络协议</li>
+<li>网络接口层:以太网、WiFi等物理传输协议</li>
+</ul>
+<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
+<h2 id="协议栈的演进">协议栈的演进</h2>
+<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
+<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
+<p>TCP(传输控制协议):</p>
+<ul>
+<li>面向连接:通信前需要建立连接(三次握手)</li>
+<li>可靠传输:使用确认机制和重传机制保证数据可靠到达</li>
+<li>流量控制:根据接收方处理能力调整发送速率</li>
+<li>拥塞控制:根据网络状况调整发送速率</li>
+<li>适用场景:文件传输、网页访问等对可靠性要求高的应用</li>
+</ul>
+<p>UDP(用户数据报协议):</p>
+<ul>
+<li>无连接:不需要建立连接即可传输数据</li>
+<li>不可靠:不保证数据一定送达</li>
+<li>无流量控制和拥塞控制</li>
+<li>开销小、延迟低</li>
+<li>适用场景:视频直播、游戏等对实时性要求高的应用</li>
+</ul>
+<h3 id="应用层的发展">应用层的发展</h3>
+<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
+<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
+<p>HTTP/1.1:</p>
+<ul>
+<li>持久连接:复用TCP连接</li>
+<li>管道化请求:支持多个请求排队</li>
+<li>但存在队头阻塞问题</li>
+</ul>
+<p>HTTP/2:</p>
+<ul>
+<li>多路复用:在同一连接上并发处理多个请求</li>
+<li>头部压缩:减少传输开销</li>
+<li>服务器推送:主动推送相关资源</li>
+<li>二进制分帧:更高效的数据传输</li>
+</ul>
+<h4 id="grpc---现代分布式系统的新选择">gRPC -
+现代分布式系统的新选择</h4>
+<p>gRPC是基于HTTP/2构建的高性能RPC框架:</p>
+<ul>
+<li>协议层次:
+<ul>
+<li>应用层:gRPC API</li>
+<li>中间层:HTTP/2</li>
+<li>传输层:TCP</li>
+<li>安全层:TLS(可选)</li>
+</ul></li>
+</ul>
+<p>四种通信模式:</p>
+<ol type="1">
+<li>一元RPC(Unary):
+<ul>
+<li>类似HTTP/1.1的请求-响应模式</li>
+<li>适用于传统的客户端-服务器交互</li>
+</ul></li>
+<li>服务器流式RPC(Server Streaming):
+<ul>
+<li>客户端发送一个请求,服务器返回数据流</li>
+<li>适用于服务器推送场景,如订阅更新</li>
+</ul></li>
+<li>客户端流式RPC(Client Streaming):
+<ul>
+<li>客户端发送数据流,服务器返回一个响应</li>
+<li>适用于数据上传场景</li>
+</ul></li>
+<li>双向流式RPC(Bidirectional Streaming):
+<ul>
+<li>客户端和服务器同时收发数据流</li>
+<li>适用于实时通信场景,如在线游戏</li>
+</ul></li>
+</ol>
+<p>gRPC的优势:</p>
+<ul>
+<li>基于HTTP/2的高性能</li>
+<li>Protocol Buffers的高效序列化</li>
+<li>强类型接口定义</li>
+<li>跨语言支持</li>
+<li>内置流控和安全机制</li>
+</ul>
+<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
+<p>TLS在传输层和应用层之间提供了安全保障:</p>
+<ul>
+<li>加密:保护数据不被窃听</li>
+<li>认证:验证通信双方身份</li>
+<li>完整性:确保数据不被篡改</li>
+</ul>
+<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
+]]></content>
+      <tags>
+        <tag>网络协议</tag>
+        <tag>gRPC</tag>
+        <tag>TLS</tag>
+        <tag>HTTP</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TLS Note</title>
     <url>/posts/32f5e233/</url>
     <content><![CDATA[<h2 id="什么是tls">什么是TLS</h2>
@@ -2033,115 +2142,6 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
         <tag>网络安全</tag>
         <tag>加密</tag>
         <tag>HTTPS</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
-    <url>/posts/f520f9c/</url>
-    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
-<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
-<span id="more"></span>
-<h3 id="网络分层模型">网络分层模型</h3>
-<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
-<ul>
-<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
-<li>传输层:TCP、UDP等传输控制协议</li>
-<li>网络层:IP、ICMP等网络协议</li>
-<li>网络接口层:以太网、WiFi等物理传输协议</li>
-</ul>
-<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
-<h2 id="协议栈的演进">协议栈的演进</h2>
-<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
-<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
-<p>TCP(传输控制协议):</p>
-<ul>
-<li>面向连接:通信前需要建立连接(三次握手)</li>
-<li>可靠传输:使用确认机制和重传机制保证数据可靠到达</li>
-<li>流量控制:根据接收方处理能力调整发送速率</li>
-<li>拥塞控制:根据网络状况调整发送速率</li>
-<li>适用场景:文件传输、网页访问等对可靠性要求高的应用</li>
-</ul>
-<p>UDP(用户数据报协议):</p>
-<ul>
-<li>无连接:不需要建立连接即可传输数据</li>
-<li>不可靠:不保证数据一定送达</li>
-<li>无流量控制和拥塞控制</li>
-<li>开销小、延迟低</li>
-<li>适用场景:视频直播、游戏等对实时性要求高的应用</li>
-</ul>
-<h3 id="应用层的发展">应用层的发展</h3>
-<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
-<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
-<p>HTTP/1.1:</p>
-<ul>
-<li>持久连接:复用TCP连接</li>
-<li>管道化请求:支持多个请求排队</li>
-<li>但存在队头阻塞问题</li>
-</ul>
-<p>HTTP/2:</p>
-<ul>
-<li>多路复用:在同一连接上并发处理多个请求</li>
-<li>头部压缩:减少传输开销</li>
-<li>服务器推送:主动推送相关资源</li>
-<li>二进制分帧:更高效的数据传输</li>
-</ul>
-<h4 id="grpc---现代分布式系统的新选择">gRPC -
-现代分布式系统的新选择</h4>
-<p>gRPC是基于HTTP/2构建的高性能RPC框架:</p>
-<ul>
-<li>协议层次:
-<ul>
-<li>应用层:gRPC API</li>
-<li>中间层:HTTP/2</li>
-<li>传输层:TCP</li>
-<li>安全层:TLS(可选)</li>
-</ul></li>
-</ul>
-<p>四种通信模式:</p>
-<ol type="1">
-<li>一元RPC(Unary):
-<ul>
-<li>类似HTTP/1.1的请求-响应模式</li>
-<li>适用于传统的客户端-服务器交互</li>
-</ul></li>
-<li>服务器流式RPC(Server Streaming):
-<ul>
-<li>客户端发送一个请求,服务器返回数据流</li>
-<li>适用于服务器推送场景,如订阅更新</li>
-</ul></li>
-<li>客户端流式RPC(Client Streaming):
-<ul>
-<li>客户端发送数据流,服务器返回一个响应</li>
-<li>适用于数据上传场景</li>
-</ul></li>
-<li>双向流式RPC(Bidirectional Streaming):
-<ul>
-<li>客户端和服务器同时收发数据流</li>
-<li>适用于实时通信场景,如在线游戏</li>
-</ul></li>
-</ol>
-<p>gRPC的优势:</p>
-<ul>
-<li>基于HTTP/2的高性能</li>
-<li>Protocol Buffers的高效序列化</li>
-<li>强类型接口定义</li>
-<li>跨语言支持</li>
-<li>内置流控和安全机制</li>
-</ul>
-<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
-<p>TLS在传输层和应用层之间提供了安全保障:</p>
-<ul>
-<li>加密:保护数据不被窃听</li>
-<li>认证:验证通信双方身份</li>
-<li>完整性:确保数据不被篡改</li>
-</ul>
-<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
-]]></content>
-      <tags>
-        <tag>TLS</tag>
-        <tag>网络协议</tag>
-        <tag>gRPC</tag>
-        <tag>HTTP</tag>
       </tags>
   </entry>
   <entry>
@@ -3818,173 +3818,6 @@ startup scripts - flowblok’s blog</a></p>
       </tags>
   </entry>
   <entry>
-    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
-    <url>/posts/c3f2a1b9/</url>
-    <content><![CDATA[<p>选择开源许可证时，通常需要回答三个问题：能否商用、能否修改后闭源、是否附带许可声明。本文用一张速查表和几条决策准则，帮助快速选定合适的许可证。</p>
-<span id="more"></span>
-<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>MIT 许可证</th>
-<th>Apache 2.0 许可证</th>
-<th>GPL 许可证 (v3)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>类型</td>
-<td>宽松（Permissive）</td>
-<td>宽松（Permissive）</td>
-<td>传染共享（Copyleft）</td>
-</tr>
-<tr>
-<td>商业使用</td>
-<td>允许</td>
-<td>允许</td>
-<td>允许</td>
-</tr>
-<tr>
-<td>修改后闭源</td>
-<td>允许</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>需要包含原许可证</td>
-<td>是</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>需要说明修改</td>
-<td>否</td>
-<td>是</td>
-<td>是</td>
-</tr>
-<tr>
-<td>专利授权</td>
-<td>无明确说明</td>
-<td>明确授权</td>
-<td>明确授权</td>
-</tr>
-<tr>
-<td>“传染性”</td>
-<td>无</td>
-<td>无</td>
-<td>强</td>
-</tr>
-</tbody>
-</table>
-<p>图表要点：如果你希望随便用、闭源也行，首选 MIT 或 Apache
-2.0；如果你希望别人用到你的代码时必须开源，选择 GPL v3。</p>
-<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
-<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
-<ul>
-<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
-<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
-<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
-</ul>
-<h3 id="apache-2.0工程团队的默认首选">✅ Apache
-2.0：工程团队的默认首选</h3>
-<ul>
-<li>核心义务：保留 <code>LICENSE</code> 与
-<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
-<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
-<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
-</ul>
-<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
-Copyleft，确保改动也开源</h3>
-<ul>
-<li>核心义务：凡分发衍生作品，必须以 GPL
-兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
-<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
-<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
-</ul>
-<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
-<ol type="1">
-<li>你是否希望别人基于你的代码做出的产品可以闭源？
-<ul>
-<li>是 → 选 MIT 或 Apache 2.0</li>
-<li>否 → 选 GPL
-v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
-AGPL）</li>
-</ul></li>
-<li>你是否担心专利纠纷？
-<ul>
-<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
-<li>否 → MIT 也可</li>
-</ul></li>
-<li>你的目标用户是谁？
-<ul>
-<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
-<li>个人/教学/社区 Demo → MIT 简洁好用</li>
-</ul></li>
-<li>你是否需要与其他许可证兼容？
-<ul>
-<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
-<li>想强制开源传递 → GPL 系列</li>
-</ul></li>
-</ol>
-<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
-<ul>
-<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
-<code>NOTICE</code>（列出版权与声明）。</li>
-<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
-对“修改过的文件”做适当标注。</li>
-<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
-<code>LICENSE/NOTICE</code> 汇总。</li>
-<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
-<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
-</ul>
-<h2 id="常见误区">❓ 常见误区</h2>
-<ul>
-<li>“用了 GPL 的库就必须把我的 SaaS
-也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
-明确将“网络提供服务”纳入义务，注意区分。</li>
-<li>“MIT
-就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
-<li>Apache 2.0
-一定要每个文件头都加版权声明吗？——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
-</ul>
-<h2 id="模板与参考">📎 模板与参考</h2>
-<ul>
-<li>官方文本：
-<ul>
-<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
-Initiative</a></li>
-<li>Apache 2.0：<a
-href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
-2.0</a></li>
-<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
-GPLv3</a></li>
-</ul></li>
-<li>模板生成：<code>choosealicense.com</code>
-提供多语言示例与合规提示。</li>
-</ul>
-<h2 id="小结">✨ 小结</h2>
-<ul>
-<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
-<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
-<li>想确保改动继续开源并回馈社区：选 <strong>GPL
-v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
-</ul>
-<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
-]]></content>
-      <tags>
-        <tag>开源</tag>
-        <tag>License</tag>
-        <tag>许可证</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>git之路：rebase &amp; cherry-pick</title>
     <url>/posts/1566a5aa/</url>
     <content><![CDATA[<p>在团队协作和日常开发中，<code>rebase</code> 和
@@ -4239,6 +4072,173 @@ Git，写出更优雅、可维护的代码历史！</p>
         <tag>Git</tag>
         <tag>Rebase</tag>
         <tag>Cherry-pick</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>开源许可证速查：MIT、Apache 2.0、GPL v3 怎么选？</title>
+    <url>/posts/c3f2a1b9/</url>
+    <content><![CDATA[<p>选择开源许可证时，通常需要回答三个问题：能否商用、能否修改后闭源、是否附带许可声明。本文用一张速查表和几条决策准则，帮助快速选定合适的许可证。</p>
+<span id="more"></span>
+<h2 id="先看结论速查表">🧭 先看结论（速查表）</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>MIT 许可证</th>
+<th>Apache 2.0 许可证</th>
+<th>GPL 许可证 (v3)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>宽松（Permissive）</td>
+<td>宽松（Permissive）</td>
+<td>传染共享（Copyleft）</td>
+</tr>
+<tr>
+<td>商业使用</td>
+<td>允许</td>
+<td>允许</td>
+<td>允许</td>
+</tr>
+<tr>
+<td>修改后闭源</td>
+<td>允许</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>需要包含原许可证</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>需要说明修改</td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>专利授权</td>
+<td>无明确说明</td>
+<td>明确授权</td>
+<td>明确授权</td>
+</tr>
+<tr>
+<td>“传染性”</td>
+<td>无</td>
+<td>无</td>
+<td>强</td>
+</tr>
+</tbody>
+</table>
+<p>图表要点：如果你希望随便用、闭源也行，首选 MIT 或 Apache
+2.0；如果你希望别人用到你的代码时必须开源，选择 GPL v3。</p>
+<h2 id="三大许可证一口气读懂">🧩 三大许可证，一口气读懂</h2>
+<h3 id="mit最宽松落地最简单">✅ MIT：最宽松、落地最简单</h3>
+<ul>
+<li>核心义务：在再分发时保留原始版权与许可证文本。</li>
+<li>适用场景：前端库、工具脚本、样例项目、教育项目等，希望最低合规成本、最大化传播。</li>
+<li>风险点：没有明确的专利授权条款，企业法务更偏好 Apache 2.0。</li>
+</ul>
+<h3 id="apache-2.0工程团队的默认首选">✅ Apache
+2.0：工程团队的默认首选</h3>
+<ul>
+<li>核心义务：保留 <code>LICENSE</code> 与
+<code>NOTICE</code>，对修改做合理标识；自带专利授权与专利反诉终止条款。</li>
+<li>适用场景：需要进入企业或商业产品的库/服务；关注专利风险的项目。</li>
+<li>亮点：与 MIT 同样宽松，但合规边界更清晰，专利条款更友好。</li>
+</ul>
+<h3 id="gpl-v3强-copyleft确保改动也开源">🔁 GPL v3：强
+Copyleft，确保改动也开源</h3>
+<ul>
+<li>核心义务：凡分发衍生作品，必须以 GPL
+兼容方式开源全部相关源代码，并保留许可证与修改说明。</li>
+<li>适用场景：你希望代码永远开源、阻止他人闭源使用改动成果（例如工具链、基础软件）。</li>
+<li>注意：对闭源商业分发不友好；与部分生态的许可证兼容性较差。</li>
+</ul>
+<h2 id="怎么选用这-4-个问题秒定">🧠 怎么选？用这 4 个问题秒定</h2>
+<ol type="1">
+<li>你是否希望别人基于你的代码做出的产品可以闭源？
+<ul>
+<li>是 → 选 MIT 或 Apache 2.0</li>
+<li>否 → 选 GPL
+v3（若是网络服务场景且更在意“通过网络提供服务”也触发开源义务，可考虑
+AGPL）</li>
+</ul></li>
+<li>你是否担心专利纠纷？
+<ul>
+<li>是 → 优先 Apache 2.0（自带明确专利授权与防滥诉条款）</li>
+<li>否 → MIT 也可</li>
+</ul></li>
+<li>你的目标用户是谁？
+<ul>
+<li>企业/商业产品集成 → Apache 2.0 更易被法务接受</li>
+<li>个人/教学/社区 Demo → MIT 简洁好用</li>
+</ul></li>
+<li>你是否需要与其他许可证兼容？
+<ul>
+<li>npm/Go/Rust 等社区通用库 → MIT/Apache 2.0 兼容面更广</li>
+<li>想强制开源传递 → GPL 系列</li>
+</ul></li>
+</ol>
+<h2 id="合规清单实操">🗂️ 合规清单（实操）</h2>
+<ul>
+<li>在仓库根目录放置 <code>LICENSE</code> 文件；Apache 2.0 另需
+<code>NOTICE</code>（列出版权与声明）。</li>
+<li>再分发二进制或源代码时，携带原始许可证文本；Apache 2.0
+对“修改过的文件”做适当标注。</li>
+<li>第三方依赖合规：记录依赖及其许可证；打包/发行时附上对应的
+<code>LICENSE/NOTICE</code> 汇总。</li>
+<li>版权年份与持有人保持最新；多人或公司名义应统一口径。</li>
+<li>公司项目：与法务确认是否需要额外的贡献者许可协议（CLA）。</li>
+</ul>
+<h2 id="常见误区">❓ 常见误区</h2>
+<ul>
+<li>“用了 GPL 的库就必须把我的 SaaS
+也开源？”——如果只是通过网络调用且未分发程序，GPL 的触发较弱，但 AGPL
+明确将“网络提供服务”纳入义务，注意区分。</li>
+<li>“MIT
+就没有任何限制？”——仍需保留版权与许可证文本；没有专利条款并不等于无限责任。</li>
+<li>Apache 2.0
+一定要每个文件头都加版权声明吗？——并非强制，但为便于溯源，核心文件加上版权头是常见实践。</li>
+</ul>
+<h2 id="模板与参考">📎 模板与参考</h2>
+<ul>
+<li>官方文本：
+<ul>
+<li>MIT：<a href="https://opensource.org/license/mit/">Open Source
+Initiative</a></li>
+<li>Apache 2.0：<a
+href="https://www.apache.org/licenses/LICENSE-2.0">Apache License
+2.0</a></li>
+<li>GPL v3：<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU
+GPLv3</a></li>
+</ul></li>
+<li>模板生成：<code>choosealicense.com</code>
+提供多语言示例与合规提示。</li>
+</ul>
+<h2 id="小结">✨ 小结</h2>
+<ul>
+<li>想要传播最广、合规成本最低：选 <strong>MIT</strong>。</li>
+<li>想兼顾企业合规与专利风险：选 <strong>Apache 2.0</strong>。</li>
+<li>想确保改动继续开源并回馈社区：选 <strong>GPL
+v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）。</li>
+</ul>
+<p>把本文表格收藏到书签，你的许可证选择基本不会错。</p>
+]]></content>
+      <tags>
+        <tag>开源</tag>
+        <tag>License</tag>
+        <tag>许可证</tag>
       </tags>
   </entry>
   <entry>
@@ -5058,6 +5058,199 @@ IB/RoCE；拓扑差异决定带宽与延迟</li>
       </tags>
   </entry>
   <entry>
+    <title>Python 语法与工程骨架</title>
+    <url>/posts/6a8247a7/</url>
+    <content><![CDATA[<p>本文按 <strong>抽象基类 → 生成器 → 类型提示 → 模块组织</strong>
+四个部分，整理一套适合大型项目的 Python 工程骨架。 <span id="more"></span></p>
+<h3 id="省流图">📚 省流图</h3>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>抽象基类</td>
+<td><code>from abc import ABC, abstractmethod</code> →
+逼子类覆写接口</td>
+</tr>
+<tr>
+<td>生成器</td>
+<td><code>yield</code> → 一次返回多批结果，<code>for</code>
+自动迭代</td>
+</tr>
+<tr>
+<td>类型提示</td>
+<td><code>Tuple[int, ...]</code> 读作“不可变整型序列”</td>
+</tr>
+<tr>
+<td>模块路径</td>
+<td><code>package.sub.module</code> → 对应
+<code>package/sub/module.py</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="面向对象abc继承重写">面向对象：ABC、继承、重写</h2>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> abc <span class="keyword">import</span> ABC, abstractmethod</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">AbsSolver</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;抽象求解器：定义统一接口&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">solve</span>(<span class="params">self, *args, **kwargs</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;计算一次解，子类必须实现&quot;&quot;&quot;</span></span><br><span class="line">        <span class="keyword">pass</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">dump</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;可选钩子：子类按需重写&quot;&quot;&quot;</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;&lt;default dump&gt;\n&quot;</span>, <span class="variable language_">self</span>.__dict__)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>ABC</strong>：<code>AbsSolver</code> 继承自
+<code>ABC</code>，内部 <strong>至少有一个</strong>
+<code>@abstractmethod</code>。</li>
+<li><strong>强制实现</strong>：实例化子类前，Python
+会检查是否实现了所有抽象方法；否则 <code>TypeError</code>。</li>
+<li><strong>可选覆写</strong>：<code>dump</code>
+不是抽象的，子类可按需扩展。</li>
+</ul>
+<h3 id="abstractmethod-用法速览"><code>@abstractmethod</code>
+用法速览</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># 无实现体或仅 raise NotImplementedError</span></span><br><span class="line">        <span class="keyword">raise</span> NotImplementedError</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Impl</span>(<span class="title class_ inherited__">Base</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># ✅ 覆写，才能实例化</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;ok&quot;</span>)</span><br><span class="line"></span><br><span class="line">Impl().foo()  <span class="comment"># 若省略 foo → TypeError: Can&#x27;t instantiate abstract class</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>省流：ABC = “接口”，“抽象方法” = “必须实现”。</p>
+</blockquote>
+<h3 id="什么是钩子-hook">🔗 什么是“钩子 (Hook)”？</h3>
+<ul>
+<li>非抽象、带默认实现的方法，<strong>子类可选</strong>地覆写。<br />
+</li>
+<li>框架在合适时机回调它，让开发者“插入自定义逻辑”。<br />
+</li>
+<li>例：<code>dump()</code> 就是调试钩子，PyTorch 的
+<code>forward_hook</code> 同理。</li>
+</ul>
+<h3 id="什么是鸭子接口-duck-typing">🦆 什么是“鸭子接口 / Duck
+Typing”？</h3>
+<ul>
+<li>不关心对象真实类型，只要 <strong>行为/look like a duck</strong>
+就当成合法。<br />
+</li>
+<li><code>ops.py</code> 用 <code>pass</code> 而非
+<code>@abstractmethod</code>，就是“鸭子接口”：谁实现了同名方法谁就能用。<br />
+</li>
+<li>优点：灵活、少耦合；缺点：漏实现时运行期才炸。</li>
+</ul>
+<blockquote>
+<p>记忆：<strong>Hook = 可选扩展点</strong>；<strong>Duck Typing =
+不验血统，只看会不会叫、会不会游。</strong></p>
+</blockquote>
+<h2 id="生成器与迭代持续产出多解">生成器与迭代：持续产出多解</h2>
+<p>在 <code>ops.py</code> 里，<code>materialize()</code> 用
+<code>yield</code> <strong>按需吐出</strong> 不同框架的层对象：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">AbsBaseOp</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="comment"># ...</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">materialize</span>(<span class="params">self, framework</span>):</span><br><span class="line">        solver = z3.Solver()</span><br><span class="line">        <span class="keyword">while</span> solver.check() == z3.sat:</span><br><span class="line">            <span class="variable language_">self</span>.model = solver.model()</span><br><span class="line">            <span class="keyword">yield</span> <span class="variable language_">self</span>._to_framework(framework)  <span class="comment"># 产出一次解</span></span><br><span class="line">            <span class="variable language_">self</span>._add_diff_constraint(solver)    <span class="comment"># 追加“与上次不同”的约束</span></span><br><span class="line">        <span class="keyword">yield</span> <span class="literal">None</span>  <span class="comment"># 无更多解</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong><code>yield</code></strong>：函数变生成器，<code>for layer in op.materialize('torch'):</code>
+可逐层迭代。</li>
+<li><strong>多解采样</strong>：在循环内
+<strong>动态给求解器加“不等”约束</strong>，驱动 Z3 返回新模型。</li>
+<li><strong>终止信号</strong>：最后 <code>yield None</code>
+让上层知道“解完了”。</li>
+</ul>
+<h3 id="yield-from-简洁重用"><code>yield from</code> 简洁重用</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">pipeline</span>(<span class="params">frameworks</span>):</span><br><span class="line">    <span class="keyword">for</span> fw <span class="keyword">in</span> frameworks:</span><br><span class="line">        <span class="keyword">yield</span> <span class="keyword">from</span> <span class="variable language_">self</span>.materialize(fw)  <span class="comment"># 直接把子生成器产物向上透传</span></span><br></pre></td></tr></table></figure>
+<h3 id="如何读取-消费生成器">🏃 如何读取 / 消费生成器？</h3>
+<ol type="1">
+<li><strong>for-loop 最省心</strong> <figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> layer <span class="keyword">in</span> op.materialize(<span class="string">&#x27;torch&#x27;</span>):</span><br><span class="line">    <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        <span class="keyword">break</span>  <span class="comment"># 无更多解</span></span><br><span class="line">    <span class="built_in">print</span>(layer)</span><br></pre></td></tr></table></figure></li>
+<li><strong><code>next()</code> 手动拉取</strong>（需要捕获
+<code>StopIteration</code>） <figure class="highlight python"><table><tr><td class="code"><pre><span class="line">g = op.materialize(<span class="string">&#x27;paddle&#x27;</span>)</span><br><span class="line"><span class="keyword">try</span>:</span><br><span class="line">    <span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">        layer = <span class="built_in">next</span>(g)</span><br><span class="line">        <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        use(layer)</span><br><span class="line"><span class="keyword">except</span> StopIteration:</span><br><span class="line">    <span class="keyword">pass</span></span><br></pre></td></tr></table></figure></li>
+<li><strong>切片取前 N
+个</strong>：<code>import itertools; first5 = list(itertools.islice(op.materialize('tf'), 5))</code></li>
+</ol>
+<blockquote>
+<p>记忆：<code>yield</code> 负责产，<code>for / next / islice</code>
+负责取。</p>
+</blockquote>
+<h2 id="类型提示速读">类型提示速读</h2>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>读法</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>List[int]</code></td>
+<td><strong>可变</strong> 整型列表</td>
+<td><code>[1, 2, 3]</code></td>
+</tr>
+<tr>
+<td><code>Tuple[str, int]</code></td>
+<td>长度固定 <code>(str, int)</code></td>
+<td><code>("id", 3)</code></td>
+</tr>
+<tr>
+<td><code>Tuple[int, ...]</code></td>
+<td>不定长整型元组</td>
+<td><code>(1,2,3,4)</code></td>
+</tr>
+<tr>
+<td><code>Dict[str, Any]</code></td>
+<td>key 是 str, value 任意</td>
+<td><code>&#123;"a":1&#125;</code></td>
+</tr>
+<tr>
+<td><code>Union[int, str]</code></td>
+<td>int <strong>或</strong> str</td>
+<td><code>42</code> / <code>"42"</code></td>
+</tr>
+<tr>
+<td><code>Optional[Foo]</code></td>
+<td><code>Union[Foo, None]</code></td>
+<td>可能返回 <code>None</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>检查工具：<code>mypy</code>, <code>pyright</code>，CI
+一跑便知类型是否对。</p>
+</blockquote>
+<h2 id="模块组织与导入路径">模块组织与导入路径</h2>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">project/</span><br><span class="line"> ├─ ops/                 # 功能包</span><br><span class="line"> │   ├─ __init__.py      # 导入门面，暴露 API</span><br><span class="line"> │   ├─ base.py          # 抽象基类与通用工具</span><br><span class="line"> │   ├─ nn.py            # 神经网络相关 Op</span><br><span class="line"> │   └─ shape.py         # 形状求解逻辑</span><br><span class="line"> ├─ scripts/             # CLI / demo / benchmark</span><br><span class="line"> └─ tests/               # pytest 单元测试</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>相对导入</strong>：包内部用
+<code>from .base import AbsBaseOp</code>，防止顶层路径污染。</li>
+<li><strong>绝对导入</strong>：外部调用写
+<code>from ops.nn import ConvOp</code>，IDE/类型检查友好。</li>
+<li><strong><code>__init__.py</code></strong>：在包级暴露高层
+API，隐藏实现细节。</li>
+</ul>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    subgraph &quot;ops 包&quot;
+      base[&quot;base.py\nAbsBaseOp&quot;]
+      nn[&quot;nn.py\nConvOp &#x2F; PoolOp&quot;]
+      shape[&quot;shape.py\nZ3 求解&quot;]
+    end
+    scripts[&quot;scripts&#x2F;train.py&quot;] --&gt; nn
+    scripts --&gt; base
+    nn --&gt; shape
+</code>
+</pre>
+<h2 id="小结">📝 小结</h2>
+<ol type="1">
+<li><strong>ABC + 抽象方法</strong> → 先定接口，再写实现。</li>
+<li><strong>生成器 (<code>yield</code>)</strong> →
+惰性产出多解/多批数据，节省内存。</li>
+<li><strong>Typing</strong> →
+<code>Tuple[int, ...]</code>=不定长；<code>Union</code>=多选；配合 IDE
+CI 早点发现错。</li>
+<li><strong>模块化</strong> → “包内相对、包外绝对”，在
+<code>__init__.py</code> 只输出你想给用户看的接口。</li>
+</ol>
+<blockquote>
+<p>熟练掌握这四招，你的 Python 项目就能又 <strong>清晰</strong> 又
+<strong>可维护</strong> 🚀</p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>Python</tag>
+        <tag>工程实践</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>H100 服务器 CUDA + PyTorch 环境速配指南</title>
     <url>/posts/e5b1c8d2/</url>
     <content><![CDATA[<p>本文记录在 Ubuntu 24.04 + H100 上从零跑通 CUDA
@@ -5723,199 +5916,6 @@ Warp”藏延迟，性能归根结底是访存模式与并行度的艺术 ✨</s
         <tag>内存</tag>
         <tag>Kernel</tag>
         <tag>Warp</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Python 语法与工程骨架</title>
-    <url>/posts/6a8247a7/</url>
-    <content><![CDATA[<p>本文按 <strong>抽象基类 → 生成器 → 类型提示 → 模块组织</strong>
-四个部分，整理一套适合大型项目的 Python 工程骨架。 <span id="more"></span></p>
-<h3 id="省流图">📚 省流图</h3>
-<table>
-<thead>
-<tr>
-<th>主题</th>
-<th>记忆点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>抽象基类</td>
-<td><code>from abc import ABC, abstractmethod</code> →
-逼子类覆写接口</td>
-</tr>
-<tr>
-<td>生成器</td>
-<td><code>yield</code> → 一次返回多批结果，<code>for</code>
-自动迭代</td>
-</tr>
-<tr>
-<td>类型提示</td>
-<td><code>Tuple[int, ...]</code> 读作“不可变整型序列”</td>
-</tr>
-<tr>
-<td>模块路径</td>
-<td><code>package.sub.module</code> → 对应
-<code>package/sub/module.py</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="面向对象abc继承重写">面向对象：ABC、继承、重写</h2>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> abc <span class="keyword">import</span> ABC, abstractmethod</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">AbsSolver</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;抽象求解器：定义统一接口&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">solve</span>(<span class="params">self, *args, **kwargs</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;计算一次解，子类必须实现&quot;&quot;&quot;</span></span><br><span class="line">        <span class="keyword">pass</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">dump</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;可选钩子：子类按需重写&quot;&quot;&quot;</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;&lt;default dump&gt;\n&quot;</span>, <span class="variable language_">self</span>.__dict__)</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong>ABC</strong>：<code>AbsSolver</code> 继承自
-<code>ABC</code>，内部 <strong>至少有一个</strong>
-<code>@abstractmethod</code>。</li>
-<li><strong>强制实现</strong>：实例化子类前，Python
-会检查是否实现了所有抽象方法；否则 <code>TypeError</code>。</li>
-<li><strong>可选覆写</strong>：<code>dump</code>
-不是抽象的，子类可按需扩展。</li>
-</ul>
-<h3 id="abstractmethod-用法速览"><code>@abstractmethod</code>
-用法速览</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># 无实现体或仅 raise NotImplementedError</span></span><br><span class="line">        <span class="keyword">raise</span> NotImplementedError</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Impl</span>(<span class="title class_ inherited__">Base</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># ✅ 覆写，才能实例化</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;ok&quot;</span>)</span><br><span class="line"></span><br><span class="line">Impl().foo()  <span class="comment"># 若省略 foo → TypeError: Can&#x27;t instantiate abstract class</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>省流：ABC = “接口”，“抽象方法” = “必须实现”。</p>
-</blockquote>
-<h3 id="什么是钩子-hook">🔗 什么是“钩子 (Hook)”？</h3>
-<ul>
-<li>非抽象、带默认实现的方法，<strong>子类可选</strong>地覆写。<br />
-</li>
-<li>框架在合适时机回调它，让开发者“插入自定义逻辑”。<br />
-</li>
-<li>例：<code>dump()</code> 就是调试钩子，PyTorch 的
-<code>forward_hook</code> 同理。</li>
-</ul>
-<h3 id="什么是鸭子接口-duck-typing">🦆 什么是“鸭子接口 / Duck
-Typing”？</h3>
-<ul>
-<li>不关心对象真实类型，只要 <strong>行为/look like a duck</strong>
-就当成合法。<br />
-</li>
-<li><code>ops.py</code> 用 <code>pass</code> 而非
-<code>@abstractmethod</code>，就是“鸭子接口”：谁实现了同名方法谁就能用。<br />
-</li>
-<li>优点：灵活、少耦合；缺点：漏实现时运行期才炸。</li>
-</ul>
-<blockquote>
-<p>记忆：<strong>Hook = 可选扩展点</strong>；<strong>Duck Typing =
-不验血统，只看会不会叫、会不会游。</strong></p>
-</blockquote>
-<h2 id="生成器与迭代持续产出多解">生成器与迭代：持续产出多解</h2>
-<p>在 <code>ops.py</code> 里，<code>materialize()</code> 用
-<code>yield</code> <strong>按需吐出</strong> 不同框架的层对象：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">AbsBaseOp</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="comment"># ...</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">materialize</span>(<span class="params">self, framework</span>):</span><br><span class="line">        solver = z3.Solver()</span><br><span class="line">        <span class="keyword">while</span> solver.check() == z3.sat:</span><br><span class="line">            <span class="variable language_">self</span>.model = solver.model()</span><br><span class="line">            <span class="keyword">yield</span> <span class="variable language_">self</span>._to_framework(framework)  <span class="comment"># 产出一次解</span></span><br><span class="line">            <span class="variable language_">self</span>._add_diff_constraint(solver)    <span class="comment"># 追加“与上次不同”的约束</span></span><br><span class="line">        <span class="keyword">yield</span> <span class="literal">None</span>  <span class="comment"># 无更多解</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong><code>yield</code></strong>：函数变生成器，<code>for layer in op.materialize('torch'):</code>
-可逐层迭代。</li>
-<li><strong>多解采样</strong>：在循环内
-<strong>动态给求解器加“不等”约束</strong>，驱动 Z3 返回新模型。</li>
-<li><strong>终止信号</strong>：最后 <code>yield None</code>
-让上层知道“解完了”。</li>
-</ul>
-<h3 id="yield-from-简洁重用"><code>yield from</code> 简洁重用</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">pipeline</span>(<span class="params">frameworks</span>):</span><br><span class="line">    <span class="keyword">for</span> fw <span class="keyword">in</span> frameworks:</span><br><span class="line">        <span class="keyword">yield</span> <span class="keyword">from</span> <span class="variable language_">self</span>.materialize(fw)  <span class="comment"># 直接把子生成器产物向上透传</span></span><br></pre></td></tr></table></figure>
-<h3 id="如何读取-消费生成器">🏃 如何读取 / 消费生成器？</h3>
-<ol type="1">
-<li><strong>for-loop 最省心</strong> <figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> layer <span class="keyword">in</span> op.materialize(<span class="string">&#x27;torch&#x27;</span>):</span><br><span class="line">    <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        <span class="keyword">break</span>  <span class="comment"># 无更多解</span></span><br><span class="line">    <span class="built_in">print</span>(layer)</span><br></pre></td></tr></table></figure></li>
-<li><strong><code>next()</code> 手动拉取</strong>（需要捕获
-<code>StopIteration</code>） <figure class="highlight python"><table><tr><td class="code"><pre><span class="line">g = op.materialize(<span class="string">&#x27;paddle&#x27;</span>)</span><br><span class="line"><span class="keyword">try</span>:</span><br><span class="line">    <span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">        layer = <span class="built_in">next</span>(g)</span><br><span class="line">        <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        use(layer)</span><br><span class="line"><span class="keyword">except</span> StopIteration:</span><br><span class="line">    <span class="keyword">pass</span></span><br></pre></td></tr></table></figure></li>
-<li><strong>切片取前 N
-个</strong>：<code>import itertools; first5 = list(itertools.islice(op.materialize('tf'), 5))</code></li>
-</ol>
-<blockquote>
-<p>记忆：<code>yield</code> 负责产，<code>for / next / islice</code>
-负责取。</p>
-</blockquote>
-<h2 id="类型提示速读">类型提示速读</h2>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>读法</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>List[int]</code></td>
-<td><strong>可变</strong> 整型列表</td>
-<td><code>[1, 2, 3]</code></td>
-</tr>
-<tr>
-<td><code>Tuple[str, int]</code></td>
-<td>长度固定 <code>(str, int)</code></td>
-<td><code>("id", 3)</code></td>
-</tr>
-<tr>
-<td><code>Tuple[int, ...]</code></td>
-<td>不定长整型元组</td>
-<td><code>(1,2,3,4)</code></td>
-</tr>
-<tr>
-<td><code>Dict[str, Any]</code></td>
-<td>key 是 str, value 任意</td>
-<td><code>&#123;"a":1&#125;</code></td>
-</tr>
-<tr>
-<td><code>Union[int, str]</code></td>
-<td>int <strong>或</strong> str</td>
-<td><code>42</code> / <code>"42"</code></td>
-</tr>
-<tr>
-<td><code>Optional[Foo]</code></td>
-<td><code>Union[Foo, None]</code></td>
-<td>可能返回 <code>None</code></td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>检查工具：<code>mypy</code>, <code>pyright</code>，CI
-一跑便知类型是否对。</p>
-</blockquote>
-<h2 id="模块组织与导入路径">模块组织与导入路径</h2>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">project/</span><br><span class="line"> ├─ ops/                 # 功能包</span><br><span class="line"> │   ├─ __init__.py      # 导入门面，暴露 API</span><br><span class="line"> │   ├─ base.py          # 抽象基类与通用工具</span><br><span class="line"> │   ├─ nn.py            # 神经网络相关 Op</span><br><span class="line"> │   └─ shape.py         # 形状求解逻辑</span><br><span class="line"> ├─ scripts/             # CLI / demo / benchmark</span><br><span class="line"> └─ tests/               # pytest 单元测试</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong>相对导入</strong>：包内部用
-<code>from .base import AbsBaseOp</code>，防止顶层路径污染。</li>
-<li><strong>绝对导入</strong>：外部调用写
-<code>from ops.nn import ConvOp</code>，IDE/类型检查友好。</li>
-<li><strong><code>__init__.py</code></strong>：在包级暴露高层
-API，隐藏实现细节。</li>
-</ul>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    subgraph &quot;ops 包&quot;
-      base[&quot;base.py\nAbsBaseOp&quot;]
-      nn[&quot;nn.py\nConvOp &#x2F; PoolOp&quot;]
-      shape[&quot;shape.py\nZ3 求解&quot;]
-    end
-    scripts[&quot;scripts&#x2F;train.py&quot;] --&gt; nn
-    scripts --&gt; base
-    nn --&gt; shape
-</code>
-</pre>
-<h2 id="小结">📝 小结</h2>
-<ol type="1">
-<li><strong>ABC + 抽象方法</strong> → 先定接口，再写实现。</li>
-<li><strong>生成器 (<code>yield</code>)</strong> →
-惰性产出多解/多批数据，节省内存。</li>
-<li><strong>Typing</strong> →
-<code>Tuple[int, ...]</code>=不定长；<code>Union</code>=多选；配合 IDE
-CI 早点发现错。</li>
-<li><strong>模块化</strong> → “包内相对、包外绝对”，在
-<code>__init__.py</code> 只输出你想给用户看的接口。</li>
-</ol>
-<blockquote>
-<p>熟练掌握这四招，你的 Python 项目就能又 <strong>清晰</strong> 又
-<strong>可维护</strong> 🚀</p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>Python</tag>
-        <tag>工程实践</tag>
       </tags>
   </entry>
   <entry>
@@ -10674,269 +10674,6 @@ A20 Gate。</li>
       </tags>
   </entry>
   <entry>
-    <title>Clash 与网络代理详解</title>
-    <url>/posts/755f751e/</url>
-    <content><![CDATA[<p>本文梳理 VPN、TUN
-模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>VPN</strong></td>
-<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
-<td>秘密隧道</td>
-</tr>
-<tr>
-<td><strong>Proxy</strong></td>
-<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
-<td>传话筒</td>
-</tr>
-<tr>
-<td><strong>Clash</strong></td>
-<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
-<td>智能调度员</td>
-</tr>
-<tr>
-<td><strong>Rule</strong></td>
-<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
-<td>分流路牌</td>
-</tr>
-<tr>
-<td><strong>TUN</strong></td>
-<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
-<td>虚拟网卡</td>
-</tr>
-<tr>
-<td><strong>Mixin</strong></td>
-<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
-<td>补丁包</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
-<table>
-<colgroup>
-<col style="width: 24%" />
-<col style="width: 20%" />
-<col style="width: 56%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>VPN</th>
-<th>代理 (Proxy)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>工作层级</strong></td>
-<td>操作系统层 (OSI L3 网络层)</td>
-<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
-</tr>
-<tr>
-<td><strong>接管范围</strong></td>
-<td>全局接管（通常），所有软件流量都走隧道</td>
-<td>仅接管支持代理设置的软件 (如浏览器)</td>
-</tr>
-<tr>
-<td><strong>加密程度</strong></td>
-<td>全程加密，强调安全性</td>
-<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
-</tr>
-<tr>
-<td><strong>灵活性</strong></td>
-<td>较差，通常“全走”或“全不走”</td>
-<td>极高，可按域名/进程分流</td>
-</tr>
-<tr>
-<td><strong>典型协议</strong></td>
-<td>WireGuard, OpenVPN, IPSec</td>
-<td>HTTP, Socks5, Shadowsocks, VMess</td>
-</tr>
-</tbody>
-</table>
-</blockquote>
-<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
-<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
-<h4 id="global-全局模式">1. Global 全局模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
-<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
-的所有活动。</li>
-<li><strong>缺点</strong>：访问国内网站（如
-B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
-</ul>
-<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
-<ul>
-<li><strong>原理</strong>：根据预设的规则列表（Rule
-List）智能判断。</li>
-<li><strong>流程</strong>：
-<ol type="1">
-<li>拦截请求。</li>
-<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
-<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
-</ol></li>
-<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
-</ul>
-<h4 id="direct-直连模式">3. Direct 直连模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
-<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
-</ul>
-<h4 id="script-脚本模式">4. Script 脚本模式</h4>
-<ul>
-<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
-<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
-</ul>
-<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
-<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
-Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
-<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
-7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
-7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
-<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
-<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
-<pre>
-<code class="mermaid">
-
-graph TD;
-    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
-    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
-    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
-    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
-    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
-</code>
-</pre>
-<ol type="1">
-<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
-<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
-<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
-<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
-3)，它处理的是 IP
-数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
-<li><strong>用户态处理</strong>：Clash 读取 TUN
-设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
-</ol>
-<blockquote>
-<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
-VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
-</blockquote>
-<blockquote>
-<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
-<p>这是一个核心问题：<strong>TUN
-模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
-<ul>
-<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
-Clash
-能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
-Clash 核心。</li>
-<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
-</ul>
-<p><strong>结论</strong>：开启 TUN
-模式并选择<strong>规则模式</strong>，意味着
-“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
-</blockquote>
-<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
-<p>在 Windows/macOS 上开启 TUN
-模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
-<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
-<strong>Service Mode</strong>。</p>
-<ul>
-<li><strong>守护进程</strong>：Service Mode
-会安装一个后台系统服务（Daemon）。</li>
-<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
-劫持、TUN 路由）。</li>
-<li><strong>UI 分离</strong>：Clash
-的图形界面（UI）只需要以普通权限运行，通过 IPC
-接口指挥后台服务干活。</li>
-<li><strong>主要作用</strong>：
-<ol type="1">
-<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
-<li><strong>系统级抗杀</strong>：UI
-关闭了，后台代理服务依然可以在线。</li>
-<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
-</ol></li>
-</ul>
-<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
-<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
-<h4 id="核心结构">核心结构</h4>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
-<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
-<p>很多时候我们使用机场提供的订阅链接，这个 URL
-下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
-TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
-<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
-<ul>
-<li><strong>原理</strong>：Clash
-启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
-配置，将两者<strong>合并</strong>。</li>
-<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
-<li><strong>用途</strong>：
-<ul>
-<li>强制开启 TUN 模式。</li>
-<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
-<li>添加个人的局域网 IP 直连规则。</li>
-</ul></li>
-</ul>
-<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
-模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
-IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
-浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
-的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
-</blockquote>
-<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
-<ol type="1">
-<li><strong>“开了全局模式就是最安全的”</strong>
-<ul>
-<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
-HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
-</ul></li>
-<li><strong>“Ping 值低网速就快”</strong>
-<ul>
-<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
-<code>TCP Handshake</code>
-时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
-等）。</li>
-</ul></li>
-<li><strong>“TUN 模式会影响打游戏吗？”</strong>
-<ul>
-<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
-协议，普通代理模式无法代理 UDP，必须开启 TUN
-模式才能让游戏流量走代理加速。</li>
-</ul></li>
-<li><strong>Clash 是 VPN 吗？</strong>
-<ul>
-<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
-<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
-VPN 几乎一致（接管全系统流量）。</li>
-</ul></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>Network</tag>
-        <tag>VPN</tag>
-        <tag>代理</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>实模式（Real Mode）</title>
     <url>/posts/b08764f6/</url>
     <content><![CDATA[<p>本文主要介绍实模式（Real
@@ -11420,6 +11157,269 @@ graph LR
         <tag>x86</tag>
         <tag>启动</tag>
         <tag>实模式</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Clash 与网络代理详解</title>
+    <url>/posts/755f751e/</url>
+    <content><![CDATA[<p>本文梳理 VPN、TUN
+模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>VPN</strong></td>
+<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
+<td>秘密隧道</td>
+</tr>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
+<td>传话筒</td>
+</tr>
+<tr>
+<td><strong>Clash</strong></td>
+<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
+<td>智能调度员</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
+<td>分流路牌</td>
+</tr>
+<tr>
+<td><strong>TUN</strong></td>
+<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
+<td>虚拟网卡</td>
+</tr>
+<tr>
+<td><strong>Mixin</strong></td>
+<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
+<td>补丁包</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>VPN</th>
+<th>代理 (Proxy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工作层级</strong></td>
+<td>操作系统层 (OSI L3 网络层)</td>
+<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
+</tr>
+<tr>
+<td><strong>接管范围</strong></td>
+<td>全局接管（通常），所有软件流量都走隧道</td>
+<td>仅接管支持代理设置的软件 (如浏览器)</td>
+</tr>
+<tr>
+<td><strong>加密程度</strong></td>
+<td>全程加密，强调安全性</td>
+<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
+</tr>
+<tr>
+<td><strong>灵活性</strong></td>
+<td>较差，通常“全走”或“全不走”</td>
+<td>极高，可按域名/进程分流</td>
+</tr>
+<tr>
+<td><strong>典型协议</strong></td>
+<td>WireGuard, OpenVPN, IPSec</td>
+<td>HTTP, Socks5, Shadowsocks, VMess</td>
+</tr>
+</tbody>
+</table>
+</blockquote>
+<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
+<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
+<h4 id="global-全局模式">1. Global 全局模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
+<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
+的所有活动。</li>
+<li><strong>缺点</strong>：访问国内网站（如
+B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
+</ul>
+<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
+<ul>
+<li><strong>原理</strong>：根据预设的规则列表（Rule
+List）智能判断。</li>
+<li><strong>流程</strong>：
+<ol type="1">
+<li>拦截请求。</li>
+<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
+<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
+</ol></li>
+<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
+</ul>
+<h4 id="direct-直连模式">3. Direct 直连模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
+<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
+</ul>
+<h4 id="script-脚本模式">4. Script 脚本模式</h4>
+<ul>
+<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
+<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
+</ul>
+<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
+<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
+Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
+<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
+7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
+7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
+<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
+<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
+<pre>
+<code class="mermaid">
+
+graph TD;
+    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
+    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
+    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
+    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
+    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
+</code>
+</pre>
+<ol type="1">
+<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
+<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
+<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
+<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
+3)，它处理的是 IP
+数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
+<li><strong>用户态处理</strong>：Clash 读取 TUN
+设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
+</ol>
+<blockquote>
+<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
+VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
+</blockquote>
+<blockquote>
+<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
+<p>这是一个核心问题：<strong>TUN
+模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
+<ul>
+<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
+Clash
+能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
+Clash 核心。</li>
+<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
+</ul>
+<p><strong>结论</strong>：开启 TUN
+模式并选择<strong>规则模式</strong>，意味着
+“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
+</blockquote>
+<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
+<p>在 Windows/macOS 上开启 TUN
+模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
+<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
+<strong>Service Mode</strong>。</p>
+<ul>
+<li><strong>守护进程</strong>：Service Mode
+会安装一个后台系统服务（Daemon）。</li>
+<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
+劫持、TUN 路由）。</li>
+<li><strong>UI 分离</strong>：Clash
+的图形界面（UI）只需要以普通权限运行，通过 IPC
+接口指挥后台服务干活。</li>
+<li><strong>主要作用</strong>：
+<ol type="1">
+<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
+<li><strong>系统级抗杀</strong>：UI
+关闭了，后台代理服务依然可以在线。</li>
+<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
+</ol></li>
+</ul>
+<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
+<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
+<h4 id="核心结构">核心结构</h4>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
+<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
+<p>很多时候我们使用机场提供的订阅链接，这个 URL
+下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
+TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
+<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
+<ul>
+<li><strong>原理</strong>：Clash
+启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
+配置，将两者<strong>合并</strong>。</li>
+<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
+<li><strong>用途</strong>：
+<ul>
+<li>强制开启 TUN 模式。</li>
+<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
+<li>添加个人的局域网 IP 直连规则。</li>
+</ul></li>
+</ul>
+<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
+模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
+IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
+浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
+的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
+</blockquote>
+<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
+<ol type="1">
+<li><strong>“开了全局模式就是最安全的”</strong>
+<ul>
+<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
+HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
+</ul></li>
+<li><strong>“Ping 值低网速就快”</strong>
+<ul>
+<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
+<code>TCP Handshake</code>
+时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
+等）。</li>
+</ul></li>
+<li><strong>“TUN 模式会影响打游戏吗？”</strong>
+<ul>
+<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
+协议，普通代理模式无法代理 UDP，必须开启 TUN
+模式才能让游戏流量走代理加速。</li>
+</ul></li>
+<li><strong>Clash 是 VPN 吗？</strong>
+<ul>
+<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
+<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
+VPN 几乎一致（接管全系统流量）。</li>
+</ul></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>Network</tag>
+        <tag>VPN</tag>
+        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -16597,6 +16597,203 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：数组</title>
+    <url>/posts/d9e4b7a3/</url>
+    <content><![CDATA[<p>变量一次只能保存一个值，要存一组同类型的数据，最简单的办法就是数组（array）。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数组</td>
+<td>一段连续内存里存放的多个同类型元素</td>
+<td>同类型数据排队</td>
+</tr>
+<tr>
+<td>元素（element）</td>
+<td>数组里的每一个数据</td>
+<td>队伍中的一员</td>
+</tr>
+<tr>
+<td>下标（index）</td>
+<td>元素在数组里的位置编号，从 0 开始</td>
+<td>第几个</td>
+</tr>
+<tr>
+<td>数组长度</td>
+<td>数组能容纳的元素个数</td>
+<td>队伍长度</td>
+</tr>
+<tr>
+<td>多维数组</td>
+<td>数组的元素还是数组，比如二维数组</td>
+<td>表格</td>
+</tr>
+<tr>
+<td>数组名</td>
+<td>数组的名字，使用时通常退化为首元素地址</td>
+<td>队伍的队首</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
+<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[数组 scores] --&gt; B[下标 0]
+    A --&gt; C[下标 1]
+    A --&gt; D[下标 2]
+    A --&gt; E[...]
+    A --&gt; F[下标 n-1]
+</code>
+</pre>
+<p>数组的两个基本事实：</p>
+<ol type="1">
+<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
+<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
+的，非常快。</li>
+</ol>
+<h3 id="一维数组">🧮 一维数组</h3>
+<h4 id="定义与初始化">定义与初始化</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>需要运行时才知道大小的数组，用第 9 章的 <code>new[]</code> 或
+<code>vector</code>，不要用变长数组写法。</p>
+</blockquote>
+<h4 id="下标访问">下标访问</h4>
+<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以结合数组长度求法：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
+<h3 id="数组与函数">📦 数组与函数</h3>
+<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="多维数组">🗺️ 多维数组</h3>
+<p>二维数组可以理解成数组的数组，适合表示表格、矩阵：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
+<p>双重循环遍历：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
+    A --&gt; C[第 2 行: 5 6 7 8]
+    A --&gt; D[第 3 行: 9 10 11 12]
+</code>
+</pre>
+<p>三维及以上同理，只是现实中用得较少。</p>
+<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>错误</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arr[5]</code>（长度 5 的数组）</td>
+<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
+</tr>
+<tr>
+<td>忘记初始化就用</td>
+<td>读到不确定的值</td>
+</tr>
+<tr>
+<td>数组长度用运行时变量</td>
+<td>变长数组写法不可移植</td>
+</tr>
+<tr>
+<td>函数里只传数组名不传长度</td>
+<td>函数不知道数组多大，容易越界</td>
+</tr>
+</tbody>
+</table>
+<p>C/C++
+<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
+<code>vector</code> 最大的差别之一——<code>vector</code> 有
+<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
+<blockquote>
+<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
+章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
+代码打交道时。</p>
+</blockquote>
+<h3 id="常见误区">❓ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>下标从 1 开始</td>
+<td>C/C++ 下标从 0 开始</td>
+</tr>
+<tr>
+<td>数组越界会报错</td>
+<td>不检查越界，是未定义行为</td>
+</tr>
+<tr>
+<td>传数组给函数是拷贝</td>
+<td>传的是首元素地址，函数内修改影响原数组</td>
+</tr>
+<tr>
+<td>数组名可以随便赋值</td>
+<td>数组名是常量地址，不能整体赋值</td>
+</tr>
+<tr>
+<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
+<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
+得到的是指针大小</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
+开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
+</blockquote>
+<p>学完数组，下一步的指针、字符串会大量建立在数组名是首元素地址这个事实上；而需要动态大小、自动管理内存时，记得有
+<code>vector</code> 这个更省心的选择。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>数组</tag>
+        <tag>多维数组</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：指针</title>
     <url>/posts/c8d4f2a9/</url>
     <content><![CDATA[<p>指针难，不是因为语法多，而是因为它要求你开始从“变量的值”进一步看到“变量在内存里的位置”。</p>
@@ -17031,203 +17228,6 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
         <tag>C/C++</tag>
         <tag>编程入门</tag>
         <tag>指针</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：数组</title>
-    <url>/posts/d9e4b7a3/</url>
-    <content><![CDATA[<p>变量一次只能保存一个值，要存一组同类型的数据，最简单的办法就是数组（array）。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>数组</td>
-<td>一段连续内存里存放的多个同类型元素</td>
-<td>同类型数据排队</td>
-</tr>
-<tr>
-<td>元素（element）</td>
-<td>数组里的每一个数据</td>
-<td>队伍中的一员</td>
-</tr>
-<tr>
-<td>下标（index）</td>
-<td>元素在数组里的位置编号，从 0 开始</td>
-<td>第几个</td>
-</tr>
-<tr>
-<td>数组长度</td>
-<td>数组能容纳的元素个数</td>
-<td>队伍长度</td>
-</tr>
-<tr>
-<td>多维数组</td>
-<td>数组的元素还是数组，比如二维数组</td>
-<td>表格</td>
-</tr>
-<tr>
-<td>数组名</td>
-<td>数组的名字，使用时通常退化为首元素地址</td>
-<td>队伍的队首</td>
-</tr>
-</tbody>
-</table>
-<h3 id="数组的基本模型">🧩 数组的基本模型</h3>
-<p>数组把多个同类型变量放进一段<strong>连续的内存</strong>里，通过下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>];   <span class="comment">// 5 个 int 排成一行</span></span><br></pre></td></tr></table></figure>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">下标:  [0]   [1]   [2]   [3]   [4]</span><br><span class="line">数据:  92    88    95    70    85</span><br><span class="line">地址:  +----+----+----+----+----+</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[数组 scores] --&gt; B[下标 0]
-    A --&gt; C[下标 1]
-    A --&gt; D[下标 2]
-    A --&gt; E[...]
-    A --&gt; F[下标 n-1]
-</code>
-</pre>
-<p>数组的两个基本事实：</p>
-<ol type="1">
-<li><strong>同类型</strong>：所有元素类型一致，占用内存大小相同；</li>
-<li><strong>连续内存</strong>：元素紧挨着存放，所以按下标访问是 O(1)
-的，非常快。</li>
-</ol>
-<h3 id="一维数组">🧮 一维数组</h3>
-<h4 id="定义与初始化">定义与初始化</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a[<span class="number">5</span>];                  <span class="comment">// 定义：5 个 int，未初始化（值不确定）</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> b[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;   <span class="comment">// 定义并初始化</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> c[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;            <span class="comment">// 部分初始化：剩下补 0，即 1 2 0 0 0</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> d[] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;          <span class="comment">// 省略长度：编译器数出 3 个</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> e[<span class="number">3</span>] = &#123;&#125;;                <span class="comment">// 全部初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>数组长度必须是编译期能确定的常量（普通写法里不能是运行时变量）：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="number">5</span>;</span><br><span class="line"><span class="comment">// int arr[n];   // 错误或不可移植：长度不是常量表达式</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> N = <span class="number">5</span>;</span><br><span class="line"><span class="type">int</span> arr[N];      <span class="comment">// 可以：N 是常量</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>需要运行时才知道大小的数组，用第 9 章的 <code>new[]</code> 或
-<code>vector</code>，不要用变长数组写法。</p>
-</blockquote>
-<h4 id="下标访问">下标访问</h4>
-<p>下标从 0 开始，最后一个元素的下标是长度减一：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line"></span><br><span class="line">scores[<span class="number">0</span>] = <span class="number">90</span>;              <span class="comment">// 修改第一个元素</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 90</span></span><br><span class="line">cout &lt;&lt; scores[<span class="number">4</span>] &lt;&lt; endl;   <span class="comment">// 85，最后一个</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">5</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; scores[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以结合数组长度求法：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> n = <span class="built_in">sizeof</span>(scores) / <span class="built_in">sizeof</span>(scores[<span class="number">0</span>]);   <span class="comment">// 5：总字节数 / 单个元素字节数</span></span><br></pre></td></tr></table></figure>
-<h3 id="数组与函数">📦 数组与函数</h3>
-<p>数组传给函数时，传的是<strong>首元素地址</strong>（数组名退化），函数里拿不到数组长度，需要额外传：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 形参 int arr[] 和 int* arr 等价，都是指针</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> scores[<span class="number">5</span>] = &#123;<span class="number">92</span>, <span class="number">88</span>, <span class="number">95</span>, <span class="number">70</span>, <span class="number">85</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(scores, <span class="number">5</span>);   <span class="comment">// 传数组名 + 长度</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>因为传的是地址，函数里修改数组会<strong>直接影响原数组</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> arr[], <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        arr[i] += <span class="number">1</span>;   <span class="comment">// 修改的是原数组</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="多维数组">🗺️ 多维数组</h3>
-<p>二维数组可以理解成数组的数组，适合表示表格、矩阵：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> matrix[<span class="number">3</span>][<span class="number">4</span>] = &#123;           <span class="comment">// 3 行 4 列</span></span><br><span class="line">    &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>&#125;,</span><br><span class="line">    &#123;<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>&#125;,</span><br><span class="line">    &#123;<span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">0</span>][<span class="number">0</span>] &lt;&lt; endl;   <span class="comment">// 1，第 1 行第 1 列</span></span><br><span class="line">cout &lt;&lt; matrix[<span class="number">2</span>][<span class="number">3</span>] &lt;&lt; endl;   <span class="comment">// 12，第 3 行第 4 列</span></span><br></pre></td></tr></table></figure>
-<p>双重循环遍历：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> row = <span class="number">0</span>; row &lt; <span class="number">3</span>; row++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> col = <span class="number">0</span>; col &lt; <span class="number">4</span>; col++) &#123;</span><br><span class="line">        cout &lt;&lt; matrix[row][col] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[matrix 3 行 4 列] --&gt; B[第 1 行: 1 2 3 4]
-    A --&gt; C[第 2 行: 5 6 7 8]
-    A --&gt; D[第 3 行: 9 10 11 12]
-</code>
-</pre>
-<p>三维及以上同理，只是现实中用得较少。</p>
-<h3 id="越界与常见错误">⚠️ 越界与常见错误</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>错误</th>
-<th>后果</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>arr[5]</code>（长度 5 的数组）</td>
-<td>越界访问，未定义行为，可能读到脏数据或崩溃</td>
-</tr>
-<tr>
-<td>忘记初始化就用</td>
-<td>读到不确定的值</td>
-</tr>
-<tr>
-<td>数组长度用运行时变量</td>
-<td>变长数组写法不可移植</td>
-</tr>
-<tr>
-<td>函数里只传数组名不传长度</td>
-<td>函数不知道数组多大，容易越界</td>
-</tr>
-</tbody>
-</table>
-<p>C/C++
-<strong>不检查数组越界</strong>，编译期通常不报错，运行时才会出问题。这是数组和
-<code>vector</code> 最大的差别之一——<code>vector</code> 有
-<code>size()</code>，还能用 <code>at()</code> 检查越界。</p>
-<blockquote>
-<p>现代 C++ 中，普通场景优先用 <code>std::vector</code>（第 9
-章讲过）；数组仍然常见于固定大小、追求极简的场景，以及和 C
-代码打交道时。</p>
-</blockquote>
-<h3 id="常见误区">❓ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>下标从 1 开始</td>
-<td>C/C++ 下标从 0 开始</td>
-</tr>
-<tr>
-<td>数组越界会报错</td>
-<td>不检查越界，是未定义行为</td>
-</tr>
-<tr>
-<td>传数组给函数是拷贝</td>
-<td>传的是首元素地址，函数内修改影响原数组</td>
-</tr>
-<tr>
-<td>数组名可以随便赋值</td>
-<td>数组名是常量地址，不能整体赋值</td>
-</tr>
-<tr>
-<td><code>sizeof(arr)</code> 在函数里也能拿到长度</td>
-<td>函数里 <code>arr</code> 是指针，<code>sizeof</code>
-得到的是指针大小</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>数组把同类型数据放进连续内存，按下标 O(1) 访问；下标从 0
-开始、不检查越界、传参时退化为指针，这三个特性决定了它的用法和风险。</p>
-</blockquote>
-<p>学完数组，下一步的指针、字符串会大量建立在数组名是首元素地址这个事实上；而需要动态大小、自动管理内存时，记得有
-<code>vector</code> 这个更省心的选择。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>数组</tag>
-        <tag>多维数组</tag>
       </tags>
   </entry>
   <entry>
@@ -20859,6 +20859,307 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
       </tags>
   </entry>
   <entry>
+    <title>SEV-SNP隔离原理：NPT、RMP与硬件强制</title>
+    <url>/posts/d2278960/</url>
+    <content><![CDATA[<p>地址翻译由 hypervisor 负责，而 hypervisor 本身并不可信。SEV-SNP 用
+NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原理。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor</td>
+<td>虚拟机监控器（VMM）</td>
+<td>云上管虚拟机的软件层</td>
+</tr>
+<tr>
+<td>嵌套分页</td>
+<td>Nested Paging，两层地址翻译</td>
+<td>虚拟机地址翻译机制</td>
+</tr>
+<tr>
+<td>NPT</td>
+<td>Nested Page Table，嵌套页表</td>
+<td>hypervisor 建的翻译规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>Reverse Map Table，反向映射表</td>
+<td>硬件记录的<strong>物理页归谁</strong>事实</td>
+</tr>
+<tr>
+<td>RMPE</td>
+<td>RMP Entry，RMP 条目</td>
+<td>每 4KB 物理页一条记录</td>
+</tr>
+<tr>
+<td>ASID</td>
+<td>Address Space Identifier，地址空间标识符</td>
+<td>每个 CVM 的唯一身份编号</td>
+</tr>
+<tr>
+<td>VMCB</td>
+<td>Virtual Machine Control Block，虚拟机控制块</td>
+<td>存 VM 状态和 ASID 的控制块</td>
+</tr>
+<tr>
+<td>VMRUN/VMEXIT</td>
+<td>进出虚拟机的特权指令</td>
+<td>硬件切换当前身份的开关</td>
+</tr>
+<tr>
+<td>VMPL</td>
+<td>Virtual Machine Privilege Level，虚拟机特权级</td>
+<td>VM 内部的 4 级权限</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全小电脑</td>
+</tr>
+<tr>
+<td>#PF</td>
+<td>Page Fault，缺页异常</td>
+<td>硬件拒绝访问时的信号</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要-snp第一代-sev-的漏洞">🧩 为什么需要 SNP：第一代 SEV
+的漏洞</h3>
+<p>先看虚拟机地址翻译。虚拟机里的地址要翻译两次才能到真实物理地址：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Guest 认为的地址(GVA) → Guest 页表 → Guest 物理地址(GPA)</span><br><span class="line">                                         │</span><br><span class="line">                                         ▼</span><br><span class="line">                          hypervisor 的嵌套页表(NPT) → 真实物理地址(SPA)</span><br></pre></td></tr></table></figure>
+<p>这里的 <strong>NPT 由 hypervisor
+管理</strong>。问题来了：<strong>hypervisor
+不可信</strong>，它可以：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>攻击</th>
+<th>做法</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>偷换内容</td>
+<td>把 VM 的某个 GPA 悄悄重映射到别的物理页</td>
+<td>VM 读到被替换的假数据</td>
+</tr>
+<tr>
+<td>数据串扰</td>
+<td>把 VM 的页映射给另一个 VM</td>
+<td>两个租户数据互相泄露</td>
+</tr>
+<tr>
+<td>直接偷读</td>
+<td>把自己映射到 VM 的页</td>
+<td>读取 VM 内存</td>
+</tr>
+</tbody>
+</table>
+<p>第一代 SEV
+只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证别人读不懂，但
+hypervisor 可以把读的对象换掉。这就是 SNP 要补的洞。</p>
+<h3 id="rmp反向映射表硬件管的所有权事实">🔍
+RMP：反向映射表，硬件管的所有权事实</h3>
+<p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
+的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
+<p>RMP：每 4KB 物理页一行，硬件强制记录：</p>
+<table>
+<thead>
+<tr>
+<th>物理页地址 (SPA)</th>
+<th>属于哪个 VM (ASID)</th>
+<th>权限/状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>哪一页物理内存</td>
+<td>归哪个虚拟机所有</td>
+<td>谁能读/写、是否加密</td>
+</tr>
+</tbody>
+</table>
+<p>反向的含义：NPT 是 hypervisor 往前翻译地址去哪，RMP
+是硬件反过来锁住这页归谁、谁才能动。</p>
+<p>关键区别：</p>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>谁维护</th>
+<th>管什么</th>
+<th>本质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NPT</td>
+<td>hypervisor（软件）</td>
+<td>地址往哪翻</td>
+<td>路由规则</td>
+</tr>
+<tr>
+<td>RMP</td>
+<td>CPU 硬件</td>
+<td>翻过去之后你有没有资格碰</td>
+<td>所有权事实</td>
+</tr>
+</tbody>
+</table>
+<p>hypervisor 能改路由规则，但改不了所有权事实——<strong>事实由 PSP
+固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
+都是白费力气，最终判定权在硬件手里。</p>
+<h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
+<p><strong>硬件强制执行，谁也绕不过</strong>，靠<strong>两把锁</strong>：</p>
+<p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
+<p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
+<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定开多快（建
+NPT
+规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
+<h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
+<p><strong>ASID（Address Space
+Identifier，地址空间标识符）</strong>——每个 CVM
+一个唯一编号。身份从哪来？怎么保证伪造不了？</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 每个 CVM 启动时分配一个 ASID（如 VM-A=16, VM-B=17）</span><br><span class="line">② ASID 记录在 VMCB（虚拟机控制块）里</span><br><span class="line">③ CPU 执行 VMRUN 进入该 VM 时，硬件把 ASID 装载为&quot;当前身份&quot;</span><br><span class="line">④ 之后该 VM 的所有内存访问，都自动携带这个身份</span><br></pre></td></tr></table></figure>
+<p><strong>判定流程（硬件完成，一次访存）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
+<p><strong>为什么软件伪造不了身份？</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
+<p>类比：VMRUN 就是刷门禁卡进房间，CPU
+是门禁系统本身。门禁系统自己知道现在里面是谁——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
+<h3 id="关键澄清hypervisor-只提供规则不执行翻译">💡 关键澄清：hypervisor
+只提供规则，不执行翻译</h3>
+<p>这是最容易混的点。<strong>页表是谁建的 ≠
+翻译是谁执行的</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
+<p>关键事实：<code>GPA→SPA</code>
+的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
+写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
+的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的地图，但走路的是
+CPU。</p>
+<p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
+<h3 id="典型场景对照">📋 典型场景对照</h3>
+<table>
+<thead>
+<tr>
+<th>访问者身份（当前 ASID）</th>
+<th>目标页归属（RMPE.ASID）</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VM-A (16)</td>
+<td>16（自己）</td>
+<td>✅ 允许</td>
+</tr>
+<tr>
+<td>VM-A (16)</td>
+<td>17（VM-B 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>16（CVM 的页）</td>
+<td>❌ 拒绝</td>
+</tr>
+<tr>
+<td>hypervisor</td>
+<td>未分配页</td>
+<td>✅ 允许（host 自己的内存）</td>
+</tr>
+</tbody>
+</table>
+<p>补充两个细节：</p>
+<ul>
+<li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
+还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
+里分别记录各级的读/写/执行权限。ASID 管是不是这家的，VMPL
+管这家里面谁有权碰。</li>
+<li><strong>设备 DMA 同样受限</strong>：设备要通过
+IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
+DMA 指向 CVM 的私有页。</li>
+</ul>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hypervisor 查 RMP</td>
+<td>查 RMP 的是 CPU 硬件，不是 hypervisor——它是裁判，不能当运动员</td>
+</tr>
+<tr>
+<td>hypervisor 执行地址翻译</td>
+<td>翻译由 CPU 的 MMU 硬件执行，hypervisor 只提供 NPT 规则表</td>
+</tr>
+<tr>
+<td>hypervisor 改 NPT 就能访问 CVM 内存</td>
+<td>NPT 是路由规则，RMP 是所有权事实，路由改了也过不了所有权检查</td>
+</tr>
+<tr>
+<td>内存加密就够防篡改</td>
+<td>加密只防读不懂，SNP/RMP 才是防偷换、重映射的关键</td>
+</tr>
+<tr>
+<td>ASID 是软件声明的身份</td>
+<td>ASID 是硬件通过 VMRUN/VMEXIT 自动维护的内部状态，软件伪造不了</td>
+</tr>
+<tr>
+<td>RMP 表软件可以随便改</td>
+<td>RMP 区域对软件保留，唯一入口 RMPUPDATE 由 PSP 固件把关</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>SEV-SNP 用 RMP
+把物理页归谁这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
+CPU 硬件执行，hypervisor 只提供页表规则；当前访问者是硬件通过
+VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管地址往哪翻，RMP
+管翻过去之后你有没有资格碰。</p>
+</blockquote>
+<p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>安全</tag>
+        <tag>机密计算</tag>
+        <tag>SEV-SNP</tag>
+        <tag>虚拟化</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TPM从零理解：保险箱里的密码世界</title>
     <url>/posts/fd7258a1/</url>
     <content><![CDATA[<p>TPM（Trusted Platform
@@ -21268,311 +21569,10 @@ blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sea
 ]]></content>
       <tags>
         <tag>安全</tag>
+        <tag>机密计算</tag>
         <tag>TPM</tag>
         <tag>可信计算</tag>
         <tag>密钥管理</tag>
-        <tag>机密计算</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>SEV-SNP隔离原理：NPT、RMP与硬件强制</title>
-    <url>/posts/d2278960/</url>
-    <content><![CDATA[<p>地址翻译由 hypervisor 负责，而 hypervisor 本身并不可信。SEV-SNP 用
-NPT 与 RMP 两级硬件机制解决这个问题，本文梳理它的隔离原理。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>hypervisor</td>
-<td>虚拟机监控器（VMM）</td>
-<td>云上管虚拟机的软件层</td>
-</tr>
-<tr>
-<td>嵌套分页</td>
-<td>Nested Paging，两层地址翻译</td>
-<td>虚拟机地址翻译机制</td>
-</tr>
-<tr>
-<td>NPT</td>
-<td>Nested Page Table，嵌套页表</td>
-<td>hypervisor 建的翻译规则</td>
-</tr>
-<tr>
-<td>RMP</td>
-<td>Reverse Map Table，反向映射表</td>
-<td>硬件记录的<strong>物理页归谁</strong>事实</td>
-</tr>
-<tr>
-<td>RMPE</td>
-<td>RMP Entry，RMP 条目</td>
-<td>每 4KB 物理页一条记录</td>
-</tr>
-<tr>
-<td>ASID</td>
-<td>Address Space Identifier，地址空间标识符</td>
-<td>每个 CVM 的唯一身份编号</td>
-</tr>
-<tr>
-<td>VMCB</td>
-<td>Virtual Machine Control Block，虚拟机控制块</td>
-<td>存 VM 状态和 ASID 的控制块</td>
-</tr>
-<tr>
-<td>VMRUN/VMEXIT</td>
-<td>进出虚拟机的特权指令</td>
-<td>硬件切换当前身份的开关</td>
-</tr>
-<tr>
-<td>VMPL</td>
-<td>Virtual Machine Privilege Level，虚拟机特权级</td>
-<td>VM 内部的 4 级权限</td>
-</tr>
-<tr>
-<td>PSP</td>
-<td>Platform Security Processor，平台安全处理器</td>
-<td>AMD CPU 里的独立安全小电脑</td>
-</tr>
-<tr>
-<td>#PF</td>
-<td>Page Fault，缺页异常</td>
-<td>硬件拒绝访问时的信号</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么需要-snp第一代-sev-的漏洞">🧩 为什么需要 SNP：第一代 SEV
-的漏洞</h3>
-<p>先看虚拟机地址翻译。虚拟机里的地址要翻译两次才能到真实物理地址：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Guest 认为的地址(GVA) → Guest 页表 → Guest 物理地址(GPA)</span><br><span class="line">                                         │</span><br><span class="line">                                         ▼</span><br><span class="line">                          hypervisor 的嵌套页表(NPT) → 真实物理地址(SPA)</span><br></pre></td></tr></table></figure>
-<p>这里的 <strong>NPT 由 hypervisor
-管理</strong>。问题来了：<strong>hypervisor
-不可信</strong>，它可以：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>攻击</th>
-<th>做法</th>
-<th>后果</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>偷换内容</td>
-<td>把 VM 的某个 GPA 悄悄重映射到别的物理页</td>
-<td>VM 读到被替换的假数据</td>
-</tr>
-<tr>
-<td>数据串扰</td>
-<td>把 VM 的页映射给另一个 VM</td>
-<td>两个租户数据互相泄露</td>
-</tr>
-<tr>
-<td>直接偷读</td>
-<td>把自己映射到 VM 的页</td>
-<td>读取 VM 内存</td>
-</tr>
-</tbody>
-</table>
-<p>第一代 SEV
-只做内存加密，<strong>防不了这种重映射/篡改</strong>。加密只保证别人读不懂，但
-hypervisor 可以把读的对象换掉。这就是 SNP 要补的洞。</p>
-<h3 id="rmp反向映射表硬件管的所有权事实">🔍
-RMP：反向映射表，硬件管的所有权事实</h3>
-<p><strong>SNP（Secure Nested Paging，安全嵌套分页）</strong>
-的核心是引入 <strong>RMP（Reverse Map Table，反向映射表）</strong>：</p>
-<p>RMP：每 4KB 物理页一行，硬件强制记录：</p>
-<table>
-<thead>
-<tr>
-<th>物理页地址 (SPA)</th>
-<th>属于哪个 VM (ASID)</th>
-<th>权限/状态</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>哪一页物理内存</td>
-<td>归哪个虚拟机所有</td>
-<td>谁能读/写、是否加密</td>
-</tr>
-</tbody>
-</table>
-<p>反向的含义：NPT 是 hypervisor 往前翻译地址去哪，RMP
-是硬件反过来锁住这页归谁、谁才能动。</p>
-<p>关键区别：</p>
-<table>
-<thead>
-<tr>
-<th>表</th>
-<th>谁维护</th>
-<th>管什么</th>
-<th>本质</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>NPT</td>
-<td>hypervisor（软件）</td>
-<td>地址往哪翻</td>
-<td>路由规则</td>
-</tr>
-<tr>
-<td>RMP</td>
-<td>CPU 硬件</td>
-<td>翻过去之后你有没有资格碰</td>
-<td>所有权事实</td>
-</tr>
-</tbody>
-</table>
-<p>hypervisor 能改路由规则，但改不了所有权事实——<strong>事实由 PSP
-固件锁定</strong>。所以 hypervisor 怎么折腾 NPT
-都是白费力气，最终判定权在硬件手里。</p>
-<h3 id="硬件强制执行是怎么实现的">🔒 硬件强制执行是怎么实现的</h3>
-<p><strong>硬件强制执行，谁也绕不过</strong>，靠<strong>两把锁</strong>：</p>
-<p><strong>锁 1：RMP 表的内容，软件改不了</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 表本身也是内存里的一个区域，但是：</span><br><span class="line">  · 表的物理位置由 CPU 内部寄存器（MSR）记录，且该区域对软件是&quot;保留区&quot;</span><br><span class="line">    —— hypervisor 想读写这块内存，直接被拒</span><br><span class="line">  · 修改 RMP 表的唯一入口是 RMPUPDATE 指令，而该指令由 CPU 固件（PSP）把关</span><br><span class="line">    —— 页一旦分配并激活给某个 CVM，PSP 就拒绝再改它的归属</span><br></pre></td></tr></table></figure>
-<p><strong>锁 2：检查逻辑固化在硬件翻译路径里，软件绕不过</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RMP 检查不是&quot;一段软件代码&quot;，而是 CPU 微码/硬件逻辑的一部分，</span><br><span class="line">它嵌在每次地址翻译的必经之路上：</span><br><span class="line"></span><br><span class="line">  访存请求 → MMU 做 NPT 翻译 → 【微码强制执行 RMP 检查】 → 通过才放行</span><br><span class="line">                                    │</span><br><span class="line">                                    └─ 这段逻辑没有&quot;跳过开关&quot;，任何软件</span><br><span class="line">                                       都插不进手</span><br></pre></td></tr></table></figure>
-<p>类比：高速公路入口的<strong>自动测速摄像头</strong>——你（hypervisor）只能决定开多快（建
-NPT
-规则），但摄像头拍不拍、罚不罚，是硬件自动执行的，你没有权限关掉它。</p>
-<h3 id="访问者身份怎么判定asid">🪪 访问者身份怎么判定：ASID</h3>
-<p><strong>ASID（Address Space
-Identifier，地址空间标识符）</strong>——每个 CVM
-一个唯一编号。身份从哪来？怎么保证伪造不了？</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 每个 CVM 启动时分配一个 ASID（如 VM-A=16, VM-B=17）</span><br><span class="line">② ASID 记录在 VMCB（虚拟机控制块）里</span><br><span class="line">③ CPU 执行 VMRUN 进入该 VM 时，硬件把 ASID 装载为&quot;当前身份&quot;</span><br><span class="line">④ 之后该 VM 的所有内存访问，都自动携带这个身份</span><br></pre></td></tr></table></figure>
-<p><strong>判定流程（硬件完成，一次访存）</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">访存到达物理页 SPA</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">读 RMPE：这页 assigned 给 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">比较&quot;当前访问者身份&quot; vs &quot;页归属 ASID&quot;</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份 == 16（就是 VM-A）→ ✅ 通过（再查 VMPL 权限）</span><br><span class="line">        │</span><br><span class="line">        ├── 当前身份是 hypervisor（host 域）→ ❌ 拒绝 #PF</span><br><span class="line">        │</span><br><span class="line">        └── 当前身份 == 17（VM-B）→ ❌ 拒绝 #PF</span><br></pre></td></tr></table></figure>
-<p><strong>为什么软件伪造不了身份？</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· &quot;当前 ASID&quot;是 CPU 内部状态，由 VMRUN / VMEXIT 这两个特权指令</span><br><span class="line">  自动切换，guest 软件碰不到这个状态</span><br><span class="line">· VM 想伪装成 hypervisor？它连 VMRUN/VMEXIT 都执行不了（特权指令）</span><br><span class="line">· hypervisor 想把 ASID 改成别人的？ASID 记录在 RMPE 里，</span><br><span class="line">  分配由 CPU 固件（PSP）完成，分配后 hypervisor 改不了</span><br></pre></td></tr></table></figure>
-<p>类比：VMRUN 就是刷门禁卡进房间，CPU
-是门禁系统本身。门禁系统自己知道现在里面是谁——它不需要房间里的人来汇报身份，因为它就是放你进去的那个系统。</p>
-<h3 id="关键澄清hypervisor-只提供规则不执行翻译">💡 关键澄清：hypervisor
-只提供规则，不执行翻译</h3>
-<p>这是最容易混的点。<strong>页表是谁建的 ≠
-翻译是谁执行的</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">你以为的访存路径：</span><br><span class="line">  guest 应用 → 翻译 → hypervisor 跑过来翻译 GPA→SPA → hypervisor 去访问</span><br><span class="line">                     ▲</span><br><span class="line">                     └─ 这样确实&quot;访问者全是 hypervisor&quot;</span><br><span class="line"></span><br><span class="line">实际上的访存路径：</span><br><span class="line">  guest 应用执行一条访存指令</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件（MMU）自动完成两次翻译   ← 翻译是 CPU 电路做的，不经过 hypervisor 的代码</span><br><span class="line">  GVA→GPA（用 guest OS 建的页表）</span><br><span class="line">  GPA→SPA（用 hypervisor 建的 NPT 表）</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  CPU 硬件查 RMP</span><br><span class="line">      │</span><br><span class="line">      ▼</span><br><span class="line">  通过→访存 / 拒绝→#PF</span><br></pre></td></tr></table></figure>
-<p>关键事实：<code>GPA→SPA</code>
-的翻译虽然<strong>规则表</strong>（NPT）是 hypervisor
-写的，但<strong>翻译这个动作</strong>是 CPU 硬件执行的，hypervisor
-的代码根本没机会跑在访存路径上。NPT 是 hypervisor 画的地图，但走路的是
-CPU。</p>
-<p><strong>最后一块拼图：hypervisor 造假 NPT 也没用</strong></p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">hypervisor 写 NPT：VM-A 的 GPA X → 物理页 P（其实是 VM-B 的页）</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">VM-A 访存 X → CPU 翻译到物理页 P → 查 RMP</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">RMP 说：页 P 归属 ASID=17（VM-B），你当前身份 ASID=16</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">❌ 硬件拒绝（#PF）</span><br></pre></td></tr></table></figure>
-<h3 id="典型场景对照">📋 典型场景对照</h3>
-<table>
-<thead>
-<tr>
-<th>访问者身份（当前 ASID）</th>
-<th>目标页归属（RMPE.ASID）</th>
-<th>判定</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>VM-A (16)</td>
-<td>16（自己）</td>
-<td>✅ 允许</td>
-</tr>
-<tr>
-<td>VM-A (16)</td>
-<td>17（VM-B 的页）</td>
-<td>❌ 拒绝</td>
-</tr>
-<tr>
-<td>hypervisor</td>
-<td>16（CVM 的页）</td>
-<td>❌ 拒绝</td>
-</tr>
-<tr>
-<td>hypervisor</td>
-<td>未分配页</td>
-<td>✅ 允许（host 自己的内存）</td>
-</tr>
-</tbody>
-</table>
-<p>补充两个细节：</p>
-<ul>
-<li><strong>VMPL</strong>（Virtual Machine Privilege Level）：SEV-SNP
-还给每个 VM 内部划分 4 个特权级（VMPL0~3），RMPE
-里分别记录各级的读/写/执行权限。ASID 管是不是这家的，VMPL
-管这家里面谁有权碰。</li>
-<li><strong>设备 DMA 同样受限</strong>：设备要通过
-IOMMU（AMD-Vi）访问内存，IOMMU 域也关联 ASID，hypervisor 不能直接把设备
-DMA 指向 CVM 的私有页。</li>
-</ul>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>hypervisor 查 RMP</td>
-<td>查 RMP 的是 CPU 硬件，不是 hypervisor——它是裁判，不能当运动员</td>
-</tr>
-<tr>
-<td>hypervisor 执行地址翻译</td>
-<td>翻译由 CPU 的 MMU 硬件执行，hypervisor 只提供 NPT 规则表</td>
-</tr>
-<tr>
-<td>hypervisor 改 NPT 就能访问 CVM 内存</td>
-<td>NPT 是路由规则，RMP 是所有权事实，路由改了也过不了所有权检查</td>
-</tr>
-<tr>
-<td>内存加密就够防篡改</td>
-<td>加密只防读不懂，SNP/RMP 才是防偷换、重映射的关键</td>
-</tr>
-<tr>
-<td>ASID 是软件声明的身份</td>
-<td>ASID 是硬件通过 VMRUN/VMEXIT 自动维护的内部状态，软件伪造不了</td>
-</tr>
-<tr>
-<td>RMP 表软件可以随便改</td>
-<td>RMP 区域对软件保留，唯一入口 RMPUPDATE 由 PSP 固件把关</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>SEV-SNP 用 RMP
-把物理页归谁这个事实从软件手里夺走，交给硬件记录并强制执行；翻译和判定都由
-CPU 硬件执行，hypervisor 只提供页表规则；当前访问者是硬件通过
-VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管地址往哪翻，RMP
-管翻过去之后你有没有资格碰。</p>
-</blockquote>
-<p>下一站：TPM——用户能直接摸到的白盒信任根。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>安全</tag>
-        <tag>机密计算</tag>
-        <tag>SEV-SNP</tag>
-        <tag>虚拟化</tag>
       </tags>
   </entry>
   <entry>
@@ -21939,8 +21939,8 @@ PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
       <tags>
         <tag>TEE</tag>
         <tag>安全</tag>
-        <tag>TPM</tag>
         <tag>机密计算</tag>
+        <tag>TPM</tag>
         <tag>信任根</tag>
         <tag>远程认证</tag>
       </tags>
@@ -28369,6 +28369,12 @@ CPU，那些层就不会出现在流量里）；</li>
 之间的点对点事务，事务完成后，它的语义（Tag、Requester
 ID、拆分与到达顺序）在硬件内部就被消费掉了。<strong>操作系统并没有把链路报文暴露给软件的接口</strong>，软件能看到的是结果——某块内存被
 DMA 写过了、某个 ioctl 返回了。</p>
+<p>把一次读事务走完整条路，各字段的去向就很直观：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. Request TLP（Host → GPU）</span><br><span class="line">   ┌────────┬─────┬──────────────┐</span><br><span class="line">   │ addr   │ Tag │ Requester ID │</span><br><span class="line">   └────────┴─────┴──────────────┘</span><br><span class="line">   │        │     └─ 校验这包是谁发的</span><br><span class="line">   │        └─ GPU 记下它，回包时原样带回</span><br><span class="line">   └─ GPU 用它定位数据</span><br><span class="line"></span><br><span class="line">2. Completion TLP（GPU → Host）</span><br><span class="line">   ┌──────────────┬─────┐</span><br><span class="line">   │ data         │ Tag │</span><br><span class="line">   └──────────────┴─────┘</span><br><span class="line">   │              └─ Host 用它匹配回请求，匹配完这条记录就释放</span><br><span class="line">   └─ 写进内存，成为软件唯一能看到的东西</span><br></pre></td></tr></table></figure>
+<p>消费这些字段的是链路两端的事务层，Host 侧的 Root Complex 与 GPU 侧的
+PCIe
+控制器；中间的传输路径上不留副本。所以事务走完，addr、Tag、Requester ID
+都已经用完即弃，软件侧最后能看见的只有被写过的那块内存。</p>
 <p>软件侧能走的路，逐条看缺口：</p>
 <table>
 <colgroup>

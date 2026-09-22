@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：Hermes Attack: Steal DNN Models with Lossless Inference Accuracy（USENIX Security 2021） 作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-21T04:30:00.000Z">
-<meta property="article:modified_time" content="2026-09-22T01:41:18.162Z">
+<meta property="article:modified_time" content="2026-09-22T02:28:22.238Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -279,7 +279,7 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-22 09:41:18" itemprop="dateModified" datetime="2026-09-22T09:41:18+08:00">2026-09-22</time>
+      <time title="Modified: 2026-09-22 10:28:22" itemprop="dateModified" datetime="2026-09-22T10:28:22+08:00">2026-09-22</time>
     </span>
 
   
@@ -303,7 +303,7 @@ trace，建立 kernel 到 layer 的映射</span></a></li></ol></li><li class="na
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>34 mins.</span>
+      <span>35 mins.</span>
     </span>
 </div>
 
@@ -1270,6 +1270,12 @@ CPU，那些层就不会出现在流量里）；</li>
 之间的点对点事务，事务完成后，它的语义（Tag、Requester
 ID、拆分与到达顺序）在硬件内部就被消费掉了。<strong>操作系统并没有把链路报文暴露给软件的接口</strong>，软件能看到的是结果——某块内存被
 DMA 写过了、某个 ioctl 返回了。</p>
+<p>把一次读事务走完整条路，各字段的去向就很直观：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">1. Request TLP（Host → GPU）</span><br><span class="line">   ┌────────┬─────┬──────────────┐</span><br><span class="line">   │ addr   │ Tag │ Requester ID │</span><br><span class="line">   └────────┴─────┴──────────────┘</span><br><span class="line">   │        │     └─ 校验这包是谁发的</span><br><span class="line">   │        └─ GPU 记下它，回包时原样带回</span><br><span class="line">   └─ GPU 用它定位数据</span><br><span class="line"></span><br><span class="line">2. Completion TLP（GPU → Host）</span><br><span class="line">   ┌──────────────┬─────┐</span><br><span class="line">   │ data         │ Tag │</span><br><span class="line">   └──────────────┴─────┘</span><br><span class="line">   │              └─ Host 用它匹配回请求，匹配完这条记录就释放</span><br><span class="line">   └─ 写进内存，成为软件唯一能看到的东西</span><br></pre></td></tr></table></figure>
+<p>消费这些字段的是链路两端的事务层，Host 侧的 Root Complex 与 GPU 侧的
+PCIe
+控制器；中间的传输路径上不留副本。所以事务走完，addr、Tag、Requester ID
+都已经用完即弃，软件侧最后能看见的只有被写过的那块内存。</p>
 <p>软件侧能走的路，逐条看缺口：</p>
 <table>
 <colgroup>
@@ -1689,13 +1695,13 @@ Models with Lossless Inference Accuracy</em>
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">464k</span>
+    <span title="Word count total">465k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">14:04</span>
+    <span title="Reading time total">14:05</span>
   </span>
 </div>
 <div class="busuanzi-count">
