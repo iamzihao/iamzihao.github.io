@@ -20330,6 +20330,206 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：运算符重载与静态成员</title>
+    <url>/posts/e2c8a5f6/</url>
+    <content><![CDATA[<p>类的成员不只是数据和函数：还能让自定义类型的对象像 <code>int</code>
+一样用
+<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>，也能让某些成员属于类而不是某个对象。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运算符重载（operator overloading）</td>
+<td>给自定义类型定义运算符的行为</td>
+<td>对象也能加减比较</td>
+</tr>
+<tr>
+<td><code>operator+</code></td>
+<td>重载 <code>+</code> 运算符的成员函数</td>
+<td>定义加法</td>
+</tr>
+<tr>
+<td><code>operator&lt;&lt;</code></td>
+<td>重载输出运算符</td>
+<td>对象直接 cout</td>
+</tr>
+<tr>
+<td><code>operator==</code></td>
+<td>重载相等比较</td>
+<td>定义相等</td>
+</tr>
+<tr>
+<td>静态成员变量</td>
+<td>属于类而不是某个对象的变量</td>
+<td>全类共享一份</td>
+</tr>
+<tr>
+<td>静态成员函数</td>
+<td>不依赖具体对象、用类名调用的函数</td>
+<td>类级操作</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要运算符重载">🧩 为什么需要运算符重载</h3>
+<p>没有运算符重载时，比较两个自定义对象要写函数调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point a&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">Point b&#123;<span class="number">3</span>, <span class="number">4</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Point c = a + b;          // 不支持：+ 不知道 Point 怎么加</span></span><br><span class="line">Point c = <span class="built_in">add</span>(a, b);          <span class="comment">// 只能这样</span></span><br></pre></td></tr></table></figure>
+<p>运算符重载让自定义类型用起来像内置类型，代码更直观：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point c = a + b;              <span class="comment">// 直观</span></span><br><span class="line"><span class="keyword">if</span> (a == b) &#123; ... &#125;           <span class="comment">// 直接比较</span></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;            <span class="comment">// 直接输出</span></span><br></pre></td></tr></table></figure>
+<h3 id="运算符重载基础">➕ 运算符重载基础</h3>
+<p>重载运算符的成员函数写法：<code>operator</code> 后跟运算符符号。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 +：返回两个点坐标相加的新点</span></span><br><span class="line">    Point <span class="keyword">operator</span>+(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">Point</span>(x + other.x, y + other.y);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 ==：坐标都相等才算相等</span></span><br><span class="line">    <span class="type">bool</span> <span class="keyword">operator</span>==(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> x == other.x &amp;&amp; y == other.y;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">a</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    <span class="function">Point <span class="title">b</span><span class="params">(<span class="number">3</span>, <span class="number">4</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    Point c = a + b;              <span class="comment">// 调用 a.operator+(b)</span></span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; c.<span class="built_in">getY</span>() &lt;&lt; endl;   <span class="comment">// 4 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (a == b) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;不相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>关键点：</p>
+<ol type="1">
+<li><code>operator+</code> 是成员函数，<code>a + b</code> 等价于调用
+<code>a.operator+(b)</code>，左操作数就是 <code>this</code>；</li>
+<li>返回新对象而不是修改自身；</li>
+<li><code>const</code> 成员函数保证比较或加法不修改对象。</li>
+</ol>
+<h3 id="重载输出运算符">🖨️ 重载输出运算符 <code>&lt;&lt;</code></h3>
+<p><code>&lt;&lt;</code> 不能作为成员函数重载（左操作数是
+<code>cout</code>，不是我们的类），要写成<strong>非成员函数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 非成员函数：左操作数是 ostream&amp;，右操作数是 Point</span></span><br><span class="line">ostream&amp; <span class="keyword">operator</span>&lt;&lt;(ostream&amp; out, <span class="type">const</span> Point&amp; p)</span><br><span class="line">&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;(&quot;</span> &lt;&lt; p.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; p.<span class="built_in">getY</span>() &lt;&lt; <span class="string">&quot;)&quot;</span>;</span><br><span class="line">    <span class="keyword">return</span> out;   <span class="comment">// 返回 out 才能连续输出</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">p</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; p &lt;&lt; endl;          <span class="comment">// (1, 2)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>返回 <code>ostream&amp;</code>
+是为了支持链式输出：<code>cout &lt;&lt; p &lt;&lt; " " &lt;&lt; q</code>。</p>
+<h3 id="重载下标运算符">🧮 重载下标运算符 <code>[]</code></h3>
+<p>容器类常用，比如让自定义类能像数组一样按下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">IntArray</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> data[<span class="number">10</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>&amp; <span class="keyword">operator</span>[](<span class="type">int</span> index)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> data[index];   <span class="comment">// 返回引用，才能赋值</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">IntArray arr;</span><br><span class="line">arr[<span class="number">3</span>] = <span class="number">42</span>;                   <span class="comment">// 调用 operator[]</span></span><br><span class="line">cout &lt;&lt; arr[<span class="number">3</span>] &lt;&lt; endl;        <span class="comment">// 42</span></span><br></pre></td></tr></table></figure>
+<h3 id="静态成员变量">🧱 静态成员变量</h3>
+<p>静态成员变量<strong>属于类</strong>，所有对象共享同一份，而不是每个对象各有一份。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Counter</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">static</span> <span class="type">int</span> count;          <span class="comment">// 声明：属于类的变量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Counter</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        count++;               <span class="comment">// 每创建一个对象，计数加一</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">getCount</span><span class="params">()</span>      <span class="comment">// 静态成员函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> count;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 类外定义并初始化：静态成员变量必须在这里给一次定义</span></span><br><span class="line"><span class="type">int</span> Counter::count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Counter a;</span><br><span class="line">    Counter b;</span><br><span class="line">    Counter c;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; Counter::<span class="built_in">getCount</span>() &lt;&lt; endl;   <span class="comment">// 3，用类名调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>要点：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通成员变量</th>
+<th>静态成员变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>归属</td>
+<td>每个对象一份</td>
+<td>整个类共享一份</td>
+</tr>
+<tr>
+<td>访问</td>
+<td>通过对象</td>
+<td>通过类名 <code>类名::变量</code> 或对象</td>
+</tr>
+<tr>
+<td>定义</td>
+<td>类内自动创建</td>
+<td>需要在类外定义一次</td>
+</tr>
+</tbody>
+</table>
+<h3 id="静态成员函数">⚙️ 静态成员函数</h3>
+<p>静态成员函数不依赖具体对象，用类名直接调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MathUtils</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> x * x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> r = MathUtils::<span class="built_in">square</span>(<span class="number">5</span>);   <span class="comment">// 不需要创建对象</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>静态成员函数的限制：<strong>没有 <code>this</code>
+指针</strong>，所以不能访问普通成员变量（不知道操作哪个对象的），只能访问静态成员和其他静态函数。</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通成员函数</th>
+<th>静态成员函数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>依赖对象</td>
+<td>是，有 <code>this</code></td>
+<td>否，没有 <code>this</code></td>
+</tr>
+<tr>
+<td>调用方式</td>
+<td>对象调用</td>
+<td>类名调用</td>
+</tr>
+<tr>
+<td>能访问普通成员</td>
+<td>能</td>
+<td>不能</td>
+</tr>
+<tr>
+<td>能访问静态成员</td>
+<td>能</td>
+<td>能</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运算符重载是给内置类型用的</td>
+<td>内置类型运算符是固定的，重载只针对自定义类型</td>
+</tr>
+<tr>
+<td><code>&lt;&lt;</code> 重载必须是成员函数</td>
+<td><code>&lt;&lt;</code> 左操作数是流对象，要用非成员函数形式</td>
+</tr>
+<tr>
+<td>重载 <code>+</code> 应该修改左操作数</td>
+<td>通常返回新对象，<code>a + b</code> 不应改变 <code>a</code></td>
+</tr>
+<tr>
+<td>静态成员变量每个对象一份</td>
+<td>全类共享一份，且在类外定义一次</td>
+</tr>
+<tr>
+<td>静态成员函数能访问普通成员变量</td>
+<td>静态函数没有 <code>this</code>，只能访问静态成员</td>
+</tr>
+<tr>
+<td>重载运算符可以随便改语义</td>
+<td>应保持直觉语义（<code>+</code> 是加法、<code>==</code>
+是相等），别滥用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>运算符重载让自定义类型用起来像内置类型（<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>、<code>[]</code>），静态成员让数据或操作属于类本身；两者的共同点是让类的表达力更强。</p>
+</blockquote>
+<p>这一章补上了类与对象（第 7
+章）之后的两块常用拼图。接下来无论是写容器类、工具类，还是做计数统计，都有了对应的语法。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>面向对象</tag>
+        <tag>运算符重载</tag>
+        <tag>静态成员</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：文件 IO 流</title>
     <url>/posts/a7c2e9d4/</url>
     <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
@@ -20656,206 +20856,6 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
         <tag>文件</tag>
         <tag>文件流</tag>
         <tag>序列化</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：运算符重载与静态成员</title>
-    <url>/posts/e2c8a5f6/</url>
-    <content><![CDATA[<p>类的成员不只是数据和函数：还能让自定义类型的对象像 <code>int</code>
-一样用
-<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>，也能让某些成员属于类而不是某个对象。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>运算符重载（operator overloading）</td>
-<td>给自定义类型定义运算符的行为</td>
-<td>对象也能加减比较</td>
-</tr>
-<tr>
-<td><code>operator+</code></td>
-<td>重载 <code>+</code> 运算符的成员函数</td>
-<td>定义加法</td>
-</tr>
-<tr>
-<td><code>operator&lt;&lt;</code></td>
-<td>重载输出运算符</td>
-<td>对象直接 cout</td>
-</tr>
-<tr>
-<td><code>operator==</code></td>
-<td>重载相等比较</td>
-<td>定义相等</td>
-</tr>
-<tr>
-<td>静态成员变量</td>
-<td>属于类而不是某个对象的变量</td>
-<td>全类共享一份</td>
-</tr>
-<tr>
-<td>静态成员函数</td>
-<td>不依赖具体对象、用类名调用的函数</td>
-<td>类级操作</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么需要运算符重载">🧩 为什么需要运算符重载</h3>
-<p>没有运算符重载时，比较两个自定义对象要写函数调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point a&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">Point b&#123;<span class="number">3</span>, <span class="number">4</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Point c = a + b;          // 不支持：+ 不知道 Point 怎么加</span></span><br><span class="line">Point c = <span class="built_in">add</span>(a, b);          <span class="comment">// 只能这样</span></span><br></pre></td></tr></table></figure>
-<p>运算符重载让自定义类型用起来像内置类型，代码更直观：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point c = a + b;              <span class="comment">// 直观</span></span><br><span class="line"><span class="keyword">if</span> (a == b) &#123; ... &#125;           <span class="comment">// 直接比较</span></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;            <span class="comment">// 直接输出</span></span><br></pre></td></tr></table></figure>
-<h3 id="运算符重载基础">➕ 运算符重载基础</h3>
-<p>重载运算符的成员函数写法：<code>operator</code> 后跟运算符符号。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 +：返回两个点坐标相加的新点</span></span><br><span class="line">    Point <span class="keyword">operator</span>+(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">Point</span>(x + other.x, y + other.y);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 ==：坐标都相等才算相等</span></span><br><span class="line">    <span class="type">bool</span> <span class="keyword">operator</span>==(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> x == other.x &amp;&amp; y == other.y;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">a</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    <span class="function">Point <span class="title">b</span><span class="params">(<span class="number">3</span>, <span class="number">4</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    Point c = a + b;              <span class="comment">// 调用 a.operator+(b)</span></span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; c.<span class="built_in">getY</span>() &lt;&lt; endl;   <span class="comment">// 4 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (a == b) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;不相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>关键点：</p>
-<ol type="1">
-<li><code>operator+</code> 是成员函数，<code>a + b</code> 等价于调用
-<code>a.operator+(b)</code>，左操作数就是 <code>this</code>；</li>
-<li>返回新对象而不是修改自身；</li>
-<li><code>const</code> 成员函数保证比较或加法不修改对象。</li>
-</ol>
-<h3 id="重载输出运算符">🖨️ 重载输出运算符 <code>&lt;&lt;</code></h3>
-<p><code>&lt;&lt;</code> 不能作为成员函数重载（左操作数是
-<code>cout</code>，不是我们的类），要写成<strong>非成员函数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 非成员函数：左操作数是 ostream&amp;，右操作数是 Point</span></span><br><span class="line">ostream&amp; <span class="keyword">operator</span>&lt;&lt;(ostream&amp; out, <span class="type">const</span> Point&amp; p)</span><br><span class="line">&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;(&quot;</span> &lt;&lt; p.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; p.<span class="built_in">getY</span>() &lt;&lt; <span class="string">&quot;)&quot;</span>;</span><br><span class="line">    <span class="keyword">return</span> out;   <span class="comment">// 返回 out 才能连续输出</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">p</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; p &lt;&lt; endl;          <span class="comment">// (1, 2)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>返回 <code>ostream&amp;</code>
-是为了支持链式输出：<code>cout &lt;&lt; p &lt;&lt; " " &lt;&lt; q</code>。</p>
-<h3 id="重载下标运算符">🧮 重载下标运算符 <code>[]</code></h3>
-<p>容器类常用，比如让自定义类能像数组一样按下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">IntArray</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> data[<span class="number">10</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>&amp; <span class="keyword">operator</span>[](<span class="type">int</span> index)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> data[index];   <span class="comment">// 返回引用，才能赋值</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">IntArray arr;</span><br><span class="line">arr[<span class="number">3</span>] = <span class="number">42</span>;                   <span class="comment">// 调用 operator[]</span></span><br><span class="line">cout &lt;&lt; arr[<span class="number">3</span>] &lt;&lt; endl;        <span class="comment">// 42</span></span><br></pre></td></tr></table></figure>
-<h3 id="静态成员变量">🧱 静态成员变量</h3>
-<p>静态成员变量<strong>属于类</strong>，所有对象共享同一份，而不是每个对象各有一份。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Counter</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">static</span> <span class="type">int</span> count;          <span class="comment">// 声明：属于类的变量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Counter</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        count++;               <span class="comment">// 每创建一个对象，计数加一</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">getCount</span><span class="params">()</span>      <span class="comment">// 静态成员函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> count;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 类外定义并初始化：静态成员变量必须在这里给一次定义</span></span><br><span class="line"><span class="type">int</span> Counter::count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Counter a;</span><br><span class="line">    Counter b;</span><br><span class="line">    Counter c;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; Counter::<span class="built_in">getCount</span>() &lt;&lt; endl;   <span class="comment">// 3，用类名调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>要点：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通成员变量</th>
-<th>静态成员变量</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>归属</td>
-<td>每个对象一份</td>
-<td>整个类共享一份</td>
-</tr>
-<tr>
-<td>访问</td>
-<td>通过对象</td>
-<td>通过类名 <code>类名::变量</code> 或对象</td>
-</tr>
-<tr>
-<td>定义</td>
-<td>类内自动创建</td>
-<td>需要在类外定义一次</td>
-</tr>
-</tbody>
-</table>
-<h3 id="静态成员函数">⚙️ 静态成员函数</h3>
-<p>静态成员函数不依赖具体对象，用类名直接调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MathUtils</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> x * x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> r = MathUtils::<span class="built_in">square</span>(<span class="number">5</span>);   <span class="comment">// 不需要创建对象</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>静态成员函数的限制：<strong>没有 <code>this</code>
-指针</strong>，所以不能访问普通成员变量（不知道操作哪个对象的），只能访问静态成员和其他静态函数。</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通成员函数</th>
-<th>静态成员函数</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>依赖对象</td>
-<td>是，有 <code>this</code></td>
-<td>否，没有 <code>this</code></td>
-</tr>
-<tr>
-<td>调用方式</td>
-<td>对象调用</td>
-<td>类名调用</td>
-</tr>
-<tr>
-<td>能访问普通成员</td>
-<td>能</td>
-<td>不能</td>
-</tr>
-<tr>
-<td>能访问静态成员</td>
-<td>能</td>
-<td>能</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>运算符重载是给内置类型用的</td>
-<td>内置类型运算符是固定的，重载只针对自定义类型</td>
-</tr>
-<tr>
-<td><code>&lt;&lt;</code> 重载必须是成员函数</td>
-<td><code>&lt;&lt;</code> 左操作数是流对象，要用非成员函数形式</td>
-</tr>
-<tr>
-<td>重载 <code>+</code> 应该修改左操作数</td>
-<td>通常返回新对象，<code>a + b</code> 不应改变 <code>a</code></td>
-</tr>
-<tr>
-<td>静态成员变量每个对象一份</td>
-<td>全类共享一份，且在类外定义一次</td>
-</tr>
-<tr>
-<td>静态成员函数能访问普通成员变量</td>
-<td>静态函数没有 <code>this</code>，只能访问静态成员</td>
-</tr>
-<tr>
-<td>重载运算符可以随便改语义</td>
-<td>应保持直觉语义（<code>+</code> 是加法、<code>==</code>
-是相等），别滥用</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>运算符重载让自定义类型用起来像内置类型（<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>、<code>[]</code>），静态成员让数据或操作属于类本身；两者的共同点是让类的表达力更强。</p>
-</blockquote>
-<p>这一章补上了类与对象（第 7
-章）之后的两块常用拼图。接下来无论是写容器类、工具类，还是做计数统计，都有了对应的语法。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>面向对象</tag>
-        <tag>运算符重载</tag>
-        <tag>静态成员</tag>
       </tags>
   </entry>
   <entry>
