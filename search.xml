@@ -5919,283 +5919,6 @@ CI 早点发现错。</li>
       </tags>
   </entry>
   <entry>
-    <title>Compute Sanitizer 实用指南：从 0 到熟练</title>
-    <url>/posts/a1b2c3d4/</url>
-    <content><![CDATA[<p>Compute Sanitizer（前身 <code>cuda-memcheck</code>）用于定位 CUDA
-程序中的越界读写、未初始化、数据竞争与 Barrier
-不匹配等问题。本文按最小示例、常见报错、命令参数与协同工具的顺序，整理一份可参考的排查笔记。</p>
-<span id="more"></span>
-<h2
-id="学习地图由浅入深可边学边用">学习地图（由浅入深，可边学边用）</h2>
-<ul>
-<li><strong>CUDA 基础语法</strong>：能写/编译最简单的
-<code>kernel</code>，理解
-<code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code>、<code>__global__</code>/<code>__device__</code>。</li>
-<li><strong>GPU 线程层级与同步</strong>：Warp / Block /
-Grid，<code>__syncthreads()</code>、<code>atomic*</code>、<code>cudaDeviceSynchronize()</code>
-的作用与限制。</li>
-<li><strong>GPU 内存层次</strong>：Global / Shared / Local / Constant /
-Texture 的用途、可见性、对齐与带宽差异。</li>
-<li><strong>常见 GPU Bug
-类型</strong>：越界、未初始化、数据竞争、Barrier 不匹配等（Sanitizer
-就是为它们报警）。</li>
-<li><strong><code>nvcc</code>
-编译选项</strong>：<code>-G</code>、<code>-g</code>、<code>-lineinfo</code>、<code>-rdc=true</code>
-等，为报告提供更友好的源码回溯。</li>
-<li><strong>Compute Sanitizer
-命令行</strong>：<code>--tool</code>、<code>--print-limit</code>、<code>--kernel-regex</code>、<code>--log-file</code>、<code>--launch-count</code>
-等高频旗标。</li>
-<li><strong>报告阅读与定位</strong>：看懂
-<code>Invalid __global__ read of size 4 at myKernel+0x280</code>
-并回溯到源码行与线程坐标。</li>
-<li><strong>性能开销与调优</strong>：理解检查为什么会变慢，以及用小数据集、<code>--launch-count</code>
-等手段控时。</li>
-<li><strong>与其他工具协同</strong>：<code>nsys</code> 找热点 →
-Sanitizer 精查；结合 <code>cuda-gdb</code> / Nsight
-工具链提升效率。</li>
-<li><strong>驱动/CUDA 版本兼容</strong>：避免工具新版 +
-驱动旧版导致的报错或缺失功能。</li>
-</ul>
-<h2 id="cuda-基础语法最小可运行示例">CUDA
-基础语法（最小可运行示例）</h2>
-<p>下面是一个最小示例：把数组里的每个元素都加 1。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// file: add_one.cu</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;cstdio&gt;</span></span></span><br><span class="line"></span><br><span class="line">__global__ <span class="type">void</span> <span class="title function_">add_one</span><span class="params">(<span class="type">int</span>* data, <span class="type">int</span> n)</span> &#123;</span><br><span class="line">    <span class="type">int</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid &lt; n) data[tid] += <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">int</span> n = <span class="number">16</span>;</span><br><span class="line">    <span class="type">int</span> h[n] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="type">int</span> *d = nullptr;</span><br><span class="line">    cudaMalloc(&amp;d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>));</span><br><span class="line">    cudaMemcpy(d, h, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyHostToDevice);</span><br><span class="line"></span><br><span class="line">    dim3 <span class="title function_">block</span><span class="params">(<span class="number">8</span>)</span>, <span class="title function_">grid</span><span class="params">((n + block.x - <span class="number">1</span>) / block.x)</span>;</span><br><span class="line">    add_one&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d, n);</span><br><span class="line">    cudaDeviceSynchronize();</span><br><span class="line"></span><br><span class="line">    cudaMemcpy(h, d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyDeviceToHost);</span><br><span class="line">    cudaFree(d);</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; n; ++i) <span class="built_in">printf</span>(<span class="string">&quot;%d &quot;</span>, h[i]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译（带调试信息与行号，便于报告映射回源码）：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo add_one.cu -o add_one</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong><code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code></strong>：设定网格与线程块维度；<code>threadIdx</code>/<code>blockIdx</code>
-提供线程坐标。</li>
-<li><strong><code>__global__</code></strong>：从主机端调用、在设备端执行的函数（即
-kernel）。</li>
-<li><strong><code>__device__</code></strong>：仅在设备端调用/执行的函数。</li>
-</ul>
-<h2 id="线程层级与同步原语">线程层级与同步原语</h2>
-<ul>
-<li><strong>执行模型</strong>：
-<ul>
-<li><strong>Warp</strong>：通常 32 线程的执行束，同步粒度最细。</li>
-<li><strong>Block</strong>：多个 warp 组成；可用
-<code>__syncthreads()</code> 在同一 Block 内屏障同步。</li>
-<li><strong>Grid</strong>：由多个 Block 组成；不同 Block 之间不可用
-<code>__syncthreads()</code> 同步。</li>
-</ul></li>
-<li><strong>同步与原子</strong>：
-<ul>
-<li><code>__syncthreads()</code>：只作用于 Block
-内；如果有条件分支导致并非所有线程执行，可能引发 Barrier 不匹配。</li>
-<li><code>atomicAdd/atomicExch/...</code>：在共享全局状态时消除数据竞争，但会降低并发度。</li>
-<li><code>cudaDeviceSynchronize()</code>：在主机端等待所有之前发起的
-kernel 完成，常用于调试阶段确保报错及时显现。</li>
-</ul></li>
-</ul>
-<h2 id="gpu-内存层次结构">GPU 内存层次结构</h2>
-<ul>
-<li><strong>Global
-Memory</strong>：容量大、延迟高、全设备可见；注意对齐与合并访问（coalescing）。</li>
-<li><strong>Shared Memory</strong>：Block 内共享、低延迟、高带宽；需留意
-Bank 冲突与对齐。</li>
-<li><strong>Local
-Memory</strong>：线程私有，寄存器溢出或大对象会落在这里，实质上也是从全局内存取，延迟高。</li>
-<li><strong>Constant/Texture</strong>：只读、缓存友好（广播/2D
-局部性场景）。</li>
-</ul>
-<p>理解这些有助于你判断这个地址是否可见或越界，从而更快看懂 Sanitizer
-的报错。</p>
-<h2 id="常见-gpu-bug-类型sanitizer-重点覆盖">常见 GPU Bug
-类型（Sanitizer 重点覆盖）</h2>
-<ul>
-<li><strong>越界读写</strong>：访问数组下标 &lt;0 或 ≥N。</li>
-<li><strong>未初始化读</strong>：读到了未写入的内存内容。</li>
-<li><strong>数据竞争 (race)</strong>：多个线程无序写同一地址。</li>
-<li><strong>Barrier 不匹配</strong>：同一 Block 内，有些线程执行了
-<code>__syncthreads()</code>，有些没执行。</li>
-</ul>
-<p>下面分别给出“可运行的最小示例 → 如何触发 → 典型报文（示意） →
-修复方式”。</p>
-<h3 id="越界读写out-of-bounds">4.1 越界读写（Out-of-Bounds）</h3>
-<p>最常见，也最好修。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// oob.cu</span><br><span class="line">__global__ void oob(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    // 故意漏掉边界判断</span><br><span class="line">    a[i] = 42;  // 当 i &gt;= n 时越界写</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译与运行（调试构建）：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo oob.cu -o oob</span><br><span class="line">compute-sanitizer --tool memcheck ./oob | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>典型报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:5: oob+0x30</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
-<p>如何修：补边界条件；或在 launch 侧收紧
-<code>grid</code>/<code>block</code>。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void oob_fix(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) a[i] = 42;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="未初始化读uninitialized-read">4.2 未初始化读（Uninitialized
-Read）</h3>
-<p>读到了从未写入的值，往往来源于遗漏初始化或越界导致的脏数据。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// uninit.cu</span><br><span class="line">__global__ void use_before_set(int* out, const int* src, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) &#123;</span><br><span class="line">        // src 未初始化就被读取</span><br><span class="line">        out[i] = src[i] + 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>主机侧若只分配未写入：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *d_src=<span class="literal">nullptr</span>, *d_out=<span class="literal">nullptr</span>;</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_src, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_out, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 故意不 cudaMemset/cudaMemcpy d_src</span></span><br><span class="line">use_before_set&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d_out, d_src, n);</span><br></pre></td></tr></table></figure>
-<p>检查：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo uninit.cu -o uninit</span><br><span class="line">compute-sanitizer --tool memcheck ./uninit | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Uninitialized __global__ memory read of size 4</span><br><span class="line">=========     at use_before_set(int*, int const*, int):uninit.cu:6</span><br></pre></td></tr></table></figure>
-<p>如何修：在设备内或拷贝前初始化。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemset</span>(d_src, <span class="number">0</span>, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 或者先在主机填充，再 cudaMemcpy 到设备</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据竞争data-race">4.3 数据竞争（Data Race）</h3>
-<p>多个线程对同一地址进行未同步的读/写，导致结果随机。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// race.cu</span><br><span class="line">__global__ void sum_naive(int* out) &#123;</span><br><span class="line">    // 让所有线程把 1 加到同一个位置</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) &#123;</span><br><span class="line">        // 非原子写：存在数据竞争</span><br><span class="line">        *out += 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>检查：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo race.cu -o race</span><br><span class="line">compute-sanitizer --tool racecheck ./race | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Race reported between Write and Write</span><br><span class="line">=========     Location: 0x7f2c38000000 in global memory</span><br><span class="line">=========     by thread (t*,b*) at sum_naive:race.cu:7</span><br></pre></td></tr></table></figure>
-<p>如何修：使用原子操作或重构并行归约。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void sum_atomic(int* out) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) atomicAdd(out, 1);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>更高性能的做法是先在 Block 内用共享内存做局部和，再用一次原子把每个
-Block 的结果汇总到全局。</p>
-<h3 id="barrier-不匹配barrier-divergence">4.4 Barrier 不匹配（Barrier
-Divergence）</h3>
-<p>同一 Block 内不是所有线程都在同一控制流路径调用
-<code>__syncthreads()</code>，会导致死锁或未定义行为。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// barrier.cu</span></span><br><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">bad_barrier</span><span class="params">(<span class="type">int</span>* a)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid % <span class="number">2</span> == <span class="number">0</span>) &#123;</span><br><span class="line">        __syncthreads();  <span class="comment">// 只有偶数线程到达屏障</span></span><br><span class="line">        a[tid] = <span class="number">1</span>;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        a[tid] = <span class="number">2</span>;</span><br><span class="line">        <span class="comment">// 缺少同步</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>检查：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo barrier.cu -o barrier</span><br><span class="line">compute-sanitizer --tool synccheck ./barrier | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Barrier error detected. Divergent thread(s) in block.</span><br><span class="line">=========     at __syncthreads(): barrier.cu:5</span><br></pre></td></tr></table></figure>
-<p>如何修：确保同一 Block
-内所有线程对屏障的到达一致（要么都到，要么都不到），或将屏障搬出分支，或重写算法避免需要屏障。</p>
-<h2 id="nvcc-编译选项给报告喂足信息"><code>nvcc</code>
-编译选项：给报告喂足信息</h2>
-<ul>
-<li><strong><code>-g -G</code></strong>：生成设备端调试符号（注意：会显著降低性能，调试用；性能测试请移除
-<code>-G</code>）。</li>
-<li><strong><code>-lineinfo</code></strong>：保留源码行号信息，Sanitizer
-可将 PC 偏移映射回源文件行。</li>
-<li><strong><code>-rdc=true</code></strong>：启用设备端链接，跨文件/库的设备函数能正确回溯。</li>
-<li>可选：<code>-Xcompiler -fno-omit-frame-pointer</code>
-便于栈回溯；<code>-O0</code> 降低优化避免行号漂移。</li>
-</ul>
-<p>推荐调试构建与发布构建分离：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Debug（用于 Sanitizer）</span></span><br><span class="line">nvcc -g -G -lineinfo -rdc=<span class="literal">true</span> -O0 app.cu -o app_dbg</span><br><span class="line"></span><br><span class="line"><span class="comment"># Release（性能评测）</span></span><br><span class="line">nvcc -O3 app.cu -o app_rel</span><br></pre></td></tr></table></figure>
-<h2 id="compute-sanitizer命令行速查">Compute Sanitizer：命令行速查</h2>
-<p>基本用法：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./app_dbg</span><br></pre></td></tr></table></figure>
-<p>常用工具（<code>--tool</code>）：</p>
-<ul>
-<li><code>memcheck</code>：越界、未初始化、非法地址等内存问题。</li>
-<li><code>racecheck</code>：数据竞争（全局/共享内存的读写冲突）。</li>
-<li><code>initcheck</code>：检测未初始化的全局内存使用。</li>
-<li><code>synccheck</code>：屏障不匹配、死锁相关问题。</li>
-</ul>
-<p>高频旗标：</p>
-<ul>
-<li><code>--print-limit &lt;N&gt;</code>：每类问题最多打印 N
-条，控制噪音。</li>
-<li><code>--kernel-regex &lt;regex&gt;</code>：只检查匹配名称的
-kernel，聚焦问题。</li>
-<li><code>--launch-count &lt;N&gt;</code>：只检查前 N 次 kernel
-启动，快速抽样。</li>
-<li><code>--log-file &lt;path&gt;</code>：将报告写入文件，便于后续解析与分享。</li>
-<li><code>--target-processes all|application-only</code>：当程序会派生子进程时很有用。</li>
-</ul>
-<p>示例：只检查 <code>oob</code> 这个 kernel
-的前两次启动，并把日志保存到 <code>cs.log</code>：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer \</span><br><span class="line">  --tool memcheck \</span><br><span class="line">  --kernel-regex <span class="string">&quot;^oob$&quot;</span> \</span><br><span class="line">  --launch-count 2 \</span><br><span class="line">  --print-limit 20 \</span><br><span class="line">  --log-file cs.log \</span><br><span class="line">  ./app_dbg --small-input</span><br></pre></td></tr></table></figure>
-<h2 id="报告阅读与定位技巧">报告阅读与定位技巧</h2>
-<p>典型报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:6: oob+0x40</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
-<p>如何快速定位：</p>
-<ul>
-<li><strong>看标题</strong>：<code>Invalid __global__ write of size 4</code>
-→ 非法全局写、长度 4 字节。</li>
-<li><strong>看符号/行号</strong>：<code>oob.cu:6</code> 需要
-<code>-lineinfo</code>/<code>-G</code> 支持。</li>
-<li><strong>看线程坐标</strong>：<code>thread (15,0,0) in block (1,0,0)</code>
-帮助你还原分支条件与边界判断。</li>
-<li><strong>回源代码</strong>：
-<ul>
-<li>确认是否缺少 <code>if (i &lt; n)</code> 之类的边界保护；</li>
-<li>若为竞争，检查是否需要 <code>atomic*</code>
-或者按块分配私有缓冲；</li>
-<li>若为 Barrier，不要将 <code>__syncthreads()</code>
-放在分支内（除非分支路径对所有线程一致）。</li>
-</ul></li>
-</ul>
-<p>调一类警告时，善用 <code>--kernel-regex</code>
-与最小复现输入，可大幅缩短迭代时间。</p>
-<h2 id="性能开销与调优">性能开销与调优</h2>
-<p>Sanitizer
-会“显著变慢”（有时数十倍），属于正常现象。降低成本的常用手段：</p>
-<ul>
-<li><strong>缩小输入规模</strong>：提供 <code>--small-input</code>
-模式或环境变量开关。</li>
-<li><strong>限制检查范围</strong>：用 <code>--kernel-regex</code>
-锁定怀疑的 kernel。</li>
-<li><strong>限制次数</strong>：用 <code>--launch-count</code>
-只审前几次启动。</li>
-<li><strong>分阶段检查</strong>：先 <code>memcheck</code>，再
-<code>racecheck</code>/<code>synccheck</code> 针对性检查。</li>
-<li><strong>仅 Debug 构建检查</strong>：<code>-G</code>
-只在调试构建开启，Release 保持性能纯净。</li>
-</ul>
-<h2 id="与其他调试-性能工具协同">与其他调试 &amp; 性能工具协同</h2>
-<ul>
-<li><strong>nsys profile → sanitizer 精查</strong>：
-<ul>
-<li>用 <code>nsys profile -o run ./app_rel</code> 找到耗时热点与可疑
-kernel 名称；</li>
-<li>针对热点 kernel 用 <code>--kernel-regex</code> + Sanitizer
-精准排错。</li>
-</ul></li>
-<li><strong>cuda-gdb</strong>：遇到崩溃或需要单步设备端代码时使用；Sanitizer
-报出可疑位置后，转到 gdb 做细粒度验证。</li>
-<li><strong>Nsight Compute/Systems</strong>：前者做单 kernel
-的性能属性分析（访存、SM 利用）；后者看系统级时间线。二者与 Sanitizer
-互补：先“无错再快”。</li>
-<li><strong>日志解析/IDE 高亮</strong>：将 <code>--log-file</code>
-输出的文本导入 IDE（或自写脚本解析），按 <code>file:line</code>
-生成可点击的诊断列表，提高修复效率。</li>
-</ul>
-<h2 id="驱动-cuda-版本兼容">🔟 驱动 / CUDA 版本兼容</h2>
-<ul>
-<li>尽量保持：<strong>Driver 版本 ≥ CUDA Toolkit
-要求的最低版本</strong>；工具链与驱动的主次版本差距大时，可能出现“工具不可用/功能缺失/报错异常”。</li>
-<li>快速自检：
-<ul>
-<li><code>nvidia-smi</code> 查看驱动版本；</li>
-<li><code>nvcc --version</code> /
-<code>compute-sanitizer --version</code> 查看工具链版本；</li>
-<li>优先使用同一套 Toolkit 内的工具 + 匹配的驱动。</li>
-</ul></li>
-</ul>
-<h2 id="实战清单拿来就用">✅ 实战清单（拿来就用）</h2>
-<ol type="1">
-<li>准备 Debug 构建：<code>-g -G -lineinfo [-rdc=true]</code>。</li>
-<li>缩小输入：加入 <code>--small-input</code> 选项或测试数据集。</li>
-<li>先跑内存：<code>compute-sanitizer --tool memcheck --print-limit 50 ./app_dbg ...</code>。</li>
-<li>聚焦可疑 kernel：<code>--kernel-regex</code> +
-<code>--launch-count</code>。</li>
-<li>若提示竞争：切到 <code>--tool racecheck</code>，确认是否需要
-<code>atomic*</code> 或重构写入模式。</li>
-<li>若提示 Barrier：检查 <code>__syncthreads()</code>
-的分支一致性与循环内位置。</li>
-<li>通过后再回 Release 构建做性能评测（<code>nsys</code>/Nsight）。</li>
-</ol>
-<h2 id="小结">📝 小结</h2>
-<ul>
-<li><strong>核心心法</strong>：先保证正确性（Sanitizer
-清零告警），再谈性能（Nsight/<code>nsys</code> 优化）。</li>
-<li><strong>高频技巧</strong>：<code>-lineinfo</code>
-给行号、<code>--kernel-regex</code> 聚焦、<code>--launch-count</code>
-抽样、日志落盘便于追踪。</li>
-<li><strong>避坑要点</strong>：Barrier
-一致性、越界/未初始化、跨文件设备函数需 <code>-rdc=true</code>。</li>
-</ul>
-<p>把以上套路串起来，基本就能“熟练驾驭 Compute Sanitizer”：遇到可疑
-kernel，开 Debug 构建 + 小输入，定位报文 → 回溯源码 → 修复 →
-复查通过，再做性能迭代。祝你早日实现“无错再快”的理想状态 🚀</p>
-]]></content>
-      <tags>
-        <tag>工具</tag>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Tensor 基础：布局、算子与形状推导</title>
     <url>/posts/f1e2d3c4/</url>
     <content><![CDATA[<p>本文聚焦 <strong>张量布局 → 常见算子 →
@@ -6774,6 +6497,283 @@ id="三大框架参数映射同一功能不同叫法">三大框架参数映射�
         <tag>深度学习</tag>
         <tag>张量</tag>
         <tag>形状推导</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Compute Sanitizer 实用指南：从 0 到熟练</title>
+    <url>/posts/a1b2c3d4/</url>
+    <content><![CDATA[<p>Compute Sanitizer（前身 <code>cuda-memcheck</code>）用于定位 CUDA
+程序中的越界读写、未初始化、数据竞争与 Barrier
+不匹配等问题。本文按最小示例、常见报错、命令参数与协同工具的顺序，整理一份可参考的排查笔记。</p>
+<span id="more"></span>
+<h2
+id="学习地图由浅入深可边学边用">学习地图（由浅入深，可边学边用）</h2>
+<ul>
+<li><strong>CUDA 基础语法</strong>：能写/编译最简单的
+<code>kernel</code>，理解
+<code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code>、<code>__global__</code>/<code>__device__</code>。</li>
+<li><strong>GPU 线程层级与同步</strong>：Warp / Block /
+Grid，<code>__syncthreads()</code>、<code>atomic*</code>、<code>cudaDeviceSynchronize()</code>
+的作用与限制。</li>
+<li><strong>GPU 内存层次</strong>：Global / Shared / Local / Constant /
+Texture 的用途、可见性、对齐与带宽差异。</li>
+<li><strong>常见 GPU Bug
+类型</strong>：越界、未初始化、数据竞争、Barrier 不匹配等（Sanitizer
+就是为它们报警）。</li>
+<li><strong><code>nvcc</code>
+编译选项</strong>：<code>-G</code>、<code>-g</code>、<code>-lineinfo</code>、<code>-rdc=true</code>
+等，为报告提供更友好的源码回溯。</li>
+<li><strong>Compute Sanitizer
+命令行</strong>：<code>--tool</code>、<code>--print-limit</code>、<code>--kernel-regex</code>、<code>--log-file</code>、<code>--launch-count</code>
+等高频旗标。</li>
+<li><strong>报告阅读与定位</strong>：看懂
+<code>Invalid __global__ read of size 4 at myKernel+0x280</code>
+并回溯到源码行与线程坐标。</li>
+<li><strong>性能开销与调优</strong>：理解检查为什么会变慢，以及用小数据集、<code>--launch-count</code>
+等手段控时。</li>
+<li><strong>与其他工具协同</strong>：<code>nsys</code> 找热点 →
+Sanitizer 精查；结合 <code>cuda-gdb</code> / Nsight
+工具链提升效率。</li>
+<li><strong>驱动/CUDA 版本兼容</strong>：避免工具新版 +
+驱动旧版导致的报错或缺失功能。</li>
+</ul>
+<h2 id="cuda-基础语法最小可运行示例">CUDA
+基础语法（最小可运行示例）</h2>
+<p>下面是一个最小示例：把数组里的每个元素都加 1。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// file: add_one.cu</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;cstdio&gt;</span></span></span><br><span class="line"></span><br><span class="line">__global__ <span class="type">void</span> <span class="title function_">add_one</span><span class="params">(<span class="type">int</span>* data, <span class="type">int</span> n)</span> &#123;</span><br><span class="line">    <span class="type">int</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid &lt; n) data[tid] += <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">int</span> n = <span class="number">16</span>;</span><br><span class="line">    <span class="type">int</span> h[n] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="type">int</span> *d = nullptr;</span><br><span class="line">    cudaMalloc(&amp;d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>));</span><br><span class="line">    cudaMemcpy(d, h, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyHostToDevice);</span><br><span class="line"></span><br><span class="line">    dim3 <span class="title function_">block</span><span class="params">(<span class="number">8</span>)</span>, <span class="title function_">grid</span><span class="params">((n + block.x - <span class="number">1</span>) / block.x)</span>;</span><br><span class="line">    add_one&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d, n);</span><br><span class="line">    cudaDeviceSynchronize();</span><br><span class="line"></span><br><span class="line">    cudaMemcpy(h, d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyDeviceToHost);</span><br><span class="line">    cudaFree(d);</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; n; ++i) <span class="built_in">printf</span>(<span class="string">&quot;%d &quot;</span>, h[i]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译（带调试信息与行号，便于报告映射回源码）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo add_one.cu -o add_one</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong><code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code></strong>：设定网格与线程块维度；<code>threadIdx</code>/<code>blockIdx</code>
+提供线程坐标。</li>
+<li><strong><code>__global__</code></strong>：从主机端调用、在设备端执行的函数（即
+kernel）。</li>
+<li><strong><code>__device__</code></strong>：仅在设备端调用/执行的函数。</li>
+</ul>
+<h2 id="线程层级与同步原语">线程层级与同步原语</h2>
+<ul>
+<li><strong>执行模型</strong>：
+<ul>
+<li><strong>Warp</strong>：通常 32 线程的执行束，同步粒度最细。</li>
+<li><strong>Block</strong>：多个 warp 组成；可用
+<code>__syncthreads()</code> 在同一 Block 内屏障同步。</li>
+<li><strong>Grid</strong>：由多个 Block 组成；不同 Block 之间不可用
+<code>__syncthreads()</code> 同步。</li>
+</ul></li>
+<li><strong>同步与原子</strong>：
+<ul>
+<li><code>__syncthreads()</code>：只作用于 Block
+内；如果有条件分支导致并非所有线程执行，可能引发 Barrier 不匹配。</li>
+<li><code>atomicAdd/atomicExch/...</code>：在共享全局状态时消除数据竞争，但会降低并发度。</li>
+<li><code>cudaDeviceSynchronize()</code>：在主机端等待所有之前发起的
+kernel 完成，常用于调试阶段确保报错及时显现。</li>
+</ul></li>
+</ul>
+<h2 id="gpu-内存层次结构">GPU 内存层次结构</h2>
+<ul>
+<li><strong>Global
+Memory</strong>：容量大、延迟高、全设备可见；注意对齐与合并访问（coalescing）。</li>
+<li><strong>Shared Memory</strong>：Block 内共享、低延迟、高带宽；需留意
+Bank 冲突与对齐。</li>
+<li><strong>Local
+Memory</strong>：线程私有，寄存器溢出或大对象会落在这里，实质上也是从全局内存取，延迟高。</li>
+<li><strong>Constant/Texture</strong>：只读、缓存友好（广播/2D
+局部性场景）。</li>
+</ul>
+<p>理解这些有助于你判断这个地址是否可见或越界，从而更快看懂 Sanitizer
+的报错。</p>
+<h2 id="常见-gpu-bug-类型sanitizer-重点覆盖">常见 GPU Bug
+类型（Sanitizer 重点覆盖）</h2>
+<ul>
+<li><strong>越界读写</strong>：访问数组下标 &lt;0 或 ≥N。</li>
+<li><strong>未初始化读</strong>：读到了未写入的内存内容。</li>
+<li><strong>数据竞争 (race)</strong>：多个线程无序写同一地址。</li>
+<li><strong>Barrier 不匹配</strong>：同一 Block 内，有些线程执行了
+<code>__syncthreads()</code>，有些没执行。</li>
+</ul>
+<p>下面分别给出“可运行的最小示例 → 如何触发 → 典型报文（示意） →
+修复方式”。</p>
+<h3 id="越界读写out-of-bounds">4.1 越界读写（Out-of-Bounds）</h3>
+<p>最常见，也最好修。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// oob.cu</span><br><span class="line">__global__ void oob(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    // 故意漏掉边界判断</span><br><span class="line">    a[i] = 42;  // 当 i &gt;= n 时越界写</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译与运行（调试构建）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo oob.cu -o oob</span><br><span class="line">compute-sanitizer --tool memcheck ./oob | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>典型报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:5: oob+0x30</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
+<p>如何修：补边界条件；或在 launch 侧收紧
+<code>grid</code>/<code>block</code>。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void oob_fix(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) a[i] = 42;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="未初始化读uninitialized-read">4.2 未初始化读（Uninitialized
+Read）</h3>
+<p>读到了从未写入的值，往往来源于遗漏初始化或越界导致的脏数据。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// uninit.cu</span><br><span class="line">__global__ void use_before_set(int* out, const int* src, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) &#123;</span><br><span class="line">        // src 未初始化就被读取</span><br><span class="line">        out[i] = src[i] + 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>主机侧若只分配未写入：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *d_src=<span class="literal">nullptr</span>, *d_out=<span class="literal">nullptr</span>;</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_src, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_out, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 故意不 cudaMemset/cudaMemcpy d_src</span></span><br><span class="line">use_before_set&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d_out, d_src, n);</span><br></pre></td></tr></table></figure>
+<p>检查：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo uninit.cu -o uninit</span><br><span class="line">compute-sanitizer --tool memcheck ./uninit | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Uninitialized __global__ memory read of size 4</span><br><span class="line">=========     at use_before_set(int*, int const*, int):uninit.cu:6</span><br></pre></td></tr></table></figure>
+<p>如何修：在设备内或拷贝前初始化。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemset</span>(d_src, <span class="number">0</span>, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 或者先在主机填充，再 cudaMemcpy 到设备</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据竞争data-race">4.3 数据竞争（Data Race）</h3>
+<p>多个线程对同一地址进行未同步的读/写，导致结果随机。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// race.cu</span><br><span class="line">__global__ void sum_naive(int* out) &#123;</span><br><span class="line">    // 让所有线程把 1 加到同一个位置</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) &#123;</span><br><span class="line">        // 非原子写：存在数据竞争</span><br><span class="line">        *out += 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>检查：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo race.cu -o race</span><br><span class="line">compute-sanitizer --tool racecheck ./race | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Race reported between Write and Write</span><br><span class="line">=========     Location: 0x7f2c38000000 in global memory</span><br><span class="line">=========     by thread (t*,b*) at sum_naive:race.cu:7</span><br></pre></td></tr></table></figure>
+<p>如何修：使用原子操作或重构并行归约。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void sum_atomic(int* out) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) atomicAdd(out, 1);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>更高性能的做法是先在 Block 内用共享内存做局部和，再用一次原子把每个
+Block 的结果汇总到全局。</p>
+<h3 id="barrier-不匹配barrier-divergence">4.4 Barrier 不匹配（Barrier
+Divergence）</h3>
+<p>同一 Block 内不是所有线程都在同一控制流路径调用
+<code>__syncthreads()</code>，会导致死锁或未定义行为。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// barrier.cu</span></span><br><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">bad_barrier</span><span class="params">(<span class="type">int</span>* a)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid % <span class="number">2</span> == <span class="number">0</span>) &#123;</span><br><span class="line">        __syncthreads();  <span class="comment">// 只有偶数线程到达屏障</span></span><br><span class="line">        a[tid] = <span class="number">1</span>;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        a[tid] = <span class="number">2</span>;</span><br><span class="line">        <span class="comment">// 缺少同步</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>检查：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo barrier.cu -o barrier</span><br><span class="line">compute-sanitizer --tool synccheck ./barrier | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Barrier error detected. Divergent thread(s) in block.</span><br><span class="line">=========     at __syncthreads(): barrier.cu:5</span><br></pre></td></tr></table></figure>
+<p>如何修：确保同一 Block
+内所有线程对屏障的到达一致（要么都到，要么都不到），或将屏障搬出分支，或重写算法避免需要屏障。</p>
+<h2 id="nvcc-编译选项给报告喂足信息"><code>nvcc</code>
+编译选项：给报告喂足信息</h2>
+<ul>
+<li><strong><code>-g -G</code></strong>：生成设备端调试符号（注意：会显著降低性能，调试用；性能测试请移除
+<code>-G</code>）。</li>
+<li><strong><code>-lineinfo</code></strong>：保留源码行号信息，Sanitizer
+可将 PC 偏移映射回源文件行。</li>
+<li><strong><code>-rdc=true</code></strong>：启用设备端链接，跨文件/库的设备函数能正确回溯。</li>
+<li>可选：<code>-Xcompiler -fno-omit-frame-pointer</code>
+便于栈回溯；<code>-O0</code> 降低优化避免行号漂移。</li>
+</ul>
+<p>推荐调试构建与发布构建分离：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Debug（用于 Sanitizer）</span></span><br><span class="line">nvcc -g -G -lineinfo -rdc=<span class="literal">true</span> -O0 app.cu -o app_dbg</span><br><span class="line"></span><br><span class="line"><span class="comment"># Release（性能评测）</span></span><br><span class="line">nvcc -O3 app.cu -o app_rel</span><br></pre></td></tr></table></figure>
+<h2 id="compute-sanitizer命令行速查">Compute Sanitizer：命令行速查</h2>
+<p>基本用法：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./app_dbg</span><br></pre></td></tr></table></figure>
+<p>常用工具（<code>--tool</code>）：</p>
+<ul>
+<li><code>memcheck</code>：越界、未初始化、非法地址等内存问题。</li>
+<li><code>racecheck</code>：数据竞争（全局/共享内存的读写冲突）。</li>
+<li><code>initcheck</code>：检测未初始化的全局内存使用。</li>
+<li><code>synccheck</code>：屏障不匹配、死锁相关问题。</li>
+</ul>
+<p>高频旗标：</p>
+<ul>
+<li><code>--print-limit &lt;N&gt;</code>：每类问题最多打印 N
+条，控制噪音。</li>
+<li><code>--kernel-regex &lt;regex&gt;</code>：只检查匹配名称的
+kernel，聚焦问题。</li>
+<li><code>--launch-count &lt;N&gt;</code>：只检查前 N 次 kernel
+启动，快速抽样。</li>
+<li><code>--log-file &lt;path&gt;</code>：将报告写入文件，便于后续解析与分享。</li>
+<li><code>--target-processes all|application-only</code>：当程序会派生子进程时很有用。</li>
+</ul>
+<p>示例：只检查 <code>oob</code> 这个 kernel
+的前两次启动，并把日志保存到 <code>cs.log</code>：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer \</span><br><span class="line">  --tool memcheck \</span><br><span class="line">  --kernel-regex <span class="string">&quot;^oob$&quot;</span> \</span><br><span class="line">  --launch-count 2 \</span><br><span class="line">  --print-limit 20 \</span><br><span class="line">  --log-file cs.log \</span><br><span class="line">  ./app_dbg --small-input</span><br></pre></td></tr></table></figure>
+<h2 id="报告阅读与定位技巧">报告阅读与定位技巧</h2>
+<p>典型报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:6: oob+0x40</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
+<p>如何快速定位：</p>
+<ul>
+<li><strong>看标题</strong>：<code>Invalid __global__ write of size 4</code>
+→ 非法全局写、长度 4 字节。</li>
+<li><strong>看符号/行号</strong>：<code>oob.cu:6</code> 需要
+<code>-lineinfo</code>/<code>-G</code> 支持。</li>
+<li><strong>看线程坐标</strong>：<code>thread (15,0,0) in block (1,0,0)</code>
+帮助你还原分支条件与边界判断。</li>
+<li><strong>回源代码</strong>：
+<ul>
+<li>确认是否缺少 <code>if (i &lt; n)</code> 之类的边界保护；</li>
+<li>若为竞争，检查是否需要 <code>atomic*</code>
+或者按块分配私有缓冲；</li>
+<li>若为 Barrier，不要将 <code>__syncthreads()</code>
+放在分支内（除非分支路径对所有线程一致）。</li>
+</ul></li>
+</ul>
+<p>调一类警告时，善用 <code>--kernel-regex</code>
+与最小复现输入，可大幅缩短迭代时间。</p>
+<h2 id="性能开销与调优">性能开销与调优</h2>
+<p>Sanitizer
+会“显著变慢”（有时数十倍），属于正常现象。降低成本的常用手段：</p>
+<ul>
+<li><strong>缩小输入规模</strong>：提供 <code>--small-input</code>
+模式或环境变量开关。</li>
+<li><strong>限制检查范围</strong>：用 <code>--kernel-regex</code>
+锁定怀疑的 kernel。</li>
+<li><strong>限制次数</strong>：用 <code>--launch-count</code>
+只审前几次启动。</li>
+<li><strong>分阶段检查</strong>：先 <code>memcheck</code>，再
+<code>racecheck</code>/<code>synccheck</code> 针对性检查。</li>
+<li><strong>仅 Debug 构建检查</strong>：<code>-G</code>
+只在调试构建开启，Release 保持性能纯净。</li>
+</ul>
+<h2 id="与其他调试-性能工具协同">与其他调试 &amp; 性能工具协同</h2>
+<ul>
+<li><strong>nsys profile → sanitizer 精查</strong>：
+<ul>
+<li>用 <code>nsys profile -o run ./app_rel</code> 找到耗时热点与可疑
+kernel 名称；</li>
+<li>针对热点 kernel 用 <code>--kernel-regex</code> + Sanitizer
+精准排错。</li>
+</ul></li>
+<li><strong>cuda-gdb</strong>：遇到崩溃或需要单步设备端代码时使用；Sanitizer
+报出可疑位置后，转到 gdb 做细粒度验证。</li>
+<li><strong>Nsight Compute/Systems</strong>：前者做单 kernel
+的性能属性分析（访存、SM 利用）；后者看系统级时间线。二者与 Sanitizer
+互补：先“无错再快”。</li>
+<li><strong>日志解析/IDE 高亮</strong>：将 <code>--log-file</code>
+输出的文本导入 IDE（或自写脚本解析），按 <code>file:line</code>
+生成可点击的诊断列表，提高修复效率。</li>
+</ul>
+<h2 id="驱动-cuda-版本兼容">🔟 驱动 / CUDA 版本兼容</h2>
+<ul>
+<li>尽量保持：<strong>Driver 版本 ≥ CUDA Toolkit
+要求的最低版本</strong>；工具链与驱动的主次版本差距大时，可能出现“工具不可用/功能缺失/报错异常”。</li>
+<li>快速自检：
+<ul>
+<li><code>nvidia-smi</code> 查看驱动版本；</li>
+<li><code>nvcc --version</code> /
+<code>compute-sanitizer --version</code> 查看工具链版本；</li>
+<li>优先使用同一套 Toolkit 内的工具 + 匹配的驱动。</li>
+</ul></li>
+</ul>
+<h2 id="实战清单拿来就用">✅ 实战清单（拿来就用）</h2>
+<ol type="1">
+<li>准备 Debug 构建：<code>-g -G -lineinfo [-rdc=true]</code>。</li>
+<li>缩小输入：加入 <code>--small-input</code> 选项或测试数据集。</li>
+<li>先跑内存：<code>compute-sanitizer --tool memcheck --print-limit 50 ./app_dbg ...</code>。</li>
+<li>聚焦可疑 kernel：<code>--kernel-regex</code> +
+<code>--launch-count</code>。</li>
+<li>若提示竞争：切到 <code>--tool racecheck</code>，确认是否需要
+<code>atomic*</code> 或重构写入模式。</li>
+<li>若提示 Barrier：检查 <code>__syncthreads()</code>
+的分支一致性与循环内位置。</li>
+<li>通过后再回 Release 构建做性能评测（<code>nsys</code>/Nsight）。</li>
+</ol>
+<h2 id="小结">📝 小结</h2>
+<ul>
+<li><strong>核心心法</strong>：先保证正确性（Sanitizer
+清零告警），再谈性能（Nsight/<code>nsys</code> 优化）。</li>
+<li><strong>高频技巧</strong>：<code>-lineinfo</code>
+给行号、<code>--kernel-regex</code> 聚焦、<code>--launch-count</code>
+抽样、日志落盘便于追踪。</li>
+<li><strong>避坑要点</strong>：Barrier
+一致性、越界/未初始化、跨文件设备函数需 <code>-rdc=true</code>。</li>
+</ul>
+<p>把以上套路串起来，基本就能“熟练驾驭 Compute Sanitizer”：遇到可疑
+kernel，开 Debug 构建 + 小输入，定位报文 → 回溯源码 → 修复 →
+复查通过，再做性能迭代。祝你早日实现“无错再快”的理想状态 🚀</p>
+]]></content>
+      <tags>
+        <tag>工具</tag>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
@@ -8711,6 +8711,90 @@ href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.swi
       </tags>
   </entry>
   <entry>
+    <title>了解Transformer</title>
+    <url>/posts/9008a9df/</url>
+    <content><![CDATA[<p>在之前的文章中我们了解到，RNN（及其变体如
+LSTM、GRU）在处理序列数据时，必须按照时间步顺序计算，这导致其无法进行大规模并行计算。同时，它也难以解决长距离依赖的问题。</p>
+<p>为了解决这两个核心痛点，一种全新的、不依赖于循环结构的模型——Transformer
+横空出世。</p>
+<span id="more"></span>
+<p>和之前一样，输入神经网络的数据，要先转换为 <strong>词嵌入（Word
+Embedding）</strong> 向量。</p>
+<h2 id="第一步融入位置信息">第一步：融入位置信息</h2>
+<p>由于 Transformer 抛弃了 RNN
+的循环结构，模型本身无法感知输入序列中词语的先后顺序。</p>
+<p>为了解决这个问题，我们需要给每个词的词向量中添加
+<strong>位置编码（Positional
+Encoding）</strong>，以此来表示这个词在句子中的绝对或相对位置。</p>
+<p>这样，每个词的输入向量就同时包含了语义信息和位置信息。</p>
+<h2
+id="核心机制自注意力self-attention">核心机制：自注意力（Self-Attention）</h2>
+<p>仅仅包含位置信息是不够的，每个词的向量中还不包含与其他词的关系。为了让模型“注意”到句子中其他词的存在并建立联系，Transformer
+引入了 <strong>自注意力机制</strong>。</p>
+<p>该机制的核心思想是为句子中的每个词动态地计算一个权重系数，这个权重代表了在编码当前词时，句子中其他词对它的重要性。这是通过三个特殊的向量来实现的：</p>
+<ul>
+<li><strong>Query (查询向量
+Q)</strong>：代表当前词，用于去“查询”其他词。</li>
+<li><strong>Key (键向量
+K)</strong>：代表被查询的词，用于和查询向量进行匹配。</li>
+<li><strong>Value (值向量 V)</strong>：代表被查询词的实际内容。</li>
+</ul>
+<p>这三个向量是通过将每个词的词向量（已包含位置编码）分别与三个可训练的权重矩阵
+<code>Wq</code>、<code>Wk</code>、<code>Wv</code> 相乘得到的。</p>
+<p><img src="/assets/image-20251010230923988.png" /></p>
+<p>计算过程如下：</p>
+<ol type="1">
+<li>拿一个词的查询向量 <code>q</code> 去和所有词（包括它自己）的键向量
+<code>k</code> 做点积，得到一个
+<strong>注意力分数</strong>。这个分数衡量了两个词之间的相关性。</li>
+<li>对得到的分数进行归一化处理（例如通过 SoftMax）。</li>
+<li>将归一化后的分数与每个词对应的值向量 <code>v</code> 相乘。</li>
+<li>将所有加权后的值向量 <code>v</code> 相加，就得到了一个新的向量
+<code>a</code>。</li>
+</ol>
+<p><img src="/assets/image-20251010231017325.png" /></p>
+<p>这个新向量 <code>a</code>
+就包含了整个句子上下文的信息，并且是为当前词量身定制的。对句子中的每一个词都执行相同的操作，我们就能得到一组全新的、富含上下文信息的词向量。</p>
+<p><img src="/assets/image-20251010231100716.png" /></p>
+<h2 id="优化多头注意力multi-head-attention">优化：多头注意力（Multi-Head
+Attention）</h2>
+<p>一个词与另一个词的关系可能有很多种（例如，语法关系、语义关系等）。如果只用一组
+<code>Wq</code>, <code>Wk</code>, <code>Wv</code>
+矩阵来计算相关性，灵活性会很低。</p>
+<p>因此，Transformer 提出了
+<strong>多头注意力机制</strong>。它通过设置多组独立的 <code>Wq</code>,
+<code>Wk</code>, <code>Wv</code> 矩阵（每一组被称为一个“头”），将原始的
+Q, K, V 映射到不同的子空间中，学习不同方面的相关性。</p>
+<p><img src="/assets/image-20251010231200452.png" /></p>
+<p>每个头都会独立地执行一次注意力计算，得到一个输出向量。最后，将所有头的输出向量拼接起来，再经过一次线性变换，就得到了最终的输出。这样，模型就能在不同维度上综合地理解词与词之间的关系。</p>
+<h2 id="整体架构编码器与解码器">整体架构：编码器与解码器</h2>
+<p>Transformer 的整体架构由 <strong>编码器（Encoder）</strong> 和
+<strong>解码器（Decoder）</strong>
+两大部分组成，每一部分都由多层堆叠而成。我们上面介绍的多头注意力机制就是其核心组件。</p>
+<ul>
+<li><strong>编码器</strong>：负责将输入序列处理成一系列富含上下文信息的表示。</li>
+<li><strong>解码器</strong>：根据编码器的输出和之前已生成的结果，来生成下一个词。</li>
+</ul>
+<p><img src="/assets/image-20251010231339402.png" /></p>
+<h2 id="总结">总结</h2>
+<p>Transformer
+通过引入自注意力机制和位置编码，完全摒弃了传统的循环和卷积结构。其强大的并行计算能力和捕捉长距离依赖的优势，使其在自然语言处理领域取得了革命性的成功，并为后续的
+BERT、GPT 等大规模预训练模型奠定了基础。</p>
+<blockquote>
+<p>参考自 <a
+href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
+飞天闪客</a></p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+        <tag>Transformer</tag>
+        <tag>Attention</tag>
+        <tag>自注意力</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>大模型百词</title>
     <url>/posts/8c9ab17b/</url>
     <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
@@ -9163,90 +9247,6 @@ IP 地址，然后点击连接，按提示输入主机的用户名和密码。</
         <tag>远程桌面</tag>
         <tag>Tailscale</tag>
         <tag>网络基础</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>了解Transformer</title>
-    <url>/posts/9008a9df/</url>
-    <content><![CDATA[<p>在之前的文章中我们了解到，RNN（及其变体如
-LSTM、GRU）在处理序列数据时，必须按照时间步顺序计算，这导致其无法进行大规模并行计算。同时，它也难以解决长距离依赖的问题。</p>
-<p>为了解决这两个核心痛点，一种全新的、不依赖于循环结构的模型——Transformer
-横空出世。</p>
-<span id="more"></span>
-<p>和之前一样，输入神经网络的数据，要先转换为 <strong>词嵌入（Word
-Embedding）</strong> 向量。</p>
-<h2 id="第一步融入位置信息">第一步：融入位置信息</h2>
-<p>由于 Transformer 抛弃了 RNN
-的循环结构，模型本身无法感知输入序列中词语的先后顺序。</p>
-<p>为了解决这个问题，我们需要给每个词的词向量中添加
-<strong>位置编码（Positional
-Encoding）</strong>，以此来表示这个词在句子中的绝对或相对位置。</p>
-<p>这样，每个词的输入向量就同时包含了语义信息和位置信息。</p>
-<h2
-id="核心机制自注意力self-attention">核心机制：自注意力（Self-Attention）</h2>
-<p>仅仅包含位置信息是不够的，每个词的向量中还不包含与其他词的关系。为了让模型“注意”到句子中其他词的存在并建立联系，Transformer
-引入了 <strong>自注意力机制</strong>。</p>
-<p>该机制的核心思想是为句子中的每个词动态地计算一个权重系数，这个权重代表了在编码当前词时，句子中其他词对它的重要性。这是通过三个特殊的向量来实现的：</p>
-<ul>
-<li><strong>Query (查询向量
-Q)</strong>：代表当前词，用于去“查询”其他词。</li>
-<li><strong>Key (键向量
-K)</strong>：代表被查询的词，用于和查询向量进行匹配。</li>
-<li><strong>Value (值向量 V)</strong>：代表被查询词的实际内容。</li>
-</ul>
-<p>这三个向量是通过将每个词的词向量（已包含位置编码）分别与三个可训练的权重矩阵
-<code>Wq</code>、<code>Wk</code>、<code>Wv</code> 相乘得到的。</p>
-<p><img src="/assets/image-20251010230923988.png" /></p>
-<p>计算过程如下：</p>
-<ol type="1">
-<li>拿一个词的查询向量 <code>q</code> 去和所有词（包括它自己）的键向量
-<code>k</code> 做点积，得到一个
-<strong>注意力分数</strong>。这个分数衡量了两个词之间的相关性。</li>
-<li>对得到的分数进行归一化处理（例如通过 SoftMax）。</li>
-<li>将归一化后的分数与每个词对应的值向量 <code>v</code> 相乘。</li>
-<li>将所有加权后的值向量 <code>v</code> 相加，就得到了一个新的向量
-<code>a</code>。</li>
-</ol>
-<p><img src="/assets/image-20251010231017325.png" /></p>
-<p>这个新向量 <code>a</code>
-就包含了整个句子上下文的信息，并且是为当前词量身定制的。对句子中的每一个词都执行相同的操作，我们就能得到一组全新的、富含上下文信息的词向量。</p>
-<p><img src="/assets/image-20251010231100716.png" /></p>
-<h2 id="优化多头注意力multi-head-attention">优化：多头注意力（Multi-Head
-Attention）</h2>
-<p>一个词与另一个词的关系可能有很多种（例如，语法关系、语义关系等）。如果只用一组
-<code>Wq</code>, <code>Wk</code>, <code>Wv</code>
-矩阵来计算相关性，灵活性会很低。</p>
-<p>因此，Transformer 提出了
-<strong>多头注意力机制</strong>。它通过设置多组独立的 <code>Wq</code>,
-<code>Wk</code>, <code>Wv</code> 矩阵（每一组被称为一个“头”），将原始的
-Q, K, V 映射到不同的子空间中，学习不同方面的相关性。</p>
-<p><img src="/assets/image-20251010231200452.png" /></p>
-<p>每个头都会独立地执行一次注意力计算，得到一个输出向量。最后，将所有头的输出向量拼接起来，再经过一次线性变换，就得到了最终的输出。这样，模型就能在不同维度上综合地理解词与词之间的关系。</p>
-<h2 id="整体架构编码器与解码器">整体架构：编码器与解码器</h2>
-<p>Transformer 的整体架构由 <strong>编码器（Encoder）</strong> 和
-<strong>解码器（Decoder）</strong>
-两大部分组成，每一部分都由多层堆叠而成。我们上面介绍的多头注意力机制就是其核心组件。</p>
-<ul>
-<li><strong>编码器</strong>：负责将输入序列处理成一系列富含上下文信息的表示。</li>
-<li><strong>解码器</strong>：根据编码器的输出和之前已生成的结果，来生成下一个词。</li>
-</ul>
-<p><img src="/assets/image-20251010231339402.png" /></p>
-<h2 id="总结">总结</h2>
-<p>Transformer
-通过引入自注意力机制和位置编码，完全摒弃了传统的循环和卷积结构。其强大的并行计算能力和捕捉长距离依赖的优势，使其在自然语言处理领域取得了革命性的成功，并为后续的
-BERT、GPT 等大规模预训练模型奠定了基础。</p>
-<blockquote>
-<p>参考自 <a
-href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
-飞天闪客</a></p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
-        <tag>Transformer</tag>
-        <tag>Attention</tag>
-        <tag>自注意力</tag>
       </tags>
   </entry>
   <entry>
@@ -15935,443 +15935,6 @@ flowchart LR
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：指针</title>
-    <url>/posts/c8d4f2a9/</url>
-    <content><![CDATA[<p>指针难，不是因为语法多，而是因为它要求你开始从“变量的值”进一步看到“变量在内存里的位置”。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>地址</td>
-<td>变量在内存中的位置编号</td>
-<td>住址</td>
-</tr>
-<tr>
-<td>指针</td>
-<td>保存地址的变量</td>
-<td>存地址</td>
-</tr>
-<tr>
-<td>取地址</td>
-<td>用 <code>&amp;</code> 得到变量地址</td>
-<td>问住址</td>
-</tr>
-<tr>
-<td>解引用</td>
-<td>用 <code>*</code> 通过地址访问目标值</td>
-<td>按地址找值</td>
-</tr>
-<tr>
-<td>栈</td>
-<td>自动管理的函数调用内存区域</td>
-<td>自动生灭</td>
-</tr>
-<tr>
-<td>堆</td>
-<td>手动申请、手动释放的内存区域</td>
-<td>手动管理</td>
-</tr>
-<tr>
-<td>空指针</td>
-<td>不指向任何有效对象的指针</td>
-<td>指向空</td>
-</tr>
-<tr>
-<td>野指针</td>
-<td>指向未知或无效位置的指针</td>
-<td>危险地址</td>
-</tr>
-<tr>
-<td>悬空指针</td>
-<td>原对象已失效但指针还留着</td>
-<td>地址过期</td>
-</tr>
-</tbody>
-</table>
-<h3 id="程序内存分区极简认识">🧩 程序内存分区极简认识</h3>
-<p>程序运行时，内存不是一整块随便用，而是可以粗略分成几个区域。初学阶段不需要记所有细节，先建立心智模型。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+----------------------+</span><br><span class="line">|  代码区              |  程序指令</span><br><span class="line">+----------------------+</span><br><span class="line">|  常量区              |  字符串字面量、只读常量</span><br><span class="line">+----------------------+</span><br><span class="line">|  全局区              |  全局变量、静态变量</span><br><span class="line">+----------------------+</span><br><span class="line">|  堆                  |  手动申请、手动释放</span><br><span class="line">+----------------------+</span><br><span class="line">|  栈                  |  局部变量、函数调用现场</span><br><span class="line">+----------------------+</span><br></pre></td></tr></table></figure>
-<p>更简单地说：</p>
-<table>
-<colgroup>
-<col style="width: 18%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 31%" />
-</colgroup>
-<thead>
-<tr>
-<th>区域</th>
-<th>放什么</th>
-<th>谁管理</th>
-<th>常见特点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>栈</td>
-<td>局部变量、函数参数</td>
-<td>编译器和运行时自动管理</td>
-<td>快，函数结束自动释放</td>
-</tr>
-<tr>
-<td>堆</td>
-<td>手动申请的大块数据</td>
-<td>程序员管理</td>
-<td>灵活，但容易泄漏</td>
-</tr>
-<tr>
-<td>全局区</td>
-<td>全局变量、<code>static</code> 变量</td>
-<td>程序启动到结束</td>
-<td>生命周期长</td>
-</tr>
-<tr>
-<td>常量区</td>
-<td>字符串字面量、只读数据</td>
-<td>编译器和系统管理</td>
-<td>通常不允许修改</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>这只是入门模型。不同系统和编译器的真实内存布局会更复杂，但这个模型足够帮助理解指针。</p>
-</blockquote>
-<h3 id="栈内存">📦 栈内存</h3>
-<h4 id="局部变量生命周期">局部变量生命周期</h4>
-<p>在函数里定义的普通局部变量，通常位于栈上。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> result = a + b;</span><br><span class="line">    <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>a</code>、<code>b</code>、<code>result</code>
-都和这次函数调用绑定。函数开始时它们被创建，函数结束时它们被销毁。</p>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用 add(3, 5)</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">创建 a、b、result</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">return result</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">函数结束，局部变量销毁</span><br></pre></td></tr></table></figure>
-<h4 id="函数结束自动销毁">函数结束自动销毁</h4>
-<p>看一个危险例子：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>x</code>
-是局部变量，函数结束后就没了。<code>return &amp;x;</code>
-返回的是一个已经失效的地址。</p>
-<p>初学阶段先记住：<strong>不要返回局部变量的地址</strong>。</p>
-<h3 id="堆内存">🧱 堆内存</h3>
-<h4 id="手动分配">手动分配</h4>
-<p>堆内存的生命周期不受函数作用域直接限制。C++ 里可以用 <code>new</code>
-申请，用 <code>delete</code> 释放。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="keyword">new</span> <span class="type">int</span>;</span><br><span class="line">*p = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line"><span class="keyword">delete</span> p;</span><br><span class="line">p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
-<p>这段代码做了几件事：</p>
-<table>
-<thead>
-<tr>
-<th>代码</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>new int</code></td>
-<td>在堆上申请一个 <code>int</code> 空间</td>
-</tr>
-<tr>
-<td><code>int* p</code></td>
-<td>用指针 <code>p</code> 保存这块空间的地址</td>
-</tr>
-<tr>
-<td><code>*p = 10;</code></td>
-<td>通过地址把值写进去</td>
-</tr>
-<tr>
-<td><code>delete p;</code></td>
-<td>释放这块堆内存</td>
-</tr>
-<tr>
-<td><code>p = nullptr;</code></td>
-<td>避免指针继续保存旧地址</td>
-</tr>
-</tbody>
-</table>
-<h4 id="生命周期不受函数限制">生命周期不受函数限制</h4>
-<p>下面这个函数返回堆内存地址是可以的：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">createNumber</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span>* p = <span class="keyword">new</span> <span class="type">int</span>;</span><br><span class="line">    *p = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> p;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span>* value = <span class="built_in">createNumber</span>();</span><br><span class="line">    cout &lt;&lt; *value &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">delete</span> value;</span><br><span class="line">    value = <span class="literal">nullptr</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>因为 <code>new int</code> 申请的是堆内存，不会随着
-<code>createNumber</code> 函数结束自动销毁。</p>
-<p>但代价是：<strong>谁申请，谁负责释放</strong>。忘记
-<code>delete</code> 会造成内存泄漏。</p>
-<h3 id="地址取地址与解引用">📍 地址、取地址与解引用</h3>
-<h4 id="地址">地址</h4>
-<p>每个变量都存放在内存中的某个位置，这个位置可以理解为地址。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">cout &lt;&lt; &amp;x &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<p><code>&amp;x</code> 表示取变量 <code>x</code> 的地址。</p>
-<h4 id="指针变量">指针变量</h4>
-<p>指针变量专门用来保存地址。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>* p = &amp;x;</span><br></pre></td></tr></table></figure>
-<p>读法：</p>
-<table>
-<thead>
-<tr>
-<th>代码</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int x = 10;</code></td>
-<td>创建一个整数变量</td>
-</tr>
-<tr>
-<td><code>&amp;x</code></td>
-<td>得到 <code>x</code> 的地址</td>
-</tr>
-<tr>
-<td><code>int* p</code></td>
-<td>创建一个指向 <code>int</code> 的指针</td>
-</tr>
-<tr>
-<td><code>p = &amp;x</code></td>
-<td>让 <code>p</code> 保存 <code>x</code> 的地址</td>
-</tr>
-</tbody>
-</table>
-<h4 id="解引用">解引用</h4>
-<p><code>*p</code> 表示通过指针 <code>p</code>
-保存的地址，访问那个地址上的值。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>* p = &amp;x;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line"></span><br><span class="line">*p = <span class="number">20</span>;</span><br><span class="line">cout &lt;&lt; x &lt;&lt; endl;   <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p>可以粗略理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x: 10</span><br><span class="line">^</span><br><span class="line">|</span><br><span class="line">p 保存 x 的地址</span><br><span class="line"></span><br><span class="line">*p 表示沿着地址找到 x</span><br></pre></td></tr></table></figure>
-<h4 id="的两个常见含义"><code>*</code> 的两个常见含义</h4>
-<p><code>*</code> 在不同位置含义不同：</p>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int* p</code></td>
-<td>定义一个指针变量</td>
-</tr>
-<tr>
-<td><code>*p = 20</code></td>
-<td>解引用，通过指针访问目标值</td>
-</tr>
-</tbody>
-</table>
-<p>这也是指针语法容易让新手混乱的地方。</p>
-<h3 id="nullptr">🕳️ <code>nullptr</code></h3>
-<h4 id="空指针">空指针</h4>
-<p>如果一个指针暂时不指向任何有效对象，应该让它等于
-<code>nullptr</code>。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
-<p><code>nullptr</code> 的意思是：这个指针现在不保存有效地址。</p>
-<h4 id="判空">判空</h4>
-<p>使用指针前，常见做法是先判断它是否为空：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以简写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (p) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>初学阶段建议写清楚 <code>p != nullptr</code>，可读性更好。</p>
-<h4 id="避免和-null-混用">避免和 <code>NULL</code> 混用</h4>
-<p>C 语言里常见 <code>NULL</code>，现代 C++ 更推荐
-<code>nullptr</code>。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p1 = <span class="literal">nullptr</span>;  <span class="comment">// 推荐</span></span><br><span class="line"><span class="type">int</span>* p2 = <span class="literal">NULL</span>;     <span class="comment">// 旧写法，不推荐混用</span></span><br></pre></td></tr></table></figure>
-<p>原因是 <code>nullptr</code> 有明确的空指针类型，更适合 C++
-的类型检查。</p>
-<h3 id="指针做函数参数">🔧 指针做函数参数</h3>
-<h4 id="修改外部变量">修改外部变量</h4>
-<p>值传递只能修改副本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>指针参数可以修改外部变量：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span>* p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        *p = <span class="number">100</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">change</span>(&amp;x);</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;  <span class="comment">// 100</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>调用 <code>change(&amp;x)</code> 时，传进去的是 <code>x</code>
-的地址。函数内部用 <code>*p</code> 找到原来的变量并修改它。</p>
-<h4 id="传数组">传数组</h4>
-<p>数组作为函数参数时，通常会退化成指针。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span>* arr, <span class="type">int</span> length)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(nums, <span class="number">3</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>arr</code> 可以理解为指向数组第一个元素的指针。</p>
-<h4 id="传缓冲区">传缓冲区</h4>
-<p>指针也常用来传一段可写缓冲区。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">fillZero</span><span class="params">(<span class="type">int</span>* buffer, <span class="type">int</span> length)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        buffer[i] = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> data[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;</span><br><span class="line">    <span class="built_in">fillZero</span>(data, <span class="number">5</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>传缓冲区时，通常要同时传长度。只传指针，函数不知道后面有多少个元素。</p>
-<h3 id="指针与数组">🧮 指针与数组</h3>
-<h4 id="数组名退化">数组名退化</h4>
-<p>很多表达式里，数组名会退化为指向首元素的指针。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* p = nums;</span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 10</span></span><br></pre></td></tr></table></figure>
-<p><code>nums</code> 在这里相当于 <code>&amp;nums[0]</code>。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; nums &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;nums[<span class="number">0</span>] &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<p>这两个输出通常会看到相同的地址。</p>
-<h4 id="指针遍历数组">指针遍历数组</h4>
-<p>可以通过指针移动遍历数组：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"><span class="type">int</span>* p = nums;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; *(p + i) &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>p + i</code> 不是简单加 <code>i</code> 个字节，而是向后移动
-<code>i</code> 个 <code>int</code> 的位置。</p>
-<p>也可以写成更常见的数组下标：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; p[i] &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>p[i]</code> 本质上可以理解为 <code>*(p + i)</code>。</p>
-<h4 id="越界风险">越界风险</h4>
-<p>指针不会自动知道数组长度。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"><span class="type">int</span>* p = nums;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; p[<span class="number">3</span>] &lt;&lt; endl;  <span class="comment">// 错误示例：越界</span></span><br></pre></td></tr></table></figure>
-<p><code>p[3]</code> 访问的是第 4 个元素，但数组只有 3
-个元素。越界访问可能输出奇怪值，也可能直接崩溃。</p>
-<p>初学阶段写数组函数时，尽量把指针和长度一起传：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span>* arr, <span class="type">int</span> length)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="指针数组字符指针数组指针">🧷 指针数组、字符指针、数组指针</h3>
-<p>这三个名字很像，但含义不同。</p>
-<h4 id="指针数组">指针数组</h4>
-<p><strong>指针数组</strong>本质上是数组，数组里的每个元素都是指针。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"><span class="type">int</span> c = <span class="number">30</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* arr[<span class="number">3</span>] = &#123;&amp;a, &amp;b, &amp;c&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *arr[<span class="number">0</span>] &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; *arr[<span class="number">1</span>] &lt;&lt; endl;  <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; *arr[<span class="number">2</span>] &lt;&lt; endl;  <span class="comment">// 30</span></span><br></pre></td></tr></table></figure>
-<p>读法：<code>arr</code> 是一个数组，里面放了 3 个
-<code>int*</code>。</p>
-<h4 id="字符指针">字符指针</h4>
-<p>字符指针常用来指向字符串字面量：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">char</span>* text = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; text &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; text[<span class="number">0</span>] &lt;&lt; endl;  <span class="comment">// h</span></span><br></pre></td></tr></table></figure>
-<p>这里建议写
-<code>const char*</code>，因为字符串字面量通常位于只读区域，不应该被修改。</p>
-<p>不要这样写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">char</span>* text = <span class="string">&quot;hello&quot;</span>;  <span class="comment">// 不推荐</span></span><br></pre></td></tr></table></figure>
-<p>如果需要可修改的字符数组，应写成数组：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">char</span> text[] = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line">text[<span class="number">0</span>] = <span class="string">&#x27;H&#x27;</span>;</span><br></pre></td></tr></table></figure>
-<h4 id="数组指针">数组指针</h4>
-<p><strong>数组指针</strong>本质上是指针，它指向一个数组。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="built_in">int</span> (*p)[<span class="number">3</span>] = &amp;nums;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; (*p)[<span class="number">0</span>] &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; (*p)[<span class="number">1</span>] &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p><code>int (*p)[3]</code> 的读法是：<code>p</code>
-是一个指针，指向一个包含 3 个 <code>int</code> 的数组。</p>
-<p>注意括号很关键：</p>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int* arr[3]</code></td>
-<td>指针数组：数组里有 3 个 <code>int*</code></td>
-</tr>
-<tr>
-<td><code>int (*p)[3]</code></td>
-<td>数组指针：指向含 3 个 <code>int</code> 的数组</td>
-</tr>
-</tbody>
-</table>
-<h3 id="野指针与悬空指针">⚠️ 野指针与悬空指针</h3>
-<h4 id="未初始化指针">未初始化指针</h4>
-<p>未初始化指针保存的是不确定地址。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p;</span><br><span class="line"><span class="comment">// cout &lt;&lt; *p &lt;&lt; endl;  // 错误示例：p 没有初始化</span></span><br></pre></td></tr></table></figure>
-<p>正确做法：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
-<p>指针定义时，如果暂时没有明确指向，就先设为 <code>nullptr</code>。</p>
-<h4 id="释放后继续使用">释放后继续使用</h4>
-<p>释放堆内存后，指针里的旧地址还在，但那块内存已经不属于你。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="keyword">new</span> <span class="type">int</span>;</span><br><span class="line">*p = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">delete</span> p;</span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *p &lt;&lt; endl;  // 错误示例：释放后继续使用</span></span><br></pre></td></tr></table></figure>
-<p>释放后建议立刻置空：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">delete</span> p;</span><br><span class="line">p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
-<p>这样后续可以通过判空避免继续使用旧地址。</p>
-<h4 id="栈内存销毁后指针残留">栈内存销毁后指针残留</h4>
-<p>下面这个例子会产生悬空指针：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>函数结束后，<code>x</code>
-已经销毁，但外面拿到的指针还残留着原来的地址。</p>
-<p>这种指针看起来像有值，实际上已经不能安全使用。</p>
-<h4 id="常见危险总结">常见危险总结</h4>
-<table>
-<thead>
-<tr>
-<th>问题</th>
-<th>示例</th>
-<th>结果</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>未初始化</td>
-<td><code>int* p;</code></td>
-<td>指向未知位置</td>
-</tr>
-<tr>
-<td>空指针解引用</td>
-<td><code>*nullptr</code></td>
-<td>程序崩溃风险</td>
-</tr>
-<tr>
-<td>释放后使用</td>
-<td><code>delete p; *p</code></td>
-<td>使用已释放内存</td>
-</tr>
-<tr>
-<td>返回局部变量地址</td>
-<td><code>return &amp;x;</code></td>
-<td>指向已销毁栈对象</td>
-</tr>
-<tr>
-<td>数组越界</td>
-<td><code>arr[100]</code></td>
-<td>访问不属于自己的内存</td>
-</tr>
-</tbody>
-</table>
-<h3 id="指针使用最小准则">📏 指针使用最小准则</h3>
-<table>
-<thead>
-<tr>
-<th>准则</th>
-<th>原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>指针定义时初始化</td>
-<td>避免野指针</td>
-</tr>
-<tr>
-<td>不知道指向哪里就用 <code>nullptr</code></td>
-<td>明确表示空</td>
-</tr>
-<tr>
-<td>解引用前先确认有效</td>
-<td>避免崩溃</td>
-</tr>
-<tr>
-<td><code>new</code> 后要 <code>delete</code></td>
-<td>避免内存泄漏</td>
-</tr>
-<tr>
-<td><code>delete</code> 后置为 <code>nullptr</code></td>
-<td>避免悬空指针误用</td>
-</tr>
-<tr>
-<td>数组指针参数同时传长度</td>
-<td>避免越界</td>
-</tr>
-<tr>
-<td>不返回局部变量地址</td>
-<td>栈内存函数结束会失效</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>指针的本质是地址；学指针，就是学会通过地址间接访问和管理内存。</p>
-</blockquote>
-<p>先把三件事分清：<code>&amp;</code>
-取地址、指针保存地址、<code>*</code>
-通过地址访问值。再逐步理解栈、堆、数组退化和悬空指针，指针就不会只是一堆符号。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>指针</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：基础语法</title>
     <url>/posts/b7e3c9a2/</url>
     <content><![CDATA[<p>学完 HelloWorld
@@ -17034,18 +16597,12 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：STL 容器</title>
-    <url>/posts/e9f3b7c2/</url>
-    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
-提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+    <title>C/C++ 入门：指针</title>
+    <url>/posts/c8d4f2a9/</url>
+    <content><![CDATA[<p>指针难，不是因为语法多，而是因为它要求你开始从“变量的值”进一步看到“变量在内存里的位置”。</p>
 <span id="more"></span>
 <h3 id="基本概念速读">📚 基本概念速读</h3>
 <table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
 <thead>
 <tr>
 <th>名称</th>
@@ -17055,414 +16612,425 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
 </thead>
 <tbody>
 <tr>
-<td>STL</td>
-<td>Standard Template Library，标准模板库</td>
-<td>C++ 标准库的容器 + 算法</td>
+<td>地址</td>
+<td>变量在内存中的位置编号</td>
+<td>住址</td>
 </tr>
 <tr>
-<td>容器（container）</td>
-<td>存储和管理一组元素的数据结构</td>
-<td>装数据的东西</td>
+<td>指针</td>
+<td>保存地址的变量</td>
+<td>存地址</td>
 </tr>
 <tr>
-<td><code>vector</code></td>
-<td>动态数组，内存连续，自动扩容</td>
-<td>自动扩容的数组</td>
+<td>取地址</td>
+<td>用 <code>&amp;</code> 得到变量地址</td>
+<td>问住址</td>
 </tr>
 <tr>
-<td><code>string</code></td>
-<td>字符串类型，自动管理字符内存</td>
-<td>好用的字符串</td>
+<td>解引用</td>
+<td>用 <code>*</code> 通过地址访问目标值</td>
+<td>按地址找值</td>
 </tr>
 <tr>
-<td><code>map</code></td>
-<td>键值对映射，按键有序</td>
-<td>字典/映射</td>
+<td>栈</td>
+<td>自动管理的函数调用内存区域</td>
+<td>自动生灭</td>
 </tr>
 <tr>
-<td><code>set</code></td>
-<td>不重复元素的有序集合</td>
-<td>去重 + 有序</td>
+<td>堆</td>
+<td>手动申请、手动释放的内存区域</td>
+<td>手动管理</td>
 </tr>
 <tr>
-<td>迭代器（iterator）</td>
-<td>遍历容器的指针式对象</td>
-<td>容器的通用游标</td>
+<td>空指针</td>
+<td>不指向任何有效对象的指针</td>
+<td>指向空</td>
 </tr>
 <tr>
-<td>范围 for</td>
-<td><code>for (auto x : c)</code> 遍历语法</td>
-<td>简单遍历</td>
+<td>野指针</td>
+<td>指向未知或无效位置的指针</td>
+<td>危险地址</td>
+</tr>
+<tr>
+<td>悬空指针</td>
+<td>原对象已失效但指针还留着</td>
+<td>地址过期</td>
 </tr>
 </tbody>
 </table>
-<h3 id="stl-是什么">🧩 STL 是什么</h3>
-<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
-<table>
-<thead>
-<tr>
-<th>组成</th>
-<th>作用</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>容器</td>
-<td>存储数据</td>
-<td><code>vector</code>、<code>map</code>、<code>set</code></td>
-</tr>
-<tr>
-<td>算法</td>
-<td>操作数据</td>
-<td><code>sort</code>、<code>find</code></td>
-</tr>
-<tr>
-<td>迭代器</td>
-<td>连接容器和算法</td>
-<td><code>begin()</code>、<code>end()</code></td>
-</tr>
-</tbody>
-</table>
-<p>STL
-用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[容器] &lt;--&gt; B[迭代器]
-    B &lt;--&gt; C[算法]
-    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
-    C --&gt; E[sort&#x2F;find&#x2F;count]
-</code>
-</pre>
-<p>先记住一个总原则：<strong>能用 STL
-容器解决的，不要自己造轮子</strong>。</p>
-<h3 id="vector动态数组">🧮 vector：动态数组</h3>
-<h4 id="基本用法">基本用法</h4>
-<p><code>vector</code>
-是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以在创建时直接给初始值：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
-<h4 id="遍历">遍历</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>size()</code> 返回的是
-<code>size_t</code>（无符号整数），所以循环变量建议也用
-<code>size_t</code>，避免有符号/无符号比较的警告。</p>
-</blockquote>
-<h4 id="常用接口">常用接口</h4>
-<table>
-<thead>
-<tr>
-<th>接口</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>push_back(x)</code></td>
-<td>尾部追加元素</td>
-</tr>
-<tr>
-<td><code>pop_back()</code></td>
-<td>删除尾部元素</td>
-</tr>
-<tr>
-<td><code>size()</code></td>
-<td>元素个数</td>
-</tr>
-<tr>
-<td><code>empty()</code></td>
-<td>是否为空</td>
-</tr>
-<tr>
-<td><code>front()</code> / <code>back()</code></td>
-<td>第一个 / 最后一个元素</td>
-</tr>
-<tr>
-<td><code>v[i]</code></td>
-<td>按下标访问，<strong>不检查越界</strong></td>
-</tr>
-<tr>
-<td><code>v.at(i)</code></td>
-<td>按下标访问，越界抛异常</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>v[i]</code>
-越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
-<code>v.at(i)</code> 更安全。</p>
-</blockquote>
-<h3 id="string常用接口与互转">📝 string：常用接口与互转</h3>
-<h4 id="常用接口-1">常用接口</h4>
-<p><code>string</code> 是 C++
-的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>find</code> 找不到时返回
-<code>string::npos</code>，判断要用它：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="与-c-字符串互转">与 C 字符串互转</h4>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
-<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
-省去了手动管理长度、手动拼接的麻烦：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>C 风格 <code>char[]</code></th>
-<th><code>string</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>拼接</td>
-<td><code>strcat</code>，要保证空间够</td>
-<td><code>s1 + s2</code></td>
-</tr>
-<tr>
-<td>比较</td>
-<td><code>strcmp</code></td>
-<td><code>==</code></td>
-</tr>
-<tr>
-<td>长度</td>
-<td><code>strlen</code></td>
-<td><code>.size()</code></td>
-</tr>
-<tr>
-<td>拷贝</td>
-<td><code>strcpy</code></td>
-<td><code>=</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="map键值对">🗺️ map：键值对</h3>
-<h4 id="基本用法-1">基本用法</h4>
-<p><code>map</code>
-保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出（按键排序）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
-<h4 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h4>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>键不存在时</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>scores["Bob"]</code></td>
-<td>自动插入一个默认值（0）</td>
-<td>需要写入时</td>
-</tr>
-<tr>
-<td><code>scores.find("Bob")</code></td>
-<td>返回 <code>end()</code>，不插入</td>
-<td>只查询时</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
-<code>count</code>，避免误插入脏数据：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="set去重与有序">🧹 set：去重与有序</h3>
-<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th><code>vector</code></th>
-<th><code>set</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>顺序</td>
-<td>保持插入顺序</td>
-<td>自动排序</td>
-</tr>
-<tr>
-<td>重复</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>按下标访问</td>
-<td>可以</td>
-<td>不可以，用迭代器</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>需要去重 + 有序时用
-<code>set</code>；需要保持插入顺序、按下标访问时用
-<code>vector</code>。</p>
-</blockquote>
-<h3 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h3>
-<h4 id="基本概念">基本概念</h4>
-<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
-指向第一个元素，<code>end()</code>
-指向最后一个元素的下一个位置（不指向有效元素）。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[begin 指向第一个元素] --&gt; B[元素...]
-    B --&gt; C[end 指向末尾之后]
-</code>
-</pre>
-<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
-的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
-<code>it-&gt;second</code> 访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="迭代器失效问题">迭代器失效问题</h4>
-<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
-<p>最典型的例子是 <code>vector</code> 扩容：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
-<p>什么时候要警惕：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>是否可能使旧迭代器失效</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
-<td>可能失效</td>
-</tr>
-<tr>
-<td><code>vector</code> 中间插入/删除</td>
-<td>受影响位置之后失效</td>
-</tr>
-<tr>
-<td><code>map</code>/<code>set</code> 插入</td>
-<td>通常不失效</td>
-</tr>
-<tr>
-<td>遍历中删除当前元素</td>
-<td>当前迭代器失效</td>
-</tr>
-</tbody>
-</table>
-<p>范围 for
-内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
-<h3 id="sort-算法">🔀 sort 算法</h3>
-<h4 id="默认排序">默认排序</h4>
-<p><code>sort</code> 属于 STL
-算法，对迭代器范围内的元素排序，默认升序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>降序可以用标准库提供的比较器：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
-<h4 id="自定义比较函数">自定义比较函数</h4>
-<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
-<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
-前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
-<code>&gt;=</code> 这种包含等号的条件。</p>
-<h4 id="小结">小结</h4>
-<table>
-<thead>
-<tr>
-<th>用法</th>
-<th>代码</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>升序</td>
-<td><code>sort(v.begin(), v.end())</code></td>
-</tr>
-<tr>
-<td>降序</td>
-<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
-</tr>
-<tr>
-<td>按自定义规则</td>
-<td><code>sort(v.begin(), v.end(), lambda)</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">⚠️ 常见误区</h3>
+<h3 id="程序内存分区极简认识">🧩 程序内存分区极简认识</h3>
+<p>程序运行时，内存不是一整块随便用，而是可以粗略分成几个区域。初学阶段不需要记所有细节，先建立心智模型。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+----------------------+</span><br><span class="line">|  代码区              |  程序指令</span><br><span class="line">+----------------------+</span><br><span class="line">|  常量区              |  字符串字面量、只读常量</span><br><span class="line">+----------------------+</span><br><span class="line">|  全局区              |  全局变量、静态变量</span><br><span class="line">+----------------------+</span><br><span class="line">|  堆                  |  手动申请、手动释放</span><br><span class="line">+----------------------+</span><br><span class="line">|  栈                  |  局部变量、函数调用现场</span><br><span class="line">+----------------------+</span><br></pre></td></tr></table></figure>
+<p>更简单地说：</p>
 <table>
 <colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
+<col style="width: 18%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 31%" />
 </colgroup>
 <thead>
 <tr>
-<th>误区</th>
-<th>正解</th>
+<th>区域</th>
+<th>放什么</th>
+<th>谁管理</th>
+<th>常见特点</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>vector</code> 下标越界会报错</td>
-<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
-会抛异常</td>
+<td>栈</td>
+<td>局部变量、函数参数</td>
+<td>编译器和运行时自动管理</td>
+<td>快，函数结束自动释放</td>
 </tr>
 <tr>
-<td><code>string</code> 就是 <code>char[]</code></td>
-<td><code>string</code> 自动管理内存，支持
-<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+<td>堆</td>
+<td>手动申请的大块数据</td>
+<td>程序员管理</td>
+<td>灵活，但容易泄漏</td>
 </tr>
 <tr>
-<td>用 <code>map[]</code> 查询很安全</td>
-<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
-<code>find</code>/<code>count</code></td>
+<td>全局区</td>
+<td>全局变量、<code>static</code> 变量</td>
+<td>程序启动到结束</td>
+<td>生命周期长</td>
 </tr>
 <tr>
-<td><code>set</code> 和 <code>vector</code> 都能去重</td>
-<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+<td>常量区</td>
+<td>字符串字面量、只读数据</td>
+<td>编译器和系统管理</td>
+<td>通常不允许修改</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>这只是入门模型。不同系统和编译器的真实内存布局会更复杂，但这个模型足够帮助理解指针。</p>
+</blockquote>
+<h3 id="栈内存">📦 栈内存</h3>
+<h4 id="局部变量生命周期">局部变量生命周期</h4>
+<p>在函数里定义的普通局部变量，通常位于栈上。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> result = a + b;</span><br><span class="line">    <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>a</code>、<code>b</code>、<code>result</code>
+都和这次函数调用绑定。函数开始时它们被创建，函数结束时它们被销毁。</p>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用 add(3, 5)</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">创建 a、b、result</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">return result</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">函数结束，局部变量销毁</span><br></pre></td></tr></table></figure>
+<h4 id="函数结束自动销毁">函数结束自动销毁</h4>
+<p>看一个危险例子：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>x</code>
+是局部变量，函数结束后就没了。<code>return &amp;x;</code>
+返回的是一个已经失效的地址。</p>
+<p>初学阶段先记住：<strong>不要返回局部变量的地址</strong>。</p>
+<h3 id="堆内存">🧱 堆内存</h3>
+<h4 id="手动分配">手动分配</h4>
+<p>堆内存的生命周期不受函数作用域直接限制。C++ 里可以用 <code>new</code>
+申请，用 <code>delete</code> 释放。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="keyword">new</span> <span class="type">int</span>;</span><br><span class="line">*p = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line"><span class="keyword">delete</span> p;</span><br><span class="line">p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
+<p>这段代码做了几件事：</p>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>new int</code></td>
+<td>在堆上申请一个 <code>int</code> 空间</td>
 </tr>
 <tr>
-<td>范围 for 遍历时随便删元素</td>
-<td>删除元素可能导致迭代器失效，需小心处理</td>
+<td><code>int* p</code></td>
+<td>用指针 <code>p</code> 保存这块空间的地址</td>
 </tr>
 <tr>
-<td><code>sort</code> 只能排数字</td>
-<td>传自定义比较函数就能排任意类型</td>
+<td><code>*p = 10;</code></td>
+<td>通过地址把值写进去</td>
 </tr>
 <tr>
-<td>STL 容器都要自己管理内存</td>
-<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+<td><code>delete p;</code></td>
+<td>释放这块堆内存</td>
+</tr>
+<tr>
+<td><code>p = nullptr;</code></td>
+<td>避免指针继续保存旧地址</td>
+</tr>
+</tbody>
+</table>
+<h4 id="生命周期不受函数限制">生命周期不受函数限制</h4>
+<p>下面这个函数返回堆内存地址是可以的：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">createNumber</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span>* p = <span class="keyword">new</span> <span class="type">int</span>;</span><br><span class="line">    *p = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> p;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span>* value = <span class="built_in">createNumber</span>();</span><br><span class="line">    cout &lt;&lt; *value &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">delete</span> value;</span><br><span class="line">    value = <span class="literal">nullptr</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>因为 <code>new int</code> 申请的是堆内存，不会随着
+<code>createNumber</code> 函数结束自动销毁。</p>
+<p>但代价是：<strong>谁申请，谁负责释放</strong>。忘记
+<code>delete</code> 会造成内存泄漏。</p>
+<h3 id="地址取地址与解引用">📍 地址、取地址与解引用</h3>
+<h4 id="地址">地址</h4>
+<p>每个变量都存放在内存中的某个位置，这个位置可以理解为地址。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">cout &lt;&lt; &amp;x &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<p><code>&amp;x</code> 表示取变量 <code>x</code> 的地址。</p>
+<h4 id="指针变量">指针变量</h4>
+<p>指针变量专门用来保存地址。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>* p = &amp;x;</span><br></pre></td></tr></table></figure>
+<p>读法：</p>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int x = 10;</code></td>
+<td>创建一个整数变量</td>
+</tr>
+<tr>
+<td><code>&amp;x</code></td>
+<td>得到 <code>x</code> 的地址</td>
+</tr>
+<tr>
+<td><code>int* p</code></td>
+<td>创建一个指向 <code>int</code> 的指针</td>
+</tr>
+<tr>
+<td><code>p = &amp;x</code></td>
+<td>让 <code>p</code> 保存 <code>x</code> 的地址</td>
+</tr>
+</tbody>
+</table>
+<h4 id="解引用">解引用</h4>
+<p><code>*p</code> 表示通过指针 <code>p</code>
+保存的地址，访问那个地址上的值。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>* p = &amp;x;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line"></span><br><span class="line">*p = <span class="number">20</span>;</span><br><span class="line">cout &lt;&lt; x &lt;&lt; endl;   <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p>可以粗略理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x: 10</span><br><span class="line">^</span><br><span class="line">|</span><br><span class="line">p 保存 x 的地址</span><br><span class="line"></span><br><span class="line">*p 表示沿着地址找到 x</span><br></pre></td></tr></table></figure>
+<h4 id="的两个常见含义"><code>*</code> 的两个常见含义</h4>
+<p><code>*</code> 在不同位置含义不同：</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int* p</code></td>
+<td>定义一个指针变量</td>
+</tr>
+<tr>
+<td><code>*p = 20</code></td>
+<td>解引用，通过指针访问目标值</td>
+</tr>
+</tbody>
+</table>
+<p>这也是指针语法容易让新手混乱的地方。</p>
+<h3 id="nullptr">🕳️ <code>nullptr</code></h3>
+<h4 id="空指针">空指针</h4>
+<p>如果一个指针暂时不指向任何有效对象，应该让它等于
+<code>nullptr</code>。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
+<p><code>nullptr</code> 的意思是：这个指针现在不保存有效地址。</p>
+<h4 id="判空">判空</h4>
+<p>使用指针前，常见做法是先判断它是否为空：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以简写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (p) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>初学阶段建议写清楚 <code>p != nullptr</code>，可读性更好。</p>
+<h4 id="避免和-null-混用">避免和 <code>NULL</code> 混用</h4>
+<p>C 语言里常见 <code>NULL</code>，现代 C++ 更推荐
+<code>nullptr</code>。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p1 = <span class="literal">nullptr</span>;  <span class="comment">// 推荐</span></span><br><span class="line"><span class="type">int</span>* p2 = <span class="literal">NULL</span>;     <span class="comment">// 旧写法，不推荐混用</span></span><br></pre></td></tr></table></figure>
+<p>原因是 <code>nullptr</code> 有明确的空指针类型，更适合 C++
+的类型检查。</p>
+<h3 id="指针做函数参数">🔧 指针做函数参数</h3>
+<h4 id="修改外部变量">修改外部变量</h4>
+<p>值传递只能修改副本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>指针参数可以修改外部变量：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span>* p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        *p = <span class="number">100</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">change</span>(&amp;x);</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;  <span class="comment">// 100</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用 <code>change(&amp;x)</code> 时，传进去的是 <code>x</code>
+的地址。函数内部用 <code>*p</code> 找到原来的变量并修改它。</p>
+<h4 id="传数组">传数组</h4>
+<p>数组作为函数参数时，通常会退化成指针。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span>* arr, <span class="type">int</span> length)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line">    <span class="built_in">printArray</span>(nums, <span class="number">3</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>arr</code> 可以理解为指向数组第一个元素的指针。</p>
+<h4 id="传缓冲区">传缓冲区</h4>
+<p>指针也常用来传一段可写缓冲区。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">fillZero</span><span class="params">(<span class="type">int</span>* buffer, <span class="type">int</span> length)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        buffer[i] = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> data[<span class="number">5</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>&#125;;</span><br><span class="line">    <span class="built_in">fillZero</span>(data, <span class="number">5</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>传缓冲区时，通常要同时传长度。只传指针，函数不知道后面有多少个元素。</p>
+<h3 id="指针与数组">🧮 指针与数组</h3>
+<h4 id="数组名退化">数组名退化</h4>
+<p>很多表达式里，数组名会退化为指向首元素的指针。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* p = nums;</span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 10</span></span><br></pre></td></tr></table></figure>
+<p><code>nums</code> 在这里相当于 <code>&amp;nums[0]</code>。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; nums &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;nums[<span class="number">0</span>] &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<p>这两个输出通常会看到相同的地址。</p>
+<h4 id="指针遍历数组">指针遍历数组</h4>
+<p>可以通过指针移动遍历数组：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"><span class="type">int</span>* p = nums;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; *(p + i) &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>p + i</code> 不是简单加 <code>i</code> 个字节，而是向后移动
+<code>i</code> 个 <code>int</code> 的位置。</p>
+<p>也可以写成更常见的数组下标：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    cout &lt;&lt; p[i] &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>p[i]</code> 本质上可以理解为 <code>*(p + i)</code>。</p>
+<h4 id="越界风险">越界风险</h4>
+<p>指针不会自动知道数组长度。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"><span class="type">int</span>* p = nums;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; p[<span class="number">3</span>] &lt;&lt; endl;  <span class="comment">// 错误示例：越界</span></span><br></pre></td></tr></table></figure>
+<p><code>p[3]</code> 访问的是第 4 个元素，但数组只有 3
+个元素。越界访问可能输出奇怪值，也可能直接崩溃。</p>
+<p>初学阶段写数组函数时，尽量把指针和长度一起传：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printArray</span><span class="params">(<span class="type">int</span>* arr, <span class="type">int</span> length)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; length; i++) &#123;</span><br><span class="line">        cout &lt;&lt; arr[i] &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="指针数组字符指针数组指针">🧷 指针数组、字符指针、数组指针</h3>
+<p>这三个名字很像，但含义不同。</p>
+<h4 id="指针数组">指针数组</h4>
+<p><strong>指针数组</strong>本质上是数组，数组里的每个元素都是指针。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"><span class="type">int</span> c = <span class="number">30</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* arr[<span class="number">3</span>] = &#123;&amp;a, &amp;b, &amp;c&#125;;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *arr[<span class="number">0</span>] &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; *arr[<span class="number">1</span>] &lt;&lt; endl;  <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; *arr[<span class="number">2</span>] &lt;&lt; endl;  <span class="comment">// 30</span></span><br></pre></td></tr></table></figure>
+<p>读法：<code>arr</code> 是一个数组，里面放了 3 个
+<code>int*</code>。</p>
+<h4 id="字符指针">字符指针</h4>
+<p>字符指针常用来指向字符串字面量：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">char</span>* text = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; text &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; text[<span class="number">0</span>] &lt;&lt; endl;  <span class="comment">// h</span></span><br></pre></td></tr></table></figure>
+<p>这里建议写
+<code>const char*</code>，因为字符串字面量通常位于只读区域，不应该被修改。</p>
+<p>不要这样写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">char</span>* text = <span class="string">&quot;hello&quot;</span>;  <span class="comment">// 不推荐</span></span><br></pre></td></tr></table></figure>
+<p>如果需要可修改的字符数组，应写成数组：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">char</span> text[] = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line">text[<span class="number">0</span>] = <span class="string">&#x27;H&#x27;</span>;</span><br></pre></td></tr></table></figure>
+<h4 id="数组指针">数组指针</h4>
+<p><strong>数组指针</strong>本质上是指针，它指向一个数组。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> nums[<span class="number">3</span>] = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="built_in">int</span> (*p)[<span class="number">3</span>] = &amp;nums;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; (*p)[<span class="number">0</span>] &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; (*p)[<span class="number">1</span>] &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p><code>int (*p)[3]</code> 的读法是：<code>p</code>
+是一个指针，指向一个包含 3 个 <code>int</code> 的数组。</p>
+<p>注意括号很关键：</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int* arr[3]</code></td>
+<td>指针数组：数组里有 3 个 <code>int*</code></td>
+</tr>
+<tr>
+<td><code>int (*p)[3]</code></td>
+<td>数组指针：指向含 3 个 <code>int</code> 的数组</td>
+</tr>
+</tbody>
+</table>
+<h3 id="野指针与悬空指针">⚠️ 野指针与悬空指针</h3>
+<h4 id="未初始化指针">未初始化指针</h4>
+<p>未初始化指针保存的是不确定地址。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p;</span><br><span class="line"><span class="comment">// cout &lt;&lt; *p &lt;&lt; endl;  // 错误示例：p 没有初始化</span></span><br></pre></td></tr></table></figure>
+<p>正确做法：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
+<p>指针定义时，如果暂时没有明确指向，就先设为 <code>nullptr</code>。</p>
+<h4 id="释放后继续使用">释放后继续使用</h4>
+<p>释放堆内存后，指针里的旧地址还在，但那块内存已经不属于你。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="keyword">new</span> <span class="type">int</span>;</span><br><span class="line">*p = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">delete</span> p;</span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *p &lt;&lt; endl;  // 错误示例：释放后继续使用</span></span><br></pre></td></tr></table></figure>
+<p>释放后建议立刻置空：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">delete</span> p;</span><br><span class="line">p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
+<p>这样后续可以通过判空避免继续使用旧地址。</p>
+<h4 id="栈内存销毁后指针残留">栈内存销毁后指针残留</h4>
+<p>下面这个例子会产生悬空指针：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>函数结束后，<code>x</code>
+已经销毁，但外面拿到的指针还残留着原来的地址。</p>
+<p>这种指针看起来像有值，实际上已经不能安全使用。</p>
+<h4 id="常见危险总结">常见危险总结</h4>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>示例</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>未初始化</td>
+<td><code>int* p;</code></td>
+<td>指向未知位置</td>
+</tr>
+<tr>
+<td>空指针解引用</td>
+<td><code>*nullptr</code></td>
+<td>程序崩溃风险</td>
+</tr>
+<tr>
+<td>释放后使用</td>
+<td><code>delete p; *p</code></td>
+<td>使用已释放内存</td>
+</tr>
+<tr>
+<td>返回局部变量地址</td>
+<td><code>return &amp;x;</code></td>
+<td>指向已销毁栈对象</td>
+</tr>
+<tr>
+<td>数组越界</td>
+<td><code>arr[100]</code></td>
+<td>访问不属于自己的内存</td>
+</tr>
+</tbody>
+</table>
+<h3 id="指针使用最小准则">📏 指针使用最小准则</h3>
+<table>
+<thead>
+<tr>
+<th>准则</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>指针定义时初始化</td>
+<td>避免野指针</td>
+</tr>
+<tr>
+<td>不知道指向哪里就用 <code>nullptr</code></td>
+<td>明确表示空</td>
+</tr>
+<tr>
+<td>解引用前先确认有效</td>
+<td>避免崩溃</td>
+</tr>
+<tr>
+<td><code>new</code> 后要 <code>delete</code></td>
+<td>避免内存泄漏</td>
+</tr>
+<tr>
+<td><code>delete</code> 后置为 <code>nullptr</code></td>
+<td>避免悬空指针误用</td>
+</tr>
+<tr>
+<td>数组指针参数同时传长度</td>
+<td>避免越界</td>
+</tr>
+<tr>
+<td>不返回局部变量地址</td>
+<td>栈内存函数结束会失效</td>
 </tr>
 </tbody>
 </table>
 <h3 id="总结">✅ 总结</h3>
 <blockquote>
-<p>STL
-三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+<p>指针的本质是地址；学指针，就是学会通过地址间接访问和管理内存。</p>
 </blockquote>
-<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
-管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
-自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>先把三件事分清：<code>&amp;</code>
+取地址、指针保存地址、<code>*</code>
+通过地址访问值。再逐步理解栈、堆、数组退化和悬空指针，指针就不会只是一堆符号。</p>
 <p>Happy Hacking! 🎉</p>
 ]]></content>
       <tags>
         <tag>C/C++</tag>
         <tag>编程入门</tag>
-        <tag>STL</tag>
-        <tag>vector</tag>
-        <tag>string</tag>
-        <tag>map</tag>
-        <tag>set</tag>
+        <tag>指针</tag>
       </tags>
   </entry>
   <entry>
@@ -18096,6 +17664,438 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：STL 容器</title>
+    <url>/posts/e9f3b7c2/</url>
+    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
+提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STL</td>
+<td>Standard Template Library，标准模板库</td>
+<td>C++ 标准库的容器 + 算法</td>
+</tr>
+<tr>
+<td>容器（container）</td>
+<td>存储和管理一组元素的数据结构</td>
+<td>装数据的东西</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td>动态数组，内存连续，自动扩容</td>
+<td>自动扩容的数组</td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>字符串类型，自动管理字符内存</td>
+<td>好用的字符串</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>键值对映射，按键有序</td>
+<td>字典/映射</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>不重复元素的有序集合</td>
+<td>去重 + 有序</td>
+</tr>
+<tr>
+<td>迭代器（iterator）</td>
+<td>遍历容器的指针式对象</td>
+<td>容器的通用游标</td>
+</tr>
+<tr>
+<td>范围 for</td>
+<td><code>for (auto x : c)</code> 遍历语法</td>
+<td>简单遍历</td>
+</tr>
+</tbody>
+</table>
+<h3 id="stl-是什么">🧩 STL 是什么</h3>
+<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
+<table>
+<thead>
+<tr>
+<th>组成</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>容器</td>
+<td>存储数据</td>
+<td><code>vector</code>、<code>map</code>、<code>set</code></td>
+</tr>
+<tr>
+<td>算法</td>
+<td>操作数据</td>
+<td><code>sort</code>、<code>find</code></td>
+</tr>
+<tr>
+<td>迭代器</td>
+<td>连接容器和算法</td>
+<td><code>begin()</code>、<code>end()</code></td>
+</tr>
+</tbody>
+</table>
+<p>STL
+用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[容器] &lt;--&gt; B[迭代器]
+    B &lt;--&gt; C[算法]
+    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
+    C --&gt; E[sort&#x2F;find&#x2F;count]
+</code>
+</pre>
+<p>先记住一个总原则：<strong>能用 STL
+容器解决的，不要自己造轮子</strong>。</p>
+<h3 id="vector动态数组">🧮 vector：动态数组</h3>
+<h4 id="基本用法">基本用法</h4>
+<p><code>vector</code>
+是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以在创建时直接给初始值：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
+<h4 id="遍历">遍历</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>size()</code> 返回的是
+<code>size_t</code>（无符号整数），所以循环变量建议也用
+<code>size_t</code>，避免有符号/无符号比较的警告。</p>
+</blockquote>
+<h4 id="常用接口">常用接口</h4>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_back(x)</code></td>
+<td>尾部追加元素</td>
+</tr>
+<tr>
+<td><code>pop_back()</code></td>
+<td>删除尾部元素</td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>empty()</code></td>
+<td>是否为空</td>
+</tr>
+<tr>
+<td><code>front()</code> / <code>back()</code></td>
+<td>第一个 / 最后一个元素</td>
+</tr>
+<tr>
+<td><code>v[i]</code></td>
+<td>按下标访问，<strong>不检查越界</strong></td>
+</tr>
+<tr>
+<td><code>v.at(i)</code></td>
+<td>按下标访问，越界抛异常</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>v[i]</code>
+越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
+<code>v.at(i)</code> 更安全。</p>
+</blockquote>
+<h3 id="string常用接口与互转">📝 string：常用接口与互转</h3>
+<h4 id="常用接口-1">常用接口</h4>
+<p><code>string</code> 是 C++
+的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>find</code> 找不到时返回
+<code>string::npos</code>，判断要用它：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="与-c-字符串互转">与 C 字符串互转</h4>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
+<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
+省去了手动管理长度、手动拼接的麻烦：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>C 风格 <code>char[]</code></th>
+<th><code>string</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拼接</td>
+<td><code>strcat</code>，要保证空间够</td>
+<td><code>s1 + s2</code></td>
+</tr>
+<tr>
+<td>比较</td>
+<td><code>strcmp</code></td>
+<td><code>==</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td><code>strlen</code></td>
+<td><code>.size()</code></td>
+</tr>
+<tr>
+<td>拷贝</td>
+<td><code>strcpy</code></td>
+<td><code>=</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="map键值对">🗺️ map：键值对</h3>
+<h4 id="基本用法-1">基本用法</h4>
+<p><code>map</code>
+保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出（按键排序）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
+<h4 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h4>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>键不存在时</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scores["Bob"]</code></td>
+<td>自动插入一个默认值（0）</td>
+<td>需要写入时</td>
+</tr>
+<tr>
+<td><code>scores.find("Bob")</code></td>
+<td>返回 <code>end()</code>，不插入</td>
+<td>只查询时</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
+<code>count</code>，避免误插入脏数据：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="set去重与有序">🧹 set：去重与有序</h3>
+<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th><code>vector</code></th>
+<th><code>set</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>顺序</td>
+<td>保持插入顺序</td>
+<td>自动排序</td>
+</tr>
+<tr>
+<td>重复</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>按下标访问</td>
+<td>可以</td>
+<td>不可以，用迭代器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>需要去重 + 有序时用
+<code>set</code>；需要保持插入顺序、按下标访问时用
+<code>vector</code>。</p>
+</blockquote>
+<h3 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h3>
+<h4 id="基本概念">基本概念</h4>
+<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
+指向第一个元素，<code>end()</code>
+指向最后一个元素的下一个位置（不指向有效元素）。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[begin 指向第一个元素] --&gt; B[元素...]
+    B --&gt; C[end 指向末尾之后]
+</code>
+</pre>
+<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
+的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
+<code>it-&gt;second</code> 访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="迭代器失效问题">迭代器失效问题</h4>
+<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
+<p>最典型的例子是 <code>vector</code> 扩容：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
+<p>什么时候要警惕：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>是否可能使旧迭代器失效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
+<td>可能失效</td>
+</tr>
+<tr>
+<td><code>vector</code> 中间插入/删除</td>
+<td>受影响位置之后失效</td>
+</tr>
+<tr>
+<td><code>map</code>/<code>set</code> 插入</td>
+<td>通常不失效</td>
+</tr>
+<tr>
+<td>遍历中删除当前元素</td>
+<td>当前迭代器失效</td>
+</tr>
+</tbody>
+</table>
+<p>范围 for
+内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
+<h3 id="sort-算法">🔀 sort 算法</h3>
+<h4 id="默认排序">默认排序</h4>
+<p><code>sort</code> 属于 STL
+算法，对迭代器范围内的元素排序，默认升序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>降序可以用标准库提供的比较器：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
+<h4 id="自定义比较函数">自定义比较函数</h4>
+<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
+<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
+前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
+<code>&gt;=</code> 这种包含等号的条件。</p>
+<h4 id="小结">小结</h4>
+<table>
+<thead>
+<tr>
+<th>用法</th>
+<th>代码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升序</td>
+<td><code>sort(v.begin(), v.end())</code></td>
+</tr>
+<tr>
+<td>降序</td>
+<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
+</tr>
+<tr>
+<td>按自定义规则</td>
+<td><code>sort(v.begin(), v.end(), lambda)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 下标越界会报错</td>
+<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
+会抛异常</td>
+</tr>
+<tr>
+<td><code>string</code> 就是 <code>char[]</code></td>
+<td><code>string</code> 自动管理内存，支持
+<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+</tr>
+<tr>
+<td>用 <code>map[]</code> 查询很安全</td>
+<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
+<code>find</code>/<code>count</code></td>
+</tr>
+<tr>
+<td><code>set</code> 和 <code>vector</code> 都能去重</td>
+<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+</tr>
+<tr>
+<td>范围 for 遍历时随便删元素</td>
+<td>删除元素可能导致迭代器失效，需小心处理</td>
+</tr>
+<tr>
+<td><code>sort</code> 只能排数字</td>
+<td>传自定义比较函数就能排任意类型</td>
+</tr>
+<tr>
+<td>STL 容器都要自己管理内存</td>
+<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>STL
+三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+</blockquote>
+<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
+管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
+自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>STL</tag>
+        <tag>vector</tag>
+        <tag>string</tag>
+        <tag>map</tag>
+        <tag>set</tag>
       </tags>
   </entry>
   <entry>
@@ -25217,6 +25217,262 @@ System for AI Computing</em> 的入门精读笔记。）</p>
       </tags>
   </entry>
   <entry>
+    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
+    <url>/posts/9f387285/</url>
+    <content><![CDATA[<blockquote>
+<p>接前两篇：<a
+href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
+href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
+work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
+逐个验证兼容性、安全性、性能和极端场景。</p>
+</blockquote>
+<span id="more"></span>
+<h2 id="rq-总览">📋 RQ 总览</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>RQ</th>
+<th>问题</th>
+<th>答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RQ1</td>
+<td>与现有方案比，兼容性如何？</td>
+<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
+</tr>
+<tr>
+<td>RQ2</td>
+<td>能不能防住攻击者？</td>
+<td>链路完整：可信 + 保密 + 防篡改</td>
+</tr>
+<tr>
+<td>RQ3</td>
+<td>LLM 上性能损失多少？</td>
+<td>overhead 只有 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>RQ4</td>
+<td>换不同 LLM / xPU 呢？</td>
+<td>依然稳定，且不随模型大小线性变差</td>
+</tr>
+<tr>
+<td>RQ5</td>
+<td>优化有没有用？</td>
+<td>E2E overhead 直接降约 89%</td>
+</tr>
+<tr>
+<td>RQ6</td>
+<td>极端情况呢？</td>
+<td>带宽砍半、显存不够也不崩</td>
+</tr>
+</tbody>
+</table>
+<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭的 PCIe-SC 原型。</p>
+<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
+<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
+2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
+TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
+即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
+软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
+加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
+<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
+RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
+12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
+硬件、NVIDIA driver、CUDA 或 AI
+application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
+<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
+上实际跑起来慢多少，是后面 RQ4 的事。</p>
+<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
+RQ2：安全性——假设攻击者控制特权软件</h2>
+<p>RQ2
+假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
+software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
+<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
+完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
+通信完整</strong>，缺一不可。</p>
+<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</h2>
+<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
+<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E2E Latency</strong></td>
+<td>从输入问题到完整回答生成的总时长</td>
+</tr>
+<tr>
+<td><strong>TPS</strong></td>
+<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
+</tr>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
+</tr>
+</tbody>
+</table>
+<p>结果：<strong>overhead
+0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
+100ms，5% overhead 就是约 105ms。</p>
+<p><strong>为什么没慢很多？</strong>
+因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
+加密；大量普通包走 A4
+免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
+<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
+xPU——稳定性验证</h2>
+<h3 id="不同-llm">不同 LLM</h3>
+<p>从小到大多种模型都测了，整体 overhead
+<strong>0.72%～4.76%</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
+<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
+是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
+2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
+带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
+<h3 id="不同-xpu">不同 xPU</h3>
+<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
+Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
+<strong>0.58%～2.40%</strong>。</p>
+<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
+的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
+重新设计安全机制。</p>
+<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
+89%</h2>
+<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
+latency overhead 降低了 88.7%～89.8%</strong>。</p>
+<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
+再读一点 → 再问一次）。三个优化对症下药：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
+<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
+次数大幅减少。</p>
+<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
+<p>最后作者主动加难度：</p>
+<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
+一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
+<strong>4.45%</strong>。</p>
+<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
+<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
+间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
+<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
+overhead 小于 2%</strong>。</p>
+<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
+的额外代价依然可控。</p>
+<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>兼容性</td>
+<td>✅</td>
+<td>5 种不同 xPU，不改硬件/驱动/应用</td>
+</tr>
+<tr>
+<td>安全性</td>
+<td>✅</td>
+<td>加密 + 完整性 + 可信建立全链路</td>
+</tr>
+<tr>
+<td>LLM 性能</td>
+<td>✅</td>
+<td>overhead 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>多模型</td>
+<td>✅</td>
+<td>0.72%～4.76%，不随模型大小线性恶化</td>
+</tr>
+<tr>
+<td>多 xPU</td>
+<td>✅</td>
+<td>0.58%～2.40%</td>
+</tr>
+<tr>
+<td>优化效果</td>
+<td>✅</td>
+<td>E2E overhead 降低约 89%</td>
+</tr>
+<tr>
+<td>极端场景</td>
+<td>✅</td>
+<td>带宽减半 / 显存溢出仍可控</td>
+</tr>
+</tbody>
+</table>
+<p>整套系统概括起来：</p>
+<blockquote>
+<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
+PCIe
+通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
+</blockquote>
+<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
+layer（共同抽象层）</strong>。</p>
+<h3 id="怎么读才有收获">怎么读才有收获</h3>
+<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
+5（Filter 规则）/ 6（Attestation 协议）/
+7-8（实验）</strong>，串起来就是全篇。</p>
+<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
+<ul>
+<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
+LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
+的表现需要另外验证。</li>
+<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
+分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
+<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
+固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
+两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
+sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
+</ul>
+<h2 id="系列回顾">📚 系列回顾</h2>
+<ul>
+<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
+背景</li>
+<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
+精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
+Handler / Adaptor / 信任建立 / 实现</li>
+<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
+</ul>
+<p>如果对背景概念想补课，可以看站内的 <a
+href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
+href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em>
+的入门精读笔记，全部实验数据来自论文原文。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+        <tag>性能测试</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</title>
     <url>/posts/25a4a786/</url>
     <content><![CDATA[<blockquote>
@@ -25625,262 +25881,6 @@ System for AI Computing</em> 的入门精读笔记。）</p>
         <tag>机密计算</tag>
         <tag>论文精读</tag>
         <tag>FPGA</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
-    <url>/posts/9f387285/</url>
-    <content><![CDATA[<blockquote>
-<p>接前两篇：<a
-href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
-href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
-work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
-逐个验证兼容性、安全性、性能和极端场景。</p>
-</blockquote>
-<span id="more"></span>
-<h2 id="rq-总览">📋 RQ 总览</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>RQ</th>
-<th>问题</th>
-<th>答案</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RQ1</td>
-<td>与现有方案比，兼容性如何？</td>
-<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
-</tr>
-<tr>
-<td>RQ2</td>
-<td>能不能防住攻击者？</td>
-<td>链路完整：可信 + 保密 + 防篡改</td>
-</tr>
-<tr>
-<td>RQ3</td>
-<td>LLM 上性能损失多少？</td>
-<td>overhead 只有 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>RQ4</td>
-<td>换不同 LLM / xPU 呢？</td>
-<td>依然稳定，且不随模型大小线性变差</td>
-</tr>
-<tr>
-<td>RQ5</td>
-<td>优化有没有用？</td>
-<td>E2E overhead 直接降约 89%</td>
-</tr>
-<tr>
-<td>RQ6</td>
-<td>极端情况呢？</td>
-<td>带宽砍半、显存不够也不崩</td>
-</tr>
-</tbody>
-</table>
-<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
-搭的 PCIe-SC 原型。</p>
-<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
-<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
-2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
-TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
-即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
-软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
-加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
-<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
-RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
-12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
-硬件、NVIDIA driver、CUDA 或 AI
-application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
-<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
-上实际跑起来慢多少，是后面 RQ4 的事。</p>
-<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
-RQ2：安全性——假设攻击者控制特权软件</h2>
-<p>RQ2
-假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
-software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
-<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
-完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
-通信完整</strong>，缺一不可。</p>
-<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
-怎么来的？</h2>
-<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
-<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
-<table>
-<thead>
-<tr>
-<th>指标</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>E2E Latency</strong></td>
-<td>从输入问题到完整回答生成的总时长</td>
-</tr>
-<tr>
-<td><strong>TPS</strong></td>
-<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
-</tr>
-<tr>
-<td><strong>TTFT</strong></td>
-<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
-</tr>
-</tbody>
-</table>
-<p>结果：<strong>overhead
-0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
-100ms，5% overhead 就是约 105ms。</p>
-<p><strong>为什么没慢很多？</strong>
-因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
-加密；大量普通包走 A4
-免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
-<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
-xPU——稳定性验证</h2>
-<h3 id="不同-llm">不同 LLM</h3>
-<p>从小到大多种模型都测了，整体 overhead
-<strong>0.72%～4.76%</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
-<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
-是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
-2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
-带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
-<h3 id="不同-xpu">不同 xPU</h3>
-<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
-Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
-<strong>0.58%～2.40%</strong>。</p>
-<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
-的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
-重新设计安全机制。</p>
-<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
-89%</h2>
-<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
-latency overhead 降低了 88.7%～89.8%</strong>。</p>
-<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
-再读一点 → 再问一次）。三个优化对症下药：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
-<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
-次数大幅减少。</p>
-<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
-<p>最后作者主动加难度：</p>
-<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
-一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
-<strong>4.45%</strong>。</p>
-<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
-<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
-间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
-<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
-overhead 小于 2%</strong>。</p>
-<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
-的额外代价依然可控。</p>
-<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
-<table>
-<thead>
-<tr>
-<th>维度</th>
-<th>结果</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>兼容性</td>
-<td>✅</td>
-<td>5 种不同 xPU，不改硬件/驱动/应用</td>
-</tr>
-<tr>
-<td>安全性</td>
-<td>✅</td>
-<td>加密 + 完整性 + 可信建立全链路</td>
-</tr>
-<tr>
-<td>LLM 性能</td>
-<td>✅</td>
-<td>overhead 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>多模型</td>
-<td>✅</td>
-<td>0.72%～4.76%，不随模型大小线性恶化</td>
-</tr>
-<tr>
-<td>多 xPU</td>
-<td>✅</td>
-<td>0.58%～2.40%</td>
-</tr>
-<tr>
-<td>优化效果</td>
-<td>✅</td>
-<td>E2E overhead 降低约 89%</td>
-</tr>
-<tr>
-<td>极端场景</td>
-<td>✅</td>
-<td>带宽减半 / 显存溢出仍可控</td>
-</tr>
-</tbody>
-</table>
-<p>整套系统概括起来：</p>
-<blockquote>
-<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
-PCIe
-通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
-</blockquote>
-<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
-layer（共同抽象层）</strong>。</p>
-<h3 id="怎么读才有收获">怎么读才有收获</h3>
-<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
-<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
-5（Filter 规则）/ 6（Attestation 协议）/
-7-8（实验）</strong>，串起来就是全篇。</p>
-<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
-<ul>
-<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
-LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
-的表现需要另外验证。</li>
-<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
-分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
-<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
-固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
-两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
-sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
-</ul>
-<h2 id="系列回顾">📚 系列回顾</h2>
-<ul>
-<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
-精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
-背景</li>
-<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
-精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
-Handler / Adaptor / 信任建立 / 实现</li>
-<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
-</ul>
-<p>如果对背景概念想补课，可以看站内的 <a
-href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
-href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
-<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
-System for AI Computing</em>
-的入门精读笔记，全部实验数据来自论文原文。）</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>GPU</tag>
-        <tag>AI</tag>
-        <tag>机密计算</tag>
-        <tag>论文精读</tag>
-        <tag>性能测试</tag>
       </tags>
   </entry>
   <entry>
@@ -28862,7 +28862,7 @@ LLM：llama.cpp、Ollama、GPT4All
 <li><strong>攻击者没有特权</strong>：只是一个能与受害者同时运行的进程，操作系统隔离照常生效，不改
 LLM 用的任何库，不与 LLM 进程通信；</li>
 <li><strong>攻击者只需要几条常规能力</strong>：能执行代码，能以只读方式打开模型文件并
-<code>mmap</code>（拿不到就退而用操作系统的页去重拿到共享内存），能执行
+<code>mmap</code>（内存映射：把一个文件映射进进程的地址空间，之后像读内存一样读它，数据由内核按页从磁盘带进来），拿不到就退而用操作系统的页去重拿到共享内存，还能执行
 <code>clflush</code> 清缓存；</li>
 <li><strong>攻击者不需要知道模型结构</strong>，也不需要框架的源码或二进制，但能根据公开的模型文件格式（safetensors、pickle）算出
 embedding table 的地址偏移。</li>
