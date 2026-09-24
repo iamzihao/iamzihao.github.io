@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="论文：I Know What You Said: Unveiling Hardware Cache Side-Channels in Local Large Language Model Inference（USENIX Security 2025） 作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong Han、Siyuan Liu、Haiyan">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出">
+<meta property="og:url" content="https://iamzihao.github.io/posts/2a9c1827/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="论文：I Know What You Said: Unveiling Hardware Cache Side-Channels in Local Large Language Model Inference（USENIX Security 2025） 作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong Han、Siyuan Liu、Haiyan">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-24T08:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-24T02:49:30.538Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="LLM">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="侧信道">
+<meta property="article:tag" content="缓存攻击">
+<meta property="article:tag" content="flush+reload">
+<meta property="article:tag" content="隐私泄漏">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/2a9c1827/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/2a9c1827/","path":"posts/2a9c1827/","title":"IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E6%A8%A1%E5%9E%8B%E7%95%99%E5%9C%A8%E6%9C%AC%E5%9C%B0%E5%AF%B9%E8%AF%9D%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E6%98%AF%E6%BC%8F%E4%BA%86"><span class="nav-number"></span> <span class="nav-text">🎬
+起点：模型留在本地，对话为什么还是漏了</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%89%8D%E6%8F%90embedding-%E6%9F%A5%E8%A1%A8%E8%B7%91%E5%9C%A8-cpu-%E4%B8%8A"><span class="nav-number">1.</span> <span class="nav-text">🔑 前提：embedding 查表跑在 CPU
+上</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E6%9D%A1%E6%B3%84%E6%BC%8F%E6%BA%90token-%E5%80%BC%E4%B8%8E%E6%97%B6%E5%BA%8F"><span class="nav-number"></span> <span class="nav-text">🔍 两条泄漏源：token 值与时序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%84%E6%BC%8F%E4%B8%80%E6%9F%A5%E8%A1%A8%E6%A8%A1%E5%BC%8F%E6%9A%B4%E9%9C%B2-token-%E5%80%BC"><span class="nav-number">1.</span> <span class="nav-text">🎯 泄漏一：查表模式暴露 token
+值</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%84%E6%BC%8F%E4%BA%8C%E8%87%AA%E5%9B%9E%E5%BD%92%E6%97%B6%E5%BA%8F%E6%9A%B4%E9%9C%B2-token-%E9%A1%BA%E5%BA%8F"><span class="nav-number">2.</span> <span class="nav-text">⏱️ 泄漏二：自回归时序暴露 token
+顺序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E4%B8%AA%E7%9C%9F%E6%AD%A3%E7%9A%84%E9%9A%BE%E9%A2%98"><span class="nav-number">3.</span> <span class="nav-text">🚧 两个真正的难题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E6%80%BB%E8%A7%88%E4%BA%94%E6%AD%A5%E6%8A%8A%E7%BC%93%E5%AD%98%E8%BD%A8%E8%BF%B9%E5%8F%98%E6%88%90%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🧩
+攻击总览：五步把缓存轨迹变成文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%87%87%E9%9B%86%E6%80%8E%E4%B9%88%E5%BD%95%E4%B8%8B%E6%AF%8F%E4%B8%80%E8%A1%8C%E7%9A%84%E8%AE%BF%E5%AD%98"><span class="nav-number"></span> <span class="nav-text">🛠️ 采集：怎么录下每一行的访存</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E7%AE%97%E5%87%BA%E7%9B%AE%E6%A0%87%E5%9C%B0%E5%9D%80"><span class="nav-number">1.</span> <span class="nav-text">📐 先算出目标地址</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98%E4%BB%8E%E5%93%AA%E6%9D%A5"><span class="nav-number">2.</span> <span class="nav-text">🤝 共享内存从哪来</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E9%A2%84%E5%8F%96%E5%99%A8%E6%8A%8A%E6%A0%87%E5%87%86-flushreload-%E6%89%93%E8%B6%B4%E4%BA%86"><span class="nav-number">3.</span> <span class="nav-text">⚠️ 硬件预取器把标准
+flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%93%E5%AD%98%E8%BD%A8%E8%BF%B9%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">4.</span> <span class="nav-text">🖥️ 缓存轨迹长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%87%E6%AE%B5%E4%B8%8E%E6%98%A0%E5%B0%84prefill-%E5%9C%A8%E5%93%AAdecode-%E5%9C%A8%E5%93%AA"><span class="nav-number"></span> <span class="nav-text">✂️ 切段与映射：prefill
+在哪，decode 在哪</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8E%BB%E5%99%AA%E4%B8%8E%E8%BF%98%E5%8E%9F%E8%BE%93%E5%87%BAllma-%E4%B8%8E%E6%97%B6%E5%BA%8F%E4%BF%A1%E5%8F%B7"><span class="nav-number"></span> <span class="nav-text">🧠 去噪与还原输出：LLMA
+与时序信号</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%87%AA%E5%9B%9E%E5%BD%92%E4%BC%9A%E4%BA%A7%E7%94%9F%E5%91%A8%E6%9C%9F%E6%80%A7"><span class="nav-number">1.</span> <span class="nav-text">📈 为什么自回归会产生周期性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E9%98%B6%E5%B7%AE%E5%88%86%E5%B3%B0%E6%98%AF%E6%BC%8F%E6%A3%80%E8%B0%B7%E6%98%AF%E5%A4%9A%E6%A3%80"><span class="nav-number">2.</span> <span class="nav-text">📉 一阶差分：峰是漏检，谷是多检</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%AD%E7%BB%83%E6%95%B0%E6%8D%AE%E4%BB%8E%E5%93%AA%E6%9D%A5%E5%90%88%E6%88%90%E7%9A%84"><span class="nav-number">3.</span> <span class="nav-text">🧪 训练数据从哪来：合成的</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%98%E5%8E%9F%E8%BE%93%E5%85%A5%E9%A1%BA%E5%BA%8Fllmb"><span class="nav-number"></span> <span class="nav-text">🔗 还原输入顺序：LLMB</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%84%E4%BC%B0%E5%87%86%E7%A1%AE%E5%88%B0%E4%BB%80%E4%B9%88%E7%A8%8B%E5%BA%A6"><span class="nav-number"></span> <span class="nav-text">📊 评估：准确到什么程度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BB%E7%BB%93%E6%9E%9C"><span class="nav-number">1.</span> <span class="nav-text">🏁 主结果</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B6%88%E8%9E%8D%E6%AF%8F%E4%B8%AA%E9%83%A8%E4%BB%B6%E5%80%BC%E5%A4%9A%E5%B0%91"><span class="nav-number">2.</span> <span class="nav-text">🧹 消融：每个部件值多少</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A1%86%E6%9E%B6%E4%B8%8E%E7%A1%AC%E4%BB%B6"><span class="nav-number">3.</span> <span class="nav-text">🧰 框架与硬件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E4%BE%8B%E5%AD%90"><span class="nav-number">4.</span> <span class="nav-text">💬 真实例子</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%BB%E5%8E%9F%E6%96%87%E6%97%B6%E6%B3%A8%E6%84%8F%E7%9A%84%E5%87%A0%E5%A4%84%E5%8F%A3%E5%BE%84%E4%B8%8D%E4%B8%80%E8%87%B4"><span class="nav-number"></span> <span class="nav-text">📎
+读原文时注意的几处口径不一致</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%B9%E7%AD%96%E4%B8%8E%E5%B1%80%E9%99%90"><span class="nav-number"></span> <span class="nav-text">🛡️ 对策与局限</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E5%BB%BA%E8%AE%AE%E7%9A%84%E4%B8%89%E7%A7%8D%E7%BC%93%E8%A7%A3"><span class="nav-number">1.</span> <span class="nav-text">🚧 论文建议的三种缓解</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E6%89%BF%E8%AE%A4%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">2.</span> <span class="nav-text">🧱 论文承认的边界</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number"></span> <span class="nav-text">✅ 总结</span></a></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">87</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">216</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/2a9c1827/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-09-24 16:00:00 / Modified: 10:49:30" itemprop="dateCreated datePublished" datetime="2026-09-24T16:00:00+08:00">2026-09-24</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>12k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>22 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>论文：<strong>I Know What You Said: Unveiling Hardware Cache
+Side-Channels in Local Large Language Model Inference</strong>（USENIX
+Security 2025）</p>
+<p>作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong
+Han、Siyuan Liu、Haiyang Li、Zhiqiang
+Lv（中国科学院信息工程研究所、中国科学院大学网络空间安全学院）</p>
+<p>概括成一段话：<strong>把 LLM
+部署到本地并不等于对话内容留在本地——同一台机器上一个没有特权的普通应用，只要盯住
+CPU
+缓存的访问模式和自回归解码的时序，就能把这次推理的输入与输出文本还原出来。</strong></p>
+</blockquote>
+<p>本地部署 LLM 的出发点是把数据留在自己机器上：不发给第三方
+API，隐私敏感的内容不出门。这篇论文指出的是另一条路径——机器内部还有一条不属于软件层的泄漏通道。<strong>token
+embedding 查表时的访存模式泄漏了 token 的值，解码阶段每个 token
+的时间点泄漏了 token 的顺序</strong>，两者都落在硬件缓存上。攻击者不与
+LLM
+进程交互，也不需要任何特权，用一个普通应用在后台记录缓存访问即可。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Token embedding</strong></td>
+<td>把 token id 映射成稠密向量的操作</td>
+<td>泄漏源头：查了哪一行就暴露了哪个 token</td>
+</tr>
+<tr>
+<td><strong>Embedding table</strong></td>
+<td>形状为词表大小 × 向量维度的参数矩阵</td>
+<td>攻击者只需知道它在模型文件里的偏移</td>
+</tr>
+<tr>
+<td><strong>Prefill</strong></td>
+<td>一次吃完所有输入 token、并行计算的阶段</td>
+<td>缓存命中事件密集，切分靠它</td>
+</tr>
+<tr>
+<td><strong>Decode</strong></td>
+<td>自回归逐 token 生成的阶段</td>
+<td>一次一个 token，时序规律</td>
+</tr>
+<tr>
+<td><strong>TPOT</strong></td>
+<td>Time Per Output Token，生成一个 token 的耗时</td>
+<td>决定时序信号的主频</td>
+</tr>
+<tr>
+<td><strong>flush+reload</strong></td>
+<td>共享内存下的缓存侧信道原语</td>
+<td>探针精度到缓存行，能分辨 embedding table 的每一行</td>
+</tr>
+<tr>
+<td><strong>Cache trace</strong></td>
+<td>攻击者采到的 时间 × 地址 延迟矩阵</td>
+<td>攻击的全部原始素材</td>
+</tr>
+<tr>
+<td><strong>False positive / negative</strong></td>
+<td>多检（没访问却报命中）/ 漏检（访问了没报）</td>
+<td>噪声的两个来源</td>
+</tr>
+<tr>
+<td><strong>PSD</strong></td>
+<td>Power Spectral Density，功率谱密度</td>
+<td>用来看 decode 阶段时序信号的周期性</td>
+</tr>
+<tr>
+<td><strong>zero-copy 加载</strong></td>
+<td>框架用 mmap 直接映射模型文件、省掉一次拷贝</td>
+<td>顺手给了攻击者一份共享内存</td>
+</tr>
+<tr>
+<td><strong>ASR</strong></td>
+<td>Attack Success Rate，本论文定义为语义相似度大于 0.77 的样本比例</td>
+<td>阈值来自 100 人的人工投票</td>
+</tr>
+</tbody>
+</table>
+<h2 id="起点模型留在本地对话为什么还是漏了">🎬
+起点：模型留在本地，对话为什么还是漏了</h2>
+<p>先看场景。用户在自己的 PC 上跑一个本地
+LLM：llama.cpp、Ollama、GPT4All 这类框架都算，模型是量化的
+7B～10B，日常用来问私事、写敏感邮件。机器上还装了别的东西，其中一个是攻击者放出来的普通应用——它可能就挂在应用商店里，行为完全合法。</p>
+<p>论文的威胁模型建立在这三条假设上：</p>
+<ol type="1">
+<li><strong>攻击者没有特权</strong>：只是一个能与受害者同时运行的进程，操作系统隔离照常生效，不改
+LLM 用的任何库，不与 LLM 进程通信；</li>
+<li><strong>攻击者只需要几条常规能力</strong>：能执行代码，能以只读方式打开模型文件并
+<code>mmap</code>（拿不到就退而用操作系统的页去重拿到共享内存），能执行
+<code>clflush</code> 清缓存；</li>
+<li><strong>攻击者不需要知道模型结构</strong>，也不需要框架的源码或二进制，但能根据公开的模型文件格式（safetensors、pickle）算出
+embedding table 的地址偏移。</li>
+</ol>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">┌────────────────────────┐          ┌────────────────────────┐</span><br><span class="line">│ Victim Process         │          │ Spy Process            │</span><br><span class="line">│                        │          │                        │</span><br><span class="line">│ LLM inference          │          │ 1. mmap model file     │</span><br><span class="line">│ 1. Token Embedding     │          │ 2. clflush + reload    │</span><br><span class="line">│ 2. Other Layers        │          │ 3. Cache Trace         │</span><br><span class="line">└───────────┬────────────┘          └───────────┬────────────┘</span><br><span class="line">            │                                   │</span><br><span class="line">            │        OS process isolation       │</span><br><span class="line">            └───────────────┬───────────────────┘</span><br><span class="line">                            ↓</span><br><span class="line">┌─────────────────────────────────────────────────────────────┐</span><br><span class="line">│ Shared LLC and DRAM: embedding table W                      │</span><br><span class="line">└─────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>图里最关键的一点是不对称：<strong>进程隔离挡住了直接读内存，但挡不住共享的缓存</strong>。嵌入表在物理内存里只有一份，两个进程各自的页表都指向它，缓存行的命中与否对所有核都是同一个事实。</p>
+<h3 id="前提embedding-查表跑在-cpu-上">🔑 前提：embedding 查表跑在 CPU
+上</h3>
+<p>这条假设决定了攻击能不能成立，论文也专门做了说明：<strong>token
+embedding 这一步在 CPU 上执行，模型其余各层可以放在任何设备上（包括
+GPU）</strong>。</p>
+<p>理由是成本。本地部署里 CPU 做 embedding 最划算，Intel 的 CPU
+推理白皮书、Meta 的 Llama Everywhere、Numenta 以及各个社区框架都把
+embedding 留在 CPU，只把后面的矩阵计算丢给 GPU。所以一份跑在 RTX 3060
+上的 llama.cpp，它的 embedding 查找依然发生在 CPU 上。</p>
+<p>反过来说，一旦 embedding 也被放到 GPU 上查表，CPU
+的缓存攻击就看不到了：离散 GPU 的缓存与 CPU
+缓存不保持一致。论文的框架评估里唯一失败的 GPU
+配置，正是这个原因（见后文）。</p>
+<h2 id="两条泄漏源token-值与时序">🔍 两条泄漏源：token 值与时序</h2>
+<h3 id="泄漏一查表模式暴露-token-值">🎯 泄漏一：查表模式暴露 token
+值</h3>
+<p>LLM 的输入输出都是 token 序列，模型需要先把每个 token
+变成稠密向量才能计算，这一步叫 token embedding。写成矩阵形式，就是对
+one-hot 编码做一次线性投影：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">E = W x</span><br><span class="line">x  ：one-hot 矩阵，第 i 行 xi = [0 ... 1(ti) ... 0]T</span><br><span class="line">W  ：embedding table，形状为 词表大小 × 向量维度</span><br></pre></td></tr></table></figure>
+<p>one-hot
+是稀疏的，所以实现上没人真的做矩阵乘法，而是退化成一次查表：取 W 的第 ti
+行。而<strong>查表是访存行为</strong>，访存会经过缓存：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">x = [0, 0, 1, 0, ..., 0]    ← one-hot，index i 是当前 token</span><br><span class="line">           │</span><br><span class="line">           │  W x  ==  W[i]</span><br><span class="line">           ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ Embedding Table W            │</span><br><span class="line">│                              │</span><br><span class="line">│ row 0                        │</span><br><span class="line">│ row 1                        │</span><br><span class="line">│ row i           ← cache hit  │</span><br><span class="line">│ ...                          │</span><br><span class="line">│ row |V|-1                    │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>第 i
+行被载入缓存这件事，在缓存侧信道上可以直接观察。于是<strong>观察到哪一行命中，就反推出此刻处理的是哪个
+token</strong>。</p>
+<p>还有一步放大：LLM 是自回归的，新生成的 token
+会被重新喂回模型，再次经过 embedding。所以这一条泄漏同时覆盖<strong>输入
+token 和输出
+token</strong>——用户问了什么、模型答了什么，都会在同一个表上留下痕迹。</p>
+<h3 id="泄漏二自回归时序暴露-token-顺序">⏱️ 泄漏二：自回归时序暴露 token
+顺序</h3>
+<p>知道有哪些 token
+还不够，还需要知道它们的顺序。论文在时间维度上另找了一处泄漏：LLM 推理分
+prefill 与 decode 两个阶段，prefill 先把全部输入 token 算完，decode
+再一个 token 一个 token 地往外吐。这些阶段天然串行，decode 要等 prefill
+结束，第 i+1 个 decode 要等第 i 个 token 出来。</p>
+<p>于是时间轴上能得到两件事：</p>
+<ul>
+<li><strong>输入与输出的分界</strong>：prefill
+结束的时间点，就是模型开始回答的时间点；</li>
+<li><strong>输出 token 的顺序</strong>：每个 decode 阶段对应一个
+token，先后顺序就是文本顺序。</li>
+</ul>
+<h3 id="两个真正的难题">🚧 两个真正的难题</h3>
+<p>论文自己列了两条挑战，后面所有设计都是围着它们转：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>挑战</th>
+<th>现象</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>C1 噪声</strong></td>
+<td>缓存侧信道有假阳性与假阴性</td>
+<td>token 列表里混进随机 token、丢掉真 token</td>
+</tr>
+<tr>
+<td><strong>C2 输入顺序被打乱</strong></td>
+<td>prefill 把输入 token 批量并行计算，embedding
+操作在时间轴上交叉重叠</td>
+<td>输入 token 被还原成一个无序集合，顺序丢了</td>
+</tr>
+</tbody>
+</table>
+<p>C1 的解法是<strong>引入一个微调过的 LLM 去噪</strong>，C2
+的解法是<strong>利用输入与输出的上下文关联给无序 token
+排序</strong>。这两个模型在论文里叫 LLMA 与 LLMB。</p>
+<h2 id="攻击总览五步把缓存轨迹变成文本">🧩
+攻击总览：五步把缓存轨迹变成文本</h2>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">1. Spy 采集 cache trace</span><br><span class="line">      ┌──────────────────────────────┐</span><br><span class="line">      │ o: L x |V| latency matrix    │</span><br><span class="line">      └──────────────┬───────────────┘</span><br><span class="line">                     ↓</span><br><span class="line">2. 切段：密集命中区 = prefill，稀疏单点 = decode</span><br><span class="line">                     ↓</span><br><span class="line">      ┌──────────────────────────────┐</span><br><span class="line">      │ oP: prefill                  │</span><br><span class="line">      │ oD: decode                   │</span><br><span class="line">      └──────────────┬───────────────┘</span><br><span class="line">                     ↓</span><br><span class="line">3. 映射成 token 列表与时序信号</span><br><span class="line">      ┌───────────────────────────────────────────┐</span><br><span class="line">      │ KD (ordered) + TD  |  KP (unordered)      │</span><br><span class="line">      └──────────────┬────────────────────────────┘</span><br><span class="line">                     ↓</span><br><span class="line">4. LLMA：融合 TD 与 KD 去噪，还原输出文本</span><br><span class="line">                     ↓</span><br><span class="line">5. LLMB：结合还原出的输出给 KP 排序，还原输入文本</span><br></pre></td></tr></table></figure>
+<p>前 3 步是信号处理，后 2
+步是模型推理。这种分工也解释了论文的方法论取向：<strong>硬件侧只负责拿到质量不高的观测，语义层的补全交给自然语言模型去做</strong>。</p>
+<h2 id="采集怎么录下每一行的访存">🛠️ 采集：怎么录下每一行的访存</h2>
+<h3 id="先算出目标地址">📐 先算出目标地址</h3>
+<p>攻击的第一步是确定要监视哪些地址。假设共享内存区域的起始地址是
+<code>p1</code>，embedding table 在其中的偏移是
+<code>p2</code>，向量维度是 D，元素大小为 b。对第 i 行：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">row-major 布局：</span><br><span class="line">  p1 + p2 + iDb  ≤  Ai  &lt;  p1 + p2 + (i + 1)Db</span><br><span class="line"></span><br><span class="line">column-major 布局：</span><br><span class="line">  Ai ∈ &#123; p | p = p1 + p2 + (i + j|V|)b,  0 ≤ j &lt; D &#125;</span><br></pre></td></tr></table></figure>
+<p>每个 i
+只挑一个确定地址作为探针。论文提到，攻击者并不需要模型或框架的任何秘密，这些偏移都能从公开的文件格式文档里推出来——safetensors
+与 pickle 的格式是公开的，主流 LLM 的 embedding
+位置也遵循同样的规则。</p>
+<h3 id="共享内存从哪来">🤝 共享内存从哪来</h3>
+<p>缓存攻击要求攻击者与受害者共享物理内存。论文用了两条互相替代的路径：</p>
+<ul>
+<li><strong>首选 mmap</strong>：现在主流的 LLM 框架都用 zero-copy
+方式加载模型，直接把模型文件映射进地址空间、按需分页。攻击者对同一个模型文件调一次
+<code>mmap</code>，两个进程就会因为 page cache
+落在同一批物理页上，<strong>共享内存是白送的</strong>，不需要页去重；</li>
+<li><strong>备选页去重</strong>：万一某些框架不支持
+zero-copy，就用操作系统提供的 page deduplication（KSM
+一类机制）拿到共享页。</li>
+</ul>
+<p>这里的因果关系值得留意：<strong>zero-copy
+是一个性能优化，它顺手把攻击面也一起送了出去</strong>。论文后面给出的对策之一，正是把它关掉。</p>
+<h3 id="硬件预取器把标准-flushreload-打趴了">⚠️ 硬件预取器把标准
+flush+reload 打趴了</h3>
+<p>这篇论文里我自己觉得最有意思的一段，是它报告了一个负面结果。</p>
+<p>按标准做法实现 flush+reload 之后，攻击在 Intel 的 Raptor Lake（13
+代酷睿）上<strong>几乎完全失效</strong>：监视 32768 个地址（Llama 2
+的词表大小）时平均每秒 5,612,394 次假阳性，精度接近零。</p>
+<p>原因是硬件里的 <strong>AoP 预取器（Array-of-Pointers
+prefetcher）</strong>。为了对抗流式与空间预取器，标准实现会把目标地址打乱后放进一个指针数组；而
+AoP
+预取器的行为恰恰是<strong>解引用数组里的指针</strong>，于是探针数组一被访问，几乎每个目标地址都被预取进缓存，全部看起来像命中。</p>
+<p>绕过办法很朴素，却正好卡在预取器的语义上：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Before: ptr_array[] = &#123; &amp;A0, &amp;A1, ..., &amp;A|V|-1 &#125;</span><br><span class="line">        visiting the array -&gt; AoP dereferences the pointers</span><br><span class="line">                           -&gt; every target looks like a hit</span><br><span class="line"></span><br><span class="line">After:  offset_array[] = &#123; A0 - min, A1 - min, ... &#125;</span><br><span class="line">        the array holds no valid pointer</span><br><span class="line">        at probe time:  address = offset_array[i] + min</span><br></pre></td></tr></table></figure>
+<p>数组里只存<strong>偏移</strong>（每个目标地址减去最小地址），访问时再把偏移加回去还原真实地址。这样数组里没有任何合法指针，AoP
+预取器无事可做。其余的预取器沿用前人的做法对付：探针地址不落在相邻页上、访问顺序随机化。</p>
+<h3 id="缓存轨迹长什么样">🖥️ 缓存轨迹长什么样</h3>
+<p>采集结果是矩阵 o：L 个时间点 × |V| 个目标地址的访存延迟，另外用
+<code>rdtsc</code> 记下每个时间点的物理时间戳。论文用一幅热力图（Figure
+3）展示它：颜色越深表示该行越可能被访问。在这样一张图里，prefill
+表现为一条竖直的密集色带，decode 表现为稀疏的散点。</p>
+<p>实现上，论文把探针线程分成 15
+个分区（partition），每轮按伪随机顺序扫自己那一份地址（<code>s = t*m + (v*167 + 13) % n</code>），并在每个内存页取中间地址作为探针，尽量避开相邻页带来的预取噪声。</p>
+<h2 id="切段与映射prefill-在哪decode-在哪">✂️ 切段与映射：prefill
+在哪，decode 在哪</h2>
+<p>攻击者不与 LLM
+交互，所以不知道推理是什么时候开始的——这属于经典的异步攻击场景。论文用一个模式匹配算法在轨迹里找两个阶段的起点：</p>
+<ul>
+<li><strong>prefill 起点</strong>：从某个时间点起，连续不少于 K
+个事件的时间间隔都小于阈值
+α1。输入是批量并行计算的，命中事件会异常密集地挤在一小段时间里；</li>
+<li><strong>decode 起点</strong>：在 prefill 之后，出现至少一个间隔大于
+α1 的事件。decode 一次只产出一个 token，事件稀疏得多。</li>
+</ul>
+<p>论文的取值是 K = 4（允许的最小输入 token 数）与 α1 =
+10⁻³（不大于一次前向传播的最小耗时）。</p>
+<p>切完之后，轨迹被映射成三样东西：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>输出</th>
+<th>含义</th>
+<th>怎么得到</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>KD</strong></td>
+<td>有序 token 列表（decode 段）</td>
+<td>每个时间点命中哪些地址，查表反查成 token 文本，去掉空集</td>
+</tr>
+<tr>
+<td><strong>TD</strong></td>
+<td>时序信号（decode 段）</td>
+<td>每个命中事件对应的时间戳序列</td>
+</tr>
+<tr>
+<td><strong>KP</strong></td>
+<td>无序 token 集合（prefill 段）</td>
+<td>整个 prefill 段命中的地址并起来反查</td>
+</tr>
+</tbody>
+</table>
+<p>判定的细节是缓存命中阈值 α2：延迟低于 α2 记为命中，α2
+来自缓存微基准测试。到这里，硬件侧的工作就结束了，剩下的是<strong>从一个很脏的
+token 列表和一条带噪的时间戳序列里把文本拼回来</strong>。</p>
+<h2 id="去噪与还原输出llma-与时序信号">🧠 去噪与还原输出：LLMA
+与时序信号</h2>
+<h3 id="为什么自回归会产生周期性">📈 为什么自回归会产生周期性</h3>
+<p>论文的出发点是两条观察：</p>
+<ol type="1">
+<li>自回归生成是<strong>数据流驱动</strong>的，前向传播走的是规整的流水线，不同于控制流驱动的程序；</li>
+<li>于是每次生成 token 可以近似看成<strong>周期性事件</strong>。</li>
+</ol>
+<p>周期有多长？就是 TPOT。论文在 13900K + RTX 3060 上跑
+Phi-3.5-mini（llama.cpp），TPOT 约 10 毫秒这一量级，因此预期在 100Hz
+处出现峰。用傅里叶变换把时序信号转到频域、算功率谱密度（PSD）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">PSD</span><br><span class="line">  ^</span><br><span class="line">  |   true positives</span><br><span class="line">  |   |        |              |</span><br><span class="line">  |   |   |    |    |         |          ← f0 and harmonics: 2*f0, 3*f0 ...</span><br><span class="line">  |   |   |    |    |         |</span><br><span class="line">  +---+---+----+----+---------+-------&gt; frequency</span><br><span class="line">      f0      2f0  3f0</span><br></pre></td></tr></table></figure>
+<p>真阳性（真的由 embedding 造成的命中）在 PSD
+上给出基频与谐波，是清晰的峰；假阳性则频谱平坦、接近白噪声。<strong>这个差别就是去噪的立足点</strong>。</p>
+<h3 id="一阶差分峰是漏检谷是多检">📉 一阶差分：峰是漏检，谷是多检</h3>
+<p>PSD
+只能证明信号有周期性，不能直接指出哪个时间点是噪声。论文的做法是先把周期成分减掉：用
+SWIPE’ 算法从 PSD 里估出基频 f0，再算归一化一阶差分。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TD_hat[k] = f0 * ( TD[k] - TD[k-1] )</span><br></pre></td></tr></table></figure>
+<p>理想情况下，相邻两次真命中的间隔是 T，所以差分应该稳定在 f0 ·
+T。偏离这个基准的两类异常正好对应两类噪声：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">normalized first-order difference</span><br><span class="line">  2T ┤          /\                        /\</span><br><span class="line">     │         /  \                      /  \</span><br><span class="line">  T  ┤──/\────/────\────────────────────/────\────   regular period</span><br><span class="line">     │ /  \  /      \                  /      \</span><br><span class="line">  0  ┤/────\/────────\────────────────/────────\──</span><br><span class="line">     └────────────────────────────────────────────→ time</span><br><span class="line">         valley                peak</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>峰（间隔接近
+2T）</strong>：中间少了一个事件，也就是漏检。真阳性原本应该在 t1 与 t2
+之间出现，把它的缺失补回来——预测这个位置的 token 并插进
+KD，相当于做完形填空；</li>
+<li><strong>谷（间隔明显小于
+T）</strong>：多出来一个事件，也就是多检。把它从 KD 里删掉。</li>
+</ul>
+<p>论文把这三选一（补一个、删一个、不动）统一写成序列到序列任务：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">O_hat ~ P( O | TD_hat_1, KD_1, TD_hat_2, KD_2, ... )</span><br></pre></td></tr></table></figure>
+<p>由微调过的 LLMA 实现：输入是时序信号与 token
+列表的交替序列，输出是清理后的文本。微调用
+LoRA，好处是保留基座模型的先验知识、同时抑制过拟合。</p>
+<h3 id="训练数据从哪来合成的">🧪 训练数据从哪来：合成的</h3>
+<p>攻击者拿不到受害者的模型和系统，也就没法采集真实数据来训练。论文的解法是利用刚发现的周期性<strong>自己合成训练集</strong>（Algorithm
+1）：</p>
+<ul>
+<li>从公开语料（UltraChat、NQ-Open、SIQA、SQuAD2、ChatGPT-Roles）取输入输出文本对，组成语料
+C；</li>
+<li>对每个 token
+的时间戳按高斯分布累积（<code>ctime += N(1, σ²)</code>），模拟 TPOT
+的自然抖动，得到周期性时序；</li>
+<li>以概率 p 删除事件、以概率 p 在均匀分布的时间点插入随机
+token，模拟漏检与多检；</li>
+<li>把数值的时序信号编码成文本提示，与文本一起组成 (提示, 标准答案)
+训练对。例如时序 <code>&#123;1.3, 1.2&#125;</code> 与 token
+<code>&#123;Hello, World&#125;</code> 编码成
+<code>1 3:Hello&lt;s&gt;1 2:World&lt;s&gt;</code>。</li>
+</ul>
+<p>论文在合成数据上把超参数扫了一遍：噪声概率 p 在 10%～40%
+的宽范围内性能稳定，超过 50% 才开始下降；周期抖动 σ = 0.08 时最好（σ
+太小等于强制严格周期，σ 大于 0.5
+则周期性被削弱到模型学不到）；基座模型换成开源的 Llama-3.1-8B 或闭源的
+GPT-4o-mini
+性能差不多，说明这一层的效果主要来自任务本身，而不是某个特定模型。</p>
+<h2 id="还原输入顺序llmb">🔗 还原输入顺序：LLMB</h2>
+<p>输出文本还原出来之后，还剩输入。输入 token 的集合 KP
+已经拿到了，缺的是顺序。论文拿它类比 bag-of-words
+模型：词袋丢掉了顺序但保留了语义结构，主题模型（如
+LDA）就是这么用的。问题是顺序丢失会伤到句子本身，论文举的例子是
+<code>A chased B</code> 与 <code>B chased A</code>——token
+集合相同，语义相反。</p>
+<p>论文的落点是<strong>输入与输出在同一个上下文里相互关联</strong>：LLM
+常常先把问题复述一遍再回答，所以输入文本对输出文本存在可学习的依赖。于是把任务写成另一个
+seq2seq：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">I_hat ~ P( I | KP, O_hat )</span><br></pre></td></tr></table></figure>
+<p>实现方式是微调出 LLMB：把无序的 token 列表编码成
+<code>&lt;s&gt;</code>
+分隔的文本序列，把已经还原出来的输出文本插在最前面当上下文，让模型推断每个
+token 的位置。</p>
+<p>训练数据同样靠合成：取语料里的输入 I，把它的 token 顺序随机打乱得到
+KP’，再用一个通用 LLM 生成对应的输出 O’，于是 (KP’, O’, I)
+就是一条监督样本。</p>
+<h2 id="评估准确到什么程度">📊 评估：准确到什么程度</h2>
+<p>实验环境是 Intel 13900K（5.8GHz，BIOS microcode 0x129）+ RTX 3060
+12GiB + 32GiB 双通道 DDR4-3200，Ubuntu 22.04 / Linux 5.18.0-38、驱动
+525.89.02、CUDA 12.0；微调放在一台 H800 云服务器上。受害模型是 5 个主流
+LLM（Gemma2-9B、Llama-3.1-8B、Falcon3-10B、Mistral-7B、Phi-3.5-mini-3B），数据集是
+5 个公开语料，合计 212,535 个 token，按 60/20/20
+划分训练、验证、测试。</p>
+<p>指标分三个粒度：字符级的 Levenshtein 相似度（LS，等于 1
+减编辑距离）、token 级的 ROUGE-1 / ROUGE-L、语义级的句向量余弦相似度
+φ。为了确定 φ 到多少算泄漏，论文在 Prolific 上招募 100 名参与者，对 50
+个样本做人工投票，得出 φ 与隐私暴露程度的线性关系（皮尔逊相关
+0.771），<strong>取 φ &gt; 0.77 作为攻击成功的判定阈值</strong>，ASR
+就是超过该阈值的样本比例。</p>
+<h3 id="主结果">🏁 主结果</h3>
+<p>论文 Table 1 的汇总行（5 个模型 × 5 个数据集的平均）：</p>
+<table>
+<thead>
+<tr>
+<th>方向</th>
+<th>平均长度</th>
+<th>R1</th>
+<th>RL</th>
+<th>LS</th>
+<th>φ</th>
+<th>ASR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>输出还原</td>
+<td>165 token</td>
+<td>96.3%</td>
+<td>96.3%</td>
+<td>94.8%</td>
+<td>98.7%</td>
+<td>99.1%</td>
+</tr>
+<tr>
+<td>输入还原</td>
+<td>24 token</td>
+<td>89.9%</td>
+<td>85.8%</td>
+<td>82.7%</td>
+<td>98.0%</td>
+<td>99.9%</td>
+</tr>
+</tbody>
+</table>
+<p>对照摘要里的另一组口径：平均编辑距离在输出与输入上分别是 5.2% 与
+17.3%。也就是说<strong>输出基本可逐字还原，输入能还原语义但字符级有出入</strong>。论文对输入侧的差距给了明确解释：输入还原是一个排列问题，搜索空间随输入长度按阶乘增长（约
+O(NI!)）。</p>
+<p>这一点在数据里看得最清楚：</p>
+<table>
+<thead>
+<tr>
+<th>数据集</th>
+<th>平均输入 token 数</th>
+<th>输入 LS</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SQuAD2</td>
+<td>180～209</td>
+<td>32.2%～34.4%</td>
+<td>长输入，字符级最差</td>
+</tr>
+<tr>
+<td>NQ-Open</td>
+<td>12～13</td>
+<td>79.8%～91.4%</td>
+<td>短输入，还原很好</td>
+</tr>
+<tr>
+<td>UltraChat</td>
+<td>19～21</td>
+<td>84.3%～90.2%</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<p>但即使是最差的一格（Phi-3.5-mini on SQuAD2，R1 51.0%、LS
+32.2%），余弦相似度仍有 92.1%，ASR
+96.4%——<strong>语句的主题与语义没有被漏掉</strong>。</p>
+<p>论文还检查了 prefill 批大小的影响：batch size 从 32 涨到
+256，各指标只在 4% 的范围内波动；batch
+很小时精度略降，因为合成训练数据假设输入 token 是随机排列的，而小 batch
+会让输入分批顺序执行、呈现出更强的顺序性，偏离了训练分布。</p>
+<h3 id="消融每个部件值多少">🧹 消融：每个部件值多少</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>配置</th>
+<th>相对完整版的变化</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>去掉时序信号的预处理（一阶差分）</td>
+<td>LS −3.0%（输出）/ −1.0%（输入）</td>
+<td>去噪前的归一化有贡献</td>
+</tr>
+<tr>
+<td>完全不喂时序信号 TD</td>
+<td>LS −12.7%（输出）/ −1.2%（输入）</td>
+<td>token 列表与时序必须融合</td>
+</tr>
+<tr>
+<td>去掉 LLMA，只用 KD 拼文本</td>
+<td>LS −10.3%</td>
+<td>模型去噪比规则去噪值钱</td>
+</tr>
+<tr>
+<td>LLMB 去掉还原出的输出上下文</td>
+<td>LS −17.1%</td>
+<td>上下文依赖是输入还原的主要依据</td>
+</tr>
+<tr>
+<td>去掉 LLMB，直接把 KP 当结果</td>
+<td>LS −46.4%</td>
+<td>没有排序模型基本等于没有输入还原</td>
+</tr>
+</tbody>
+</table>
+<p>还有一组更基础的对照：只用侧信道数据（Pure SCA）时，输入还原只到 R1
+50.4%、LS 29.8%、φ 66.1%、ASR 29.3%；加上模型与输出上下文之后是 R1
+82.8%、LS 76.2%、φ 96.9%、ASR
+99.7%。<strong>纯侧信道拿到的是线索，文本还得靠语言模型补全</strong>——这也和本文的方法论一致。</p>
+<h3 id="框架与硬件">🧰 框架与硬件</h3>
+<p>论文在 10 个主流本地推理框架上验证，CPU 路径全部成功，GPU 路径 9
+个成功：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU 推理</td>
+<td>10 / 10 成功（llama.cpp 的 φ 输出 99.5% / 输入 95.2%）</td>
+</tr>
+<tr>
+<td>GPU 推理</td>
+<td>9 / 10 成功，唯一失败的是 HuggingFace Transformers</td>
+</tr>
+<tr>
+<td>失败原因</td>
+<td>它把 embedding 查表放在 GPU 上做，CPU 缓存侧信道探不到</td>
+</tr>
+<tr>
+<td>硬件</td>
+<td>14900K / 13900K / 12700KF 三台机器，输入 φ 均 ≥ 96.5%，ASR 100%</td>
+</tr>
+<tr>
+<td>量化</td>
+<td>F16 / Q8_0 / BF16 / F32 四种，φ 在 96.2%～99.3% 之间</td>
+</tr>
+<tr>
+<td>操作系统</td>
+<td>Ubuntu 22.04、Windows 11、Debian 12（Docker 内）均可复现</td>
+</tr>
+</tbody>
+</table>
+<p>这组结果说明攻击不依赖某个特定框架的实现细节，<strong>真正的前提只有一条：embedding
+在 CPU 上查表</strong>。</p>
+<h3 id="真实例子">💬 真实例子</h3>
+<p>论文展示的还原样本里，有几个细节很能说明问题：</p>
+<ul>
+<li><code>who played freddy krueger in the 2010 nightmare on elm street?</code>
+这一个 prompt 的输入输出还原三项指标都是 100%。其中 <strong>freddy
+krueger
+这类专有名词并没有出现在合成训练集里</strong>，模型是从侧信道给出的
+token 线索里拼出来的；</li>
+<li><code>what rank is an e5 in the air force?</code> 的输入被还原成
+<code>e5 in the air force is what rank?</code>，语序变了但语义完整，φ
+87%；</li>
+<li>失败的例子集中在语义相似度 64%～76%
+的区间，典型表现是词序错乱、出现多余的
+<code>header</code>、<code>Zoeken</code> 这类无关
+token——正是噪声污染留下的痕迹。</li>
+</ul>
+<p>论文据此指出，这种能力足以窃取
+PII（个人身份信息）：能还原专有名词、能容忍同义替换与语序变化，<strong>语义相似度高而字符相似度偏低</strong>，说明泄漏的是内容而不是形式。</p>
+<h2 id="读原文时注意的几处口径不一致">📎
+读原文时注意的几处口径不一致</h2>
+<p>精读时我对照了摘要、正文与表格，有几处不一致值得记下来，免得引用时张冠李戴：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>位置</th>
+<th>原文写法</th>
+<th>对照结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>摘要</td>
+<td>cosine similarity 98.7%（input）/ 98.0%（output）</td>
+<td>与正文 §1 和 Table 1 的平均行相反：98.7% 属于输出、98.0%
+属于输入</td>
+</tr>
+<tr>
+<td>Table 4</td>
+<td>Output Recovery 一栏写作 φI，Input Recovery 一栏写作 φO</td>
+<td>两栏标号疑似互换</td>
+</tr>
+<tr>
+<td>§4.4 与 Figure 5</td>
+<td>正文说 false positive 对应峰、false negative 对应谷；图注写 false
+positive 在谷、false negative 在峰</td>
+<td>两处互相矛盾；按语义读才通：峰是漏检（补 token），谷是多检（删
+token），此时 Figure 5 的图注与语义一致，正文段落的命名反了</td>
+</tr>
+<tr>
+<td>Figure 4 说明</td>
+<td>TPOT 约 10 microseconds，因此在 100Hz 处预期出现峰</td>
+<td>100Hz 对应每 token 10 毫秒，单位应为 ms</td>
+</tr>
+</tbody>
+</table>
+<p>这类不一致属于原文自身，引用数字时以表格为准。</p>
+<h2 id="对策与局限">🛡️ 对策与局限</h2>
+<h3 id="论文建议的三种缓解">🚧 论文建议的三种缓解</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>措施</th>
+<th>做法</th>
+<th>代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>禁用 zero-copy 加载</td>
+<td>不让框架用 mmap 映射模型文件，切断共享内存这条路</td>
+<td>llama.cpp 加载延迟性能下降 17%；同时跑两个以上实例时内存开销增加约
+32%</td>
+</tr>
+<tr>
+<td>部署 RBAC</td>
+<td>限制模型文件内存页的共享范围，只允许指定程序共享，可用 eBPF
+内核钩子按会话认证</td>
+<td>现有本地推理框架没有这项能力，需要改造</td>
+</tr>
+<tr>
+<td>硬件隔离缓存</td>
+<td>用 Intel CAT（Cache Allocation Technology）切分 LLC，把 LLM
+与其余进程隔开</td>
+<td>只有服务器级 Xeon 提供，消费级平台拿不到；而本地 LLM
+恰恰主要跑在消费级机器上</td>
+</tr>
+</tbody>
+</table>
+<p>三条路的共同问题是一样的：<strong>缓解手段要么伤性能，要么在目标平台上不存在</strong>。这也解释了论文为什么把它当作一个未被防御的现实威胁来报告，而不是一个已被修补的历史漏洞。</p>
+<h3 id="论文承认的边界">🧱 论文承认的边界</h3>
+<ul>
+<li><strong>输入还原的字符级精度不高</strong>：受缓存攻击的时间分辨率与
+prefill 并行执行限制，长输入的可读性有限；但语义层面的 φ 平均仍有
+94.8%，在接近 6000 字符的长文本上 ASR 为 99.1%；</li>
+<li><strong>换用其他 CPU 侧信道有额外门槛</strong>：Prime+Probe
+一类冲突型攻击只有 set 级空间分辨率，而 embedding table
+远大于缓存的路数，一个 set
+会映射到多行，候选空间会膨胀；没有共享内存时，ASLR
+与不连续的页帧分配还会打乱 set
+与行的对应关系，需要额外的运行时画像；</li>
+<li><strong>GPU 侧 embedding 目前打不到</strong>：离散 GPU 的缓存与 CPU
+不保持一致，需要 GPU 缓存攻击原语（例如
+Invalidate+Compare），但那类原语同样有 set
+冲突的问题。不过论文也留了一句：NVIDIA
+驱动的显存页分配随机性较小、起始地址稳定，反而有利于学习地址映射。</li>
+</ul>
+<h2 id="总结">✅ 总结</h2>
+<p><strong>本地 LLM 的输入输出文本，可以从 CPU
+缓存的访问模式里读出来：embedding 查表暴露 token
+的值，自回归解码的时序暴露 token
+的顺序，剩下的事情交给两个微调过的语言模型去做——一个融合时序与 token
+列表去噪还原输出，一个利用输入输出的上下文依赖给乱序的输入 token
+排序。</strong></p>
+<p>三个值得记住的要点：</p>
+<ol type="1">
+<li><strong>泄漏点在访存模式上</strong>：embedding
+是查表而不是乘法，查哪一行是可控的、可观察的；</li>
+<li><strong>性能优化顺带送出了攻击面</strong>：zero-copy 加载是
+llama.cpp 这类框架的默认行为，也是攻击者拿到共享内存的捷径；</li>
+<li><strong>侧信道只是线索，语言模型负责补全</strong>：纯侧信道数据的输入还原
+ASR 只有 29.3%，加上语言模型与输出上下文后到
+99.7%——语义的补全能力本身就是攻击效力的一部分。</li>
+</ol>
+<p>如果把这篇和我们之前精读的 <a href="/posts/c41f8e02/">Hermes
+Attack</a> 放在一起看，两条路线正好互补：Hermes 站在 CPU 与 GPU 之间的
+PCIe
+总线上抓明文流量，偷的是<strong>模型本身</strong>（结构、超参数、权重）；这篇站在
+CPU
+缓存上观察访存模式，偷的是<strong>使用模型过程中产生的内容</strong>（prompt
+与回答）。共性是同一个结论——部署方式决定了数据流经哪些共享硬件，而那些共享硬件才是真正需要加密或隔离的地方。</p>
+<p>（本文为 USENIX Security 2025 论文 <em>I Know What You Said:
+Unveiling Hardware Cache Side-Channels in Local Large Language Model
+Inference</em> 的精读笔记，正文表格内的数据取自论文原文。）</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/LLM/" rel="tag"># LLM</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/%E4%BE%A7%E4%BF%A1%E9%81%93/" rel="tag"># 侧信道</a>
+              <a href="/tags/%E7%BC%93%E5%AD%98%E6%94%BB%E5%87%BB/" rel="tag"># 缓存攻击</a>
+              <a href="/tags/flush-reload/" rel="tag"># flush+reload</a>
+              <a href="/tags/%E9%9A%90%E7%A7%81%E6%B3%84%E6%BC%8F/" rel="tag"># 隐私泄漏</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/c41f8e02/" rel="prev" title="Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型">
+                  <i class="fa fa-angle-left"></i> Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">477k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">14:27</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>

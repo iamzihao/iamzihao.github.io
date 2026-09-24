@@ -9392,269 +9392,6 @@ True。</li>
       </tags>
   </entry>
   <entry>
-    <title>Clash 与网络代理详解</title>
-    <url>/posts/755f751e/</url>
-    <content><![CDATA[<p>本文梳理 VPN、TUN
-模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>VPN</strong></td>
-<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
-<td>秘密隧道</td>
-</tr>
-<tr>
-<td><strong>Proxy</strong></td>
-<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
-<td>传话筒</td>
-</tr>
-<tr>
-<td><strong>Clash</strong></td>
-<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
-<td>智能调度员</td>
-</tr>
-<tr>
-<td><strong>Rule</strong></td>
-<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
-<td>分流路牌</td>
-</tr>
-<tr>
-<td><strong>TUN</strong></td>
-<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
-<td>虚拟网卡</td>
-</tr>
-<tr>
-<td><strong>Mixin</strong></td>
-<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
-<td>补丁包</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
-<table>
-<colgroup>
-<col style="width: 24%" />
-<col style="width: 20%" />
-<col style="width: 56%" />
-</colgroup>
-<thead>
-<tr>
-<th>特性</th>
-<th>VPN</th>
-<th>代理 (Proxy)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>工作层级</strong></td>
-<td>操作系统层 (OSI L3 网络层)</td>
-<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
-</tr>
-<tr>
-<td><strong>接管范围</strong></td>
-<td>全局接管（通常），所有软件流量都走隧道</td>
-<td>仅接管支持代理设置的软件 (如浏览器)</td>
-</tr>
-<tr>
-<td><strong>加密程度</strong></td>
-<td>全程加密，强调安全性</td>
-<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
-</tr>
-<tr>
-<td><strong>灵活性</strong></td>
-<td>较差，通常“全走”或“全不走”</td>
-<td>极高，可按域名/进程分流</td>
-</tr>
-<tr>
-<td><strong>典型协议</strong></td>
-<td>WireGuard, OpenVPN, IPSec</td>
-<td>HTTP, Socks5, Shadowsocks, VMess</td>
-</tr>
-</tbody>
-</table>
-</blockquote>
-<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
-<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
-<h4 id="global-全局模式">1. Global 全局模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
-<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
-的所有活动。</li>
-<li><strong>缺点</strong>：访问国内网站（如
-B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
-</ul>
-<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
-<ul>
-<li><strong>原理</strong>：根据预设的规则列表（Rule
-List）智能判断。</li>
-<li><strong>流程</strong>：
-<ol type="1">
-<li>拦截请求。</li>
-<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
-<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
-</ol></li>
-<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
-</ul>
-<h4 id="direct-直连模式">3. Direct 直连模式</h4>
-<ul>
-<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
-<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
-</ul>
-<h4 id="script-脚本模式">4. Script 脚本模式</h4>
-<ul>
-<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
-<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
-</ul>
-<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
-<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
-Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
-<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
-7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
-7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
-<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
-<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
-<pre>
-<code class="mermaid">
-
-graph TD;
-    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
-    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
-    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
-    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
-    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
-</code>
-</pre>
-<ol type="1">
-<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
-<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
-<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
-<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
-3)，它处理的是 IP
-数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
-<li><strong>用户态处理</strong>：Clash 读取 TUN
-设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
-</ol>
-<blockquote>
-<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
-VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
-</blockquote>
-<blockquote>
-<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
-<p>这是一个核心问题：<strong>TUN
-模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
-<ul>
-<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
-Clash
-能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
-Clash 核心。</li>
-<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
-</ul>
-<p><strong>结论</strong>：开启 TUN
-模式并选择<strong>规则模式</strong>，意味着
-“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
-</blockquote>
-<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
-<p>在 Windows/macOS 上开启 TUN
-模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
-<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
-<strong>Service Mode</strong>。</p>
-<ul>
-<li><strong>守护进程</strong>：Service Mode
-会安装一个后台系统服务（Daemon）。</li>
-<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
-劫持、TUN 路由）。</li>
-<li><strong>UI 分离</strong>：Clash
-的图形界面（UI）只需要以普通权限运行，通过 IPC
-接口指挥后台服务干活。</li>
-<li><strong>主要作用</strong>：
-<ol type="1">
-<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
-<li><strong>系统级抗杀</strong>：UI
-关闭了，后台代理服务依然可以在线。</li>
-<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
-</ol></li>
-</ul>
-<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
-<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
-<h4 id="核心结构">核心结构</h4>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
-<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
-<p>很多时候我们使用机场提供的订阅链接，这个 URL
-下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
-TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
-<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
-<ul>
-<li><strong>原理</strong>：Clash
-启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
-配置，将两者<strong>合并</strong>。</li>
-<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
-<li><strong>用途</strong>：
-<ul>
-<li>强制开启 TUN 模式。</li>
-<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
-<li>添加个人的局域网 IP 直连规则。</li>
-</ul></li>
-</ul>
-<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
-<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
-模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
-IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
-浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
-的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
-</blockquote>
-<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
-<ol type="1">
-<li><strong>“开了全局模式就是最安全的”</strong>
-<ul>
-<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
-HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
-</ul></li>
-<li><strong>“Ping 值低网速就快”</strong>
-<ul>
-<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
-<code>TCP Handshake</code>
-时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
-等）。</li>
-</ul></li>
-<li><strong>“TUN 模式会影响打游戏吗？”</strong>
-<ul>
-<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
-协议，普通代理模式无法代理 UDP，必须开启 TUN
-模式才能让游戏流量走代理加速。</li>
-</ul></li>
-<li><strong>Clash 是 VPN 吗？</strong>
-<ul>
-<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
-<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
-VPN 几乎一致（接管全系统流量）。</li>
-</ul></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>Clash</tag>
-        <tag>Network</tag>
-        <tag>VPN</tag>
-        <tag>代理</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>BIOS</title>
     <url>/posts/ea91aa61/</url>
     <content><![CDATA[<p>从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里
@@ -10934,6 +10671,269 @@ A20 Gate。</li>
         <tag>固件</tag>
         <tag>启动流程</tag>
         <tag>UEFI</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Clash 与网络代理详解</title>
+    <url>/posts/755f751e/</url>
+    <content><![CDATA[<p>本文梳理 VPN、TUN
+模式等代理相关技术的原理，解释网络数据在其中的转发过程。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>VPN</strong></td>
+<td>Virtual Private Network，虚拟专用网络，在公网上建立加密通道。</td>
+<td>秘密隧道</td>
+</tr>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>代理服务器，充当客户端和服务器之间的“中介”。</td>
+<td>传话筒</td>
+</tr>
+<tr>
+<td><strong>Clash</strong></td>
+<td>一个基于 Go 语言开发的多平台代理客户端核心。</td>
+<td>智能调度员</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>根据域名、IP、地理位置决定流量走代理还是直连的规则。</td>
+<td>分流路牌</td>
+</tr>
+<tr>
+<td><strong>TUN</strong></td>
+<td>操作系统层的虚拟网络接口，用于接管系统级流量。</td>
+<td>虚拟网卡</td>
+</tr>
+<tr>
+<td><strong>Mixin</strong></td>
+<td>混合配置，在不修改订阅文件的前提下，注入自定义配置。</td>
+<td>补丁包</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>VPN vs 代理 (Proxy) 简要对比：</strong></p>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>VPN</th>
+<th>代理 (Proxy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>工作层级</strong></td>
+<td>操作系统层 (OSI L3 网络层)</td>
+<td>应用程序层 (OSI L4/L7 传输/应用层)</td>
+</tr>
+<tr>
+<td><strong>接管范围</strong></td>
+<td>全局接管（通常），所有软件流量都走隧道</td>
+<td>仅接管支持代理设置的软件 (如浏览器)</td>
+</tr>
+<tr>
+<td><strong>加密程度</strong></td>
+<td>全程加密，强调安全性</td>
+<td>视协议而定 (HTTP不加密, HTTPS/Socks5加密)</td>
+</tr>
+<tr>
+<td><strong>灵活性</strong></td>
+<td>较差，通常“全走”或“全不走”</td>
+<td>极高，可按域名/进程分流</td>
+</tr>
+<tr>
+<td><strong>典型协议</strong></td>
+<td>WireGuard, OpenVPN, IPSec</td>
+<td>HTTP, Socks5, Shadowsocks, VMess</td>
+</tr>
+</tbody>
+</table>
+</blockquote>
+<h3 id="代理模式流量的指挥棒">⚡ 代理模式：流量的指挥棒</h3>
+<p>Clash 最核心的功能就是决定“这个请求该走哪条路”。</p>
+<h4 id="global-全局模式">1. Global 全局模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量一视同仁，强制通过代理服务器转发。</li>
+<li><strong>场景</strong>：访问完全被封锁的网络环境，或者需要隐藏真实 IP
+的所有活动。</li>
+<li><strong>缺点</strong>：访问国内网站（如
+B站、淘宝）会绕路国外，速度慢且浪费流量。</li>
+</ul>
+<h4 id="rule-规则模式-最常用">2. Rule 规则模式 (最常用)</h4>
+<ul>
+<li><strong>原理</strong>：根据预设的规则列表（Rule
+List）智能判断。</li>
+<li><strong>流程</strong>：
+<ol type="1">
+<li>拦截请求。</li>
+<li>匹配规则（是 Google? 走 US 节点；是 Baidu? 走直连 Direct）。</li>
+<li>未匹配到的请求走“漏网之鱼”策略（Final）。</li>
+</ol></li>
+<li><strong>优势</strong>：国内直连快，国外代理通，自动分流。</li>
+</ul>
+<h4 id="direct-直连模式">3. Direct 直连模式</h4>
+<ul>
+<li><strong>原理</strong>：所有流量都不走代理，直接发送。</li>
+<li><strong>场景</strong>：暂时不需要代理，或者代理服务器挂了的时候。</li>
+</ul>
+<h4 id="script-脚本模式">4. Script 脚本模式</h4>
+<ul>
+<li><strong>原理</strong>：使用 JavaScript 编写复杂的路由逻辑。</li>
+<li><strong>场景</strong>：极客玩家，需要根据特定时间段、网络延迟动态调整路由。</li>
+</ul>
+<h3 id="进阶黑科技tun-模式">🧠 进阶黑科技：TUN 模式</h3>
+<p>很多小白用户会发现：<strong>“为什么我开了 Clash，浏览器能上
+Google，但终端 (Terminal) 或 游戏 还是连不上？”</strong></p>
+<p>这是因为传统的 Clash 工作在 <strong>应用层 (Layer
+7)</strong>，它会在本地开启 HTTP/Socks5 端口（如
+7890）。只有主动去连接这个端口的软件（如设置了系统代理的浏览器）才会被代理。而游戏、命令行工具默认是不走系统代理配置的。</p>
+<p><strong>TUN (Network Tunnel) 模式</strong> 就是为了解决这个问题。</p>
+<h4 id="tun-的工作原理">🛡️ TUN 的工作原理</h4>
+<pre>
+<code class="mermaid">
+
+graph TD;
+    A[&quot;应用程序 (App&#x2F;Game)&quot;] -- &quot;1. 发送数据包&quot; --&gt; B[&quot;操作系统网络栈&quot;];
+    B -- &quot;2. 路由表指向虚拟网卡&quot; --&gt; C[&quot;TUN 虚拟网卡 (utun&#x2F;tun0)&quot;];
+    C -- &quot;3. 拦截数据 (Layer 3 IP包)&quot; --&gt; D[&quot;Clash 内核&quot;];
+    D -- &quot;4. 重新封装&#x2F;加密&quot; --&gt; E[&quot;物理网卡 (Wi-Fi&#x2F;Ethernet)&quot;];
+    E -- &quot;5. 发送至公网&quot; --&gt; F[&quot;代理服务器&quot;];
+</code>
+</pre>
+<ol type="1">
+<li><strong>创建虚拟网卡</strong>：Clash 在系统中创建一个名为
+<code>utun</code> 或 <code>tun0</code> 的虚拟网卡。</li>
+<li><strong>修改路由表</strong>：修改系统的默认网关，将所有流量“骗”进这个虚拟网卡。</li>
+<li><strong>三层接管</strong>：因为 TUN 工作在网络层 (Layer
+3)，它处理的是 IP
+数据包。这意味着<strong>所有</strong>软件（无论是否支持代理）发出的流量都会经过它。</li>
+<li><strong>用户态处理</strong>：Clash 读取 TUN
+设备的数据，进行拆包、分析目标地址、匹配规则，然后转发。</li>
+</ol>
+<blockquote>
+<p><strong>总结</strong>：开启 TUN 模式后，Clash 就变成了一个“类
+VPN”，能够接管系统级的所有流量，实现“真·全局接管”。</p>
+</blockquote>
+<blockquote>
+<p><strong>TUN 模式 vs 规则模式：它们如何协同工作？</strong></p>
+<p>这是一个核心问题：<strong>TUN
+模式负责“拦截”，而规则模式负责“分流”</strong>。</p>
+<ul>
+<li><strong>TUN 模式</strong>：作为<strong>流量入口</strong>，它只决定
+Clash
+能处理哪些应用的流量。开启后，它会接管<strong>所有</strong>应用的数据包，然后交给
+Clash 核心。</li>
+<li><strong>规则/全局/直连模式</strong>：作为<strong>调度中心</strong>，它决定被拦截进来的流量的<strong>最终去向</strong>。</li>
+</ul>
+<p><strong>结论</strong>：开启 TUN
+模式并选择<strong>规则模式</strong>，意味着
+“拦截所有应用的流量，然后根据规则智能判断走代理还是直连”，并<strong>不会</strong>变成全局代理。</p>
+</blockquote>
+<h3 id="service-mode-服务模式">🛠️ Service Mode 服务模式</h3>
+<p>在 Windows/macOS 上开启 TUN
+模式通常需要<strong>管理员权限</strong>，因为涉及到创建网卡和修改路由表。</p>
+<p>为了避免每次启动都要输密码，或者为了更稳定的后台运行，Clash 引入了
+<strong>Service Mode</strong>。</p>
+<ul>
+<li><strong>守护进程</strong>：Service Mode
+会安装一个后台系统服务（Daemon）。</li>
+<li><strong>权限隔离</strong>：这个服务以高权限（System/Root）运行，专门负责处理底层的网络操作（DNS
+劫持、TUN 路由）。</li>
+<li><strong>UI 分离</strong>：Clash
+的图形界面（UI）只需要以普通权限运行，通过 IPC
+接口指挥后台服务干活。</li>
+<li><strong>主要作用</strong>：
+<ol type="1">
+<li><strong>无感启动 TUN</strong>：不需要每次弹窗提权。</li>
+<li><strong>系统级抗杀</strong>：UI
+关闭了，后台代理服务依然可以在线。</li>
+<li><strong>重启自愈</strong>：系统重启后服务自动拉起。</li>
+</ol></li>
+</ul>
+<h3 id="配置文件结构与-mixin">🧱 配置文件结构与 Mixin</h3>
+<p>Clash 的配置文件（通常是 <code>.yaml</code>）是它的灵魂。</p>
+<h4 id="核心结构">核心结构</h4>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">port:</span> <span class="number">7890</span>               <span class="comment"># HTTP 代理端口</span></span><br><span class="line"><span class="attr">socks-port:</span> <span class="number">7891</span>         <span class="comment"># SOCKS5 代理端口</span></span><br><span class="line"><span class="attr">mode:</span> <span class="string">rule</span>               <span class="comment"># 默认模式</span></span><br><span class="line"><span class="attr">log-level:</span> <span class="string">info</span>          <span class="comment"># 日志等级</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 代理节点池 (Proxies)</span></span><br><span class="line"><span class="attr">proxies:</span></span><br><span class="line">  <span class="bullet">-</span> &#123; <span class="attr">name:</span> <span class="string">&quot;HK Server&quot;</span>, <span class="attr">type:</span> <span class="string">ss</span>, <span class="attr">server:</span> <span class="number">1.2</span><span class="number">.3</span><span class="number">.4</span>, <span class="string">...</span> &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 策略组 (Proxy Groups)</span></span><br><span class="line"><span class="attr">proxy-groups:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">&quot;自动选择&quot;</span></span><br><span class="line">    <span class="attr">type:</span> <span class="string">url-test</span>       <span class="comment"># 自动测速选择最快的</span></span><br><span class="line">    <span class="attr">proxies:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;HK Server&quot;</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">&quot;US Server&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 规则 (Rules) - 从上到下匹配，命中即止</span></span><br><span class="line"><span class="attr">rules:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,google.com,Proxy</span>  <span class="comment"># Google 域名走代理</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">DOMAIN-SUFFIX,bilibili.com,Direct</span> <span class="comment"># B站直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">GEOIP,CN,Direct</span>                 <span class="comment"># 中国 IP 直连</span></span><br><span class="line">  <span class="bullet">-</span> <span class="string">MATCH,Proxy</span>                     <span class="comment"># 剩下的全走代理</span></span><br></pre></td></tr></table></figure>
+<h4 id="mixin-混合配置">🌪️ Mixin (混合配置)</h4>
+<p>很多时候我们使用机场提供的订阅链接，这个 URL
+下载下来的配置文件是只读的，每次更新都会覆盖。如果你想<strong>永久</strong>修改某些配置（比如开启
+TUN，或者添加自定义规则），直接改下载的文件是没用的。</p>
+<p><strong>Mixin (混合/覆写)</strong> 机制应运而生：</p>
+<ul>
+<li><strong>原理</strong>：Clash
+启动时，会先读取订阅的配置文件，然后读取本地的 Mixin
+配置，将两者<strong>合并</strong>。</li>
+<li><strong>优先级</strong>：Mixin 配置 &gt; 订阅配置。</li>
+<li><strong>用途</strong>：
+<ul>
+<li>强制开启 TUN 模式。</li>
+<li>注入自定义的 DNS 服务器（防止 DNS 污染）。</li>
+<li>添加个人的局域网 IP 直连规则。</li>
+</ul></li>
+</ul>
+<p><strong>Mixin 示例 (开启 TUN 和 DNS劫持):</strong></p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">mixin:</span> <span class="comment"># 注意：不同客户端写法可能不同，原理一致</span></span><br><span class="line">  <span class="attr">dns:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">listen:</span> <span class="string">:53</span></span><br><span class="line">    <span class="attr">enhanced-mode:</span> <span class="string">fake-ip</span>  <span class="comment"># 配合 TUN 使用的核心模式</span></span><br><span class="line">    <span class="attr">nameserver:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">      <span class="bullet">-</span> <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">  <span class="attr">tun:</span></span><br><span class="line">    <span class="attr">enable:</span> <span class="literal">true</span></span><br><span class="line">    <span class="attr">stack:</span> <span class="string">system</span>          <span class="comment"># 网络栈类型</span></span><br><span class="line">    <span class="attr">dns-hijack:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">any:53</span>             <span class="comment"># 劫持所有 DNS 查询</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>Fake-IP 模式是什么？</strong> 当开启 TUN
+模式时，为了避免频繁的 DNS 解析请求导致延迟，Clash 会立即返回一个“假
+IP”（Fake-IP，如 <code>198.18.0.1</code>）给浏览器。
+浏览器以为拿到了真实 IP，向这个假 IP 发送请求。Clash 拦截到发往假 IP
+的包，根据映射表找到原始域名，再在远端代理服务器进行真正的解析和连接。这能极大地提高响应速度。</p>
+</blockquote>
+<h3 id="常见误区纠正">⚠️ 常见误区纠正</h3>
+<ol type="1">
+<li><strong>“开了全局模式就是最安全的”</strong>
+<ul>
+<li><strong>错</strong>。全局模式只是将所有流量转发给代理服务器。如果你的代理协议（如
+HTTP）是明文的，或者机场本身记录日志，你的隐私依然不安全。</li>
+</ul></li>
+<li><strong>“Ping 值低网速就快”</strong>
+<ul>
+<li><strong>不一定</strong>。Clash 面板上的 Ping 通常是
+<code>TCP Handshake</code>
+时间，只代表你到代理服务器的延迟。实际网速还取决于代理服务器的带宽拥塞程度和线路质量（CN2/GIA
+等）。</li>
+</ul></li>
+<li><strong>“TUN 模式会影响打游戏吗？”</strong>
+<ul>
+<li><strong>正面影响</strong>。大多数外服游戏基于 UDP
+协议，普通代理模式无法代理 UDP，必须开启 TUN
+模式才能让游戏流量走代理加速。</li>
+</ul></li>
+<li><strong>Clash 是 VPN 吗？</strong>
+<ul>
+<li>从<strong>技术实现</strong>上看：Clash 只是一个代理客户端。</li>
+<li>从<strong>用户体验</strong>上看：开启 TUN 模式后的 Clash，表现得和
+VPN 几乎一致（接管全系统流量）。</li>
+</ul></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>Clash</tag>
+        <tag>Network</tag>
+        <tag>VPN</tag>
+        <tag>代理</tag>
       </tags>
   </entry>
   <entry>
@@ -14486,6 +14486,335 @@ DHCP 服务器</h4>
       </tags>
   </entry>
   <entry>
+    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
+    <url>/posts/18f02423/</url>
+    <content><![CDATA[<p>CUDA
+报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
+<td>下命令的人</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU 端代码，真正执行 kernel 的一侧。</td>
+<td>干活的人</td>
+</tr>
+<tr>
+<td>Kernel</td>
+<td>在 GPU 上并行执行的函数。</td>
+<td>GPU 任务</td>
+</tr>
+<tr>
+<td>Stream</td>
+<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
+<td>GPU 队列</td>
+</tr>
+<tr>
+<td>Synchronize</td>
+<td>CPU 停下来等 GPU 做完前面的任务。</td>
+<td>等结果</td>
+</tr>
+<tr>
+<td>CUDA error code</td>
+<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
+<td>一句错误摘要</td>
+</tr>
+</tbody>
+</table>
+<p>省流：</p>
+<blockquote>
+<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
+真正在哪里出错”。</strong></p>
+</blockquote>
+<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
+<p>CUDA 程序里通常有两条时间线：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
+<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
+队列，然后自己继续往下跑。</p>
+<p>也就是说：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
+<p>这行代码返回成功，通常只能说明：</p>
+<blockquote>
+<p>kernel launch 请求成功提交了。</p>
+</blockquote>
+<p>它不等价于：</p>
+<blockquote>
+<p>kernel 已经在 GPU 上执行成功了。</p>
+</blockquote>
+<p>这就是 CUDA 异步报错的根源。</p>
+<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
+<p>一个简化版流程如下：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
+<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
+<p>普通 CPU 函数调用更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
+<p>CUDA kernel launch 更像这样：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
+<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
+kernel。</p>
+<h3 id="stream-是什么">🧩 Stream 是什么</h3>
+<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
+<p>同一个 stream 里的任务通常按顺序执行。但 CPU
+提交任务时不一定等待每个任务结束：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
+<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
+done。</p>
+<p>这在 PyTorch 里很常见：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
+<p>前面几行可能只是不断向 GPU 提交算子。到了
+<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
+GPU，于是错误可能在这里才爆出来。</p>
+<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
+<p>假设某个 kernel 里有越界写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>CPU 端这样调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
+<p>可能的结果是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>报错位置看起来在：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
+<p>但真正的事故现场可能是前面的：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
+<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
+工作完成，CPU 到这里才第一次认真问 GPU：</p>
+<blockquote>
+<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
+</blockquote>
+<p>GPU/driver 这时返回：</p>
+<blockquote>
+<p>前面那个 kernel 已经出错了。</p>
+</blockquote>
+<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
+<p>默认情况下，GPU 端错误通常不是像 CPU
+异常一样立刻带着完整调用栈抛回来。</p>
+<p>更接近下面这个过程：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
+<p>所以你看到的经常是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
+<p>例如：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
+<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
+<ul>
+<li>哪个 kernel 的哪一行出错；</li>
+<li>哪个 block/thread 出错；</li>
+<li>GPU 上完整的调用链是什么；</li>
+<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
+</ul>
+<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
+<p>当 PyTorch 报错栈指向：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>它通常表示：</p>
+<blockquote>
+<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
+</blockquote>
+<p>它不必然表示：</p>
+<blockquote>
+<p>这个 API 自己就是根因。</p>
+</blockquote>
+<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
+<p>常见通知点包括：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 75%" />
+</colgroup>
+<thead>
+<tr>
+<th>操作</th>
+<th>为什么会暴露错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>明确等待 GPU 之前的任务完成。</td>
+</tr>
+<tr>
+<td><code>cudaStreamSynchronize(stream)</code></td>
+<td>等某个 stream 完成。</td>
+</tr>
+<tr>
+<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
+<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
+</tr>
+<tr>
+<td><code>tensor.cpu()</code></td>
+<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
+</tr>
+<tr>
+<td><code>loss.item()</code></td>
+<td>需要把 GPU 标量读到 Python 数值。</td>
+</tr>
+<tr>
+<td>后续 CUDA API</td>
+<td>发现当前 CUDA context 已经有错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么-gpu-错误默认信息这么少">🔍 为什么 GPU
+错误默认信息这么少</h3>
+<p>CPU 异常容易打印调用栈，是因为 CPU
+线程有清晰的栈帧和同步执行路径。</p>
+<p>GPU kernel 不一样：</p>
+<ul>
+<li>一个 kernel 可能有成千上万个线程同时执行；</li>
+<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
+<li>错误可能只发生在某个 thread；</li>
+<li>kernel launch 和 kernel 执行在时间线上分离；</li>
+<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
+调试模式。</li>
+</ul>
+<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
+<p>这些描述很有用，但它们不是完整定位结果。</p>
+<h3 id="cuda_launch_blocking1-做了什么">🛠️
+<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
+<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
+<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
+<p>默认情况：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>开启后：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
+<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
+的位置。</p>
+<p>代价是程序会明显变慢，因为 CPU/GPU
+原本可以重叠执行的部分被压平了。</p>
+<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
+<p>分类任务里，<code>target</code> 必须在
+<code>[0, num_classes - 1]</code> 范围内。</p>
+<p>例如模型输出 10 类：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
+<p>但 <code>target</code> 里出现了非法类别：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
+<p>这时：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
+<p>GPU kernel 可能触发 device-side
+assert。你看到的报错位置却可能在：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
+<p>或者：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
+<p>真正要查的是：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
+<p>如果是 <code>cross_entropy</code>，优先确认：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
+<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
+<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>区别是：</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 73%" />
+</colgroup>
+<thead>
+<tr>
+<th>API</th>
+<th>主要检查什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cudaGetLastError()</code></td>
+<td>kernel launch 是否成功，比如配置、参数、符号等 launch
+阶段错误。</td>
+</tr>
+<tr>
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
+</tr>
+</tbody>
+</table>
+<p>如果要进一步定位到源码行，可以用更重的工具：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
+<p>典型报告可能会给出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
+<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
+事故现场。</p>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
+写错了。</td>
+<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
+</tr>
+<tr>
+<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
+<td>launch 成功只代表提交成功，不代表执行成功。</td>
+</tr>
+<tr>
+<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
+<td>它只是让报错更同步、更容易定位。</td>
+</tr>
+<tr>
+<td>GPU 报错信息太少，所以没法查。</td>
+<td>默认信息少，但可以用同步、断言、Compute
+Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
+</tr>
+<tr>
+<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
+<td>一个早期 GPU 错误可能污染后续 CUDA
+context，后面只是连续发现错误状态。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
+<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
+<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
+<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
+错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
+往往在更早提交的任务里。</p>
+</blockquote>
+<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
+和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
+Sanitizer。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>PyTorch</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：从编译环境到 HelloWorld</title>
     <url>/posts/c4f8a2d1/</url>
     <content><![CDATA[<p>最近想系统补一下计算机基础，从 c/c++ 开始吧。</p>
@@ -15192,335 +15521,6 @@ flowchart TD
         <tag>C/C++</tag>
         <tag>编译器</tag>
         <tag>HelloWorld</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>CUDA 异步报错：为什么调用栈总是不在真正出错处</title>
-    <url>/posts/18f02423/</url>
-    <content><![CDATA[<p>CUDA
-报错往往不出现在真正出错的语句，而是推迟到后续某个调用才暴露。本文分析异步执行导致调用栈错位的原因与排查方法。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Host</td>
-<td>CPU 端代码，也就是发起 CUDA 调用的一侧。</td>
-<td>下命令的人</td>
-</tr>
-<tr>
-<td>Device</td>
-<td>GPU 端代码，真正执行 kernel 的一侧。</td>
-<td>干活的人</td>
-</tr>
-<tr>
-<td>Kernel</td>
-<td>在 GPU 上并行执行的函数。</td>
-<td>GPU 任务</td>
-</tr>
-<tr>
-<td>Stream</td>
-<td>CUDA 的任务队列，同一个 stream 内通常按提交顺序执行。</td>
-<td>GPU 队列</td>
-</tr>
-<tr>
-<td>Synchronize</td>
-<td>CPU 停下来等 GPU 做完前面的任务。</td>
-<td>等结果</td>
-</tr>
-<tr>
-<td>CUDA error code</td>
-<td>CUDA runtime/driver 返回给 CPU 的错误状态。</td>
-<td>一句错误摘要</td>
-</tr>
-</tbody>
-</table>
-<p>省流：</p>
-<blockquote>
-<p><strong>CPU 端调用栈通常表示“CPU 在哪里发现 GPU 出错”，不一定表示“GPU
-真正在哪里出错”。</strong></p>
-</blockquote>
-<h3 id="先建立一个心智模型">🧠 先建立一个心智模型</h3>
-<p>CUDA 程序里通常有两条时间线：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 时间线:</span><br><span class="line">  launch A  -&gt;  launch B  -&gt;  print  -&gt;  synchronize  -&gt;  报错</span><br><span class="line"></span><br><span class="line">GPU 时间线:</span><br><span class="line">                 execute A  -&gt;  A 内部出错</span><br><span class="line">                              execute B 或被错误状态影响</span><br></pre></td></tr></table></figure>
-<p>CPU 发起 kernel 时，很多情况下只是把任务提交给 GPU
-队列，然后自己继续往下跑。</p>
-<p>也就是说：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br></pre></td></tr></table></figure>
-<p>这行代码返回成功，通常只能说明：</p>
-<blockquote>
-<p>kernel launch 请求成功提交了。</p>
-</blockquote>
-<p>它不等价于：</p>
-<blockquote>
-<p>kernel 已经在 GPU 上执行成功了。</p>
-</blockquote>
-<p>这就是 CUDA 异步报错的根源。</p>
-<h3 id="cpu-和-gpu-怎么协作">🔁 CPU 和 GPU 怎么协作</h3>
-<p>一个简化版流程如下：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------+</span><br><span class="line">| CPU Host Thread   |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 1. 准备 kernel 参数</span><br><span class="line">          | 2. 调用 CUDA runtime/driver</span><br><span class="line">          | 3. 把命令放入 stream</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| CUDA Driver       |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 4. 提交到 GPU command queue</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| GPU Device        |</span><br><span class="line">+---------+---------+</span><br><span class="line">          |</span><br><span class="line">          | 5. 按 stream 顺序执行 kernel / memcpy / event</span><br><span class="line">          v</span><br><span class="line">+-------------------+</span><br><span class="line">| Device Memory     |</span><br><span class="line">+-------------------+</span><br></pre></td></tr></table></figure>
-<p>关键点是：<strong>提交任务</strong>和<strong>任务执行完成</strong>不是同一件事。</p>
-<p>普通 CPU 函数调用更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">调用函数 -&gt; 函数执行 -&gt; 返回结果/异常</span><br></pre></td></tr></table></figure>
-<p>CUDA kernel launch 更像这样：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">提交任务 -&gt; 立即返回 -&gt; GPU 稍后执行 -&gt; CPU 之后某个点才知道结果</span><br></pre></td></tr></table></figure>
-<p>所以 CPU 端代码可能已经走到很后面，GPU 才刚执行到前面提交的
-kernel。</p>
-<h3 id="stream-是什么">🧩 Stream 是什么</h3>
-<p>可以把 CUDA stream 理解成 GPU 任务队列：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">stream 0:</span><br><span class="line">  kernel A</span><br><span class="line">  kernel B</span><br><span class="line">  cudaMemcpy</span><br><span class="line">  kernel C</span><br></pre></td></tr></table></figure>
-<p>同一个 stream 里的任务通常按顺序执行。但 CPU
-提交任务时不一定等待每个任务结束：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">时间 ---&gt;</span><br><span class="line"></span><br><span class="line">CPU:  launch A | launch B | launch C | print(&quot;done&quot;) | synchronize</span><br><span class="line"></span><br><span class="line">GPU:             |---- A ----|---- B ----|---- C ----|</span><br></pre></td></tr></table></figure>
-<p>所以 <code>print("done")</code> 出现，不代表 GPU kernel 已经
-done。</p>
-<p>这在 PyTorch 里很常见：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits = model(x)</span><br><span class="line">loss = criterion(logits, target)</span><br><span class="line">loss.backward()</span><br><span class="line"><span class="built_in">print</span>(loss.item())</span><br></pre></td></tr></table></figure>
-<p>前面几行可能只是不断向 GPU 提交算子。到了
-<code>loss.item()</code>，CPU 需要把 GPU 上的标量拿回来，这时必须等待
-GPU，于是错误可能在这里才爆出来。</p>
-<h3 id="gpu-出错时发生了什么">💥 GPU 出错时发生了什么</h3>
-<p>假设某个 kernel 里有越界写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">badKernel</span><span class="params">(<span class="type">float</span>* out, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    out[i] = <span class="number">1.0f</span>;  <span class="comment">// 如果 i &gt;= n，就是越界写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>CPU 端这样调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;after launch\n&quot;</span>);</span><br><span class="line"><span class="built_in">cudaMemcpy</span>(host, out, bytes, cudaMemcpyDeviceToHost);</span><br></pre></td></tr></table></figure>
-<p>可能的结果是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">after launch</span><br><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>报错位置看起来在：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemcpy</span>(...)</span><br></pre></td></tr></table></figure>
-<p>但真正的事故现场可能是前面的：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">badKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(out, n);</span><br></pre></td></tr></table></figure>
-<p>原因是 <code>cudaMemcpy(...DeviceToHost...)</code> 需要等待前面的 GPU
-工作完成，CPU 到这里才第一次认真问 GPU：</p>
-<blockquote>
-<p>前面的任务都做完了吗？我要把结果拿回来了。</p>
-</blockquote>
-<p>GPU/driver 这时返回：</p>
-<blockquote>
-<p>前面那个 kernel 已经出错了。</p>
-</blockquote>
-<h3 id="gpu-怎么通知-cpu">📡 GPU 怎么通知 CPU</h3>
-<p>默认情况下，GPU 端错误通常不是像 CPU
-异常一样立刻带着完整调用栈抛回来。</p>
-<p>更接近下面这个过程：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">+-------------------------------+</span><br><span class="line">| GPU 执行 kernel               |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | 出现非法访问 / assert / launch failure</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| Driver/context 记录错误状态   |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | CPU 后续调用同步、拷贝、查询、相关 CUDA API</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| CUDA runtime 返回错误码       |</span><br><span class="line">+---------------+---------------+</span><br><span class="line">                |</span><br><span class="line">                | PyTorch/C++ runtime 包装成异常或返回值</span><br><span class="line">                v</span><br><span class="line">+-------------------------------+</span><br><span class="line">| 打印 CPU/Python/C++ 调用栈    |</span><br><span class="line">+-------------------------------+</span><br></pre></td></tr></table></figure>
-<p>所以你看到的经常是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 调用栈 + 一句 GPU 错误摘要</span><br></pre></td></tr></table></figure>
-<p>例如：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RuntimeError: CUDA error: device-side assert triggered</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CUDA error: an illegal memory access was encountered</span><br></pre></td></tr></table></figure>
-<p>这类信息说明 GPU 端发生了什么类型的错误，但它默认不一定告诉你：</p>
-<ul>
-<li>哪个 kernel 的哪一行出错；</li>
-<li>哪个 block/thread 出错；</li>
-<li>GPU 上完整的调用链是什么；</li>
-<li>Python 栈中哪一行才是真正提交问题 kernel 的位置。</li>
-</ul>
-<h3 id="cpu-调用栈到底说明什么">🧾 CPU 调用栈到底说明什么</h3>
-<p>当 PyTorch 报错栈指向：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br><span class="line">tensor.cpu()</span><br><span class="line">torch.cuda.synchronize()</span><br><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>它通常表示：</p>
-<blockquote>
-<p>CPU 在这个 API 调用处发现 CUDA 已经处于错误状态。</p>
-</blockquote>
-<p>它不必然表示：</p>
-<blockquote>
-<p>这个 API 自己就是根因。</p>
-</blockquote>
-<p>更准确地说，调用栈里的位置是<strong>通知点</strong>，不一定是<strong>事故现场</strong>。</p>
-<p>常见通知点包括：</p>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 75%" />
-</colgroup>
-<thead>
-<tr>
-<th>操作</th>
-<th>为什么会暴露错误</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>明确等待 GPU 之前的任务完成。</td>
-</tr>
-<tr>
-<td><code>cudaStreamSynchronize(stream)</code></td>
-<td>等某个 stream 完成。</td>
-</tr>
-<tr>
-<td><code>cudaMemcpy(...DeviceToHost...)</code></td>
-<td>要从 GPU 拿数据回 CPU，必须等结果可用。</td>
-</tr>
-<tr>
-<td><code>tensor.cpu()</code></td>
-<td>PyTorch 需要把 GPU Tensor 拷回 CPU。</td>
-</tr>
-<tr>
-<td><code>loss.item()</code></td>
-<td>需要把 GPU 标量读到 Python 数值。</td>
-</tr>
-<tr>
-<td>后续 CUDA API</td>
-<td>发现当前 CUDA context 已经有错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么-gpu-错误默认信息这么少">🔍 为什么 GPU
-错误默认信息这么少</h3>
-<p>CPU 异常容易打印调用栈，是因为 CPU
-线程有清晰的栈帧和同步执行路径。</p>
-<p>GPU kernel 不一样：</p>
-<ul>
-<li>一个 kernel 可能有成千上万个线程同时执行；</li>
-<li>每个线程都有自己的 <code>threadIdx/blockIdx</code>；</li>
-<li>错误可能只发生在某个 thread；</li>
-<li>kernel launch 和 kernel 执行在时间线上分离；</li>
-<li>上层框架默认更关心“这个 CUDA 操作失败了”，而不是自动进入 GPU
-调试模式。</li>
-</ul>
-<p>所以默认报错往往是一个 CUDA error code 加一段短描述：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">illegal memory access</span><br><span class="line">device-side assert triggered</span><br><span class="line">misaligned address</span><br><span class="line">unspecified launch failure</span><br><span class="line">an illegal instruction was encountered</span><br></pre></td></tr></table></figure>
-<p>这些描述很有用，但它们不是完整定位结果。</p>
-<h3 id="cuda_launch_blocking1-做了什么">🛠️
-<code>CUDA_LAUNCH_BLOCKING=1</code> 做了什么</h3>
-<p>调试 PyTorch CUDA 错误时，最常用的第一步是：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">CUDA_LAUNCH_BLOCKING=1 python train.py</span><br></pre></td></tr></table></figure>
-<p>它的作用可以简化理解为：让很多 CUDA launch 变得更同步。</p>
-<p>默认情况：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; launch B -&gt; launch C -&gt; 后面某处报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>开启后：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU: launch A -&gt; 等 A 完成 -&gt; 如果 A 出错，就更早报错</span><br><span class="line">GPU:      A 执行并出错</span><br></pre></td></tr></table></figure>
-<p>这不会修复 bug，但能让 Python 调用栈更接近真正提交错误 kernel
-的位置。</p>
-<p>代价是程序会明显变慢，因为 CPU/GPU
-原本可以重叠执行的部分被压平了。</p>
-<h3 id="一个-pytorch-里的典型例子">🧪 一个 PyTorch 里的典型例子</h3>
-<p>分类任务里，<code>target</code> 必须在
-<code>[0, num_classes - 1]</code> 范围内。</p>
-<p>例如模型输出 10 类：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">logits.shape  <span class="comment"># [batch_size, 10]</span></span><br></pre></td></tr></table></figure>
-<p>但 <code>target</code> 里出现了非法类别：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">target.<span class="built_in">max</span>()  <span class="comment"># 12</span></span><br></pre></td></tr></table></figure>
-<p>这时：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss = torch.nn.functional.cross_entropy(logits, target)</span><br></pre></td></tr></table></figure>
-<p>GPU kernel 可能触发 device-side
-assert。你看到的报错位置却可能在：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.backward()</span><br></pre></td></tr></table></figure>
-<p>或者：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line">loss.item()</span><br></pre></td></tr></table></figure>
-<p>真正要查的是：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(target.<span class="built_in">min</span>(), target.<span class="built_in">max</span>(), logits.shape)</span><br></pre></td></tr></table></figure>
-<p>如果是 <code>cross_entropy</code>，优先确认：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0 &lt;= target.min()</span><br><span class="line">target.max() &lt; logits.shape[1]</span><br><span class="line">target.dtype == torch.long</span><br></pre></td></tr></table></figure>
-<h3 id="ccuda-里怎么抓得更准">🧰 C++/CUDA 里怎么抓得更准</h3>
-<p>自定义 CUDA kernel 调试时，可以在 kernel 后面临时加两类检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args);</span><br><span class="line"></span><br><span class="line">cudaError_t err = <span class="built_in">cudaGetLastError</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;launch error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">err = <span class="built_in">cudaDeviceSynchronize</span>();</span><br><span class="line"><span class="keyword">if</span> (err != cudaSuccess) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;runtime error: %s\n&quot;</span>, <span class="built_in">cudaGetErrorString</span>(err));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>区别是：</p>
-<table>
-<colgroup>
-<col style="width: 26%" />
-<col style="width: 73%" />
-</colgroup>
-<thead>
-<tr>
-<th>API</th>
-<th>主要检查什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cudaGetLastError()</code></td>
-<td>kernel launch 是否成功，比如配置、参数、符号等 launch
-阶段错误。</td>
-</tr>
-<tr>
-<td><code>cudaDeviceSynchronize()</code></td>
-<td>等 GPU 实际执行完，能暴露 kernel 执行期间的错误。</td>
-</tr>
-</tbody>
-</table>
-<p>如果要进一步定位到源码行，可以用更重的工具：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./your_program</span><br></pre></td></tr></table></figure>
-<p>典型报告可能会给出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Invalid __global__ write of size 4</span><br><span class="line">    at kernel.cu:123</span><br><span class="line">    by thread (31,0,0) in block (12,0,0)</span><br></pre></td></tr></table></figure>
-<p>这比默认的一句 <code>illegal memory access</code> 更接近真正的 GPU
-事故现场。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>报错栈指向 <code>loss.item()</code>，所以 <code>loss.item()</code>
-写错了。</td>
-<td>它可能只是第一个同步点，真正错误在更早的 GPU kernel。</td>
-</tr>
-<tr>
-<td>kernel launch 没报错，说明 kernel 执行没问题。</td>
-<td>launch 成功只代表提交成功，不代表执行成功。</td>
-</tr>
-<tr>
-<td><code>CUDA_LAUNCH_BLOCKING=1</code> 能修复 CUDA bug。</td>
-<td>它只是让报错更同步、更容易定位。</td>
-</tr>
-<tr>
-<td>GPU 报错信息太少，所以没法查。</td>
-<td>默认信息少，但可以用同步、断言、Compute
-Sanitizer、<code>cuda-gdb</code> 等工具补充。</td>
-</tr>
-<tr>
-<td>后续所有 CUDA 调用都报错，说明每一行都有 bug。</td>
-<td>一个早期 GPU 错误可能污染后续 CUDA
-context，后面只是连续发现错误状态。</td>
-</tr>
-</tbody>
-</table>
-<h3 id="实战排查顺序">🪜 实战排查顺序</h3>
-<p>遇到 CUDA 异步报错，我一般按这个顺序做：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. 开启同步定位</span><br><span class="line">   CUDA_LAUNCH_BLOCKING=1 python train.py</span><br><span class="line"></span><br><span class="line">2. 看报错更靠近哪一行</span><br><span class="line">   model forward / loss / backward / tensor copy</span><br><span class="line"></span><br><span class="line">3. 查最常见数据问题</span><br><span class="line">   shape / dtype / device / index range / NaN / Inf</span><br><span class="line"></span><br><span class="line">4. 如果是分类 loss</span><br><span class="line">   检查 target.min()、target.max()、target.dtype</span><br><span class="line"></span><br><span class="line">5. 如果是自定义 CUDA kernel</span><br><span class="line">   kernel 后加 cudaGetLastError() + cudaDeviceSynchronize()</span><br><span class="line"></span><br><span class="line">6. 仍然不清楚</span><br><span class="line">   compute-sanitizer --tool memcheck ...</span><br></pre></td></tr></table></figure>
-<p>尤其是 PyTorch 里，下面这些检查非常便宜：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;logits:&#x27;</span>, logits.shape, logits.dtype, logits.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target:&#x27;</span>, target.shape, target.dtype, target.device)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;target range:&#x27;</span>, target.<span class="built_in">min</span>().item(), target.<span class="built_in">max</span>().item())</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;finite:&#x27;</span>, torch.isfinite(logits).<span class="built_in">all</span>().item())</span><br></pre></td></tr></table></figure>
-<p>先查这些，往往比盯着最后一行报错栈更有效。</p>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>CUDA 异步报错里，CPU 调用栈通常是“发现错误的位置”，GPU
-错误摘要才说明“发生了哪类 GPU 错误”，真正的出错 kernel
-往往在更早提交的任务里。</p>
-</blockquote>
-<p>调试时不要把报错栈当成唯一事实。先把异步变同步，再检查数据范围、shape、dtype
-和自定义 kernel 的边界访问；需要更细粒度定位时，再上 Compute
-Sanitizer。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>PyTorch</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
@@ -20330,6 +20330,206 @@ IO、多文件工程，最后用这五块选学内容补齐常用拼图。接下
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：运算符重载与静态成员</title>
+    <url>/posts/e2c8a5f6/</url>
+    <content><![CDATA[<p>类的成员不只是数据和函数：还能让自定义类型的对象像 <code>int</code>
+一样用
+<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>，也能让某些成员属于类而不是某个对象。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运算符重载（operator overloading）</td>
+<td>给自定义类型定义运算符的行为</td>
+<td>对象也能加减比较</td>
+</tr>
+<tr>
+<td><code>operator+</code></td>
+<td>重载 <code>+</code> 运算符的成员函数</td>
+<td>定义加法</td>
+</tr>
+<tr>
+<td><code>operator&lt;&lt;</code></td>
+<td>重载输出运算符</td>
+<td>对象直接 cout</td>
+</tr>
+<tr>
+<td><code>operator==</code></td>
+<td>重载相等比较</td>
+<td>定义相等</td>
+</tr>
+<tr>
+<td>静态成员变量</td>
+<td>属于类而不是某个对象的变量</td>
+<td>全类共享一份</td>
+</tr>
+<tr>
+<td>静态成员函数</td>
+<td>不依赖具体对象、用类名调用的函数</td>
+<td>类级操作</td>
+</tr>
+</tbody>
+</table>
+<h3 id="为什么需要运算符重载">🧩 为什么需要运算符重载</h3>
+<p>没有运算符重载时，比较两个自定义对象要写函数调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point a&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">Point b&#123;<span class="number">3</span>, <span class="number">4</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Point c = a + b;          // 不支持：+ 不知道 Point 怎么加</span></span><br><span class="line">Point c = <span class="built_in">add</span>(a, b);          <span class="comment">// 只能这样</span></span><br></pre></td></tr></table></figure>
+<p>运算符重载让自定义类型用起来像内置类型，代码更直观：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point c = a + b;              <span class="comment">// 直观</span></span><br><span class="line"><span class="keyword">if</span> (a == b) &#123; ... &#125;           <span class="comment">// 直接比较</span></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;            <span class="comment">// 直接输出</span></span><br></pre></td></tr></table></figure>
+<h3 id="运算符重载基础">➕ 运算符重载基础</h3>
+<p>重载运算符的成员函数写法：<code>operator</code> 后跟运算符符号。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 +：返回两个点坐标相加的新点</span></span><br><span class="line">    Point <span class="keyword">operator</span>+(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">Point</span>(x + other.x, y + other.y);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 ==：坐标都相等才算相等</span></span><br><span class="line">    <span class="type">bool</span> <span class="keyword">operator</span>==(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> x == other.x &amp;&amp; y == other.y;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">a</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    <span class="function">Point <span class="title">b</span><span class="params">(<span class="number">3</span>, <span class="number">4</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    Point c = a + b;              <span class="comment">// 调用 a.operator+(b)</span></span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; c.<span class="built_in">getY</span>() &lt;&lt; endl;   <span class="comment">// 4 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (a == b) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;不相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>关键点：</p>
+<ol type="1">
+<li><code>operator+</code> 是成员函数，<code>a + b</code> 等价于调用
+<code>a.operator+(b)</code>，左操作数就是 <code>this</code>；</li>
+<li>返回新对象而不是修改自身；</li>
+<li><code>const</code> 成员函数保证比较或加法不修改对象。</li>
+</ol>
+<h3 id="重载输出运算符">🖨️ 重载输出运算符 <code>&lt;&lt;</code></h3>
+<p><code>&lt;&lt;</code> 不能作为成员函数重载（左操作数是
+<code>cout</code>，不是我们的类），要写成<strong>非成员函数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 非成员函数：左操作数是 ostream&amp;，右操作数是 Point</span></span><br><span class="line">ostream&amp; <span class="keyword">operator</span>&lt;&lt;(ostream&amp; out, <span class="type">const</span> Point&amp; p)</span><br><span class="line">&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;(&quot;</span> &lt;&lt; p.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; p.<span class="built_in">getY</span>() &lt;&lt; <span class="string">&quot;)&quot;</span>;</span><br><span class="line">    <span class="keyword">return</span> out;   <span class="comment">// 返回 out 才能连续输出</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">p</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; p &lt;&lt; endl;          <span class="comment">// (1, 2)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>返回 <code>ostream&amp;</code>
+是为了支持链式输出：<code>cout &lt;&lt; p &lt;&lt; " " &lt;&lt; q</code>。</p>
+<h3 id="重载下标运算符">🧮 重载下标运算符 <code>[]</code></h3>
+<p>容器类常用，比如让自定义类能像数组一样按下标访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">IntArray</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> data[<span class="number">10</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>&amp; <span class="keyword">operator</span>[](<span class="type">int</span> index)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> data[index];   <span class="comment">// 返回引用，才能赋值</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">IntArray arr;</span><br><span class="line">arr[<span class="number">3</span>] = <span class="number">42</span>;                   <span class="comment">// 调用 operator[]</span></span><br><span class="line">cout &lt;&lt; arr[<span class="number">3</span>] &lt;&lt; endl;        <span class="comment">// 42</span></span><br></pre></td></tr></table></figure>
+<h3 id="静态成员变量">🧱 静态成员变量</h3>
+<p>静态成员变量<strong>属于类</strong>，所有对象共享同一份，而不是每个对象各有一份。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Counter</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">static</span> <span class="type">int</span> count;          <span class="comment">// 声明：属于类的变量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Counter</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        count++;               <span class="comment">// 每创建一个对象，计数加一</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">getCount</span><span class="params">()</span>      <span class="comment">// 静态成员函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> count;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 类外定义并初始化：静态成员变量必须在这里给一次定义</span></span><br><span class="line"><span class="type">int</span> Counter::count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Counter a;</span><br><span class="line">    Counter b;</span><br><span class="line">    Counter c;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; Counter::<span class="built_in">getCount</span>() &lt;&lt; endl;   <span class="comment">// 3，用类名调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>要点：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通成员变量</th>
+<th>静态成员变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>归属</td>
+<td>每个对象一份</td>
+<td>整个类共享一份</td>
+</tr>
+<tr>
+<td>访问</td>
+<td>通过对象</td>
+<td>通过类名 <code>类名::变量</code> 或对象</td>
+</tr>
+<tr>
+<td>定义</td>
+<td>类内自动创建</td>
+<td>需要在类外定义一次</td>
+</tr>
+</tbody>
+</table>
+<h3 id="静态成员函数">⚙️ 静态成员函数</h3>
+<p>静态成员函数不依赖具体对象，用类名直接调用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MathUtils</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> x * x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> r = MathUtils::<span class="built_in">square</span>(<span class="number">5</span>);   <span class="comment">// 不需要创建对象</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>静态成员函数的限制：<strong>没有 <code>this</code>
+指针</strong>，所以不能访问普通成员变量（不知道操作哪个对象的），只能访问静态成员和其他静态函数。</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>普通成员函数</th>
+<th>静态成员函数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>依赖对象</td>
+<td>是，有 <code>this</code></td>
+<td>否，没有 <code>this</code></td>
+</tr>
+<tr>
+<td>调用方式</td>
+<td>对象调用</td>
+<td>类名调用</td>
+</tr>
+<tr>
+<td>能访问普通成员</td>
+<td>能</td>
+<td>不能</td>
+</tr>
+<tr>
+<td>能访问静态成员</td>
+<td>能</td>
+<td>能</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常见误区">⚠️ 常见误区</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运算符重载是给内置类型用的</td>
+<td>内置类型运算符是固定的，重载只针对自定义类型</td>
+</tr>
+<tr>
+<td><code>&lt;&lt;</code> 重载必须是成员函数</td>
+<td><code>&lt;&lt;</code> 左操作数是流对象，要用非成员函数形式</td>
+</tr>
+<tr>
+<td>重载 <code>+</code> 应该修改左操作数</td>
+<td>通常返回新对象，<code>a + b</code> 不应改变 <code>a</code></td>
+</tr>
+<tr>
+<td>静态成员变量每个对象一份</td>
+<td>全类共享一份，且在类外定义一次</td>
+</tr>
+<tr>
+<td>静态成员函数能访问普通成员变量</td>
+<td>静态函数没有 <code>this</code>，只能访问静态成员</td>
+</tr>
+<tr>
+<td>重载运算符可以随便改语义</td>
+<td>应保持直觉语义（<code>+</code> 是加法、<code>==</code>
+是相等），别滥用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="总结">✅ 总结</h3>
+<blockquote>
+<p>运算符重载让自定义类型用起来像内置类型（<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>、<code>[]</code>），静态成员让数据或操作属于类本身；两者的共同点是让类的表达力更强。</p>
+</blockquote>
+<p>这一章补上了类与对象（第 7
+章）之后的两块常用拼图。接下来无论是写容器类、工具类，还是做计数统计，都有了对应的语法。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>面向对象</tag>
+        <tag>运算符重载</tag>
+        <tag>静态成员</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：文件 IO 流</title>
     <url>/posts/a7c2e9d4/</url>
     <content><![CDATA[<p>程序跑完数据就没了，想留到下次就得把数据写进文件；文件 IO 流（file
@@ -20656,206 +20856,6 @@ POD，对象持久化要序列化并带版本意识；任何文件操作先检�
         <tag>文件</tag>
         <tag>文件流</tag>
         <tag>序列化</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：运算符重载与静态成员</title>
-    <url>/posts/e2c8a5f6/</url>
-    <content><![CDATA[<p>类的成员不只是数据和函数：还能让自定义类型的对象像 <code>int</code>
-一样用
-<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>，也能让某些成员属于类而不是某个对象。</p>
-<span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>运算符重载（operator overloading）</td>
-<td>给自定义类型定义运算符的行为</td>
-<td>对象也能加减比较</td>
-</tr>
-<tr>
-<td><code>operator+</code></td>
-<td>重载 <code>+</code> 运算符的成员函数</td>
-<td>定义加法</td>
-</tr>
-<tr>
-<td><code>operator&lt;&lt;</code></td>
-<td>重载输出运算符</td>
-<td>对象直接 cout</td>
-</tr>
-<tr>
-<td><code>operator==</code></td>
-<td>重载相等比较</td>
-<td>定义相等</td>
-</tr>
-<tr>
-<td>静态成员变量</td>
-<td>属于类而不是某个对象的变量</td>
-<td>全类共享一份</td>
-</tr>
-<tr>
-<td>静态成员函数</td>
-<td>不依赖具体对象、用类名调用的函数</td>
-<td>类级操作</td>
-</tr>
-</tbody>
-</table>
-<h3 id="为什么需要运算符重载">🧩 为什么需要运算符重载</h3>
-<p>没有运算符重载时，比较两个自定义对象要写函数调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point a&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">Point b&#123;<span class="number">3</span>, <span class="number">4</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Point c = a + b;          // 不支持：+ 不知道 Point 怎么加</span></span><br><span class="line">Point c = <span class="built_in">add</span>(a, b);          <span class="comment">// 只能这样</span></span><br></pre></td></tr></table></figure>
-<p>运算符重载让自定义类型用起来像内置类型，代码更直观：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">Point c = a + b;              <span class="comment">// 直观</span></span><br><span class="line"><span class="keyword">if</span> (a == b) &#123; ... &#125;           <span class="comment">// 直接比较</span></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;            <span class="comment">// 直接输出</span></span><br></pre></td></tr></table></figure>
-<h3 id="运算符重载基础">➕ 运算符重载基础</h3>
-<p>重载运算符的成员函数写法：<code>operator</code> 后跟运算符符号。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 +：返回两个点坐标相加的新点</span></span><br><span class="line">    Point <span class="keyword">operator</span>+(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">Point</span>(x + other.x, y + other.y);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 重载 ==：坐标都相等才算相等</span></span><br><span class="line">    <span class="type">bool</span> <span class="keyword">operator</span>==(<span class="type">const</span> Point&amp; other) <span class="type">const</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> x == other.x &amp;&amp; y == other.y;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">a</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    <span class="function">Point <span class="title">b</span><span class="params">(<span class="number">3</span>, <span class="number">4</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    Point c = a + b;              <span class="comment">// 调用 a.operator+(b)</span></span><br><span class="line">    cout &lt;&lt; c.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; c.<span class="built_in">getY</span>() &lt;&lt; endl;   <span class="comment">// 4 6</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (a == b) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;不相等&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>关键点：</p>
-<ol type="1">
-<li><code>operator+</code> 是成员函数，<code>a + b</code> 等价于调用
-<code>a.operator+(b)</code>，左操作数就是 <code>this</code>；</li>
-<li>返回新对象而不是修改自身；</li>
-<li><code>const</code> 成员函数保证比较或加法不修改对象。</li>
-</ol>
-<h3 id="重载输出运算符">🖨️ 重载输出运算符 <code>&lt;&lt;</code></h3>
-<p><code>&lt;&lt;</code> 不能作为成员函数重载（左操作数是
-<code>cout</code>，不是我们的类），要写成<strong>非成员函数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Point</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> x, y;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Point</span>(<span class="type">int</span> px, <span class="type">int</span> py) : <span class="built_in">x</span>(px), <span class="built_in">y</span>(py) &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getX</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> x; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getY</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> y; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 非成员函数：左操作数是 ostream&amp;，右操作数是 Point</span></span><br><span class="line">ostream&amp; <span class="keyword">operator</span>&lt;&lt;(ostream&amp; out, <span class="type">const</span> Point&amp; p)</span><br><span class="line">&#123;</span><br><span class="line">    out &lt;&lt; <span class="string">&quot;(&quot;</span> &lt;&lt; p.<span class="built_in">getX</span>() &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; p.<span class="built_in">getY</span>() &lt;&lt; <span class="string">&quot;)&quot;</span>;</span><br><span class="line">    <span class="keyword">return</span> out;   <span class="comment">// 返回 out 才能连续输出</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">Point <span class="title">p</span><span class="params">(<span class="number">1</span>, <span class="number">2</span>)</span></span>;</span><br><span class="line">    cout &lt;&lt; p &lt;&lt; endl;          <span class="comment">// (1, 2)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>返回 <code>ostream&amp;</code>
-是为了支持链式输出：<code>cout &lt;&lt; p &lt;&lt; " " &lt;&lt; q</code>。</p>
-<h3 id="重载下标运算符">🧮 重载下标运算符 <code>[]</code></h3>
-<p>容器类常用，比如让自定义类能像数组一样按下标访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">IntArray</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> data[<span class="number">10</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="type">int</span>&amp; <span class="keyword">operator</span>[](<span class="type">int</span> index)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> data[index];   <span class="comment">// 返回引用，才能赋值</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">IntArray arr;</span><br><span class="line">arr[<span class="number">3</span>] = <span class="number">42</span>;                   <span class="comment">// 调用 operator[]</span></span><br><span class="line">cout &lt;&lt; arr[<span class="number">3</span>] &lt;&lt; endl;        <span class="comment">// 42</span></span><br></pre></td></tr></table></figure>
-<h3 id="静态成员变量">🧱 静态成员变量</h3>
-<p>静态成员变量<strong>属于类</strong>，所有对象共享同一份，而不是每个对象各有一份。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Counter</span> &#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">static</span> <span class="type">int</span> count;          <span class="comment">// 声明：属于类的变量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Counter</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        count++;               <span class="comment">// 每创建一个对象，计数加一</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">getCount</span><span class="params">()</span>      <span class="comment">// 静态成员函数</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> count;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 类外定义并初始化：静态成员变量必须在这里给一次定义</span></span><br><span class="line"><span class="type">int</span> Counter::count = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    Counter a;</span><br><span class="line">    Counter b;</span><br><span class="line">    Counter c;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; Counter::<span class="built_in">getCount</span>() &lt;&lt; endl;   <span class="comment">// 3，用类名调用</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>要点：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通成员变量</th>
-<th>静态成员变量</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>归属</td>
-<td>每个对象一份</td>
-<td>整个类共享一份</td>
-</tr>
-<tr>
-<td>访问</td>
-<td>通过对象</td>
-<td>通过类名 <code>类名::变量</code> 或对象</td>
-</tr>
-<tr>
-<td>定义</td>
-<td>类内自动创建</td>
-<td>需要在类外定义一次</td>
-</tr>
-</tbody>
-</table>
-<h3 id="静态成员函数">⚙️ 静态成员函数</h3>
-<p>静态成员函数不依赖具体对象，用类名直接调用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MathUtils</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="type">static</span> <span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> x * x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> r = MathUtils::<span class="built_in">square</span>(<span class="number">5</span>);   <span class="comment">// 不需要创建对象</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>静态成员函数的限制：<strong>没有 <code>this</code>
-指针</strong>，所以不能访问普通成员变量（不知道操作哪个对象的），只能访问静态成员和其他静态函数。</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th>普通成员函数</th>
-<th>静态成员函数</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>依赖对象</td>
-<td>是，有 <code>this</code></td>
-<td>否，没有 <code>this</code></td>
-</tr>
-<tr>
-<td>调用方式</td>
-<td>对象调用</td>
-<td>类名调用</td>
-</tr>
-<tr>
-<td>能访问普通成员</td>
-<td>能</td>
-<td>不能</td>
-</tr>
-<tr>
-<td>能访问静态成员</td>
-<td>能</td>
-<td>能</td>
-</tr>
-</tbody>
-</table>
-<h3 id="常见误区">⚠️ 常见误区</h3>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>运算符重载是给内置类型用的</td>
-<td>内置类型运算符是固定的，重载只针对自定义类型</td>
-</tr>
-<tr>
-<td><code>&lt;&lt;</code> 重载必须是成员函数</td>
-<td><code>&lt;&lt;</code> 左操作数是流对象，要用非成员函数形式</td>
-</tr>
-<tr>
-<td>重载 <code>+</code> 应该修改左操作数</td>
-<td>通常返回新对象，<code>a + b</code> 不应改变 <code>a</code></td>
-</tr>
-<tr>
-<td>静态成员变量每个对象一份</td>
-<td>全类共享一份，且在类外定义一次</td>
-</tr>
-<tr>
-<td>静态成员函数能访问普通成员变量</td>
-<td>静态函数没有 <code>this</code>，只能访问静态成员</td>
-</tr>
-<tr>
-<td>重载运算符可以随便改语义</td>
-<td>应保持直觉语义（<code>+</code> 是加法、<code>==</code>
-是相等），别滥用</td>
-</tr>
-</tbody>
-</table>
-<h3 id="总结">✅ 总结</h3>
-<blockquote>
-<p>运算符重载让自定义类型用起来像内置类型（<code>+</code>、<code>==</code>、<code>&lt;&lt;</code>、<code>[]</code>），静态成员让数据或操作属于类本身；两者的共同点是让类的表达力更强。</p>
-</blockquote>
-<p>这一章补上了类与对象（第 7
-章）之后的两块常用拼图。接下来无论是写容器类、工具类，还是做计数统计，都有了对应的语法。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>面向对象</tag>
-        <tag>运算符重载</tag>
-        <tag>静态成员</tag>
       </tags>
   </entry>
   <entry>
@@ -25628,262 +25628,6 @@ System for AI Computing</em> 的入门精读笔记。）</p>
       </tags>
   </entry>
   <entry>
-    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
-    <url>/posts/9f387285/</url>
-    <content><![CDATA[<blockquote>
-<p>接前两篇：<a
-href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
-href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
-work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
-逐个验证兼容性、安全性、性能和极端场景。</p>
-</blockquote>
-<span id="more"></span>
-<h2 id="rq-总览">📋 RQ 总览</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>RQ</th>
-<th>问题</th>
-<th>答案</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RQ1</td>
-<td>与现有方案比，兼容性如何？</td>
-<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
-</tr>
-<tr>
-<td>RQ2</td>
-<td>能不能防住攻击者？</td>
-<td>链路完整：可信 + 保密 + 防篡改</td>
-</tr>
-<tr>
-<td>RQ3</td>
-<td>LLM 上性能损失多少？</td>
-<td>overhead 只有 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>RQ4</td>
-<td>换不同 LLM / xPU 呢？</td>
-<td>依然稳定，且不随模型大小线性变差</td>
-</tr>
-<tr>
-<td>RQ5</td>
-<td>优化有没有用？</td>
-<td>E2E overhead 直接降约 89%</td>
-</tr>
-<tr>
-<td>RQ6</td>
-<td>极端情况呢？</td>
-<td>带宽砍半、显存不够也不崩</td>
-</tr>
-</tbody>
-</table>
-<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
-搭的 PCIe-SC 原型。</p>
-<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
-<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
-2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
-TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
-即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
-软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
-加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
-<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
-RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
-12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
-硬件、NVIDIA driver、CUDA 或 AI
-application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
-<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
-上实际跑起来慢多少，是后面 RQ4 的事。</p>
-<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
-RQ2：安全性——假设攻击者控制特权软件</h2>
-<p>RQ2
-假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
-software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
-<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
-完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
-通信完整</strong>，缺一不可。</p>
-<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
-怎么来的？</h2>
-<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
-<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
-<table>
-<thead>
-<tr>
-<th>指标</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>E2E Latency</strong></td>
-<td>从输入问题到完整回答生成的总时长</td>
-</tr>
-<tr>
-<td><strong>TPS</strong></td>
-<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
-</tr>
-<tr>
-<td><strong>TTFT</strong></td>
-<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
-</tr>
-</tbody>
-</table>
-<p>结果：<strong>overhead
-0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
-100ms，5% overhead 就是约 105ms。</p>
-<p><strong>为什么没慢很多？</strong>
-因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
-加密；大量普通包走 A4
-免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
-<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
-xPU——稳定性验证</h2>
-<h3 id="不同-llm">不同 LLM</h3>
-<p>从小到大多种模型都测了，整体 overhead
-<strong>0.72%～4.76%</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
-<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
-是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
-2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
-带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
-<h3 id="不同-xpu">不同 xPU</h3>
-<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
-Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
-<strong>0.58%～2.40%</strong>。</p>
-<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
-的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
-重新设计安全机制。</p>
-<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
-89%</h2>
-<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
-latency overhead 降低了 88.7%～89.8%</strong>。</p>
-<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
-再读一点 → 再问一次）。三个优化对症下药：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
-<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
-次数大幅减少。</p>
-<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
-<p>最后作者主动加难度：</p>
-<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
-一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
-<strong>4.45%</strong>。</p>
-<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
-<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
-间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
-<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
-overhead 小于 2%</strong>。</p>
-<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
-的额外代价依然可控。</p>
-<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
-<table>
-<thead>
-<tr>
-<th>维度</th>
-<th>结果</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>兼容性</td>
-<td>✅</td>
-<td>5 种不同 xPU，不改硬件/驱动/应用</td>
-</tr>
-<tr>
-<td>安全性</td>
-<td>✅</td>
-<td>加密 + 完整性 + 可信建立全链路</td>
-</tr>
-<tr>
-<td>LLM 性能</td>
-<td>✅</td>
-<td>overhead 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>多模型</td>
-<td>✅</td>
-<td>0.72%～4.76%，不随模型大小线性恶化</td>
-</tr>
-<tr>
-<td>多 xPU</td>
-<td>✅</td>
-<td>0.58%～2.40%</td>
-</tr>
-<tr>
-<td>优化效果</td>
-<td>✅</td>
-<td>E2E overhead 降低约 89%</td>
-</tr>
-<tr>
-<td>极端场景</td>
-<td>✅</td>
-<td>带宽减半 / 显存溢出仍可控</td>
-</tr>
-</tbody>
-</table>
-<p>整套系统概括起来：</p>
-<blockquote>
-<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
-PCIe
-通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
-</blockquote>
-<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
-layer（共同抽象层）</strong>。</p>
-<h3 id="怎么读才有收获">怎么读才有收获</h3>
-<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
-<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
-5（Filter 规则）/ 6（Attestation 协议）/
-7-8（实验）</strong>，串起来就是全篇。</p>
-<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
-<ul>
-<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
-LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
-的表现需要另外验证。</li>
-<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
-分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
-<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
-固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
-两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
-sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
-</ul>
-<h2 id="系列回顾">📚 系列回顾</h2>
-<ul>
-<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
-精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
-背景</li>
-<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
-精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
-Handler / Adaptor / 信任建立 / 实现</li>
-<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
-</ul>
-<p>如果对背景概念想补课，可以看站内的 <a
-href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
-href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
-<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
-System for AI Computing</em>
-的入门精读笔记，全部实验数据来自论文原文。）</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>GPU</tag>
-        <tag>AI</tag>
-        <tag>机密计算</tag>
-        <tag>论文精读</tag>
-        <tag>性能测试</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>PCIe TLP 解析入门：抓包之后，怎么读懂一个数据包</title>
     <url>/posts/f50af83e/</url>
     <content><![CDATA[<p>PCIe 链路上跑的 AI 推理数据、模型权重、SSD
@@ -26689,6 +26433,262 @@ Count</td>
         <tag>硬件</tag>
         <tag>DMA</tag>
         <tag>抓包分析</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
+    <url>/posts/9f387285/</url>
+    <content><![CDATA[<blockquote>
+<p>接前两篇：<a
+href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
+href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
+work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
+逐个验证兼容性、安全性、性能和极端场景。</p>
+</blockquote>
+<span id="more"></span>
+<h2 id="rq-总览">📋 RQ 总览</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>RQ</th>
+<th>问题</th>
+<th>答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RQ1</td>
+<td>与现有方案比，兼容性如何？</td>
+<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
+</tr>
+<tr>
+<td>RQ2</td>
+<td>能不能防住攻击者？</td>
+<td>链路完整：可信 + 保密 + 防篡改</td>
+</tr>
+<tr>
+<td>RQ3</td>
+<td>LLM 上性能损失多少？</td>
+<td>overhead 只有 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>RQ4</td>
+<td>换不同 LLM / xPU 呢？</td>
+<td>依然稳定，且不随模型大小线性变差</td>
+</tr>
+<tr>
+<td>RQ5</td>
+<td>优化有没有用？</td>
+<td>E2E overhead 直接降约 89%</td>
+</tr>
+<tr>
+<td>RQ6</td>
+<td>极端情况呢？</td>
+<td>带宽砍半、显存不够也不崩</td>
+</tr>
+</tbody>
+</table>
+<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭的 PCIe-SC 原型。</p>
+<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
+<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
+2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
+TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
+即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
+软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
+加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
+<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
+RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
+12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
+硬件、NVIDIA driver、CUDA 或 AI
+application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
+<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
+上实际跑起来慢多少，是后面 RQ4 的事。</p>
+<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
+RQ2：安全性——假设攻击者控制特权软件</h2>
+<p>RQ2
+假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
+software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
+<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
+完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
+通信完整</strong>，缺一不可。</p>
+<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</h2>
+<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
+<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E2E Latency</strong></td>
+<td>从输入问题到完整回答生成的总时长</td>
+</tr>
+<tr>
+<td><strong>TPS</strong></td>
+<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
+</tr>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
+</tr>
+</tbody>
+</table>
+<p>结果：<strong>overhead
+0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
+100ms，5% overhead 就是约 105ms。</p>
+<p><strong>为什么没慢很多？</strong>
+因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
+加密；大量普通包走 A4
+免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
+<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
+xPU——稳定性验证</h2>
+<h3 id="不同-llm">不同 LLM</h3>
+<p>从小到大多种模型都测了，整体 overhead
+<strong>0.72%～4.76%</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
+<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
+是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
+2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
+带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
+<h3 id="不同-xpu">不同 xPU</h3>
+<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
+Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
+<strong>0.58%～2.40%</strong>。</p>
+<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
+的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
+重新设计安全机制。</p>
+<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
+89%</h2>
+<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
+latency overhead 降低了 88.7%～89.8%</strong>。</p>
+<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
+再读一点 → 再问一次）。三个优化对症下药：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
+<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
+次数大幅减少。</p>
+<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
+<p>最后作者主动加难度：</p>
+<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
+一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
+<strong>4.45%</strong>。</p>
+<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
+<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
+间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
+<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
+overhead 小于 2%</strong>。</p>
+<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
+的额外代价依然可控。</p>
+<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>兼容性</td>
+<td>✅</td>
+<td>5 种不同 xPU，不改硬件/驱动/应用</td>
+</tr>
+<tr>
+<td>安全性</td>
+<td>✅</td>
+<td>加密 + 完整性 + 可信建立全链路</td>
+</tr>
+<tr>
+<td>LLM 性能</td>
+<td>✅</td>
+<td>overhead 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>多模型</td>
+<td>✅</td>
+<td>0.72%～4.76%，不随模型大小线性恶化</td>
+</tr>
+<tr>
+<td>多 xPU</td>
+<td>✅</td>
+<td>0.58%～2.40%</td>
+</tr>
+<tr>
+<td>优化效果</td>
+<td>✅</td>
+<td>E2E overhead 降低约 89%</td>
+</tr>
+<tr>
+<td>极端场景</td>
+<td>✅</td>
+<td>带宽减半 / 显存溢出仍可控</td>
+</tr>
+</tbody>
+</table>
+<p>整套系统概括起来：</p>
+<blockquote>
+<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
+PCIe
+通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
+</blockquote>
+<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
+layer（共同抽象层）</strong>。</p>
+<h3 id="怎么读才有收获">怎么读才有收获</h3>
+<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
+5（Filter 规则）/ 6（Attestation 协议）/
+7-8（实验）</strong>，串起来就是全篇。</p>
+<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
+<ul>
+<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
+LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
+的表现需要另外验证。</li>
+<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
+分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
+<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
+固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
+两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
+sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
+</ul>
+<h2 id="系列回顾">📚 系列回顾</h2>
+<ul>
+<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
+背景</li>
+<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
+精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
+Handler / Adaptor / 信任建立 / 实现</li>
+<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
+</ul>
+<p>如果对背景概念想补课，可以看站内的 <a
+href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
+href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em>
+的入门精读笔记，全部实验数据来自论文原文。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+        <tag>性能测试</tag>
       </tags>
   </entry>
   <entry>
@@ -28756,6 +28756,698 @@ Models with Lossless Inference Accuracy</em>
         <tag>PCIe</tag>
         <tag>模型窃取</tag>
         <tag>侧信道</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出</title>
+    <url>/posts/2a9c1827/</url>
+    <content><![CDATA[<blockquote>
+<p>论文：<strong>I Know What You Said: Unveiling Hardware Cache
+Side-Channels in Local Large Language Model Inference</strong>（USENIX
+Security 2025）</p>
+<p>作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong
+Han、Siyuan Liu、Haiyang Li、Zhiqiang
+Lv（中国科学院信息工程研究所、中国科学院大学网络空间安全学院）</p>
+<p>概括成一段话：<strong>把 LLM
+部署到本地并不等于对话内容留在本地——同一台机器上一个没有特权的普通应用，只要盯住
+CPU
+缓存的访问模式和自回归解码的时序，就能把这次推理的输入与输出文本还原出来。</strong></p>
+</blockquote>
+<p>本地部署 LLM 的出发点是把数据留在自己机器上：不发给第三方
+API，隐私敏感的内容不出门。这篇论文指出的是另一条路径——机器内部还有一条不属于软件层的泄漏通道。<strong>token
+embedding 查表时的访存模式泄漏了 token 的值，解码阶段每个 token
+的时间点泄漏了 token 的顺序</strong>，两者都落在硬件缓存上。攻击者不与
+LLM
+进程交互，也不需要任何特权，用一个普通应用在后台记录缓存访问即可。</p>
+<span id="more"></span>
+<h3 id="基本概念速读">📚 基本概念速读</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Token embedding</strong></td>
+<td>把 token id 映射成稠密向量的操作</td>
+<td>泄漏源头：查了哪一行就暴露了哪个 token</td>
+</tr>
+<tr>
+<td><strong>Embedding table</strong></td>
+<td>形状为词表大小 × 向量维度的参数矩阵</td>
+<td>攻击者只需知道它在模型文件里的偏移</td>
+</tr>
+<tr>
+<td><strong>Prefill</strong></td>
+<td>一次吃完所有输入 token、并行计算的阶段</td>
+<td>缓存命中事件密集，切分靠它</td>
+</tr>
+<tr>
+<td><strong>Decode</strong></td>
+<td>自回归逐 token 生成的阶段</td>
+<td>一次一个 token，时序规律</td>
+</tr>
+<tr>
+<td><strong>TPOT</strong></td>
+<td>Time Per Output Token，生成一个 token 的耗时</td>
+<td>决定时序信号的主频</td>
+</tr>
+<tr>
+<td><strong>flush+reload</strong></td>
+<td>共享内存下的缓存侧信道原语</td>
+<td>探针精度到缓存行，能分辨 embedding table 的每一行</td>
+</tr>
+<tr>
+<td><strong>Cache trace</strong></td>
+<td>攻击者采到的 时间 × 地址 延迟矩阵</td>
+<td>攻击的全部原始素材</td>
+</tr>
+<tr>
+<td><strong>False positive / negative</strong></td>
+<td>多检（没访问却报命中）/ 漏检（访问了没报）</td>
+<td>噪声的两个来源</td>
+</tr>
+<tr>
+<td><strong>PSD</strong></td>
+<td>Power Spectral Density，功率谱密度</td>
+<td>用来看 decode 阶段时序信号的周期性</td>
+</tr>
+<tr>
+<td><strong>zero-copy 加载</strong></td>
+<td>框架用 mmap 直接映射模型文件、省掉一次拷贝</td>
+<td>顺手给了攻击者一份共享内存</td>
+</tr>
+<tr>
+<td><strong>ASR</strong></td>
+<td>Attack Success Rate，本论文定义为语义相似度大于 0.77 的样本比例</td>
+<td>阈值来自 100 人的人工投票</td>
+</tr>
+</tbody>
+</table>
+<h2 id="起点模型留在本地对话为什么还是漏了">🎬
+起点：模型留在本地，对话为什么还是漏了</h2>
+<p>先看场景。用户在自己的 PC 上跑一个本地
+LLM：llama.cpp、Ollama、GPT4All 这类框架都算，模型是量化的
+7B～10B，日常用来问私事、写敏感邮件。机器上还装了别的东西，其中一个是攻击者放出来的普通应用——它可能就挂在应用商店里，行为完全合法。</p>
+<p>论文的威胁模型建立在这三条假设上：</p>
+<ol type="1">
+<li><strong>攻击者没有特权</strong>：只是一个能与受害者同时运行的进程，操作系统隔离照常生效，不改
+LLM 用的任何库，不与 LLM 进程通信；</li>
+<li><strong>攻击者只需要几条常规能力</strong>：能执行代码，能以只读方式打开模型文件并
+<code>mmap</code>（拿不到就退而用操作系统的页去重拿到共享内存），能执行
+<code>clflush</code> 清缓存；</li>
+<li><strong>攻击者不需要知道模型结构</strong>，也不需要框架的源码或二进制，但能根据公开的模型文件格式（safetensors、pickle）算出
+embedding table 的地址偏移。</li>
+</ol>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌────────────────────────┐          ┌────────────────────────┐</span><br><span class="line">│ Victim Process         │          │ Spy Process            │</span><br><span class="line">│                        │          │                        │</span><br><span class="line">│ LLM inference          │          │ 1. mmap model file     │</span><br><span class="line">│ 1. Token Embedding     │          │ 2. clflush + reload    │</span><br><span class="line">│ 2. Other Layers        │          │ 3. Cache Trace         │</span><br><span class="line">└───────────┬────────────┘          └───────────┬────────────┘</span><br><span class="line">            │                                   │</span><br><span class="line">            │        OS process isolation       │</span><br><span class="line">            └───────────────┬───────────────────┘</span><br><span class="line">                            ↓</span><br><span class="line">┌─────────────────────────────────────────────────────────────┐</span><br><span class="line">│ Shared LLC and DRAM: embedding table W                      │</span><br><span class="line">└─────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>图里最关键的一点是不对称：<strong>进程隔离挡住了直接读内存，但挡不住共享的缓存</strong>。嵌入表在物理内存里只有一份，两个进程各自的页表都指向它，缓存行的命中与否对所有核都是同一个事实。</p>
+<h3 id="前提embedding-查表跑在-cpu-上">🔑 前提：embedding 查表跑在 CPU
+上</h3>
+<p>这条假设决定了攻击能不能成立，论文也专门做了说明：<strong>token
+embedding 这一步在 CPU 上执行，模型其余各层可以放在任何设备上（包括
+GPU）</strong>。</p>
+<p>理由是成本。本地部署里 CPU 做 embedding 最划算，Intel 的 CPU
+推理白皮书、Meta 的 Llama Everywhere、Numenta 以及各个社区框架都把
+embedding 留在 CPU，只把后面的矩阵计算丢给 GPU。所以一份跑在 RTX 3060
+上的 llama.cpp，它的 embedding 查找依然发生在 CPU 上。</p>
+<p>反过来说，一旦 embedding 也被放到 GPU 上查表，CPU
+的缓存攻击就看不到了：离散 GPU 的缓存与 CPU
+缓存不保持一致。论文的框架评估里唯一失败的 GPU
+配置，正是这个原因（见后文）。</p>
+<h2 id="两条泄漏源token-值与时序">🔍 两条泄漏源：token 值与时序</h2>
+<h3 id="泄漏一查表模式暴露-token-值">🎯 泄漏一：查表模式暴露 token
+值</h3>
+<p>LLM 的输入输出都是 token 序列，模型需要先把每个 token
+变成稠密向量才能计算，这一步叫 token embedding。写成矩阵形式，就是对
+one-hot 编码做一次线性投影：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">E = W x</span><br><span class="line">x  ：one-hot 矩阵，第 i 行 xi = [0 ... 1(ti) ... 0]T</span><br><span class="line">W  ：embedding table，形状为 词表大小 × 向量维度</span><br></pre></td></tr></table></figure>
+<p>one-hot
+是稀疏的，所以实现上没人真的做矩阵乘法，而是退化成一次查表：取 W 的第 ti
+行。而<strong>查表是访存行为</strong>，访存会经过缓存：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x = [0, 0, 1, 0, ..., 0]    ← one-hot，index i 是当前 token</span><br><span class="line">           │</span><br><span class="line">           │  W x  ==  W[i]</span><br><span class="line">           ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ Embedding Table W            │</span><br><span class="line">│                              │</span><br><span class="line">│ row 0                        │</span><br><span class="line">│ row 1                        │</span><br><span class="line">│ row i           ← cache hit  │</span><br><span class="line">│ ...                          │</span><br><span class="line">│ row |V|-1                    │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>第 i
+行被载入缓存这件事，在缓存侧信道上可以直接观察。于是<strong>观察到哪一行命中，就反推出此刻处理的是哪个
+token</strong>。</p>
+<p>还有一步放大：LLM 是自回归的，新生成的 token
+会被重新喂回模型，再次经过 embedding。所以这一条泄漏同时覆盖<strong>输入
+token 和输出
+token</strong>——用户问了什么、模型答了什么，都会在同一个表上留下痕迹。</p>
+<h3 id="泄漏二自回归时序暴露-token-顺序">⏱️ 泄漏二：自回归时序暴露 token
+顺序</h3>
+<p>知道有哪些 token
+还不够，还需要知道它们的顺序。论文在时间维度上另找了一处泄漏：LLM 推理分
+prefill 与 decode 两个阶段，prefill 先把全部输入 token 算完，decode
+再一个 token 一个 token 地往外吐。这些阶段天然串行，decode 要等 prefill
+结束，第 i+1 个 decode 要等第 i 个 token 出来。</p>
+<p>于是时间轴上能得到两件事：</p>
+<ul>
+<li><strong>输入与输出的分界</strong>：prefill
+结束的时间点，就是模型开始回答的时间点；</li>
+<li><strong>输出 token 的顺序</strong>：每个 decode 阶段对应一个
+token，先后顺序就是文本顺序。</li>
+</ul>
+<h3 id="两个真正的难题">🚧 两个真正的难题</h3>
+<p>论文自己列了两条挑战，后面所有设计都是围着它们转：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>挑战</th>
+<th>现象</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>C1 噪声</strong></td>
+<td>缓存侧信道有假阳性与假阴性</td>
+<td>token 列表里混进随机 token、丢掉真 token</td>
+</tr>
+<tr>
+<td><strong>C2 输入顺序被打乱</strong></td>
+<td>prefill 把输入 token 批量并行计算，embedding
+操作在时间轴上交叉重叠</td>
+<td>输入 token 被还原成一个无序集合，顺序丢了</td>
+</tr>
+</tbody>
+</table>
+<p>C1 的解法是<strong>引入一个微调过的 LLM 去噪</strong>，C2
+的解法是<strong>利用输入与输出的上下文关联给无序 token
+排序</strong>。这两个模型在论文里叫 LLMA 与 LLMB。</p>
+<h2 id="攻击总览五步把缓存轨迹变成文本">🧩
+攻击总览：五步把缓存轨迹变成文本</h2>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. Spy 采集 cache trace</span><br><span class="line">      ┌──────────────────────────────┐</span><br><span class="line">      │ o: L x |V| latency matrix    │</span><br><span class="line">      └──────────────┬───────────────┘</span><br><span class="line">                     ↓</span><br><span class="line">2. 切段：密集命中区 = prefill，稀疏单点 = decode</span><br><span class="line">                     ↓</span><br><span class="line">      ┌──────────────────────────────┐</span><br><span class="line">      │ oP: prefill                  │</span><br><span class="line">      │ oD: decode                   │</span><br><span class="line">      └──────────────┬───────────────┘</span><br><span class="line">                     ↓</span><br><span class="line">3. 映射成 token 列表与时序信号</span><br><span class="line">      ┌───────────────────────────────────────────┐</span><br><span class="line">      │ KD (ordered) + TD  |  KP (unordered)      │</span><br><span class="line">      └──────────────┬────────────────────────────┘</span><br><span class="line">                     ↓</span><br><span class="line">4. LLMA：融合 TD 与 KD 去噪，还原输出文本</span><br><span class="line">                     ↓</span><br><span class="line">5. LLMB：结合还原出的输出给 KP 排序，还原输入文本</span><br></pre></td></tr></table></figure>
+<p>前 3 步是信号处理，后 2
+步是模型推理。这种分工也解释了论文的方法论取向：<strong>硬件侧只负责拿到质量不高的观测，语义层的补全交给自然语言模型去做</strong>。</p>
+<h2 id="采集怎么录下每一行的访存">🛠️ 采集：怎么录下每一行的访存</h2>
+<h3 id="先算出目标地址">📐 先算出目标地址</h3>
+<p>攻击的第一步是确定要监视哪些地址。假设共享内存区域的起始地址是
+<code>p1</code>，embedding table 在其中的偏移是
+<code>p2</code>，向量维度是 D，元素大小为 b。对第 i 行：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">row-major 布局：</span><br><span class="line">  p1 + p2 + iDb  ≤  Ai  &lt;  p1 + p2 + (i + 1)Db</span><br><span class="line"></span><br><span class="line">column-major 布局：</span><br><span class="line">  Ai ∈ &#123; p | p = p1 + p2 + (i + j|V|)b,  0 ≤ j &lt; D &#125;</span><br></pre></td></tr></table></figure>
+<p>每个 i
+只挑一个确定地址作为探针。论文提到，攻击者并不需要模型或框架的任何秘密，这些偏移都能从公开的文件格式文档里推出来——safetensors
+与 pickle 的格式是公开的，主流 LLM 的 embedding
+位置也遵循同样的规则。</p>
+<h3 id="共享内存从哪来">🤝 共享内存从哪来</h3>
+<p>缓存攻击要求攻击者与受害者共享物理内存。论文用了两条互相替代的路径：</p>
+<ul>
+<li><strong>首选 mmap</strong>：现在主流的 LLM 框架都用 zero-copy
+方式加载模型，直接把模型文件映射进地址空间、按需分页。攻击者对同一个模型文件调一次
+<code>mmap</code>，两个进程就会因为 page cache
+落在同一批物理页上，<strong>共享内存是白送的</strong>，不需要页去重；</li>
+<li><strong>备选页去重</strong>：万一某些框架不支持
+zero-copy，就用操作系统提供的 page deduplication（KSM
+一类机制）拿到共享页。</li>
+</ul>
+<p>这里的因果关系值得留意：<strong>zero-copy
+是一个性能优化，它顺手把攻击面也一起送了出去</strong>。论文后面给出的对策之一，正是把它关掉。</p>
+<h3 id="硬件预取器把标准-flushreload-打趴了">⚠️ 硬件预取器把标准
+flush+reload 打趴了</h3>
+<p>这篇论文里我自己觉得最有意思的一段，是它报告了一个负面结果。</p>
+<p>按标准做法实现 flush+reload 之后，攻击在 Intel 的 Raptor Lake（13
+代酷睿）上<strong>几乎完全失效</strong>：监视 32768 个地址（Llama 2
+的词表大小）时平均每秒 5,612,394 次假阳性，精度接近零。</p>
+<p>原因是硬件里的 <strong>AoP 预取器（Array-of-Pointers
+prefetcher）</strong>。为了对抗流式与空间预取器，标准实现会把目标地址打乱后放进一个指针数组；而
+AoP
+预取器的行为恰恰是<strong>解引用数组里的指针</strong>，于是探针数组一被访问，几乎每个目标地址都被预取进缓存，全部看起来像命中。</p>
+<p>绕过办法很朴素，却正好卡在预取器的语义上：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Before: ptr_array[] = &#123; &amp;A0, &amp;A1, ..., &amp;A|V|-1 &#125;</span><br><span class="line">        visiting the array -&gt; AoP dereferences the pointers</span><br><span class="line">                           -&gt; every target looks like a hit</span><br><span class="line"></span><br><span class="line">After:  offset_array[] = &#123; A0 - min, A1 - min, ... &#125;</span><br><span class="line">        the array holds no valid pointer</span><br><span class="line">        at probe time:  address = offset_array[i] + min</span><br></pre></td></tr></table></figure>
+<p>数组里只存<strong>偏移</strong>（每个目标地址减去最小地址），访问时再把偏移加回去还原真实地址。这样数组里没有任何合法指针，AoP
+预取器无事可做。其余的预取器沿用前人的做法对付：探针地址不落在相邻页上、访问顺序随机化。</p>
+<h3 id="缓存轨迹长什么样">🖥️ 缓存轨迹长什么样</h3>
+<p>采集结果是矩阵 o：L 个时间点 × |V| 个目标地址的访存延迟，另外用
+<code>rdtsc</code> 记下每个时间点的物理时间戳。论文用一幅热力图（Figure
+3）展示它：颜色越深表示该行越可能被访问。在这样一张图里，prefill
+表现为一条竖直的密集色带，decode 表现为稀疏的散点。</p>
+<p>实现上，论文把探针线程分成 15
+个分区（partition），每轮按伪随机顺序扫自己那一份地址（<code>s = t*m + (v*167 + 13) % n</code>），并在每个内存页取中间地址作为探针，尽量避开相邻页带来的预取噪声。</p>
+<h2 id="切段与映射prefill-在哪decode-在哪">✂️ 切段与映射：prefill
+在哪，decode 在哪</h2>
+<p>攻击者不与 LLM
+交互，所以不知道推理是什么时候开始的——这属于经典的异步攻击场景。论文用一个模式匹配算法在轨迹里找两个阶段的起点：</p>
+<ul>
+<li><strong>prefill 起点</strong>：从某个时间点起，连续不少于 K
+个事件的时间间隔都小于阈值
+α1。输入是批量并行计算的，命中事件会异常密集地挤在一小段时间里；</li>
+<li><strong>decode 起点</strong>：在 prefill 之后，出现至少一个间隔大于
+α1 的事件。decode 一次只产出一个 token，事件稀疏得多。</li>
+</ul>
+<p>论文的取值是 K = 4（允许的最小输入 token 数）与 α1 =
+10⁻³（不大于一次前向传播的最小耗时）。</p>
+<p>切完之后，轨迹被映射成三样东西：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>输出</th>
+<th>含义</th>
+<th>怎么得到</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>KD</strong></td>
+<td>有序 token 列表（decode 段）</td>
+<td>每个时间点命中哪些地址，查表反查成 token 文本，去掉空集</td>
+</tr>
+<tr>
+<td><strong>TD</strong></td>
+<td>时序信号（decode 段）</td>
+<td>每个命中事件对应的时间戳序列</td>
+</tr>
+<tr>
+<td><strong>KP</strong></td>
+<td>无序 token 集合（prefill 段）</td>
+<td>整个 prefill 段命中的地址并起来反查</td>
+</tr>
+</tbody>
+</table>
+<p>判定的细节是缓存命中阈值 α2：延迟低于 α2 记为命中，α2
+来自缓存微基准测试。到这里，硬件侧的工作就结束了，剩下的是<strong>从一个很脏的
+token 列表和一条带噪的时间戳序列里把文本拼回来</strong>。</p>
+<h2 id="去噪与还原输出llma-与时序信号">🧠 去噪与还原输出：LLMA
+与时序信号</h2>
+<h3 id="为什么自回归会产生周期性">📈 为什么自回归会产生周期性</h3>
+<p>论文的出发点是两条观察：</p>
+<ol type="1">
+<li>自回归生成是<strong>数据流驱动</strong>的，前向传播走的是规整的流水线，不同于控制流驱动的程序；</li>
+<li>于是每次生成 token 可以近似看成<strong>周期性事件</strong>。</li>
+</ol>
+<p>周期有多长？就是 TPOT。论文在 13900K + RTX 3060 上跑
+Phi-3.5-mini（llama.cpp），TPOT 约 10 毫秒这一量级，因此预期在 100Hz
+处出现峰。用傅里叶变换把时序信号转到频域、算功率谱密度（PSD）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PSD</span><br><span class="line">  ^</span><br><span class="line">  |   true positives</span><br><span class="line">  |   |        |              |</span><br><span class="line">  |   |   |    |    |         |          ← f0 and harmonics: 2*f0, 3*f0 ...</span><br><span class="line">  |   |   |    |    |         |</span><br><span class="line">  +---+---+----+----+---------+-------&gt; frequency</span><br><span class="line">      f0      2f0  3f0</span><br></pre></td></tr></table></figure>
+<p>真阳性（真的由 embedding 造成的命中）在 PSD
+上给出基频与谐波，是清晰的峰；假阳性则频谱平坦、接近白噪声。<strong>这个差别就是去噪的立足点</strong>。</p>
+<h3 id="一阶差分峰是漏检谷是多检">📉 一阶差分：峰是漏检，谷是多检</h3>
+<p>PSD
+只能证明信号有周期性，不能直接指出哪个时间点是噪声。论文的做法是先把周期成分减掉：用
+SWIPE’ 算法从 PSD 里估出基频 f0，再算归一化一阶差分。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">TD_hat[k] = f0 * ( TD[k] - TD[k-1] )</span><br></pre></td></tr></table></figure>
+<p>理想情况下，相邻两次真命中的间隔是 T，所以差分应该稳定在 f0 ·
+T。偏离这个基准的两类异常正好对应两类噪声：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">normalized first-order difference</span><br><span class="line">  2T ┤          /\                        /\</span><br><span class="line">     │         /  \                      /  \</span><br><span class="line">  T  ┤──/\────/────\────────────────────/────\────   regular period</span><br><span class="line">     │ /  \  /      \                  /      \</span><br><span class="line">  0  ┤/────\/────────\────────────────/────────\──</span><br><span class="line">     └────────────────────────────────────────────→ time</span><br><span class="line">         valley                peak</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>峰（间隔接近
+2T）</strong>：中间少了一个事件，也就是漏检。真阳性原本应该在 t1 与 t2
+之间出现，把它的缺失补回来——预测这个位置的 token 并插进
+KD，相当于做完形填空；</li>
+<li><strong>谷（间隔明显小于
+T）</strong>：多出来一个事件，也就是多检。把它从 KD 里删掉。</li>
+</ul>
+<p>论文把这三选一（补一个、删一个、不动）统一写成序列到序列任务：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">O_hat ~ P( O | TD_hat_1, KD_1, TD_hat_2, KD_2, ... )</span><br></pre></td></tr></table></figure>
+<p>由微调过的 LLMA 实现：输入是时序信号与 token
+列表的交替序列，输出是清理后的文本。微调用
+LoRA，好处是保留基座模型的先验知识、同时抑制过拟合。</p>
+<h3 id="训练数据从哪来合成的">🧪 训练数据从哪来：合成的</h3>
+<p>攻击者拿不到受害者的模型和系统，也就没法采集真实数据来训练。论文的解法是利用刚发现的周期性<strong>自己合成训练集</strong>（Algorithm
+1）：</p>
+<ul>
+<li>从公开语料（UltraChat、NQ-Open、SIQA、SQuAD2、ChatGPT-Roles）取输入输出文本对，组成语料
+C；</li>
+<li>对每个 token
+的时间戳按高斯分布累积（<code>ctime += N(1, σ²)</code>），模拟 TPOT
+的自然抖动，得到周期性时序；</li>
+<li>以概率 p 删除事件、以概率 p 在均匀分布的时间点插入随机
+token，模拟漏检与多检；</li>
+<li>把数值的时序信号编码成文本提示，与文本一起组成 (提示, 标准答案)
+训练对。例如时序 <code>&#123;1.3, 1.2&#125;</code> 与 token
+<code>&#123;Hello, World&#125;</code> 编码成
+<code>1 3:Hello&lt;s&gt;1 2:World&lt;s&gt;</code>。</li>
+</ul>
+<p>论文在合成数据上把超参数扫了一遍：噪声概率 p 在 10%～40%
+的宽范围内性能稳定，超过 50% 才开始下降；周期抖动 σ = 0.08 时最好（σ
+太小等于强制严格周期，σ 大于 0.5
+则周期性被削弱到模型学不到）；基座模型换成开源的 Llama-3.1-8B 或闭源的
+GPT-4o-mini
+性能差不多，说明这一层的效果主要来自任务本身，而不是某个特定模型。</p>
+<h2 id="还原输入顺序llmb">🔗 还原输入顺序：LLMB</h2>
+<p>输出文本还原出来之后，还剩输入。输入 token 的集合 KP
+已经拿到了，缺的是顺序。论文拿它类比 bag-of-words
+模型：词袋丢掉了顺序但保留了语义结构，主题模型（如
+LDA）就是这么用的。问题是顺序丢失会伤到句子本身，论文举的例子是
+<code>A chased B</code> 与 <code>B chased A</code>——token
+集合相同，语义相反。</p>
+<p>论文的落点是<strong>输入与输出在同一个上下文里相互关联</strong>：LLM
+常常先把问题复述一遍再回答，所以输入文本对输出文本存在可学习的依赖。于是把任务写成另一个
+seq2seq：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">I_hat ~ P( I | KP, O_hat )</span><br></pre></td></tr></table></figure>
+<p>实现方式是微调出 LLMB：把无序的 token 列表编码成
+<code>&lt;s&gt;</code>
+分隔的文本序列，把已经还原出来的输出文本插在最前面当上下文，让模型推断每个
+token 的位置。</p>
+<p>训练数据同样靠合成：取语料里的输入 I，把它的 token 顺序随机打乱得到
+KP’，再用一个通用 LLM 生成对应的输出 O’，于是 (KP’, O’, I)
+就是一条监督样本。</p>
+<h2 id="评估准确到什么程度">📊 评估：准确到什么程度</h2>
+<p>实验环境是 Intel 13900K（5.8GHz，BIOS microcode 0x129）+ RTX 3060
+12GiB + 32GiB 双通道 DDR4-3200，Ubuntu 22.04 / Linux 5.18.0-38、驱动
+525.89.02、CUDA 12.0；微调放在一台 H800 云服务器上。受害模型是 5 个主流
+LLM（Gemma2-9B、Llama-3.1-8B、Falcon3-10B、Mistral-7B、Phi-3.5-mini-3B），数据集是
+5 个公开语料，合计 212,535 个 token，按 60/20/20
+划分训练、验证、测试。</p>
+<p>指标分三个粒度：字符级的 Levenshtein 相似度（LS，等于 1
+减编辑距离）、token 级的 ROUGE-1 / ROUGE-L、语义级的句向量余弦相似度
+φ。为了确定 φ 到多少算泄漏，论文在 Prolific 上招募 100 名参与者，对 50
+个样本做人工投票，得出 φ 与隐私暴露程度的线性关系（皮尔逊相关
+0.771），<strong>取 φ &gt; 0.77 作为攻击成功的判定阈值</strong>，ASR
+就是超过该阈值的样本比例。</p>
+<h3 id="主结果">🏁 主结果</h3>
+<p>论文 Table 1 的汇总行（5 个模型 × 5 个数据集的平均）：</p>
+<table>
+<thead>
+<tr>
+<th>方向</th>
+<th>平均长度</th>
+<th>R1</th>
+<th>RL</th>
+<th>LS</th>
+<th>φ</th>
+<th>ASR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>输出还原</td>
+<td>165 token</td>
+<td>96.3%</td>
+<td>96.3%</td>
+<td>94.8%</td>
+<td>98.7%</td>
+<td>99.1%</td>
+</tr>
+<tr>
+<td>输入还原</td>
+<td>24 token</td>
+<td>89.9%</td>
+<td>85.8%</td>
+<td>82.7%</td>
+<td>98.0%</td>
+<td>99.9%</td>
+</tr>
+</tbody>
+</table>
+<p>对照摘要里的另一组口径：平均编辑距离在输出与输入上分别是 5.2% 与
+17.3%。也就是说<strong>输出基本可逐字还原，输入能还原语义但字符级有出入</strong>。论文对输入侧的差距给了明确解释：输入还原是一个排列问题，搜索空间随输入长度按阶乘增长（约
+O(NI!)）。</p>
+<p>这一点在数据里看得最清楚：</p>
+<table>
+<thead>
+<tr>
+<th>数据集</th>
+<th>平均输入 token 数</th>
+<th>输入 LS</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SQuAD2</td>
+<td>180～209</td>
+<td>32.2%～34.4%</td>
+<td>长输入，字符级最差</td>
+</tr>
+<tr>
+<td>NQ-Open</td>
+<td>12～13</td>
+<td>79.8%～91.4%</td>
+<td>短输入，还原很好</td>
+</tr>
+<tr>
+<td>UltraChat</td>
+<td>19～21</td>
+<td>84.3%～90.2%</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<p>但即使是最差的一格（Phi-3.5-mini on SQuAD2，R1 51.0%、LS
+32.2%），余弦相似度仍有 92.1%，ASR
+96.4%——<strong>语句的主题与语义没有被漏掉</strong>。</p>
+<p>论文还检查了 prefill 批大小的影响：batch size 从 32 涨到
+256，各指标只在 4% 的范围内波动；batch
+很小时精度略降，因为合成训练数据假设输入 token 是随机排列的，而小 batch
+会让输入分批顺序执行、呈现出更强的顺序性，偏离了训练分布。</p>
+<h3 id="消融每个部件值多少">🧹 消融：每个部件值多少</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>配置</th>
+<th>相对完整版的变化</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>去掉时序信号的预处理（一阶差分）</td>
+<td>LS −3.0%（输出）/ −1.0%（输入）</td>
+<td>去噪前的归一化有贡献</td>
+</tr>
+<tr>
+<td>完全不喂时序信号 TD</td>
+<td>LS −12.7%（输出）/ −1.2%（输入）</td>
+<td>token 列表与时序必须融合</td>
+</tr>
+<tr>
+<td>去掉 LLMA，只用 KD 拼文本</td>
+<td>LS −10.3%</td>
+<td>模型去噪比规则去噪值钱</td>
+</tr>
+<tr>
+<td>LLMB 去掉还原出的输出上下文</td>
+<td>LS −17.1%</td>
+<td>上下文依赖是输入还原的主要依据</td>
+</tr>
+<tr>
+<td>去掉 LLMB，直接把 KP 当结果</td>
+<td>LS −46.4%</td>
+<td>没有排序模型基本等于没有输入还原</td>
+</tr>
+</tbody>
+</table>
+<p>还有一组更基础的对照：只用侧信道数据（Pure SCA）时，输入还原只到 R1
+50.4%、LS 29.8%、φ 66.1%、ASR 29.3%；加上模型与输出上下文之后是 R1
+82.8%、LS 76.2%、φ 96.9%、ASR
+99.7%。<strong>纯侧信道拿到的是线索，文本还得靠语言模型补全</strong>——这也和本文的方法论一致。</p>
+<h3 id="框架与硬件">🧰 框架与硬件</h3>
+<p>论文在 10 个主流本地推理框架上验证，CPU 路径全部成功，GPU 路径 9
+个成功：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU 推理</td>
+<td>10 / 10 成功（llama.cpp 的 φ 输出 99.5% / 输入 95.2%）</td>
+</tr>
+<tr>
+<td>GPU 推理</td>
+<td>9 / 10 成功，唯一失败的是 HuggingFace Transformers</td>
+</tr>
+<tr>
+<td>失败原因</td>
+<td>它把 embedding 查表放在 GPU 上做，CPU 缓存侧信道探不到</td>
+</tr>
+<tr>
+<td>硬件</td>
+<td>14900K / 13900K / 12700KF 三台机器，输入 φ 均 ≥ 96.5%，ASR 100%</td>
+</tr>
+<tr>
+<td>量化</td>
+<td>F16 / Q8_0 / BF16 / F32 四种，φ 在 96.2%～99.3% 之间</td>
+</tr>
+<tr>
+<td>操作系统</td>
+<td>Ubuntu 22.04、Windows 11、Debian 12（Docker 内）均可复现</td>
+</tr>
+</tbody>
+</table>
+<p>这组结果说明攻击不依赖某个特定框架的实现细节，<strong>真正的前提只有一条：embedding
+在 CPU 上查表</strong>。</p>
+<h3 id="真实例子">💬 真实例子</h3>
+<p>论文展示的还原样本里，有几个细节很能说明问题：</p>
+<ul>
+<li><code>who played freddy krueger in the 2010 nightmare on elm street?</code>
+这一个 prompt 的输入输出还原三项指标都是 100%。其中 <strong>freddy
+krueger
+这类专有名词并没有出现在合成训练集里</strong>，模型是从侧信道给出的
+token 线索里拼出来的；</li>
+<li><code>what rank is an e5 in the air force?</code> 的输入被还原成
+<code>e5 in the air force is what rank?</code>，语序变了但语义完整，φ
+87%；</li>
+<li>失败的例子集中在语义相似度 64%～76%
+的区间，典型表现是词序错乱、出现多余的
+<code>header</code>、<code>Zoeken</code> 这类无关
+token——正是噪声污染留下的痕迹。</li>
+</ul>
+<p>论文据此指出，这种能力足以窃取
+PII（个人身份信息）：能还原专有名词、能容忍同义替换与语序变化，<strong>语义相似度高而字符相似度偏低</strong>，说明泄漏的是内容而不是形式。</p>
+<h2 id="读原文时注意的几处口径不一致">📎
+读原文时注意的几处口径不一致</h2>
+<p>精读时我对照了摘要、正文与表格，有几处不一致值得记下来，免得引用时张冠李戴：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>位置</th>
+<th>原文写法</th>
+<th>对照结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>摘要</td>
+<td>cosine similarity 98.7%（input）/ 98.0%（output）</td>
+<td>与正文 §1 和 Table 1 的平均行相反：98.7% 属于输出、98.0%
+属于输入</td>
+</tr>
+<tr>
+<td>Table 4</td>
+<td>Output Recovery 一栏写作 φI，Input Recovery 一栏写作 φO</td>
+<td>两栏标号疑似互换</td>
+</tr>
+<tr>
+<td>§4.4 与 Figure 5</td>
+<td>正文说 false positive 对应峰、false negative 对应谷；图注写 false
+positive 在谷、false negative 在峰</td>
+<td>两处互相矛盾；按语义读才通：峰是漏检（补 token），谷是多检（删
+token），此时 Figure 5 的图注与语义一致，正文段落的命名反了</td>
+</tr>
+<tr>
+<td>Figure 4 说明</td>
+<td>TPOT 约 10 microseconds，因此在 100Hz 处预期出现峰</td>
+<td>100Hz 对应每 token 10 毫秒，单位应为 ms</td>
+</tr>
+</tbody>
+</table>
+<p>这类不一致属于原文自身，引用数字时以表格为准。</p>
+<h2 id="对策与局限">🛡️ 对策与局限</h2>
+<h3 id="论文建议的三种缓解">🚧 论文建议的三种缓解</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>措施</th>
+<th>做法</th>
+<th>代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>禁用 zero-copy 加载</td>
+<td>不让框架用 mmap 映射模型文件，切断共享内存这条路</td>
+<td>llama.cpp 加载延迟性能下降 17%；同时跑两个以上实例时内存开销增加约
+32%</td>
+</tr>
+<tr>
+<td>部署 RBAC</td>
+<td>限制模型文件内存页的共享范围，只允许指定程序共享，可用 eBPF
+内核钩子按会话认证</td>
+<td>现有本地推理框架没有这项能力，需要改造</td>
+</tr>
+<tr>
+<td>硬件隔离缓存</td>
+<td>用 Intel CAT（Cache Allocation Technology）切分 LLC，把 LLM
+与其余进程隔开</td>
+<td>只有服务器级 Xeon 提供，消费级平台拿不到；而本地 LLM
+恰恰主要跑在消费级机器上</td>
+</tr>
+</tbody>
+</table>
+<p>三条路的共同问题是一样的：<strong>缓解手段要么伤性能，要么在目标平台上不存在</strong>。这也解释了论文为什么把它当作一个未被防御的现实威胁来报告，而不是一个已被修补的历史漏洞。</p>
+<h3 id="论文承认的边界">🧱 论文承认的边界</h3>
+<ul>
+<li><strong>输入还原的字符级精度不高</strong>：受缓存攻击的时间分辨率与
+prefill 并行执行限制，长输入的可读性有限；但语义层面的 φ 平均仍有
+94.8%，在接近 6000 字符的长文本上 ASR 为 99.1%；</li>
+<li><strong>换用其他 CPU 侧信道有额外门槛</strong>：Prime+Probe
+一类冲突型攻击只有 set 级空间分辨率，而 embedding table
+远大于缓存的路数，一个 set
+会映射到多行，候选空间会膨胀；没有共享内存时，ASLR
+与不连续的页帧分配还会打乱 set
+与行的对应关系，需要额外的运行时画像；</li>
+<li><strong>GPU 侧 embedding 目前打不到</strong>：离散 GPU 的缓存与 CPU
+不保持一致，需要 GPU 缓存攻击原语（例如
+Invalidate+Compare），但那类原语同样有 set
+冲突的问题。不过论文也留了一句：NVIDIA
+驱动的显存页分配随机性较小、起始地址稳定，反而有利于学习地址映射。</li>
+</ul>
+<h2 id="总结">✅ 总结</h2>
+<p><strong>本地 LLM 的输入输出文本，可以从 CPU
+缓存的访问模式里读出来：embedding 查表暴露 token
+的值，自回归解码的时序暴露 token
+的顺序，剩下的事情交给两个微调过的语言模型去做——一个融合时序与 token
+列表去噪还原输出，一个利用输入输出的上下文依赖给乱序的输入 token
+排序。</strong></p>
+<p>三个值得记住的要点：</p>
+<ol type="1">
+<li><strong>泄漏点在访存模式上</strong>：embedding
+是查表而不是乘法，查哪一行是可控的、可观察的；</li>
+<li><strong>性能优化顺带送出了攻击面</strong>：zero-copy 加载是
+llama.cpp 这类框架的默认行为，也是攻击者拿到共享内存的捷径；</li>
+<li><strong>侧信道只是线索，语言模型负责补全</strong>：纯侧信道数据的输入还原
+ASR 只有 29.3%，加上语言模型与输出上下文后到
+99.7%——语义的补全能力本身就是攻击效力的一部分。</li>
+</ol>
+<p>如果把这篇和我们之前精读的 <a href="/posts/c41f8e02/">Hermes
+Attack</a> 放在一起看，两条路线正好互补：Hermes 站在 CPU 与 GPU 之间的
+PCIe
+总线上抓明文流量，偷的是<strong>模型本身</strong>（结构、超参数、权重）；这篇站在
+CPU
+缓存上观察访存模式，偷的是<strong>使用模型过程中产生的内容</strong>（prompt
+与回答）。共性是同一个结论——部署方式决定了数据流经哪些共享硬件，而那些共享硬件才是真正需要加密或隔离的地方。</p>
+<p>（本文为 USENIX Security 2025 论文 <em>I Know What You Said:
+Unveiling Hardware Cache Side-Channels in Local Large Language Model
+Inference</em> 的精读笔记，正文表格内的数据取自论文原文。）</p>
+]]></content>
+      <tags>
+        <tag>安全</tag>
+        <tag>LLM</tag>
+        <tag>论文精读</tag>
+        <tag>侧信道</tag>
+        <tag>缓存攻击</tag>
+        <tag>flush+reload</tag>
+        <tag>隐私泄漏</tag>
       </tags>
   </entry>
 </search>
