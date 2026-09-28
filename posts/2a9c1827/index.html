@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：I Know What You Said: Unveiling Hardware Cache Side-Channels in Local Large Language Model Inference（USENIX Security 2025） 作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong Han、Siyuan Liu、Haiyan">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-24T08:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-24T02:59:41.227Z">
+<meta property="article:modified_time" content="2026-09-28T09:18:12.176Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -271,9 +271,15 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-09-24 16:00:00 / Modified: 10:59:41" itemprop="dateCreated datePublished" datetime="2026-09-24T16:00:00+08:00">2026-09-24</time>
+      <time title="Created: 2026-09-24 16:00:00" itemprop="dateCreated datePublished" datetime="2026-09-24T16:00:00+08:00">2026-09-24</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-09-28 17:18:12" itemprop="dateModified" datetime="2026-09-28T17:18:12+08:00">2026-09-28</time>
     </span>
 
   
@@ -290,14 +296,14 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>12k</span>
+      <span>13k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>22 mins.</span>
+      <span>23 mins.</span>
     </span>
 </div>
 
@@ -370,6 +376,12 @@ LLM
 <td><strong>flush+reload</strong></td>
 <td>共享内存下的缓存侧信道原语</td>
 <td>探针精度到缓存行，能分辨 embedding table 的每一行</td>
+</tr>
+<tr>
+<td><strong>Prefetcher（预取器）</strong></td>
+<td>CPU 里猜「你接下来要读哪儿」、提前把数据搬进缓存的硬件部件，AoP
+是其中专门解引用指针数组的一种</td>
+<td>攻击的对手：会替受害者把行摸热，制造假阳性</td>
 </tr>
 <tr>
 <td><strong>Cache trace</strong></td>
@@ -524,16 +536,31 @@ zero-copy，就用操作系统提供的 page deduplication（KSM
 flush+reload 打趴了</h3>
 <p>论文里值得一提的一段，是它报告了一个负面结果。</p>
 <p>按标准做法实现 flush+reload 之后，攻击在 Intel 的 Raptor Lake（13
-代酷睿）上<strong>几乎完全失效</strong>：监视 32768 个地址（Llama 2
+代酷睿，即本文实验平台的
+i9-13900K）上<strong>几乎完全失效</strong>：监视 32768 个地址（Llama 2
 的词表大小）时平均每秒 5,612,394 次假阳性，精度接近零。</p>
-<p>原因是硬件里的 <strong>AoP 预取器（Array-of-Pointers
-prefetcher）</strong>。为了对抗流式与空间预取器，标准实现会把目标地址打乱后放进一个指针数组；而
-AoP
-预取器的行为恰恰是<strong>解引用数组里的指针</strong>，于是探针数组一被访问，几乎每个目标地址都被预取进缓存，全部看起来像命中。</p>
-<p>绕过办法很朴素，却正好卡在预取器的语义上：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Before: ptr_array[] = &#123; &amp;A0, &amp;A1, ..., &amp;A|V|-1 &#125;</span><br><span class="line">        visiting the array -&gt; AoP dereferences the pointers</span><br><span class="line">                           -&gt; every target looks like a hit</span><br><span class="line"></span><br><span class="line">After:  offset_array[] = &#123; A0 - min, A1 - min, ... &#125;</span><br><span class="line">        the array holds no valid pointer</span><br><span class="line">        at probe time:  address = offset_array[i] + min</span><br></pre></td></tr></table></figure>
-<p>数组里只存<strong>偏移</strong>（每个目标地址减去最小地址），访问时再把偏移加回去还原真实地址。这样数组里没有任何合法指针，AoP
-预取器无事可做。其余的预取器沿用前人的做法对付：探针地址不落在相邻页上、访问顺序随机化。</p>
+<p>原因是硬件里的<strong>预取器</strong>——CPU
+里专猜「你接下来要读哪儿」、提前把数据搬进缓存的小助手。它把这条攻击打趴用了两步。</p>
+<p><strong>第一步：它替受害者把格子摸热了。</strong>
+间谍判断「这个地址有没有被访问过」的办法是「擦干净（<code>clflush</code>）→
+等一会儿 →
+再摸一下，还热就说明有人摸过」。小助手一猜中，就抢在间谍前面把格子摸热了，间谍摸到热便当成「受害者访问过」——全是假阳性。打比方：想知道昨晚有没有人到过门口，就在地上撒面粉看脚印；结果<strong>保安半夜巡逻路过</strong>留下脚印，你一看就断定「有人来过」。更糟的是这保安是间谍自己请来的：<strong>访问越有规律，它猜得越准</strong>。所以前人的标准对策是<strong>打乱访问顺序</strong>。</p>
+<p><strong>第二步：打乱顺序要先有清单，而这份清单正好喂给了另一个小助手。</strong>
+要乱序访问，代码里就得先有一份「32768
+个目标地址」的数组，才能随便挑着读：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ptr_array[] = &#123; &amp;A0, &amp;A1, ..., &amp;A|V|-1 &#125;     // 数组元素 = 地址本身</span><br></pre></td></tr></table></figure>
+<p>CPU 里的预取器不止一个。间谍用乱序防住了猜步长的那位，却撞上
+<strong>AoP（Array-of-Pointers
+prefetcher）</strong>，它的专长恰好是：<strong>看见一张表里装的全是地址，就把这些地址指向的缓存行一次全搬回来</strong>。它不看访问顺序，只看数组内容像不像地址——而
+<code>ptr_array</code> 里装的正好是 32768 个地址。于是每轮刚
+<code>clflush</code> 完，AoP
+就替他把目标全部预取回缓存，<strong>几乎每个地址看起来都命中</strong>，精度归零。</p>
+<p>绕过办法很朴素，正好卡在预取器的语义上：<strong>别让数组里再出现地址</strong>。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">原来：ptr_array[]    = &#123; &amp;A0, &amp;A1, ..., &amp;A|V|-1 &#125;</span><br><span class="line">      元素是地址本身 -&gt; AoP 认得，替间谍把它们全搬进缓存 -&gt; 每个地址都像命中</span><br><span class="line"></span><br><span class="line">现在：offset_array[] = &#123; A0 - min, A1 - min, ... &#125;</span><br><span class="line">      元素是「地址 - 最小地址」，只剩一个小零头</span><br><span class="line">      AoP 拿它当地址去摸，摸到的是无关内存 -&gt; 无事可做</span><br><span class="line">      真地址由间谍自己现算：addr = offset_array[i] + min</span><br></pre></td></tr></table></figure>
+<p>数组里只存<strong>偏移</strong>（每个目标地址减去最小地址），访问时再把偏移加回去还原真实地址。关键在于：<strong>预取器只会照抄内存里看得见的值</strong>——它把数组里的偏移当成指针去解引用，只会摸到进程低地址那一片无关内存；而真正的基准
+<code>min</code>
+只活在间谍自己的寄存器里，预取器看不见。地址这个信息于是从「内存里的数据」挪进了「间谍自己的计算」，它就无从下手了。</p>
+<p>其余的预取器沿用前人的做法对付：探针地址不落在相邻页上、访问顺序随机化。</p>
 <h3 id="缓存轨迹长什么样">🖥️ 缓存轨迹长什么样</h3>
 <p>采集结果是矩阵 o：L 个时间点 × |V| 个目标地址的访存延迟，另外用
 <code>rdtsc</code> 记下每个时间点的物理时间戳。论文用一幅热力图（Figure
@@ -1047,13 +1074,13 @@ Inference</em> 的精读笔记，正文表格内的数据取自论文原文。�
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">477k</span>
+    <span title="Word count total">478k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">14:28</span>
+    <span title="Reading time total">14:29</span>
   </span>
 </div>
 <div class="busuanzi-count">
