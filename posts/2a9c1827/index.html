@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：I Know What You Said: Unveiling Hardware Cache Side-Channels in Local Large Language Model Inference（USENIX Security 2025） 作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong Han、Siyuan Liu、Haiyan">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-24T08:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-28T09:18:12.176Z">
+<meta property="article:modified_time" content="2026-09-28T09:26:20.176Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -183,8 +183,9 @@
 上</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E6%9D%A1%E6%B3%84%E6%BC%8F%E6%BA%90token-%E5%80%BC%E4%B8%8E%E6%97%B6%E5%BA%8F"><span class="nav-number"></span> <span class="nav-text">🔍 两条泄漏源：token 值与时序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%84%E6%BC%8F%E4%B8%80%E6%9F%A5%E8%A1%A8%E6%A8%A1%E5%BC%8F%E6%9A%B4%E9%9C%B2-token-%E5%80%BC"><span class="nav-number">1.</span> <span class="nav-text">🎯 泄漏一：查表模式暴露 token
 值</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%84%E6%BC%8F%E4%BA%8C%E8%87%AA%E5%9B%9E%E5%BD%92%E6%97%B6%E5%BA%8F%E6%9A%B4%E9%9C%B2-token-%E9%A1%BA%E5%BA%8F"><span class="nav-number">2.</span> <span class="nav-text">⏱️ 泄漏二：自回归时序暴露 token
 顺序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E4%B8%AA%E7%9C%9F%E6%AD%A3%E7%9A%84%E9%9A%BE%E9%A2%98"><span class="nav-number">3.</span> <span class="nav-text">🚧 两个真正的难题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E6%80%BB%E8%A7%88%E4%BA%94%E6%AD%A5%E6%8A%8A%E7%BC%93%E5%AD%98%E8%BD%A8%E8%BF%B9%E5%8F%98%E6%88%90%E6%96%87%E6%9C%AC"><span class="nav-number"></span> <span class="nav-text">🧩
-攻击总览：五步把缓存轨迹变成文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%87%87%E9%9B%86%E6%80%8E%E4%B9%88%E5%BD%95%E4%B8%8B%E6%AF%8F%E4%B8%80%E8%A1%8C%E7%9A%84%E8%AE%BF%E5%AD%98"><span class="nav-number"></span> <span class="nav-text">🛠️ 采集：怎么录下每一行的访存</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E7%AE%97%E5%87%BA%E7%9B%AE%E6%A0%87%E5%9C%B0%E5%9D%80"><span class="nav-number">1.</span> <span class="nav-text">📐 先算出目标地址</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98%E4%BB%8E%E5%93%AA%E6%9D%A5"><span class="nav-number">2.</span> <span class="nav-text">🤝 共享内存从哪来</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E9%A2%84%E5%8F%96%E5%99%A8%E6%8A%8A%E6%A0%87%E5%87%86-flushreload-%E6%89%93%E8%B6%B4%E4%BA%86"><span class="nav-number">3.</span> <span class="nav-text">⚠️ 硬件预取器把标准
-flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%93%E5%AD%98%E8%BD%A8%E8%BF%B9%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">4.</span> <span class="nav-text">🖥️ 缓存轨迹长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%87%E6%AE%B5%E4%B8%8E%E6%98%A0%E5%B0%84prefill-%E5%9C%A8%E5%93%AAdecode-%E5%9C%A8%E5%93%AA"><span class="nav-number"></span> <span class="nav-text">✂️ 切段与映射：prefill
+攻击总览：五步把缓存轨迹变成文本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%87%87%E9%9B%86%E6%80%8E%E4%B9%88%E5%BD%95%E4%B8%8B%E6%AF%8F%E4%B8%80%E8%A1%8C%E7%9A%84%E8%AE%BF%E5%AD%98"><span class="nav-number"></span> <span class="nav-text">🛠️ 采集：怎么录下每一行的访存</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E7%AE%97%E5%87%BA%E7%9B%AE%E6%A0%87%E5%9C%B0%E5%9D%80"><span class="nav-number">1.</span> <span class="nav-text">📐 先算出目标地址</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98%E4%BB%8E%E5%93%AA%E6%9D%A5"><span class="nav-number">2.</span> <span class="nav-text">🤝 共享内存从哪来</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E6%B5%8B%E4%B8%80%E8%A1%8Cflushreload-%E6%8E%A2%E9%92%88"><span class="nav-number">3.</span> <span class="nav-text">📏 怎么测一行：flush+reload
+探针</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E9%A2%84%E5%8F%96%E5%99%A8%E6%8A%8A%E6%A0%87%E5%87%86-flushreload-%E6%89%93%E8%B6%B4%E4%BA%86"><span class="nav-number">4.</span> <span class="nav-text">⚠️ 硬件预取器把标准
+flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%93%E5%AD%98%E8%BD%A8%E8%BF%B9%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="nav-number">5.</span> <span class="nav-text">🖥️ 缓存轨迹长什么样</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%87%E6%AE%B5%E4%B8%8E%E6%98%A0%E5%B0%84prefill-%E5%9C%A8%E5%93%AAdecode-%E5%9C%A8%E5%93%AA"><span class="nav-number"></span> <span class="nav-text">✂️ 切段与映射：prefill
 在哪，decode 在哪</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8E%BB%E5%99%AA%E4%B8%8E%E8%BF%98%E5%8E%9F%E8%BE%93%E5%87%BAllma-%E4%B8%8E%E6%97%B6%E5%BA%8F%E4%BF%A1%E5%8F%B7"><span class="nav-number"></span> <span class="nav-text">🧠 去噪与还原输出：LLMA
 与时序信号</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%87%AA%E5%9B%9E%E5%BD%92%E4%BC%9A%E4%BA%A7%E7%94%9F%E5%91%A8%E6%9C%9F%E6%80%A7"><span class="nav-number">1.</span> <span class="nav-text">📈 为什么自回归会产生周期性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E9%98%B6%E5%B7%AE%E5%88%86%E5%B3%B0%E6%98%AF%E6%BC%8F%E6%A3%80%E8%B0%B7%E6%98%AF%E5%A4%9A%E6%A3%80"><span class="nav-number">2.</span> <span class="nav-text">📉 一阶差分：峰是漏检，谷是多检</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%AD%E7%BB%83%E6%95%B0%E6%8D%AE%E4%BB%8E%E5%93%AA%E6%9D%A5%E5%90%88%E6%88%90%E7%9A%84"><span class="nav-number">3.</span> <span class="nav-text">🧪 训练数据从哪来：合成的</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%98%E5%8E%9F%E8%BE%93%E5%85%A5%E9%A1%BA%E5%BA%8Fllmb"><span class="nav-number"></span> <span class="nav-text">🔗 还原输入顺序：LLMB</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%84%E4%BC%B0%E5%87%86%E7%A1%AE%E5%88%B0%E4%BB%80%E4%B9%88%E7%A8%8B%E5%BA%A6"><span class="nav-number"></span> <span class="nav-text">📊 评估：准确到什么程度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BB%E7%BB%93%E6%9E%9C"><span class="nav-number">1.</span> <span class="nav-text">🏁 主结果</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B6%88%E8%9E%8D%E6%AF%8F%E4%B8%AA%E9%83%A8%E4%BB%B6%E5%80%BC%E5%A4%9A%E5%B0%91"><span class="nav-number">2.</span> <span class="nav-text">🧹 消融：每个部件值多少</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A1%86%E6%9E%B6%E4%B8%8E%E7%A1%AC%E4%BB%B6"><span class="nav-number">3.</span> <span class="nav-text">🧰 框架与硬件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9C%9F%E5%AE%9E%E4%BE%8B%E5%AD%90"><span class="nav-number">4.</span> <span class="nav-text">💬 真实例子</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%BB%E5%8E%9F%E6%96%87%E6%97%B6%E6%B3%A8%E6%84%8F%E7%9A%84%E5%87%A0%E5%A4%84%E5%8F%A3%E5%BE%84%E4%B8%8D%E4%B8%80%E8%87%B4"><span class="nav-number"></span> <span class="nav-text">📎
 读原文时注意的几处口径不一致</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%B9%E7%AD%96%E4%B8%8E%E5%B1%80%E9%99%90"><span class="nav-number"></span> <span class="nav-text">🛡️ 对策与局限</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E5%BB%BA%E8%AE%AE%E7%9A%84%E4%B8%89%E7%A7%8D%E7%BC%93%E8%A7%A3"><span class="nav-number">1.</span> <span class="nav-text">🚧 论文建议的三种缓解</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E6%89%BF%E8%AE%A4%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">2.</span> <span class="nav-text">🧱 论文承认的边界</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number"></span> <span class="nav-text">✅ 总结</span></a></div>
@@ -279,7 +280,7 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-28 17:18:12" itemprop="dateModified" datetime="2026-09-28T17:18:12+08:00">2026-09-28</time>
+      <time title="Modified: 2026-09-28 17:26:20" itemprop="dateModified" datetime="2026-09-28T17:26:20+08:00">2026-09-28</time>
     </span>
 
   
@@ -296,14 +297,14 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>13k</span>
+      <span>14k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>23 mins.</span>
+      <span>25 mins.</span>
     </span>
 </div>
 
@@ -532,6 +533,31 @@ zero-copy，就用操作系统提供的 page deduplication（KSM
 </ul>
 <p>这里的因果关系值得留意：<strong>zero-copy
 是一个性能优化，它顺手把攻击面也一起送了出去</strong>。论文后面给出的对策之一，正是把它关掉。</p>
+<h3 id="怎么测一行flushreload-探针">📏 怎么测一行：flush+reload
+探针</h3>
+<p>前面两步解决了「监视哪些地址」和「怎么拿到那些内存」，还差最核心的一环：<strong>怎么知道某一行在某个时刻有没有被访问。</strong></p>
+<p>论文用的原语是
+<strong>flush+reload</strong>，机制一句话：<strong>擦干净，等一会儿，再摸一下看快慢。</strong></p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">clflush &amp;A                ① 把 A 所在的缓存行从各级缓存里踢出去</span><br><span class="line">   │</span><br><span class="line">   ├── 等一小会儿，让受害者跑 ──        ② 观察窗口</span><br><span class="line">   │</span><br><span class="line">t = reload(&amp;A)            ③ 重新读一次，并计时</span><br><span class="line">   │</span><br><span class="line">   ├─ t 小（几十 cycle）  -&gt; 命中   -&gt; 这期间有人把它搬回过缓存</span><br><span class="line">   └─ t 大（几百 cycle）  -&gt; 未命中 -&gt; 这期间没人碰过它</span><br></pre></td></tr></table></figure>
+<p>要害在 ①
+给出的<strong>干净初始状态</strong>。这一行被踢出去之后，能重新回到缓存里的原因只有两个：攻击者自己
+③ 的那次读，或者<strong>受害者在这段时间里访问了它</strong>。而 ③
+是踢出去之后的第一次读，必然未命中，所以剩下来就只有一种可能——<strong>reload
+的耗时本身就是答案：快，就说明受害者刚才摸了这一行。</strong></p>
+<p>一轮完整扫描，就是把这个动作在全部 32768 个地址上过一遍：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">for v in 0 .. |V|-1:   clflush(A[v])      // ① 一次全擦干净</span><br><span class="line">        ──── 等待窗口 ────                 // ② 留出时间让受害者推理</span><br><span class="line">for v in 0 .. |V|-1:   测 A[v] 的延迟      // ③ 挨个回读，快的算命中</span><br></pre></td></tr></table></figure>
+<p>有两个细节必须处理，它们也正是下一节的由来：</p>
+<ul>
+<li><strong>③ 的访问顺序必须打乱</strong>：如果老老实实按 0、1、2
+往下读，CPU
+的预取器（下一节的主角）就会猜出攻击者要读什么，提前把这些行搬进缓存，于是每个地址看起来都命中——全是假阳性；</li>
+<li><strong>②
+的窗口不能随便拉长</strong>：太短则受害者的推理还没跑到，太长则不同
+token
+的事件会混在同一轮里；更麻烦的是，已经命中的行会被后续的访问挤出去，变成漏检。</li>
+</ul>
+<p>所以「打乱顺序」不是锦上添花，而是标准实现的一部分——而恰恰是这个标准做法，在
+Raptor Lake 上撞了墙。</p>
 <h3 id="硬件预取器把标准-flushreload-打趴了">⚠️ 硬件预取器把标准
 flush+reload 打趴了</h3>
 <p>论文里值得一提的一段，是它报告了一个负面结果。</p>
@@ -542,9 +568,7 @@ i9-13900K）上<strong>几乎完全失效</strong>：监视 32768 个地址（Ll
 <p>原因是硬件里的<strong>预取器</strong>——CPU
 里专猜「你接下来要读哪儿」、提前把数据搬进缓存的小助手。它把这条攻击打趴用了两步。</p>
 <p><strong>第一步：它替受害者把格子摸热了。</strong>
-间谍判断「这个地址有没有被访问过」的办法是「擦干净（<code>clflush</code>）→
-等一会儿 →
-再摸一下，还热就说明有人摸过」。小助手一猜中，就抢在间谍前面把格子摸热了，间谍摸到热便当成「受害者访问过」——全是假阳性。打比方：想知道昨晚有没有人到过门口，就在地上撒面粉看脚印；结果<strong>保安半夜巡逻路过</strong>留下脚印，你一看就断定「有人来过」。更糟的是这保安是间谍自己请来的：<strong>访问越有规律，它猜得越准</strong>。所以前人的标准对策是<strong>打乱访问顺序</strong>。</p>
+上一节的判定逻辑是「我擦干净之后，这一行还是热的，就说明有人动过」。小助手一猜中，就抢在间谍前面把格子摸热了，间谍摸到热便当成「受害者访问过」——全是假阳性。打比方：想知道昨晚有没有人到过门口，就在地上撒面粉看脚印；结果<strong>保安半夜巡逻路过</strong>留下脚印，你一看就断定「有人来过」。更糟的是这保安是间谍自己请来的：<strong>访问越有规律，它猜得越准</strong>。所以前人的标准对策是<strong>打乱访问顺序</strong>。</p>
 <p><strong>第二步：打乱顺序要先有清单，而这份清单正好喂给了另一个小助手。</strong>
 要乱序访问，代码里就得先有一份「32768
 个目标地址」的数组，才能随便挑着读：</p>
@@ -1074,13 +1098,13 @@ Inference</em> 的精读笔记，正文表格内的数据取自论文原文。�
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">478k</span>
+    <span title="Word count total">479k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">14:29</span>
+    <span title="Reading time total">14:30</span>
   </span>
 </div>
 <div class="busuanzi-count">
