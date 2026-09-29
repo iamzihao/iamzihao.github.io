@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：I Know What You Said: Unveiling Hardware Cache Side-Channels in Local Large Language Model Inference（USENIX Security 2025） 作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong Han、Siyuan Liu、Haiyan">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-24T08:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-28T09:26:20.176Z">
+<meta property="article:modified_time" content="2026-09-28T09:33:45.537Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -280,7 +280,7 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-28 17:26:20" itemprop="dateModified" datetime="2026-09-28T17:26:20+08:00">2026-09-28</time>
+      <time title="Modified: 2026-09-28 17:33:45" itemprop="dateModified" datetime="2026-09-28T17:33:45+08:00">2026-09-28</time>
     </span>
 
   
@@ -380,8 +380,8 @@ LLM
 </tr>
 <tr>
 <td><strong>Prefetcher（预取器）</strong></td>
-<td>CPU 里猜「你接下来要读哪儿」、提前把数据搬进缓存的硬件部件，AoP
-是其中专门解引用指针数组的一种</td>
+<td>CPU
+里猜「你接下来要读哪儿」、提前把数据搬进缓存的硬件部件，AoP（Array-of-Pointers）是其中专门解引用指针数组的一种</td>
 <td>攻击的对手：会替受害者把行摸热，制造假阳性</td>
 </tr>
 <tr>
@@ -453,7 +453,8 @@ one-hot 编码做一次线性投影：</p>
 行。而<strong>查表是访存行为</strong>，访存会经过缓存：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">x = [0, 0, 1, 0, ..., 0]    ← one-hot，index i 是当前 token</span><br><span class="line">           │</span><br><span class="line">           │  W x  ==  W[i]</span><br><span class="line">           ↓</span><br><span class="line">┌──────────────────────────────┐</span><br><span class="line">│ Embedding Table W            │</span><br><span class="line">│                              │</span><br><span class="line">│ row 0                        │</span><br><span class="line">│ row 1                        │</span><br><span class="line">│ row i           ← cache hit  │</span><br><span class="line">│ ...                          │</span><br><span class="line">│ row |V|-1                    │</span><br><span class="line">└──────────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>第 i
-行被载入缓存这件事，在缓存侧信道上可以直接观察。于是<strong>观察到哪一行命中，就反推出此刻处理的是哪个
+行被载入缓存这件事，在缓存侧信道上可以直接观察（用什么手段观察，见后文「采集」一节的
+flush+reload）。于是<strong>观察到哪一行命中，就反推出此刻处理的是哪个
 token</strong>。</p>
 <p>还有一步放大：LLM 是自回归的，新生成的 token
 会被重新喂回模型，再次经过 embedding。所以这一条泄漏同时覆盖<strong>输入
@@ -546,6 +547,11 @@ zero-copy，就用操作系统提供的 page deduplication（KSM
 的耗时本身就是答案：快，就说明受害者刚才摸了这一行。</strong></p>
 <p>一轮完整扫描，就是把这个动作在全部 32768 个地址上过一遍：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">for v in 0 .. |V|-1:   clflush(A[v])      // ① 一次全擦干净</span><br><span class="line">        ──── 等待窗口 ────                 // ② 留出时间让受害者推理</span><br><span class="line">for v in 0 .. |V|-1:   测 A[v] 的延迟      // ③ 挨个回读，快的算命中</span><br></pre></td></tr></table></figure>
+<p>这里有个前提要先说清楚：<strong>攻击者与受害者之间没有任何约定</strong>——他不知道这次推理什么时候开始、什么时候结束，论文把这称为异步攻击场景。所以探针不是”被推理触发”的，而是<strong>从头到尾一刻不停地扫</strong>，事后才回到轨迹里去切段（见后文）。</p>
+<p>实现上还有两个纵深：探针线程被拆成 <strong>15
+个分区（partition）</strong>，各自独立扫自己那一份地址（每轮按伪随机顺序，<code>s = t*m + (v*167 + 13) % n</code>）——<strong>分片把每轮的墙钟时间压到约
+1/15，这才撑得起”远快于出
+token”</strong>；另外每个内存页只取中间地址做探针，进一步躲开相邻页被顺带预取的可能。</p>
 <p>有两个细节必须处理，它们也正是下一节的由来：</p>
 <ul>
 <li><strong>③ 的访问顺序必须打乱</strong>：如果老老实实按 0、1、2
@@ -590,12 +596,12 @@ prefetcher）</strong>，它的专长恰好是：<strong>看见一张表里装�
 <code>rdtsc</code> 记下每个时间点的物理时间戳。论文用一幅热力图（Figure
 3）展示它：颜色越深表示该行越可能被访问。在这样一张图里，prefill
 表现为一条竖直的密集色带，decode 表现为稀疏的散点。</p>
-<p>实现上，论文把探针线程分成 15
-个分区（partition），每轮按伪随机顺序扫自己那一份地址（<code>s = t*m + (v*167 + 13) % n</code>），并在每个内存页取中间地址作为探针，尽量避开相邻页带来的预取噪声。</p>
+<p>从「延迟」到「命中」还差最后一步判定：<strong>延迟低于阈值 α2
+记为命中，α2
+由缓存微基准测试得出</strong>。判定之后的每一个命中就是一个「命中事件」，后面切段与映射全都建立在它上面。</p>
 <h2 id="切段与映射prefill-在哪decode-在哪">✂️ 切段与映射：prefill
 在哪，decode 在哪</h2>
-<p>攻击者不与 LLM
-交互，所以不知道推理是什么时候开始的——这属于经典的异步攻击场景。论文用一个模式匹配算法在轨迹里找两个阶段的起点：</p>
+<p>攻击者不知道推理是什么时候开始的（就是前面说的异步场景），所以起点只能从轨迹里自己找。论文用一个模式匹配算法定位两个阶段的起点：</p>
 <ul>
 <li><strong>prefill 起点</strong>：从某个时间点起，连续不少于 K
 个事件的时间间隔都小于阈值
@@ -603,8 +609,8 @@ prefetcher）</strong>，它的专长恰好是：<strong>看见一张表里装�
 <li><strong>decode 起点</strong>：在 prefill 之后，出现至少一个间隔大于
 α1 的事件。decode 一次只产出一个 token，事件稀疏得多。</li>
 </ul>
-<p>论文的取值是 K = 4（允许的最小输入 token 数）与 α1 =
-10⁻³（不大于一次前向传播的最小耗时）。</p>
+<p>论文的取值是 K = 4（允许的最小输入 token 数）与 α1 = 10⁻³（按上下文即
+1 毫秒，不大于一次前向传播的最小耗时）。</p>
 <p>切完之后，轨迹被映射成三样东西：</p>
 <table>
 <colgroup>
@@ -637,9 +643,8 @@ prefetcher）</strong>，它的专长恰好是：<strong>看见一张表里装�
 </tr>
 </tbody>
 </table>
-<p>判定的细节是缓存命中阈值 α2：延迟低于 α2 记为命中，α2
-来自缓存微基准测试。到这里，硬件侧的工作就结束了，剩下的是<strong>从一个很脏的
-token 列表和一条带噪的时间戳序列里把文本拼回来</strong>。</p>
+<p>到这里，硬件侧的工作就结束了，剩下的是<strong>从一个很脏的 token
+列表和一条带噪的时间戳序列里把文本拼回来</strong>。</p>
 <h2 id="去噪与还原输出llma-与时序信号">🧠 去噪与还原输出：LLMA
 与时序信号</h2>
 <h3 id="为什么自回归会产生周期性">📈 为什么自回归会产生周期性</h3>
@@ -659,18 +664,21 @@ ms，见文末口径一节）。用傅里叶变换把时序信号转到频域、
 <h3 id="一阶差分峰是漏检谷是多检">📉 一阶差分：峰是漏检，谷是多检</h3>
 <p>PSD
 只能证明信号有周期性，不能直接指出哪个时间点是噪声。论文的做法是先把周期成分减掉：用
-SWIPE’ 算法从 PSD 里估出基频 f0，再算归一化一阶差分。</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TD_hat[k] = f0 * ( TD[k] - TD[k-1] )</span><br></pre></td></tr></table></figure>
-<p>理想情况下，相邻两次真命中的间隔是 T，所以差分应该稳定在 f0 ·
-T。偏离这个基准的两类异常正好对应两类噪声：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">normalized first-order difference</span><br><span class="line">  2T ┤          /\                        /\</span><br><span class="line">     │         /  \                      /  \</span><br><span class="line">  T  ┤──/\────/────\────────────────────/────\────   regular period</span><br><span class="line">     │ /  \  /      \                  /      \</span><br><span class="line">  0  ┤/────\/────────\────────────────/────────\──</span><br><span class="line">     └────────────────────────────────────────────→ time</span><br><span class="line">         valley                peak</span><br></pre></td></tr></table></figure>
+SWIPE’ 算法从 PSD 里估出基频
+f0，再算归一化一阶差分——把每个间隔都换算成「相当于多少个正常周期」：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TD_hat[k] = f0 * ( TD[k] - TD[k-1] )     // 等价于 (TD[k] - TD[k-1]) / T，其中 T = 1/f0</span><br></pre></td></tr></table></figure>
+<p>正常情况下相邻两次真命中的间隔就是 T，所以这个值应当稳定在
+<strong>1</strong>——归一化之后不再带时间单位，偏大偏小一眼就能看出来。图上的纵轴标的就是归一化后的倍数，不是时间：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">normalized first-order difference</span><br><span class="line">   2 ┤          /\                        /\</span><br><span class="line">     │         /  \                      /  \</span><br><span class="line">   1 ┤──/\────/────\────────────────────/────\────   regular period</span><br><span class="line">     │ /  \  /      \                  /      \</span><br><span class="line">   0 ┤/────\/────────\────────────────/────────\──</span><br><span class="line">     └────────────────────────────────────────────→ time</span><br><span class="line">         valley                peak</span><br></pre></td></tr></table></figure>
+<p>偏离这个基准的两类异常正好对应两类噪声：</p>
 <ul>
-<li><strong>峰（间隔接近
-2T）</strong>：中间少了一个事件，也就是漏检。真阳性原本应该在 t1 与 t2
-之间出现，把它的缺失补回来——预测这个位置的 token 并插进
+<li><strong>峰（接近
+2）</strong>：间隔翻了一倍，说明中间少了一个事件，也就是漏检。真阳性原本应该在
+t1 与 t2 之间出现，把它的缺失补回来——预测这个位置的 token 并插进
 KD，相当于做完形填空；</li>
-<li><strong>谷（间隔明显小于
-T）</strong>：多出来一个事件，也就是多检。把它从 KD 里删掉。</li>
+<li><strong>谷（接近
+0）</strong>：间隔塌缩，说明多出来一个事件，也就是多检。把它从 KD
+里删掉。</li>
 </ul>
 <p>论文把这三选一（补一个、删一个、不动）统一写成序列到序列任务：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">O_hat ~ P( O | TD_hat_1, KD_1, TD_hat_2, KD_2, ... )</span><br></pre></td></tr></table></figure>
@@ -691,7 +699,8 @@ token，模拟漏检与多检；</li>
 <li>把数值的时序信号编码成文本提示，与文本一起组成 (提示, 标准答案)
 训练对。例如时序 <code>&#123;1.3, 1.2&#125;</code> 与 token
 <code>&#123;Hello, World&#125;</code> 编码成
-<code>1 3:Hello&lt;s&gt;1 2:World&lt;s&gt;</code>。</li>
+<code>1 3:Hello&lt;s&gt;1 2:World&lt;s&gt;</code>（小数点被换成空格，<code>&lt;s&gt;</code>
+用来分隔相邻的两段）。</li>
 </ul>
 <p>论文在合成数据上把超参数扫了一遍：噪声概率 p 在 10%～40%
 的宽范围内性能稳定，超过 50% 才开始下降；周期抖动 σ = 0.08 时最好（σ
@@ -1104,7 +1113,7 @@ Inference</em> 的精读笔记，正文表格内的数据取自论文原文。�
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">14:30</span>
+    <span title="Reading time total">14:31</span>
   </span>
 </div>
 <div class="busuanzi-count">
