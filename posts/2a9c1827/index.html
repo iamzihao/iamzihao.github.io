@@ -30,7 +30,7 @@
 <meta property="og:description" content="论文：I Know What You Said: Unveiling Hardware Cache Side-Channels in Local Large Language Model Inference（USENIX Security 2025） 作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong Han、Siyuan Liu、Haiyan">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-24T08:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-29T00:50:52.542Z">
+<meta property="article:modified_time" content="2026-09-29T00:53:58.770Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -280,7 +280,7 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-29 08:50:52" itemprop="dateModified" datetime="2026-09-29T08:50:52+08:00">2026-09-29</time>
+      <time title="Modified: 2026-09-29 08:53:58" itemprop="dateModified" datetime="2026-09-29T08:53:58+08:00">2026-09-29</time>
     </span>
 
   
@@ -297,14 +297,14 @@ flush+reload 打趴了</span></a></li><li class="nav-item nav-level-3"><a class=
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>14k</span>
+      <span>15k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>26 mins.</span>
+      <span>27 mins.</span>
     </span>
 </div>
 
@@ -525,9 +525,20 @@ token，先后顺序就是文本顺序。</li>
 进地址空间之后，又有一个起始地址 <code>p1</code>。两个数一拼，<strong>第
 i 行的起始地址</strong>就得到了：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">一行占 D·b 字节，前面还有 i 行 -&gt; 前面总共占掉 i·D·b 字节</span><br><span class="line"></span><br><span class="line">row-major（行优先，绝大多数框架都用这种）：</span><br><span class="line">    row_i 的起始地址 = p1 + p2 + i · D · b      // 各行依次排下去</span><br><span class="line"></span><br><span class="line">column-major（列优先，少数格式这样排）：</span><br><span class="line">    row_i 的元素不再连续，第 j 个元素位于 p1 + p2 + (i + j·|V|) · b</span><br></pre></td></tr></table></figure>
-<p>范围拿到之后，<strong>每行只需要挑一个地址</strong>：一行有 8
-KB、横跨 128
-个缓存行，但只要这一行被访问，整行都会被载入，一定会路过我们盯着的那个地址。</p>
+<p>范围拿到之后，<strong>每行只需要挑一个地址做探针</strong>，理由分三步：</p>
+<ol type="1">
+<li>缓存的最小单位是<strong>缓存行</strong>（x86 上是 64
+字节），而探针测的其实是「某个地址所在的那个缓存行，此刻在不在缓存里」；</li>
+<li>一行是 <code>D·b = 4096 × 2 = 8192</code> 字节（8 KB），刚好跨
+<code>8192 ÷ 64 = 128</code> 个缓存行；</li>
+<li>模型查表时取的是<strong>整个 D
+维向量</strong>（后面的层要拿它参与计算），所以这 128
+个缓存行会被一起载入缓存。</li>
+</ol>
+<p>既然这 128
+个缓存行同进同出，盯住其中任意一个就够——这一个变热，就等价于「第 i
+行被访问过」。要是 128 个都盯，探针要扫的地址数凭空翻 128
+倍，纯属浪费。</p>
 <p>于是攻击者既不需要模型、也不需要框架的任何秘密——只要文件格式是公开的，这
 32768 个地址就能自己算出来。</p>
 <h3 id="共享内存从哪来">🤝 共享内存从哪来</h3>
@@ -1116,7 +1127,7 @@ Inference</em> 的精读笔记，正文表格内的数据取自论文原文。�
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">479k</span>
+    <span title="Word count total">480k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
