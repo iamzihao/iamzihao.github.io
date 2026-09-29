@@ -307,6 +307,44 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p><img src="/assets/influxdb-01.png" /></p>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<p><img src="/assets/influxdb-02.png" /></p>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1183,44 +1221,6 @@ TDX 的体系结构、内存保护机制、I/O
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p><img src="/assets/influxdb-01.png" /></p>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<p><img src="/assets/influxdb-02.png" /></p>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -9264,83 +9264,6 @@ Diffusion</strong>
       </tags>
   </entry>
   <entry>
-    <title>计算机中的P = NP? 问题</title>
-    <url>/posts/181d0004/</url>
-    <content><![CDATA[<p>在计算机科学领域，有一个悬赏一百万美元的世纪难题，它就是“P=NP?”问题。这个问题非常重要，它关系到计算机的算力极限，也和我们生活中的很多问题（如密码学、物流规划、人工智能等）息息相关。</p>
-<span id="more"></span>
-<h2 id="时间复杂度">时间复杂度</h2>
-<p>在讨论P与NP问题之前，我们需要先简单了解一下<strong>时间复杂度</strong>，它是衡量一个算法运行效率的标尺。我们通常用大O符号来表示，比如
-O(n), O(n²), O(2ⁿ) 等。</p>
-<p>常见的算法时间复杂度增长趋势如下：
-<code>O(1) &lt; O(log n) &lt; O(n) &lt; O(n log n) &lt; O(n²) &lt; O(n³) &lt; O(2ⁿ) &lt; O(n!) &lt; O(nⁿ)</code></p>
-<ul>
-<li><strong>多项式时间复杂度</strong>：如 O(1), O(log n), O(n), O(n log
-n), O(n²), O(n³) 等。它们的特点是，随着问题规模 n
-的增长，计算时间的增长速度是可控的。</li>
-<li><strong>指数时间复杂度</strong>：如 O(2ⁿ), O(n!)
-等。这类算法的计算时间会随着问题规模 n 的增长而急剧增加，当 n
-稍大时，计算就会变得不切实际。</li>
-</ul>
-<h2 id="p-问题">P 问题</h2>
-<p><strong>P 问题</strong> (Polynomial time)
-指的是那些<strong>可以在多项式时间内被解决的问题</strong>。</p>
-<p>简单来说，如果一个问题能找到一个高效的算法，在有限且可接受的时间内计算出结果，那么它就是一个P问题。我们日常遇到的大部分问题，比如排序、查找等，都属于P问题。</p>
-<h2 id="np-问题">NP 问题</h2>
-<p><strong>NP 问题</strong> (Nondeterministic Polynomial time)
-指的是那些<strong>可以在多-项式时间内验证一个解是否正确的问题</strong>。</p>
-<p>注意这里的关键词是“验证”而不是“解决”。NP问题不保证能被快速解决，但如果你给我一个解，我能很快地判断出它是不是正确的解。</p>
-<p>一个很经典的例子是“旅行商问题（TSP）”：给定一系列城市和每对城市之间的距离，求解访问每一座城市一次并返回起点的最短路径。</p>
-<ul>
-<li>解决这个问题非常困难，需要尝试大量的可能性。</li>
-<li>但如果有人给了你一条具体的路径，你可以很容易地计算出总长度，并验证它是否满足某个条件（比如，是否小于1000公里）。</li>
-</ul>
-<p>所有的P问题都是NP问题，因为如果一个问题能被快速解决，那么它的解也一定能被快速验证。</p>
-<h2 id="np-hard-和-np-complete">NP-Hard 和 NP-Complete</h2>
-<p>在NP问题中，有一类最难的问题，它们被称为 <strong>NP-Complete</strong>
-和 <strong>NP-Hard</strong>。</p>
-<ul>
-<li><p><strong>NP-Hard</strong>：如果<strong>所有</strong>的NP问题都能在多项式时间内“归约”到问题
-X，那么 X 就是一个 NP-Hard 问题。“归约”可以通俗地理解为“转化”。这意味着
-X
-问题的难度大于等于任何一个NP问题。它就像是NP世界里的“万恶之源”。</p></li>
-<li><p><strong>NP-Complete</strong>：一个问题既是 NP-Hard
-的，同时它本身又是一个 NP 问题，那么它就被称为
-<strong>NP-Complete</strong> 问题。NP-Complete 问题是 NP
-问题中最难的一类。</p></li>
-</ul>
-<p>常见的 NP-Complete 问题包括：</p>
-<ul>
-<li><strong>逻辑电路问题
-(SAT)</strong>：给定一个逻辑电路，是否存在一种输入，使其输出为
-True。</li>
-<li><strong>哈密顿回路问题</strong>：在一个图中，是否存在一条经过每个顶点一次且仅一次的回路。</li>
-<li><strong>旅行商问题
-(TSP)</strong>：给定一系列城市和每对城市之间的距离，求解访问每一座城市一次并返回起点的最短路径。</li>
-</ul>
-<h2 id="pnp-世纪难题">P=NP? 世纪难题</h2>
-<p>理解了以上概念后，“P=NP?”问题的核心就浮出水面了：</p>
-<blockquote>
-<p><strong>所有能被快速验证解的问题（NP），是否也都存在快速解决它们的算法（P）？</strong></p>
-</blockquote>
-<p>如果
-<code>P=NP</code>，意味着所有NP问题（包括所有NP-Complete问题）都能在多项式时间内被解决。这将给科学技术带来革命性的变化：密码学可能被轻易破解，物流和规划问题能找到完美的最优解，人工智能的发展也会迈出一大步。</p>
-<p>反之，如果
-<code>P≠NP</code>，则意味着存在一类问题，我们能快速验证其解，却无法快速求解。这也符合我们目前的普遍认知。</p>
-<p>这个问题在2000年被美国克雷数学研究所列为七个“千年大奖问题”之一，悬赏一百万美元求解。</p>
-<h3 id="p与np的关系图">P与NP的关系图</h3>
-<p><img src="/assets/p-np-01.png" /></p>
-<blockquote>
-<p>本文内容部分参考了周扬荣老师的PPT。</p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>算法</tag>
-        <tag>复杂度理论</tag>
-        <tag>P与NP</tag>
-        <tag>计算机科学</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>BIOS</title>
     <url>/posts/ea91aa61/</url>
     <content><![CDATA[<p>从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里
@@ -10883,6 +10806,83 @@ VPN 几乎一致（接管全系统流量）。</li>
         <tag>Network</tag>
         <tag>VPN</tag>
         <tag>代理</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>计算机中的P = NP? 问题</title>
+    <url>/posts/181d0004/</url>
+    <content><![CDATA[<p>在计算机科学领域，有一个悬赏一百万美元的世纪难题，它就是“P=NP?”问题。这个问题非常重要，它关系到计算机的算力极限，也和我们生活中的很多问题（如密码学、物流规划、人工智能等）息息相关。</p>
+<span id="more"></span>
+<h2 id="时间复杂度">时间复杂度</h2>
+<p>在讨论P与NP问题之前，我们需要先简单了解一下<strong>时间复杂度</strong>，它是衡量一个算法运行效率的标尺。我们通常用大O符号来表示，比如
+O(n), O(n²), O(2ⁿ) 等。</p>
+<p>常见的算法时间复杂度增长趋势如下：
+<code>O(1) &lt; O(log n) &lt; O(n) &lt; O(n log n) &lt; O(n²) &lt; O(n³) &lt; O(2ⁿ) &lt; O(n!) &lt; O(nⁿ)</code></p>
+<ul>
+<li><strong>多项式时间复杂度</strong>：如 O(1), O(log n), O(n), O(n log
+n), O(n²), O(n³) 等。它们的特点是，随着问题规模 n
+的增长，计算时间的增长速度是可控的。</li>
+<li><strong>指数时间复杂度</strong>：如 O(2ⁿ), O(n!)
+等。这类算法的计算时间会随着问题规模 n 的增长而急剧增加，当 n
+稍大时，计算就会变得不切实际。</li>
+</ul>
+<h2 id="p-问题">P 问题</h2>
+<p><strong>P 问题</strong> (Polynomial time)
+指的是那些<strong>可以在多项式时间内被解决的问题</strong>。</p>
+<p>简单来说，如果一个问题能找到一个高效的算法，在有限且可接受的时间内计算出结果，那么它就是一个P问题。我们日常遇到的大部分问题，比如排序、查找等，都属于P问题。</p>
+<h2 id="np-问题">NP 问题</h2>
+<p><strong>NP 问题</strong> (Nondeterministic Polynomial time)
+指的是那些<strong>可以在多-项式时间内验证一个解是否正确的问题</strong>。</p>
+<p>注意这里的关键词是“验证”而不是“解决”。NP问题不保证能被快速解决，但如果你给我一个解，我能很快地判断出它是不是正确的解。</p>
+<p>一个很经典的例子是“旅行商问题（TSP）”：给定一系列城市和每对城市之间的距离，求解访问每一座城市一次并返回起点的最短路径。</p>
+<ul>
+<li>解决这个问题非常困难，需要尝试大量的可能性。</li>
+<li>但如果有人给了你一条具体的路径，你可以很容易地计算出总长度，并验证它是否满足某个条件（比如，是否小于1000公里）。</li>
+</ul>
+<p>所有的P问题都是NP问题，因为如果一个问题能被快速解决，那么它的解也一定能被快速验证。</p>
+<h2 id="np-hard-和-np-complete">NP-Hard 和 NP-Complete</h2>
+<p>在NP问题中，有一类最难的问题，它们被称为 <strong>NP-Complete</strong>
+和 <strong>NP-Hard</strong>。</p>
+<ul>
+<li><p><strong>NP-Hard</strong>：如果<strong>所有</strong>的NP问题都能在多项式时间内“归约”到问题
+X，那么 X 就是一个 NP-Hard 问题。“归约”可以通俗地理解为“转化”。这意味着
+X
+问题的难度大于等于任何一个NP问题。它就像是NP世界里的“万恶之源”。</p></li>
+<li><p><strong>NP-Complete</strong>：一个问题既是 NP-Hard
+的，同时它本身又是一个 NP 问题，那么它就被称为
+<strong>NP-Complete</strong> 问题。NP-Complete 问题是 NP
+问题中最难的一类。</p></li>
+</ul>
+<p>常见的 NP-Complete 问题包括：</p>
+<ul>
+<li><strong>逻辑电路问题
+(SAT)</strong>：给定一个逻辑电路，是否存在一种输入，使其输出为
+True。</li>
+<li><strong>哈密顿回路问题</strong>：在一个图中，是否存在一条经过每个顶点一次且仅一次的回路。</li>
+<li><strong>旅行商问题
+(TSP)</strong>：给定一系列城市和每对城市之间的距离，求解访问每一座城市一次并返回起点的最短路径。</li>
+</ul>
+<h2 id="pnp-世纪难题">P=NP? 世纪难题</h2>
+<p>理解了以上概念后，“P=NP?”问题的核心就浮出水面了：</p>
+<blockquote>
+<p><strong>所有能被快速验证解的问题（NP），是否也都存在快速解决它们的算法（P）？</strong></p>
+</blockquote>
+<p>如果
+<code>P=NP</code>，意味着所有NP问题（包括所有NP-Complete问题）都能在多项式时间内被解决。这将给科学技术带来革命性的变化：密码学可能被轻易破解，物流和规划问题能找到完美的最优解，人工智能的发展也会迈出一大步。</p>
+<p>反之，如果
+<code>P≠NP</code>，则意味着存在一类问题，我们能快速验证其解，却无法快速求解。这也符合我们目前的普遍认知。</p>
+<p>这个问题在2000年被美国克雷数学研究所列为七个“千年大奖问题”之一，悬赏一百万美元求解。</p>
+<h3 id="p与np的关系图">P与NP的关系图</h3>
+<p><img src="/assets/p-np-01.png" /></p>
+<blockquote>
+<p>本文内容部分参考了周扬荣老师的PPT。</p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>算法</tag>
+        <tag>复杂度理论</tag>
+        <tag>P与NP</tag>
+        <tag>计算机科学</tag>
       </tags>
   </entry>
   <entry>
@@ -24210,6 +24210,112 @@ Rust，变量、类型、<code>struct</code>、数组、函数这些零件大多
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive</title>
+    <url>/posts/7ddab86c/</url>
+    <content><![CDATA[<p>看 VGA 或驱动代码时会碰到
+<code>#[repr(C)]</code>、<code>#[repr(transparent)]</code>、<code>#[derive(...)]</code>
+这样的方括号标签。它们叫属性（attribute），作用是告诉编译器下面这个东西按什么特殊规则处理。其中
+<code>repr</code> 系列直接决定 struct
+在内存里的排布——这是和硬件打交道的关键。</p>
+<span id="more"></span>
+<blockquote>
+<p>接《<a href="/posts/5bfe3d1c/">Rust OS 前置：从 C 到 Rust</a>》与《<a
+href="/posts/4b7500f7/">借用与生命周期</a>》。</p>
+</blockquote>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>含义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#[...]</code></td>
+<td>属性（attribute）</td>
+<td>告诉编译器按特殊规则处理</td>
+</tr>
+<tr>
+<td><code>#[derive(...)]</code></td>
+<td>自动生成常用实现</td>
+<td>加功能，不是加数据</td>
+</tr>
+<tr>
+<td><code>#[repr(C)]</code></td>
+<td>按 C 的内存布局排布</td>
+<td>和硬件/FFI 对齐</td>
+</tr>
+<tr>
+<td><code>#[repr(transparent)]</code></td>
+<td>单字段类型与字段布局一致</td>
+<td>包装不额外占内存</td>
+</tr>
+</tbody>
+</table>
+<h2 id="属性-...-是什么">🏷️ 属性 <code>#[...]</code> 是什么</h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123; ... &#125;</span><br></pre></td></tr></table></figure>
+<p><code>#[...]</code>
+不是函数调用，也不是注释，而是<strong>给编译器的指令</strong>：</p>
+<blockquote>
+<p>下面这个东西，请按照某种特殊规则处理。</p>
+</blockquote>
+<p>常见用途：<code>#[derive(...)]</code>（自动实现
+trait）、<code>#[repr(...)]</code>（规定内存布局）、<code>#[no_mangle]</code>（禁止符号名改写）、<code>#![no_std]</code>（crate
+级属性）——你在 Rust OS 项目里其实已经见过后面几个。</p>
+<h2 id="derive让编译器自动生成功能">🪄 derive：让编译器自动生成功能</h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>derive</code> 的意思是让编译器自动给这个类型实现这些
+trait：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Debug      可以格式化打印</span><br><span class="line">Clone      可以复制一份</span><br><span class="line">Copy       赋值即复制（不移动）</span><br><span class="line">PartialEq  可以用 == 比较</span><br><span class="line">Eq         完整相等性</span><br></pre></td></tr></table></figure>
+<p>它给类型<strong>加功能</strong>，不改变数据本身。</p>
+<h2 id="reprc内存布局按-c-的规则">🧬 repr(C)：内存布局按 C 的规则</h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,   <span class="comment">// 1 字节</span></span><br><span class="line">    color_code: ColorCode,  <span class="comment">// 1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>repr(C)</code> 规定这个 struct 按 C
+语言的内存布局规则排列（字段顺序、对齐方式都和 C 编译器一致）。</p>
+<p>为什么 VGA 需要它？因为<strong>硬件不认识
+Rust</strong>，只认内存里的一串字节。要让 Rust 的 struct
+和硬件的寄存器/显存布局一致，必须保证：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 眼中的 ScreenChar            VGA 眼中的一个字符单元</span><br><span class="line">┌──────────┬──────────┐        ┌──────────┬──────────┐</span><br><span class="line">│ ASCII    │ Color    │   ===  │ ASCII    │ Color    │</span><br><span class="line">│ 1 byte   │ 1 byte   │        │ 1 byte   │ 1 byte   │</span><br><span class="line">└──────────┴──────────┘        └──────────┴──────────┘</span><br></pre></td></tr></table></figure>
+<p>如果没有 <code>repr(C)</code>，Rust
+编译器<strong>有权重排字段或插入填充</strong>来优化布局——内存里长什么样是不保证的。对普通应用无所谓，但对映射到硬件的
+struct 是致命的。同理，跨语言 FFI（调用 C 库）也要 <code>repr(C)</code>
+保证两边看到同一份布局。</p>
+<h2 id="reprtransparent单字段包装零开销">🔍
+repr(transparent)：单字段包装零开销</h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ColorCode</span>(<span class="type">u8</span>);</span><br></pre></td></tr></table></figure>
+<p><code>ColorCode</code> 只有一个字段
+<code>u8</code>，这种单字段包装常用来给一个基本类型起个有语义的名字。<code>repr(transparent)</code>
+保证：<code>ColorCode</code>
+的内存布局和这个唯一字段完全一致，不会在外面套一层多余的包装。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">ColorCode ──► u8</span><br><span class="line">┌──────────┐</span><br><span class="line">│ color    │  ← 一个字节的颜色属性</span><br><span class="line">└──────────┘</span><br></pre></td></tr></table></figure>
+<p>用途：想给一个数组或基本类型起个有语义的名字，又不想引入任何布局开销时使用。也正因为这层零开销，VGA
+的 <code>ScreenChar</code> 才能把 <code>ColorCode</code>
+当成一个普通字节放进 <code>#[repr(C)]</code> 的布局里，整个 struct
+保持整齐的 2 字节。</p>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>属性是写给编译器的规则：<code>derive</code> 自动实现常用
+trait，<code>repr(C)</code> 让 struct 布局与
+C/硬件一致，<code>repr(transparent)</code> 保证单字段包装零开销。写 OS
+时凡是<strong>要和硬件寄存器、显存或外部 ABI 对齐</strong>的
+struct，基本都要用 <code>repr</code> 系列声明布局。</p>
+</blockquote>
+<p>下一篇把这些语法全部串起来：逐行拆解 VGA <code>Writer</code>
+的代码。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>Rust</tag>
+        <tag>内存布局</tag>
+        <tag>属性</tag>
+        <tag>repr</tag>
+        <tag>derive</tag>
+        <tag>FFI</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 前置：借用与生命周期——引用、裸指针与 unsafe</title>
     <url>/posts/4b7500f7/</url>
     <content><![CDATA[<p>Rust 与 C 的分水岭在内存归谁管：C 靠程序员自觉，Rust
@@ -24446,112 +24552,6 @@ struct 在内存里到底长什么样。</p>
         <tag>裸指针</tag>
         <tag>unsafe</tag>
         <tag>生命周期</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 前置：属性与内存布局——repr(C)、repr(transparent) 与 derive</title>
-    <url>/posts/7ddab86c/</url>
-    <content><![CDATA[<p>看 VGA 或驱动代码时会碰到
-<code>#[repr(C)]</code>、<code>#[repr(transparent)]</code>、<code>#[derive(...)]</code>
-这样的方括号标签。它们叫属性（attribute），作用是告诉编译器下面这个东西按什么特殊规则处理。其中
-<code>repr</code> 系列直接决定 struct
-在内存里的排布——这是和硬件打交道的关键。</p>
-<span id="more"></span>
-<blockquote>
-<p>接《<a href="/posts/5bfe3d1c/">Rust OS 前置：从 C 到 Rust</a>》与《<a
-href="/posts/4b7500f7/">借用与生命周期</a>》。</p>
-</blockquote>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>含义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#[...]</code></td>
-<td>属性（attribute）</td>
-<td>告诉编译器按特殊规则处理</td>
-</tr>
-<tr>
-<td><code>#[derive(...)]</code></td>
-<td>自动生成常用实现</td>
-<td>加功能，不是加数据</td>
-</tr>
-<tr>
-<td><code>#[repr(C)]</code></td>
-<td>按 C 的内存布局排布</td>
-<td>和硬件/FFI 对齐</td>
-</tr>
-<tr>
-<td><code>#[repr(transparent)]</code></td>
-<td>单字段类型与字段布局一致</td>
-<td>包装不额外占内存</td>
-</tr>
-</tbody>
-</table>
-<h2 id="属性-...-是什么">🏷️ 属性 <code>#[...]</code> 是什么</h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123; ... &#125;</span><br></pre></td></tr></table></figure>
-<p><code>#[...]</code>
-不是函数调用，也不是注释，而是<strong>给编译器的指令</strong>：</p>
-<blockquote>
-<p>下面这个东西，请按照某种特殊规则处理。</p>
-</blockquote>
-<p>常见用途：<code>#[derive(...)]</code>（自动实现
-trait）、<code>#[repr(...)]</code>（规定内存布局）、<code>#[no_mangle]</code>（禁止符号名改写）、<code>#![no_std]</code>（crate
-级属性）——你在 Rust OS 项目里其实已经见过后面几个。</p>
-<h2 id="derive让编译器自动生成功能">🪄 derive：让编译器自动生成功能</h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,</span><br><span class="line">    color_code: ColorCode,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>derive</code> 的意思是让编译器自动给这个类型实现这些
-trait：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Debug      可以格式化打印</span><br><span class="line">Clone      可以复制一份</span><br><span class="line">Copy       赋值即复制（不移动）</span><br><span class="line">PartialEq  可以用 == 比较</span><br><span class="line">Eq         完整相等性</span><br></pre></td></tr></table></figure>
-<p>它给类型<strong>加功能</strong>，不改变数据本身。</p>
-<h2 id="reprc内存布局按-c-的规则">🧬 repr(C)：内存布局按 C 的规则</h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[repr(C)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,   <span class="comment">// 1 字节</span></span><br><span class="line">    color_code: ColorCode,  <span class="comment">// 1 字节</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>repr(C)</code> 规定这个 struct 按 C
-语言的内存布局规则排列（字段顺序、对齐方式都和 C 编译器一致）。</p>
-<p>为什么 VGA 需要它？因为<strong>硬件不认识
-Rust</strong>，只认内存里的一串字节。要让 Rust 的 struct
-和硬件的寄存器/显存布局一致，必须保证：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Rust 眼中的 ScreenChar            VGA 眼中的一个字符单元</span><br><span class="line">┌──────────┬──────────┐        ┌──────────┬──────────┐</span><br><span class="line">│ ASCII    │ Color    │   ===  │ ASCII    │ Color    │</span><br><span class="line">│ 1 byte   │ 1 byte   │        │ 1 byte   │ 1 byte   │</span><br><span class="line">└──────────┴──────────┘        └──────────┴──────────┘</span><br></pre></td></tr></table></figure>
-<p>如果没有 <code>repr(C)</code>，Rust
-编译器<strong>有权重排字段或插入填充</strong>来优化布局——内存里长什么样是不保证的。对普通应用无所谓，但对映射到硬件的
-struct 是致命的。同理，跨语言 FFI（调用 C 库）也要 <code>repr(C)</code>
-保证两边看到同一份布局。</p>
-<h2 id="reprtransparent单字段包装零开销">🔍
-repr(transparent)：单字段包装零开销</h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="meta">#[repr(transparent)]</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ColorCode</span>(<span class="type">u8</span>);</span><br></pre></td></tr></table></figure>
-<p><code>ColorCode</code> 只有一个字段
-<code>u8</code>，这种单字段包装常用来给一个基本类型起个有语义的名字。<code>repr(transparent)</code>
-保证：<code>ColorCode</code>
-的内存布局和这个唯一字段完全一致，不会在外面套一层多余的包装。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">ColorCode ──► u8</span><br><span class="line">┌──────────┐</span><br><span class="line">│ color    │  ← 一个字节的颜色属性</span><br><span class="line">└──────────┘</span><br></pre></td></tr></table></figure>
-<p>用途：想给一个数组或基本类型起个有语义的名字，又不想引入任何布局开销时使用。也正因为这层零开销，VGA
-的 <code>ScreenChar</code> 才能把 <code>ColorCode</code>
-当成一个普通字节放进 <code>#[repr(C)]</code> 的布局里，整个 struct
-保持整齐的 2 字节。</p>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>属性是写给编译器的规则：<code>derive</code> 自动实现常用
-trait，<code>repr(C)</code> 让 struct 布局与
-C/硬件一致，<code>repr(transparent)</code> 保证单字段包装零开销。写 OS
-时凡是<strong>要和硬件寄存器、显存或外部 ABI 对齐</strong>的
-struct，基本都要用 <code>repr</code> 系列声明布局。</p>
-</blockquote>
-<p>下一篇把这些语法全部串起来：逐行拆解 VGA <code>Writer</code>
-的代码。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>Rust</tag>
-        <tag>内存布局</tag>
-        <tag>属性</tag>
-        <tag>repr</tag>
-        <tag>derive</tag>
-        <tag>FFI</tag>
       </tags>
   </entry>
   <entry>
@@ -28964,6 +28964,8 @@ zero-copy，就用操作系统提供的 page deduplication（KSM
 ③ 的那次读，或者<strong>受害者在这段时间里访问了它</strong>。而 ③
 是踢出去之后的第一次读，必然未命中，所以剩下来就只有一种可能——<strong>reload
 的耗时本身就是答案：快，就说明受害者刚才碰过这条缓存行。</strong></p>
+<p>（注意「只有两个原因」是原始 flush+reload
+的前提，而预取器恰恰会打破它——它不是受害者，却会替你把这条缓存行搬回来。下一节讲的就是这件事。）</p>
 <p>一轮完整扫描，就是把这个动作在全部 32768 个地址上过一遍：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">for v in 0 .. |V|-1:   clflush(A[v])      // ① 一次全擦干净</span><br><span class="line">        ──── 等待窗口 ────                 // ② 留出时间让受害者推理</span><br><span class="line">for v in 0 .. |V|-1:   测 A[v] 的延迟      // ③ 挨个回读，快的算命中</span><br></pre></td></tr></table></figure>
 <p>这里有个前提要先说清楚：<strong>攻击者与受害者之间没有任何约定</strong>——他不知道这次推理什么时候开始、什么时候结束，论文把这称为异步攻击场景。所以探针不是”被推理触发”的，而是<strong>从头到尾一刻不停地扫</strong>，事后才回到轨迹里去切段（见后文）。</p>
@@ -29063,50 +29065,120 @@ prefetcher）</strong>，它的专长恰好是：<strong>看见一张表里装�
 </tr>
 </tbody>
 </table>
+<p>这三样里，<strong>KD 与 TD
+是同一批事件的两种属性，按下标一一对齐</strong>：<code>KD[k]</code> 是第
+k 个命中反查出来的 token，<code>TD[k]</code>
+就是它发生的时刻。也就是说「内容」和「时刻」同源，后面的去噪才能用「时间上对不对」去纠正「token
+对不对」。KP 与它们无关，它来自 prefill 段，只有一个没有顺序的集合。</p>
 <p>到这里，硬件侧的工作就结束了，剩下的是<strong>从一个很脏的 token
 列表和一条带噪的时间戳序列里把文本拼回来</strong>。</p>
 <h2 id="去噪与还原输出llma-与时序信号">🧠 去噪与还原输出：LLMA
 与时序信号</h2>
-<h3 id="为什么自回归会产生周期性">📈 为什么自回归会产生周期性</h3>
-<p>论文的出发点是两条观察：</p>
-<ol type="1">
-<li>自回归生成是<strong>数据流驱动</strong>的，前向传播走的是规整的流水线，不同于控制流驱动的程序；</li>
-<li>于是每次生成 token 可以近似看成<strong>周期性事件</strong>。</li>
-</ol>
-<p>周期有多长？就是 TPOT。论文在 13900K + RTX 3060 上跑
-Phi-3.5-mini（llama.cpp），预期在 100Hz 处出现峰，也就是每 10
-毫秒生成一个 token（原文这一句把 TPOT 写成约 10 microseconds，按 100Hz
-反推单位应是
-ms，见文末口径一节）。用傅里叶变换把时序信号转到频域、算功率谱密度（PSD）：</p>
+<p>上一节交出来的是<strong>一对脏数据</strong>：一份可能多词、可能少词的有序
+token 列表 KD，和一条与它逐项对齐的时间戳序列
+TD；这一节要把它们还原成干净的输出文本。要做的判断说白了只有三选一：<strong>补一个
+token、删一个 token、不动</strong>。</p>
+<p>两类污染各有来历：「多词」来自<strong>多检</strong>——不是 embedding
+引起的访存被误判成命中，反查出来就是一个随机
+token；「少词」来自<strong>漏检</strong>——真的 embedding
+命中被漏判了。所以这一节只做两步：<strong>先量出「正常间隔多长」，再看每个间隔偏了多少</strong>，剩下的「动哪个
+token、补什么词」交给语言模型。</p>
+<h3 id="只要一件事真命中的间隔是固定的">📈
+只要一件事：真命中的间隔是固定的</h3>
+<p>去噪的依据其实只有一条：<strong>decode
+是「一个萝卜一个坑」的</strong>——每生成一个 token 就查一次
+embedding，命中事件也就跟着 token
+的节拍一个挨一个落下来，<strong>相邻两次真命中之间的间隔基本恒定</strong>。这个间隔就是
+TPOT（生成一个 token 的耗时），论文的环境里约 10 毫秒。</p>
+<p>论文为这个前提给的理由是：LLM
+的前向传播是<strong>数据流驱动</strong>的，走的是规整的流水线（不像控制流驱动的程序那样路径不定），所以每次生成
+token 可以近似看成一个周期性事件。</p>
+<p>于是判断噪声的办法很朴素：<strong>看间隔</strong>。正常间隔是那个固定值，凡是「不对劲」的间隔，附近就有噪声。后面会看到，间隔只有两种不对法。</p>
+<p>那这个固定值从哪儿来？论文不假设攻击者知道受害者机器的
+TPOT，而是「从数据里自己量」：把时间戳序列转到频域，有节拍就会表现为基频
+f0 上的尖峰，再用 SWIPE’ 把 f0 读出来，<code>T = 1/f0</code>
+就是那个固定间隔。（<strong>看不懂频域不影响往下读</strong>，这一步的作用就是「自动量一遍正常间隔是多少」。）</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">PSD</span><br><span class="line">  ^</span><br><span class="line">  |   true positives</span><br><span class="line">  |   |        |              |</span><br><span class="line">  |   |   |    |    |         |          ← f0 and harmonics: 2*f0, 3*f0 ...</span><br><span class="line">  |   |   |    |    |         |</span><br><span class="line">  +---+---+----+----+---------+-------&gt; frequency</span><br><span class="line">      f0      2f0  3f0</span><br></pre></td></tr></table></figure>
-<p>真阳性（真的由 embedding 造成的命中）在 PSD
-上给出基频与谐波，是清晰的峰；假阳性则频谱平坦、接近白噪声。<strong>这个差别就是去噪的立足点</strong>。</p>
-<h3 id="一阶差分峰是漏检谷是多检">📉 一阶差分：峰是漏检，谷是多检</h3>
-<p>PSD
-只能证明信号有周期性，不能直接指出哪个时间点是噪声。论文的做法是先把周期成分减掉：用
-SWIPE’ 算法从 PSD 里估出基频
-f0，再算归一化一阶差分——把每个间隔都换算成「相当于多少个正常周期」：</p>
+<p>顺带它还证明了一件事：这串命中里<strong>确实有稳定的节拍</strong>，不是一片随机（如果全是随机命中，频谱就是平的、没有尖峰）。但它回答不了「第几次命中是噪声」——频域是一次整体统计，指不到具体某一个点。要指到具体位置，只能回到时间轴上逐个看间隔，也就是下一小节。</p>
+<p>（论文的预期是在 100Hz 处出现峰，也就是每 10 毫秒一个
+token；原文这一句把 TPOT 写成约 10 microseconds，按 100Hz 反推单位应是
+ms，见文末口径一节。）</p>
+<h3 id="一阶差分每个间隔除以-t看是几倍">📉 一阶差分：每个间隔除以
+T，看是几倍</h3>
+<p>要指到具体位置，只剩这一步：把相邻两个命中的时间差<strong>除以
+T</strong>，也就是问「这一段相当于几个正常间隔」。</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">TD_hat[k] = f0 * ( TD[k] - TD[k-1] )     // 等价于 (TD[k] - TD[k-1]) / T，其中 T = 1/f0</span><br></pre></td></tr></table></figure>
-<p>正常情况下相邻两次真命中的间隔就是 T，所以这个值应当稳定在
-<strong>1</strong>——归一化之后不再带时间单位，偏大偏小一眼就能看出来。图上的纵轴标的就是归一化后的倍数，不是时间：</p>
+<p>正常情况下这个读数就是
+<strong>1</strong>——因为除的就是正常间隔本身。所以这里<strong>不需要再记任何绝对时间，只看它离
+1 有多远</strong>；除以 T
+的意义也在这儿：把毫秒换成「几倍正常间隔」，换台机器跑也照样读。图上的纵轴标的就是这个倍数，不是时间：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">normalized first-order difference</span><br><span class="line">   2 ┤          /\                        /\</span><br><span class="line">     │         /  \                      /  \</span><br><span class="line">   1 ┤──/\────/────\────────────────────/────\────   regular period</span><br><span class="line">     │ /  \  /      \                  /      \</span><br><span class="line">   0 ┤/────\/────────\────────────────/────────\──</span><br><span class="line">     └────────────────────────────────────────────→ time</span><br><span class="line">         valley                peak</span><br></pre></td></tr></table></figure>
-<p>偏离这个基准的两类异常正好对应两类噪声：</p>
+<p>偏离这个基准的两类异常正好对应两类噪声，用一个具体例子看最清楚：设
+TPOT 恰好是 10 ms，真命中落在 <code>0, 10, 20, 30, 40, 50</code>
+ms，依次对应输出 <code>the cat sat on the mat</code> 这 6 个
+token。（归一化值的个数 = 命中个数 −
+1，所以下面三行的长度本来就不一样。）</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>情形</th>
+<th>观测到的命中时刻（ms）</th>
+<th>相邻间隔 → 归一化（÷T）</th>
+<th>KD 里发生了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>理想</td>
+<td>0, 10, 20, 30, 40, 50</td>
+<td><code>10 10 10 10 10</code> → <code>1 1 1 1 1</code></td>
+<td>6 个 token 齐全</td>
+</tr>
+<tr>
+<td>漏检一次</td>
+<td>30 ms 那次没报出来，只剩 0, 10, 20, 40, 50</td>
+<td><code>10 10 20 10</code> → <code>1 1 2 1</code></td>
+<td>少一个 token（这里是 <code>sat</code>）</td>
+</tr>
+<tr>
+<td>多检一次</td>
+<td>25 ms 处多报一次，变成 0, 10, 20, 25, 30, 40, 50</td>
+<td><code>10 10 5 5 10 10</code> → <code>1 1 0.5 0.5 1 1</code></td>
+<td>混进一个随机 token</td>
+</tr>
+</tbody>
+</table>
+<p>于是两类异常各自有了固定的形状：</p>
 <ul>
-<li><strong>峰（接近
-2）</strong>：间隔翻了一倍，说明中间少了一个事件，也就是漏检。真阳性原本应该在
-t1 与 t2 之间出现，把它的缺失补回来——预测这个位置的 token 并插进
-KD，相当于做完形填空；</li>
-<li><strong>谷（接近
-0）</strong>：间隔塌缩，说明多出来一个事件，也就是多检。把它从 KD
+<li><strong>一个 ≈2 的峰 =
+漏检</strong>：间隔翻了一倍，说明中间少了一个事件。真阳性原本应该出现在两个相邻命中之间，把它的缺失补回来——预测这个位置的
+token 并插进 KD，相当于做完形填空；</li>
+<li><strong>一对 ≈0.5 的谷 =
+多检</strong>：假事件插进两个真命中之间，把原本一整个周期切成两段，于是这两段的归一化值都小于
+1。原文只给到「小于 1」这一步（Figure 5 里画到
+0）；上表把假命中放在正中间，所以看到的是 0.5 +
+0.5，若它贴着真事件则会出现一个接近 0 的谷。把多出来的那个 token 从 KD
 里删掉。</li>
 </ul>
 <p>论文把这三选一（补一个、删一个、不动）统一写成序列到序列任务：</p>
 <figure class="highlight text"><table><tr><td class="code"><pre><span class="line">O_hat ~ P( O | TD_hat_1, KD_1, TD_hat_2, KD_2, ... )</span><br></pre></td></tr></table></figure>
 <p>由微调过的 LLMA 实现：输入是时序信号与 token
-列表的交替序列，输出是清理后的文本。微调用
-LoRA，好处是保留基座模型的先验知识、同时抑制过拟合。</p>
+列表的交替序列，输出是清理后的文本。<strong>为什么必须是交替排列，而不是把
+TD 与 KD 分开喂？</strong> 因为「这里该动」和「该动哪个
+token」绑在同一个下标上：<code>TD_hat[k]</code> 说的是「第 k-1
+个事件到第 k 个事件这一段间隔不对」，紧挨着它的 <code>KD[k]</code>
+才是那个位置上的 token。两样贴在一起，模型才能把「间隔是
+2」翻译成「<code>sat</code> 与 <code>the</code> 之间该补一个词」。微调用
+LoRA，好处是保留基座模型的先验知识、同时抑制过拟合。（这两个部件各自值多少，见后文消融表：不喂
+TD 时输出的 LS 掉 12.7%，去掉 LLMA 只按规则拼 KD 掉 10.3%。）</p>
 <h3 id="训练数据从哪来合成的">🧪 训练数据从哪来：合成的</h3>
-<p>攻击者拿不到受害者的模型和系统，也就没法采集真实数据来训练。论文的解法是利用刚发现的周期性<strong>自己合成训练集</strong>（Algorithm
+<p>攻击者拿不到受害者的模型和系统，也就没法采集真实数据来训练。但上一节已经把真命中的生成方式讲清楚了：<strong>带高斯抖动的周期信号，外加随机删、随机插</strong>。既然这套生成规则已经摆在面前，就可以照它反过来造数据，一次都不用碰到受害者（Algorithm
 1）：</p>
 <ul>
 <li>从公开语料（UltraChat、NQ-Open、SIQA、SQuAD2、ChatGPT-Roles）取输入输出文本对，组成语料
@@ -29114,13 +29186,14 @@ C；</li>
 <li>对每个 token
 的时间戳按高斯分布累积（<code>ctime += N(1, σ²)</code>），模拟 TPOT
 的自然抖动，得到周期性时序；</li>
-<li>以概率 p 删除事件、以概率 p 在均匀分布的时间点插入随机
-token，模拟漏检与多检；</li>
+<li>以概率 p 删除事件（制造漏检）、以概率 p 在均匀分布的时间点插入随机
+token（制造多检）——「随机 token」正对应假阳性反查出来的那个无关词；</li>
 <li>把数值的时序信号编码成文本提示，与文本一起组成 (提示, 标准答案)
-训练对。例如时序 <code>&#123;1.3, 1.2&#125;</code> 与 token
-<code>&#123;Hello, World&#125;</code> 编码成
+训练对。编码用的就是上一节那条交替序列：每个条目写成「归一化时间值 :
+token」，条目之间用 <code>&lt;s&gt;</code> 分隔。例如时序
+<code>&#123;1.3, 1.2&#125;</code> 与 token <code>&#123;Hello, World&#125;</code> 编码成
 <code>1 3:Hello&lt;s&gt;1 2:World&lt;s&gt;</code>（小数点被换成空格，<code>&lt;s&gt;</code>
-用来分隔相邻的两段）。</li>
+用来分隔相邻的两段），标准答案则是 <code>Hello World</code>。</li>
 </ul>
 <p>论文在合成数据上把超参数扫了一遍：噪声概率 p 在 10%～40%
 的宽范围内性能稳定，超过 50% 才开始下降；周期抖动 σ = 0.08 时最好（σ
