@@ -29,9 +29,9 @@
 <meta property="og:site_name" content="Zihao Li">
 <meta property="og:description" content="GPU 的线程组织与内存层次是理解 CUDA 性能的基础。本文用表格、Mermaid 图和代码示例，梳理 Kernel、Warp、合并访存与 bank 冲突这些概念。">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://iamzihao.github.io/assets/bank_conflict.png">
+<meta property="og:image" content="https://iamzihao.github.io/assets/cuda-memory-01.png">
 <meta property="article:published_time" content="2025-08-13T04:11:31.000Z">
-<meta property="article:modified_time" content="2026-09-29T00:36:30.102Z">
+<meta property="article:modified_time" content="2026-09-29T01:45:06.474Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CUDA">
@@ -39,7 +39,7 @@
 <meta property="article:tag" content="Kernel">
 <meta property="article:tag" content="Warp">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://iamzihao.github.io/assets/bank_conflict.png">
+<meta name="twitter:image" content="https://iamzihao.github.io/assets/cuda-memory-01.png">
 
 
 <link rel="canonical" href="https://iamzihao.github.io/posts/d4b8f045/">
@@ -274,7 +274,7 @@ shared 形影不离？</span></a></li></ol></li><li class="nav-item nav-level-2"
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-29 08:36:30" itemprop="dateModified" datetime="2026-09-29T08:36:30+08:00">2026-09-29</time>
+      <time title="Modified: 2026-09-29 09:45:06" itemprop="dateModified" datetime="2026-09-29T09:45:06+08:00">2026-09-29</time>
     </span>
 
   
@@ -591,7 +591,7 @@ BLOCK_ROWS 对应 blockDim.y，代表一次搬运/计算的 行数批次；典�
 gather/scatter——冲突来源是线程集中到同一地址或分布不可控，单靠填充无法分散，需要换算法或分段访问。</p>
 </blockquote>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__shared__ <span class="type">float</span> tile[<span class="number">32</span>][<span class="number">33</span>]; <span class="comment">// 33 = 32 + 1   (列方向额外 +1 填充)</span></span><br></pre></td></tr></table></figure>
-<p><img src="/assets/bank_conflict.png" /></p>
+<p><img src="/assets/cuda-memory-01.png" /></p>
 <p>为什么 +1 就能避开冲突？</p>
 <ol type="1">
 <li><code>tile[行][列]</code> 在显存里按 <strong>行主序</strong>
@@ -746,13 +746,13 @@ Warp”藏延迟，性能归根结底是访存模式与并行度的艺术 ✨</s
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">480k</span>
+    <span title="Word count total">479k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">14:32</span>
+    <span title="Reading time total">14:31</span>
   </span>
 </div>
 <div class="busuanzi-count">
