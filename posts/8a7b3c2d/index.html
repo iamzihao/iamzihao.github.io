@@ -30,7 +30,7 @@
 <meta property="og:description" content="在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网 IP + 端口转发）配置复杂且有安全风险，本文介绍 Tailscale + Windows 远程桌面 的组合方案。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-10-16T04:42:21.000Z">
-<meta property="article:modified_time" content="2026-09-10T03:25:44.563Z">
+<meta property="article:modified_time" content="2026-09-29T00:41:02.822Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="Windows">
 <meta property="article:tag" content="内网穿透">
@@ -176,10 +176,10 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E7%BD%91%E7%BB%9C%E5%9F%BA%E7%A1%80%E6%A6%82%E5%BF%B5%E9%80%9F%E8%A7%88"><span class="nav-number">1.</span> <span class="nav-text">🧩 一、网络基础概念速览</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%BD%91%E5%8D%A1%E4%B8%8E-mac-%E5%9C%B0%E5%9D%80%E7%A1%AC%E4%BB%B6%E8%BA%AB%E4%BB%BD%E8%AF%81"><span class="nav-number">1.1.</span> <span class="nav-text">1. 网卡与 MAC 地址：硬件身份证</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#ip-%E5%9C%B0%E5%9D%80%E7%BD%91%E7%BB%9C%E4%B8%96%E7%95%8C%E7%9A%84%E9%97%A8%E7%89%8C%E5%8F%B7"><span class="nav-number">1.2.</span> <span class="nav-text">2. IP 地址：网络世界的门牌号</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%B7%AF%E7%94%B1%E5%99%A8%E4%B8%8E-nat%E5%AE%B6%E5%BA%AD%E7%BD%91%E7%BB%9C%E5%A4%A7%E7%AE%A1%E5%AE%B6"><span class="nav-number">1.3.</span> <span class="nav-text">3. 路由器与 NAT：家庭网络大管家</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%AB%AF%E5%8F%A3%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9C%8D%E5%8A%A1%E7%AA%97%E5%8F%A3"><span class="nav-number">1.4.</span> <span class="nav-text">4. 端口：程序的服务窗口</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%98%B2%E7%81%AB%E5%A2%99%E7%BD%91%E7%BB%9C%E4%B8%96%E7%95%8C%E7%9A%84%E4%BF%9D%E5%AE%89"><span class="nav-number">1.5.</span> <span class="nav-text">5. 防火墙：网络世界的保安</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#vpn%E8%99%9A%E6%8B%9F%E7%9A%84%E4%B8%93%E7%94%A8%E9%80%9A%E9%81%93"><span class="nav-number">1.6.</span> <span class="nav-text">6. VPN：虚拟的专用通道</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BA%8Ctailscale%E8%BD%BB%E6%9D%BE%E5%AE%9E%E7%8E%B0%E5%86%85%E7%BD%91%E7%A9%BF%E9%80%8F"><span class="nav-number">2.</span> <span class="nav-text">🚀
-二、Tailscale：轻松实现内网穿透</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#tailscale-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">2.1.</span> <span class="nav-text">1. Tailscale 是什么？</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#tailscale-%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86"><span class="nav-number">2.2.</span> <span class="nav-text">2. Tailscale 工作原理</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89windows-%E8%BF%9C%E7%A8%8B%E6%A1%8C%E9%9D%A2-rdp"><span class="nav-number">3.</span> <span class="nav-text">🖥️ 三、Windows 远程桌面 (RDP)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#windows-%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E4%B8%8D%E6%98%AF%E6%89%80%E6%9C%89%E7%89%88%E6%9C%AC%E9%83%BD%E8%83%BD%E8%A2%AB%E8%BF%9C%E7%A8%8B"><span class="nav-number">3.1.</span> <span class="nav-text">1. Windows
-版本限制：不是所有版本都能“被远程”</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%B4%A6%E6%88%B7%E4%B9%8B%E8%B0%9C%E5%BE%AE%E8%BD%AF%E8%B4%A6%E6%88%B7-vs.-%E6%9C%AC%E5%9C%B0%E8%B4%A6%E6%88%B7"><span class="nav-number">3.2.</span> <span class="nav-text">2. 账户之谜：微软账户
-vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9B%9B%E5%AE%9E%E6%88%98%E5%B7%A5%E4%BD%9C%E6%B5%81%E6%80%BB%E7%BB%93"><span class="nav-number">4.</span> <span class="nav-text">⚡ 四、实战工作流总结</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E7%BD%91%E7%BB%9C%E5%9F%BA%E7%A1%80%E6%A6%82%E5%BF%B5%E9%80%9F%E8%A7%88"><span class="nav-number">1.</span> <span class="nav-text">🧩 一、网络基础概念速览</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BD%91%E5%8D%A1%E4%B8%8E-mac-%E5%9C%B0%E5%9D%80%E7%A1%AC%E4%BB%B6%E8%BA%AB%E4%BB%BD%E8%AF%81"><span class="nav-number">1.1.</span> <span class="nav-text">1. 网卡与 MAC 地址：硬件身份证</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ip-%E5%9C%B0%E5%9D%80%E7%BD%91%E7%BB%9C%E4%B8%96%E7%95%8C%E7%9A%84%E9%97%A8%E7%89%8C%E5%8F%B7"><span class="nav-number">1.2.</span> <span class="nav-text">2. IP 地址：网络世界的门牌号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B7%AF%E7%94%B1%E5%99%A8%E4%B8%8E-nat%E5%AE%B6%E5%BA%AD%E7%BD%91%E7%BB%9C%E5%A4%A7%E7%AE%A1%E5%AE%B6"><span class="nav-number">1.3.</span> <span class="nav-text">3. 路由器与 NAT：家庭网络大管家</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AB%AF%E5%8F%A3%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9C%8D%E5%8A%A1%E7%AA%97%E5%8F%A3"><span class="nav-number">1.4.</span> <span class="nav-text">4. 端口：程序的服务窗口</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%98%B2%E7%81%AB%E5%A2%99%E7%BD%91%E7%BB%9C%E4%B8%96%E7%95%8C%E7%9A%84%E4%BF%9D%E5%AE%89"><span class="nav-number">1.5.</span> <span class="nav-text">5. 防火墙：网络世界的保安</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#vpn%E8%99%9A%E6%8B%9F%E7%9A%84%E4%B8%93%E7%94%A8%E9%80%9A%E9%81%93"><span class="nav-number">1.6.</span> <span class="nav-text">6. VPN：虚拟的专用通道</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8Ctailscale%E8%BD%BB%E6%9D%BE%E5%AE%9E%E7%8E%B0%E5%86%85%E7%BD%91%E7%A9%BF%E9%80%8F"><span class="nav-number">2.</span> <span class="nav-text">🚀
+二、Tailscale：轻松实现内网穿透</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#tailscale-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">2.1.</span> <span class="nav-text">1. Tailscale 是什么？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tailscale-%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86"><span class="nav-number">2.2.</span> <span class="nav-text">2. Tailscale 工作原理</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89windows-%E8%BF%9C%E7%A8%8B%E6%A1%8C%E9%9D%A2-rdp"><span class="nav-number">3.</span> <span class="nav-text">🖥️ 三、Windows 远程桌面 (RDP)</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#windows-%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E4%B8%8D%E6%98%AF%E6%89%80%E6%9C%89%E7%89%88%E6%9C%AC%E9%83%BD%E8%83%BD%E8%A2%AB%E8%BF%9C%E7%A8%8B"><span class="nav-number">3.1.</span> <span class="nav-text">1. Windows
+版本限制：不是所有版本都能“被远程”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B4%A6%E6%88%B7%E4%B9%8B%E8%B0%9C%E5%BE%AE%E8%BD%AF%E8%B4%A6%E6%88%B7-vs.-%E6%9C%AC%E5%9C%B0%E8%B4%A6%E6%88%B7"><span class="nav-number">3.2.</span> <span class="nav-text">2. 账户之谜：微软账户
+vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E5%AE%9E%E6%88%98%E5%B7%A5%E4%BD%9C%E6%B5%81%E6%80%BB%E7%BB%93"><span class="nav-number">4.</span> <span class="nav-text">⚡ 四、实战工作流总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -271,7 +271,7 @@ vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 11:25:44" itemprop="dateModified" datetime="2026-09-10T11:25:44+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-29 08:41:02" itemprop="dateModified" datetime="2026-09-29T08:41:02+08:00">2026-09-29</time>
     </span>
 
   
@@ -309,9 +309,9 @@ vs. 本地账户</span></a></li></ol></li><li class="nav-item nav-level-3"><a c
 IP + 端口转发）配置复杂且有安全风险，本文介绍 <strong>Tailscale +
 Windows 远程桌面</strong> 的组合方案。</p>
 <span id="more"></span>
-<h3 id="一网络基础概念速览">🧩 一、网络基础概念速览</h3>
+<h2 id="一网络基础概念速览">🧩 一、网络基础概念速览</h2>
 <p>在深入主题之前，我们先快速过一遍几个核心的网络概念，这有助于你理解为什么需要“内网穿透”。</p>
-<h4 id="网卡与-mac-地址硬件身份证">1. 网卡与 MAC 地址：硬件身份证</h4>
+<h3 id="网卡与-mac-地址硬件身份证">1. 网卡与 MAC 地址：硬件身份证</h3>
 <ul>
 <li><strong>网卡 (NIC)</strong>:
 电脑连接网络（无论是有线还是无线）所必需的物理硬件。</li>
@@ -322,7 +322,7 @@ Windows 远程桌面</strong> 的组合方案。</p>
 <p><strong>省流</strong>：网卡是电脑上网的硬件，MAC
 地址是这张网卡的“身份证号”，全球唯一。</p>
 </blockquote>
-<h4 id="ip-地址网络世界的门牌号">2. IP 地址：网络世界的门牌号</h4>
+<h3 id="ip-地址网络世界的门牌号">2. IP 地址：网络世界的门牌号</h3>
 <ul>
 <li><strong>内网 IP (Private IP)</strong>：通常以
 <code>192.168.x.x</code>、<code>172.16.x.x</code> 或
@@ -336,7 +336,7 @@ IP)</strong>：由你的网络服务提供商（ISP）分配的，是你在整�
 是你在互联网上的地址，全世界独一无二；内网 IP
 是你在局域网内的地址，只在内部有效。</p>
 </blockquote>
-<h4 id="路由器与-nat家庭网络大管家">3. 路由器与 NAT：家庭网络大管家</h4>
+<h3 id="路由器与-nat家庭网络大管家">3. 路由器与 NAT：家庭网络大管家</h3>
 <ul>
 <li><strong>路由器 (Router)</strong>:
 连接你家庭/办公室内部所有设备（构成一个局域网），并负责将这个局域网连接到互联网的设备。</li>
@@ -350,7 +350,7 @@ IP 地址</strong>来访问互联网。当外部数据返回时，NAT
 技术让很多内网设备能共用一个公网 IP
 上网，但也因此把它们“藏”在了内网中，导致外网无法直接找到它们。</p>
 </blockquote>
-<h4 id="端口程序的服务窗口">4. 端口：程序的服务窗口</h4>
+<h3 id="端口程序的服务窗口">4. 端口：程序的服务窗口</h3>
 <p>如果说 IP
 地址是一栋大楼的地址，那么端口号就是这栋楼里具体的房间号或窗口号。一台电脑上可以同时运行很多网络服务（网页服务、游戏、远程桌面等），操作系统就是用端口号来区分数据应该交给哪个程序处理。</p>
 <ul>
@@ -363,12 +363,12 @@ IP 地址</strong>来访问互联网。当外部数据返回时，NAT
 地址用来定位电脑，端口号用来定位电脑上的具体<strong>程序（服务）</strong>。<code>IP:端口号</code>
 才能精确找到目标。</p>
 </blockquote>
-<h4 id="防火墙网络世界的保安">5. 防火墙：网络世界的保安</h4>
+<h3 id="防火墙网络世界的保安">5. 防火墙：网络世界的保安</h3>
 <p>防火墙是一个网络安全系统，它像一个保安，根据预设的规则来监控和控制进出网络的流量。它可以阻止未经授权的访问，保护你的电脑免受攻击。但有时，它也可能“过于尽职”，阻止了正常的远程桌面连接请求。</p>
 <blockquote>
 <p><strong>省流</strong>：防火墙是网络保安，按规则放行或拦截数据。它在保护安全的同时，也可能需要你手动设置“白名单”来允许特定连接通过。</p>
 </blockquote>
-<h4 id="vpn虚拟的专用通道">6. VPN：虚拟的专用通道</h4>
+<h3 id="vpn虚拟的专用通道">6. VPN：虚拟的专用通道</h3>
 <p>VPN (Virtual Private Network)
 的核心思想是在公共网络（如互联网）上建立一个加密的、虚拟的私人通道。连接到
 VPN
@@ -392,11 +392,11 @@ graph TD
     Internet -- &quot;公网 IP&quot; --&gt; Router
 </code>
 </pre>
-<h3 id="二tailscale轻松实现内网穿透">🚀
-二、Tailscale：轻松实现内网穿透</h3>
+<h2 id="二tailscale轻松实现内网穿透">🚀
+二、Tailscale：轻松实现内网穿透</h2>
 <p>要解决从外网访问内网设备的问题，就需要“内网穿透”，即打通内外网的壁垒。Tailscale
 就是实现这一目标的“神器”。</p>
-<h4 id="tailscale-是什么">1. Tailscale 是什么？</h4>
+<h3 id="tailscale-是什么">1. Tailscale 是什么？</h3>
 <p>Tailscale 是一个基于 <strong>WireGuard®</strong> 协议构建的零配置 VPN
 服务。WireGuard® 是一种现代化、高性能的 VPN
 协议，以其代码简洁、速度快和安全性高而著称。Tailscale
@@ -406,7 +406,7 @@ graph TD
 协议的“魔法”工具，能把你所有设备拉进一个虚拟局域网，让它们能用一个固定的内网
 IP ( <code>100.x.x.x</code> ) 互相访问，过程全自动。</p>
 </blockquote>
-<h4 id="tailscale-工作原理">2. Tailscale 工作原理</h4>
+<h3 id="tailscale-工作原理">2. Tailscale 工作原理</h3>
 <p>Tailscale 的优雅之处在于它简化了复杂的网络连接过程：</p>
 <ol type="1">
 <li><strong>协调服务器</strong>：所有设备通过一个协调服务器（使用
@@ -448,12 +448,12 @@ graph TD
      linkStyle 3,4 stroke:orange,stroke-dasharray: 5 5;
 </code>
 </pre>
-<h3 id="三windows-远程桌面-rdp">🖥️ 三、Windows 远程桌面 (RDP)</h3>
+<h2 id="三windows-远程桌面-rdp">🖥️ 三、Windows 远程桌面 (RDP)</h2>
 <p>有了 Tailscale
 打通网络，我们还需要一个工具来实际操作远程电脑。Windows
 自带的远程桌面（RDP）就是最佳选择之一。</p>
-<h4 id="windows-版本限制不是所有版本都能被远程">1. Windows
-版本限制：不是所有版本都能“被远程”</h4>
+<h3 id="windows-版本限制不是所有版本都能被远程">1. Windows
+版本限制：不是所有版本都能“被远程”</h3>
 <p>这是最关键的一点：<strong>只有特定版本的 Windows
 才能作为远程桌面主机（被连接）</strong>。Windows
 家庭版只能作为客户端（去连接别人），不能被连接。</p>
@@ -499,8 +499,8 @@ https://github.com/zbezj/HEU_KMS_Activator/releases</p>
 </blockquote>
 <p>你可以在 <code>设置 -&gt; 系统 -&gt; 关于</code> 中查看你的 Windows
 版本。</p>
-<h4 id="账户之谜微软账户-vs.-本地账户">2. 账户之谜：微软账户
-vs. 本地账户</h4>
+<h3 id="账户之谜微软账户-vs.-本地账户">2. 账户之谜：微软账户
+vs. 本地账户</h3>
 <p>为了远程连接，目标电脑上的用户账户<strong>必须设置密码</strong>。这里就引出了另一个常见问题：使用哪种账户登录？</p>
 <ul>
 <li><strong>本地账户 (Local Account)</strong>：这是传统的 Windows
@@ -520,7 +520,7 @@ OneDrive 等微软服务深度集成。</li>
 <blockquote>
 <p><strong>省流</strong>：远程桌面需要带密码的账户。用<strong>本地账户</strong>最省事。用<strong>微软账户</strong>时，用户名记得填<strong>完整邮箱地址</strong>。</p>
 </blockquote>
-<h3 id="四实战工作流总结">⚡ 四、实战工作流总结</h3>
+<h2 id="四实战工作流总结">⚡ 四、实战工作流总结</h2>
 <p>现在，我们将所有部分串联起来，形成一个简单清晰的操作流程：</p>
 <ol type="1">
 <li><strong>安装

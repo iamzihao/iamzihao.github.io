@@ -30,7 +30,7 @@
 <meta property="og:description" content="从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里 BIOS 做了什么。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-11-19T09:09:15.000Z">
-<meta property="article:modified_time" content="2026-09-10T03:24:43.213Z">
+<meta property="article:modified_time" content="2026-09-29T00:41:02.842Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="BIOS">
 <meta property="article:tag" content="固件">
@@ -175,7 +175,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8C%89%E4%B8%8B%E7%94%B5%E6%BA%90%E9%94%AE%E7%9A%84%E9%80%90%E5%B8%A7%E8%A7%A3%E8%AF%B4"><span class="nav-number">2.</span> <span class="nav-text">⚡ 按下电源键的逐帧解说</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bios-%E5%9C%A8%E5%93%AA%E9%87%8C"><span class="nav-number">3.</span> <span class="nav-text">🧠 BIOS 在哪里？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bios-%E7%9A%84%E5%9B%9B%E5%A4%A7%E8%81%8C%E8%B4%A3"><span class="nav-number">4.</span> <span class="nav-text">🧱 BIOS 的四大职责</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#post"><span class="nav-number">4.1.</span> <span class="nav-text">🔍 POST</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">4.2.</span> <span class="nav-text">🛠️ 硬件初始化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BB%BA%E7%AB%8B%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F%E8%A1%A8"><span class="nav-number">4.3.</span> <span class="nav-text">建立中断向量表</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BC%95%E5%AF%BC%E5%8A%A0%E8%BD%BD"><span class="nav-number">4.4.</span> <span class="nav-text">🚀 引导加载</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#bios-%E4%B8%AD%E6%96%AD%E6%9C%8D%E5%8A%A1%E8%AF%A6%E8%A7%A3"><span class="nav-number">5.</span> <span class="nav-text">🔌 BIOS 中断服务详解</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F%E8%A1%A8-ivt"><span class="nav-number">5.1.</span> <span class="nav-text">💡 深入理解：中断向量表 (IVT)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%AD%E6%96%AD%E8%B0%83%E7%94%A8%E8%BF%87%E7%A8%8B"><span class="nav-number">5.2.</span> <span class="nav-text">🔄 中断调用过程</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F"><span class="nav-number">5.3.</span> <span class="nav-text">📋 常见中断向量</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%87%AA%E5%AE%9A%E4%B9%89%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F%E7%A4%BA%E4%BE%8B"><span class="nav-number">5.4.</span> <span class="nav-text">💻 自定义中断向量示例</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%87%8D%E8%A6%81%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9"><span class="nav-number">5.5.</span> <span class="nav-text">⚠️ 重要注意事项</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E7%94%A8-bios-%E4%B8%AD%E6%96%AD%E6%9C%8D%E5%8A%A1%E8%AF%A6%E8%A7%A3"><span class="nav-number">6.</span> <span class="nav-text">📺 常用 BIOS 中断服务详解</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#int-0x10---%E8%A7%86%E9%A2%91%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.1.</span> <span class="nav-text">INT 0x10 - 视频服务</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#int-0x13---%E7%A3%81%E7%9B%98%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.2.</span> <span class="nav-text">INT 0x13 - 磁盘服务</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#chs-%E5%AF%BB%E5%9D%80%E6%A8%A1%E5%BC%8F"><span class="nav-number">6.3.</span> <span class="nav-text">CHS 寻址模式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#int-0x16---%E9%94%AE%E7%9B%98%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.4.</span> <span class="nav-text">INT 0x16 - 键盘服务</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#int-0x15---%E7%B3%BB%E7%BB%9F%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.5.</span> <span class="nav-text">INT 0x15 - 系统服务</span></a></li></ol></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8C%89%E4%B8%8B%E7%94%B5%E6%BA%90%E9%94%AE%E7%9A%84%E9%80%90%E5%B8%A7%E8%A7%A3%E8%AF%B4"><span class="nav-number">2.</span> <span class="nav-text">⚡ 按下电源键的逐帧解说</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bios-%E5%9C%A8%E5%93%AA%E9%87%8C"><span class="nav-number">3.</span> <span class="nav-text">🧠 BIOS 在哪里？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bios-%E7%9A%84%E5%9B%9B%E5%A4%A7%E8%81%8C%E8%B4%A3"><span class="nav-number">4.</span> <span class="nav-text">🧱 BIOS 的四大职责</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#post"><span class="nav-number">4.1.</span> <span class="nav-text">🔍 POST</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A1%AC%E4%BB%B6%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">4.2.</span> <span class="nav-text">🛠️ 硬件初始化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BB%BA%E7%AB%8B%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F%E8%A1%A8"><span class="nav-number">4.3.</span> <span class="nav-text">建立中断向量表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BC%95%E5%AF%BC%E5%8A%A0%E8%BD%BD"><span class="nav-number">4.4.</span> <span class="nav-text">🚀 引导加载</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bios-%E4%B8%AD%E6%96%AD%E6%9C%8D%E5%8A%A1%E8%AF%A6%E8%A7%A3"><span class="nav-number">5.</span> <span class="nav-text">🔌 BIOS 中断服务详解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F%E8%A1%A8-ivt"><span class="nav-number">5.1.</span> <span class="nav-text">💡 深入理解：中断向量表 (IVT)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%AD%E6%96%AD%E8%B0%83%E7%94%A8%E8%BF%87%E7%A8%8B"><span class="nav-number">5.2.</span> <span class="nav-text">🔄 中断调用过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F"><span class="nav-number">5.3.</span> <span class="nav-text">📋 常见中断向量</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%87%AA%E5%AE%9A%E4%B9%89%E4%B8%AD%E6%96%AD%E5%90%91%E9%87%8F%E7%A4%BA%E4%BE%8B"><span class="nav-number">5.4.</span> <span class="nav-text">💻 自定义中断向量示例</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%8D%E8%A6%81%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9"><span class="nav-number">5.5.</span> <span class="nav-text">⚠️ 重要注意事项</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B8%B8%E7%94%A8-bios-%E4%B8%AD%E6%96%AD%E6%9C%8D%E5%8A%A1%E8%AF%A6%E8%A7%A3"><span class="nav-number">6.</span> <span class="nav-text">📺 常用 BIOS 中断服务详解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#int-0x10---%E8%A7%86%E9%A2%91%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.1.</span> <span class="nav-text">INT 0x10 - 视频服务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#int-0x13---%E7%A3%81%E7%9B%98%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.2.</span> <span class="nav-text">INT 0x13 - 磁盘服务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#chs-%E5%AF%BB%E5%9D%80%E6%A8%A1%E5%BC%8F"><span class="nav-number">6.3.</span> <span class="nav-text">CHS 寻址模式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#int-0x16---%E9%94%AE%E7%9B%98%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.4.</span> <span class="nav-text">INT 0x16 - 键盘服务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#int-0x15---%E7%B3%BB%E7%BB%9F%E6%9C%8D%E5%8A%A1"><span class="nav-number">6.5.</span> <span class="nav-text">INT 0x15 - 系统服务</span></a></li></ol></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -267,7 +267,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 11:24:43" itemprop="dateModified" datetime="2026-09-10T11:24:43+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-29 08:41:02" itemprop="dateModified" datetime="2026-09-29T08:41:02+08:00">2026-09-29</time>
     </span>
 
   
@@ -304,7 +304,7 @@
     <div class="post-body" itemprop="articleBody"><p>从按下电源键到操作系统接管之间有一段“黑屏时间”，本文梳理这段时间里
 BIOS 做了什么。</p>
 <span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -415,7 +415,7 @@ System，主板固化固件，负责最初的硬件初始化与引导。</td>
 BIOS</strong>的工作原理，这是理解现代 UEFI 的基础。UEFI
 在底层仍然兼容传统 BIOS 的某些机制（如 Legacy Boot 模式）。</p>
 </blockquote>
-<h3 id="按下电源键的逐帧解说">⚡ 按下电源键的逐帧解说</h3>
+<h2 id="按下电源键的逐帧解说">⚡ 按下电源键的逐帧解说</h2>
 <ol type="1">
 <li><strong>硬件上电阶段（Power-On）</strong>
 <ul>
@@ -482,7 +482,7 @@ BIOS</strong>的工作原理，这是理解现代 UEFI 的基础。UEFI
 <li>启动第一个进程。</li>
 </ul></li>
 </ol>
-<h3 id="bios-在哪里">🧠 BIOS 在哪里？</h3>
+<h2 id="bios-在哪里">🧠 BIOS 在哪里？</h2>
 <ul>
 <li>固化在主板上的 EEPROM / SPI Flash 芯片里。</li>
 <li>地址通常映射到物理内存高端（如 <code>0xF0000-0xFFFFF</code>
@@ -674,8 +674,8 @@ SPI Flash/EEPROM 芯片中读取数据。</li>
 </tr>
 </tbody>
 </table>
-<h3 id="bios-的四大职责">🧱 BIOS 的四大职责</h3>
-<h4 id="post">🔍 POST</h4>
+<h2 id="bios-的四大职责">🧱 BIOS 的四大职责</h2>
+<h3 id="post">🔍 POST</h3>
 <p><strong>加电自检（POST）</strong>：验证
 CPU、内存、显卡、键盘等核心器件是否健康。</p>
 <table>
@@ -714,7 +714,7 @@ CPU、内存、显卡、键盘等核心器件是否健康。</p>
 </tr>
 </tbody>
 </table>
-<h4 id="硬件初始化">🛠️ 硬件初始化</h4>
+<h3 id="硬件初始化">🛠️ 硬件初始化</h3>
 <p><strong>硬件初始化</strong>：配置芯片组、显卡、磁盘控制器，为系统做好底层环境。</p>
 <table>
 <colgroup>
@@ -752,7 +752,7 @@ CPU、内存、显卡、键盘等核心器件是否健康。</p>
 </tr>
 </tbody>
 </table>
-<h4 id="建立中断向量表">建立中断向量表</h4>
+<h3 id="建立中断向量表">建立中断向量表</h3>
 <p>BIOS 在内存最低地址 (<code>0x00000 - 0x003FF</code>)
 建立中断向量表(RAM中，因此可修改)：</p>
 <p><strong>实模式中断向量表 (IVT) 结构：</strong></p>
@@ -860,7 +860,7 @@ INT 0x10 为例（IVT 地址 <code>0x0040</code>）：</p>
 <li>这种顺序与实模式下的段:偏移寻址方式一致：<code>物理地址 = CS × 16 + IP</code>。</li>
 </ul>
 </blockquote>
-<h4 id="引导加载">🚀 引导加载</h4>
+<h3 id="引导加载">🚀 引导加载</h3>
 <p><strong>引导加载流程：</strong></p>
 <ol type="1">
 <li><p><strong>读取 CMOS 获取启动设备顺序</strong></p></li>
@@ -1046,7 +1046,7 @@ Table）</strong>：</p>
 GUID、名称、起始/结束 LBA 等</li>
 <li><strong>备份分区表</strong>：磁盘末尾有完整备份</li>
 </ul>
-<h3 id="bios-中断服务详解">🔌 BIOS 中断服务详解</h3>
+<h2 id="bios-中断服务详解">🔌 BIOS 中断服务详解</h2>
 <p><strong>中断是什么？</strong></p>
 <p>中断（Interrupt）是 CPU
 暂停当前执行流程，转而去处理特定事件或请求的机制。中断分为三类：</p>
@@ -1086,7 +1086,7 @@ IVT。</li>
 会通过页表转换为物理地址。</li>
 </ul>
 <p>BIOS 提供了一系列中断服务，让引导程序可以使用硬件：</p>
-<h4 id="深入理解中断向量表-ivt">💡 深入理解：中断向量表 (IVT)</h4>
+<h3 id="深入理解中断向量表-ivt">💡 深入理解：中断向量表 (IVT)</h3>
 <p>在实模式下，BIOS 中断是通过中断向量表（Interrupt Vector Table,
 IVT）来实现的。</p>
 <p><strong>IVT 的结构：</strong></p>
@@ -1160,7 +1160,7 @@ IVT）来实现的。</p>
 </tr>
 </tbody>
 </table>
-<h4 id="中断调用过程">🔄 中断调用过程</h4>
+<h3 id="中断调用过程">🔄 中断调用过程</h3>
 <p>当执行 <code>int 0x10</code> 时，CPU 自动执行以下步骤：</p>
 <ol type="1">
 <li><p><strong>将 FLAGS 寄存器压栈（保存状态）</strong>
@@ -1228,7 +1228,7 @@ AX、BX、CX、DX、SI、DI、BP、DS、ES 等）。</li>
 <li><p><strong>跳转到 BIOS 代码</strong> <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">jmp [读取的CS]:[读取的IP]</span><br></pre></td></tr></table></figure></p></li>
 <li><p><strong>BIOS 处理并返回</strong> <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">iret (恢复现场)</span><br></pre></td></tr></table></figure></p></li>
 </ol>
-<h4 id="常见中断向量">📋 常见中断向量</h4>
+<h3 id="常见中断向量">📋 常见中断向量</h3>
 <table>
 <thead>
 <tr>
@@ -1313,10 +1313,10 @@ AX、BX、CX、DX、SI、DI、BP、DS、ES 等）。</li>
 </tr>
 </tbody>
 </table>
-<h4 id="自定义中断向量示例">💻 自定义中断向量示例</h4>
+<h3 id="自定义中断向量示例">💻 自定义中断向量示例</h3>
 <p>安装自定义的 INT 0x80 处理程序（类似 Linux 系统调用）：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">my_int80_handler:</span><br><span class="line">    ; 处理逻辑</span><br><span class="line">    cmp ah, 0x01</span><br><span class="line">    je print_string    ; 功能1:打印字符串</span><br><span class="line">    ; ...</span><br><span class="line">    iret              ; 必须用iret返回!</span><br><span class="line"></span><br><span class="line">install_handler:</span><br><span class="line">    cli               ; 关闭中断</span><br><span class="line">    ; 计算IVT地址: 0x80 × 4 = 0x200</span><br><span class="line">    xor ax, ax</span><br><span class="line">    mov es, ax        ; ES = 0</span><br><span class="line">    mov bx, 0x0200    ; 偏移 = 0x200</span><br><span class="line">    </span><br><span class="line">    ; 写入偏移地址</span><br><span class="line">    mov word [es:bx], my_int80_handler</span><br><span class="line">    ; 写入段地址</span><br><span class="line">    mov word [es:bx+2], cs</span><br><span class="line">    </span><br><span class="line">    sti               ; 恢复中断</span><br><span class="line">    ret</span><br></pre></td></tr></table></figure>
-<h4 id="重要注意事项">⚠️ 重要注意事项</h4>
+<h3 id="重要注意事项">⚠️ 重要注意事项</h3>
 <ol type="1">
 <li><strong>保护模式下 IVT 不可用</strong>
 <ul>
@@ -1351,8 +1351,8 @@ IF=0，避免中断嵌套；处理完毕后通常用 <code>iret</code> 恢复原
 状态，或通过 <code>sti</code> 手动重新开启。</li>
 </ul>
 </blockquote>
-<h3 id="常用-bios-中断服务详解">📺 常用 BIOS 中断服务详解</h3>
-<h4 id="int-0x10---视频服务">INT 0x10 - 视频服务</h4>
+<h2 id="常用-bios-中断服务详解">📺 常用 BIOS 中断服务详解</h2>
+<h3 id="int-0x10---视频服务">INT 0x10 - 视频服务</h3>
 <p>这是我们在引导程序中最常用的中断之一。</p>
 <table>
 <thead>
@@ -1419,7 +1419,7 @@ AH、BH）：</p>
 </blockquote>
 <p><strong>示例：输出 <code>Hello</code> 到屏幕</strong></p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mov ah, 0x0E    ; 功能号:Teletype输出</span><br><span class="line">mov al, &#x27;H&#x27;     ; 字符</span><br><span class="line">int 0x10        ; 调用BIOS</span><br><span class="line">;重复输出e, l, l, o</span><br></pre></td></tr></table></figure>
-<h4 id="int-0x13---磁盘服务">INT 0x13 - 磁盘服务</h4>
+<h3 id="int-0x13---磁盘服务">INT 0x13 - 磁盘服务</h3>
 <p>用于读写磁盘扇区：</p>
 <table>
 <colgroup>
@@ -1475,7 +1475,7 @@ AH、BH）：</p>
 </tr>
 </tbody>
 </table>
-<h4 id="chs-寻址模式">CHS 寻址模式</h4>
+<h3 id="chs-寻址模式">CHS 寻址模式</h3>
 <ul>
 <li><strong>C (Cylinder)</strong>：柱面号: 0-1023</li>
 <li><strong>H (Head)</strong>：磁头号: 0-255</li>
@@ -1483,7 +1483,7 @@ AH、BH）：</p>
 </ul>
 <p><strong>计算公式：</strong></p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">物理扇区号 = (C × 磁头数 + H) × 每磁道扇区数 + (S - 1)</span><br></pre></td></tr></table></figure>
-<h4 id="int-0x16---键盘服务">INT 0x16 - 键盘服务</h4>
+<h3 id="int-0x16---键盘服务">INT 0x16 - 键盘服务</h3>
 <table>
 <thead>
 <tr>
@@ -1510,7 +1510,7 @@ AH、BH）：</p>
 </tr>
 </tbody>
 </table>
-<h4 id="int-0x15---系统服务">INT 0x15 - 系统服务</h4>
+<h3 id="int-0x15---系统服务">INT 0x15 - 系统服务</h3>
 <table>
 <thead>
 <tr>

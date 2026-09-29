@@ -30,7 +30,7 @@
 <meta property="og:description" content="TPM（Trusted Platform Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的 BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-08-25T06:03:27.000Z">
-<meta property="article:modified_time" content="2026-09-10T03:34:17.796Z">
+<meta property="article:modified_time" content="2026-09-29T00:41:03.190Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="机密计算">
@@ -176,14 +176,14 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E6%98%AF%E4%BB%80%E4%B9%88%E4%B8%80%E5%8F%B0%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA%E7%9A%84%E4%BF%9D%E9%99%A9%E7%AE%B1%E7%94%B5%E8%84%91"><span class="nav-number">2.</span> <span class="nav-text">🏦 TPM
-是什么：一台只进不出的保险箱电脑</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E7%9A%84%E4%B8%89%E5%A4%A7%E6%A0%B8%E5%BF%83%E8%83%BD%E5%8A%9B"><span class="nav-number">3.</span> <span class="nav-text">🧬 TPM 的三大核心能力</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BA%A6%E9%87%8Fmeasurementpcr-%E4%B8%8E%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA"><span class="nav-number">3.1.</span> <span class="nav-text">① 度量（Measurement）：PCR
-与只进不出</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AD%98%E5%82%A8sealing%E5%AF%86%E5%B0%81%E9%92%A5%E5%8C%99%E5%92%8C%E7%8A%B6%E6%80%81%E7%BB%91%E5%AE%9A"><span class="nav-number">3.2.</span> <span class="nav-text">②
-存储（Sealing，密封）：钥匙和状态绑定</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AE%A4%E8%AF%81attestationaik-%E4%B8%8E-quote"><span class="nav-number">3.3.</span> <span class="nav-text">③ 认证（Attestation）：AIK 与
-Quote</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tpm-%E6%98%AF%E7%A1%AC%E4%BB%B6%E8%BF%98%E6%98%AF%E8%BD%AF%E4%BB%B6"><span class="nav-number">4.</span> <span class="nav-text">💻 TPM 是硬件还是软件？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tcg-%E6%98%AF%E5%95%A5"><span class="nav-number">5.</span> <span class="nav-text">🏛 TCG 是啥？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%94%A8%E6%88%B7%E6%80%8E%E4%B9%88%E8%AE%BF%E9%97%AE-tpm"><span class="nav-number">6.</span> <span class="nav-text">🛠 用户怎么访问 TPM</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BD%A0%E5%85%B6%E5%AE%9E%E5%B7%B2%E7%BB%8F%E5%9C%A8%E7%94%A8-tpm%E4%B8%89%E4%B8%AA%E6%97%A5%E5%B8%B8%E5%9C%BA%E6%99%AF"><span class="nav-number">7.</span> <span class="nav-text">🖥 你其实已经在用
-TPM：三个日常场景</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#blob-%E4%B8%8E%E4%B8%A4%E5%B1%82%E5%8A%A0%E5%AF%86"><span class="nav-number">8.</span> <span class="nav-text">🔑 blob 与两层加密</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%86%E9%92%A5%E6%A0%91%E4%B8%8E-nvram%E5%AE%B9%E5%99%A8%E5%92%8C%E7%BB%93%E6%9E%84%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="nav-number">9.</span> <span class="nav-text">🧅 密钥树与
-NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E4%BE%8B%E5%AD%90%E7%94%A8-tpm-%E5%8A%A0%E5%AF%86%E4%B8%80%E4%B8%AA%E6%96%87%E4%BB%B66-%E6%AD%A5"><span class="nav-number">10.</span> <span class="nav-text">🎬 完整例子：用 TPM
-加密一个文件（6 步）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">11.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tpm-%E6%98%AF%E4%BB%80%E4%B9%88%E4%B8%80%E5%8F%B0%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA%E7%9A%84%E4%BF%9D%E9%99%A9%E7%AE%B1%E7%94%B5%E8%84%91"><span class="nav-number">2.</span> <span class="nav-text">🏦 TPM
+是什么：一台只进不出的保险箱电脑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tpm-%E7%9A%84%E4%B8%89%E5%A4%A7%E6%A0%B8%E5%BF%83%E8%83%BD%E5%8A%9B"><span class="nav-number">3.</span> <span class="nav-text">🧬 TPM 的三大核心能力</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BA%A6%E9%87%8Fmeasurementpcr-%E4%B8%8E%E5%8F%AA%E8%BF%9B%E4%B8%8D%E5%87%BA"><span class="nav-number">3.1.</span> <span class="nav-text">① 度量（Measurement）：PCR
+与只进不出</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%98%E5%82%A8sealing%E5%AF%86%E5%B0%81%E9%92%A5%E5%8C%99%E5%92%8C%E7%8A%B6%E6%80%81%E7%BB%91%E5%AE%9A"><span class="nav-number">3.2.</span> <span class="nav-text">②
+存储（Sealing，密封）：钥匙和状态绑定</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%A4%E8%AF%81attestationaik-%E4%B8%8E-quote"><span class="nav-number">3.3.</span> <span class="nav-text">③ 认证（Attestation）：AIK 与
+Quote</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tpm-%E6%98%AF%E7%A1%AC%E4%BB%B6%E8%BF%98%E6%98%AF%E8%BD%AF%E4%BB%B6"><span class="nav-number">4.</span> <span class="nav-text">💻 TPM 是硬件还是软件？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tcg-%E6%98%AF%E5%95%A5"><span class="nav-number">5.</span> <span class="nav-text">🏛 TCG 是啥？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%94%A8%E6%88%B7%E6%80%8E%E4%B9%88%E8%AE%BF%E9%97%AE-tpm"><span class="nav-number">6.</span> <span class="nav-text">🛠 用户怎么访问 TPM</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BD%A0%E5%85%B6%E5%AE%9E%E5%B7%B2%E7%BB%8F%E5%9C%A8%E7%94%A8-tpm%E4%B8%89%E4%B8%AA%E6%97%A5%E5%B8%B8%E5%9C%BA%E6%99%AF"><span class="nav-number">7.</span> <span class="nav-text">🖥 你其实已经在用
+TPM：三个日常场景</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#blob-%E4%B8%8E%E4%B8%A4%E5%B1%82%E5%8A%A0%E5%AF%86"><span class="nav-number">8.</span> <span class="nav-text">🔑 blob 与两层加密</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%86%E9%92%A5%E6%A0%91%E4%B8%8E-nvram%E5%AE%B9%E5%99%A8%E5%92%8C%E7%BB%93%E6%9E%84%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="nav-number">9.</span> <span class="nav-text">🧅 密钥树与
+NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E4%BE%8B%E5%AD%90%E7%94%A8-tpm-%E5%8A%A0%E5%AF%86%E4%B8%80%E4%B8%AA%E6%96%87%E4%BB%B66-%E6%AD%A5"><span class="nav-number">10.</span> <span class="nav-text">🎬 完整例子：用 TPM
+加密一个文件（6 步）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">11.</span> <span class="nav-text">⚠️ 常见误区</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -275,7 +275,7 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 11:34:17" itemprop="dateModified" datetime="2026-09-10T11:34:17+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-29 08:41:03" itemprop="dateModified" datetime="2026-09-29T08:41:03+08:00">2026-09-29</time>
     </span>
 
   
@@ -313,7 +313,7 @@ NVRAM：容器和结构的关系</span></a></li><li class="nav-item nav-level-3"
 Module，可信平台模块）是主板上专门做密码运算的安全芯片，Windows 的
 BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的原理。</p>
 <span id="more"></span>
-<h3 id="基本概念速读">📚 基本概念速读</h3>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -385,8 +385,8 @@ BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的
 </tr>
 </tbody>
 </table>
-<h3 id="tpm-是什么一台只进不出的保险箱电脑">🏦 TPM
-是什么：一台只进不出的保险箱电脑</h3>
+<h2 id="tpm-是什么一台只进不出的保险箱电脑">🏦 TPM
+是什么：一台只进不出的保险箱电脑</h2>
 <p><strong>TPM（Trusted Platform Module，可信平台模块）</strong>
 是一颗独立的<strong>密码协处理器芯片</strong>，焊在主板上（PCIe/SPI
 总线连接）。它干的事：给你提供<strong>基于硬件的密钥存储和加密运算</strong>，密钥永远锁在芯片里，谁也拷不走。</p>
@@ -395,9 +395,9 @@ BitLocker、指纹登录等安全功能都依赖它。本文从零理解 TPM 的
 <p><strong>最重要的一条规矩：密钥一旦生成就锁在保险柜里，任何软件都拿不到密钥本身</strong>。你只能让它用这把钥匙帮你签名——它签完把结果给你，钥匙还在柜子里。</p>
 <p>TPM 是<strong>行业标准</strong>（TCG 定义，ISO/IEC 11889），Windows
 11 强制要求，几乎所有新主板都带。</p>
-<h3 id="tpm-的三大核心能力">🧬 TPM 的三大核心能力</h3>
-<h4 id="度量measurementpcr-与只进不出">① 度量（Measurement）：PCR
-与只进不出</h4>
+<h2 id="tpm-的三大核心能力">🧬 TPM 的三大核心能力</h2>
+<h3 id="度量measurementpcr-与只进不出">① 度量（Measurement）：PCR
+与只进不出</h3>
 <p>平台启动时，逐级测量并记录：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">平台启动时逐级测量：</span><br><span class="line">  固件 → 引导程序 → 内核 → ...</span><br><span class="line">  每级算出哈希，PCR_Extend 进 PCR</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">PCR 新值 = SHA256( PCR旧值 || 新测量值 )   ← || 是拼接，不是按位或</span><br></pre></td></tr></table></figure>
 <p><strong>PCR（Platform Configuration
@@ -429,16 +429,16 @@ Extend 链里。</p>
 直接写成干净的值。Extend
 用哈希链保证历史不可抹除：账本只能往后加页，不能撕掉前面的页。</p>
 </blockquote>
-<h4 id="存储sealing密封钥匙和状态绑定">②
-存储（Sealing，密封）：钥匙和状态绑定</h4>
+<h3 id="存储sealing密封钥匙和状态绑定">②
+存储（Sealing，密封）：钥匙和状态绑定</h3>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">seal(key, PCR值集合)  →  这把钥匙只在一个特定状态下才能 unseal</span><br><span class="line"></span><br><span class="line">TPM 内部有密钥层级：</span><br><span class="line">  SRK（存储根密钥）→ 保护下面的所有子密钥</span><br><span class="line">  子密钥 → 保护应用的密钥</span><br><span class="line">像一棵树，根在芯片里，枝叶在外面（磁盘上）</span><br></pre></td></tr></table></figure>
 <p>这就是<strong>钥匙锁进保险箱，保险箱的门锁绑定系统状态</strong>——系统被篡改（PCR
 不对），unseal 直接失败。</p>
 <p><strong>sealing
 的本质价值</strong>：密钥和系统状态（PCR）绑定。<strong>就算攻击者偷走了整个硬盘/内存里的密文，只要这台机器的状态不是当初密封时的状态（或他把东西搬去别的机器），密钥就永远解不开。</strong>
 把密码保护升级成状态保护。</p>
-<h4 id="认证attestationaik-与-quote">③ 认证（Attestation）：AIK 与
-Quote</h4>
+<h3 id="认证attestationaik-与-quote">③ 认证（Attestation）：AIK 与
+Quote</h3>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -475,7 +475,7 @@ Quote</h4>
 <p>远程认证的经典玩法：验证方给个随机数 nonce → 被验证方 TPM 对 PCR +
 nonce 签名 → 验证方核对签名和 PCR 是否符合预期。nonce
 防重放，签名保证真实。</p>
-<h3 id="tpm-是硬件还是软件">💻 TPM 是硬件还是软件？</h3>
+<h2 id="tpm-是硬件还是软件">💻 TPM 是硬件还是软件？</h2>
 <p><strong>TPM 是一个逻辑规范，实现方式有多种。</strong> TPM 2.0
 规范（TCG
 定的）定义这台设备应该提供什么命令、什么语义，实现形态看厂商：</p>
@@ -521,19 +521,19 @@ nonce 签名 → 验证方核对签名和 PCR 是否符合预期。nonce
 计算并提取了保护密钥。这也是机密计算里做 <strong>CTPM（机密
 TPM）</strong> 的动机之一。</p>
 </blockquote>
-<h3 id="tcg-是啥">🏛 TCG 是啥？</h3>
+<h2 id="tcg-是啥">🏛 TCG 是啥？</h2>
 <p><strong>TCG（Trusted Computing Group，可信计算组织）</strong>
 是一个国际标准组织（成员包括 AMD、Intel、Microsoft、IBM
 等），<strong>负责制定 TPM 的规范</strong>。类比：TCG 是国标委，TPM 2.0
 规范是它发布的标准，各家芯片厂（英飞凌、国民技术等）按标准造芯片。TCG
 还定义了 <strong>TSS（TCG Software Stack）</strong>——应用程序访问 TPM
 的统一接口库。</p>
-<h3 id="用户怎么访问-tpm">🛠 用户怎么访问 TPM</h3>
+<h2 id="用户怎么访问-tpm">🛠 用户怎么访问 TPM</h2>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">用户 → TSS 软件栈（tpm2-tools 等）→ TPM 芯片</span><br><span class="line">       ↑</span><br><span class="line">    tpm2_pcrread      读 PCR</span><br><span class="line">    tpm2_createkey    生成密钥</span><br><span class="line">    tpm2_sign         用密钥签名</span><br><span class="line">    tpm2_quote        做远程认证</span><br><span class="line">    tpm2_nvwrite      写 NVRAM（需要授权）</span><br></pre></td></tr></table></figure>
 <p>命令行示例（Linux 上可跑）：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">tpm2_pcrread sha256:0          <span class="comment"># 读 PCR 0 的值</span></span><br><span class="line">tpm2_createprimary -c owner.ctx <span class="comment"># 在 Owner 层级下创建主密钥</span></span><br><span class="line">tpm2_quote -c aik.ctx -l sha256:0,1 -m quote.bin -s sig.bin  <span class="comment"># 做认证</span></span><br></pre></td></tr></table></figure>
-<h3 id="你其实已经在用-tpm三个日常场景">🖥 你其实已经在用
-TPM：三个日常场景</h3>
+<h2 id="你其实已经在用-tpm三个日常场景">🖥 你其实已经在用
+TPM：三个日常场景</h2>
 <p><strong>场景 A：BitLocker（磁盘加密）——用 TPM
 保管磁盘密钥</strong></p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">① 启用 BitLocker，系统让 TPM 生成/存入&quot;磁盘加密密钥&quot;</span><br><span class="line">② 开机时：</span><br><span class="line">   系统问 TPM：&quot;当前 PCR 值是多少？符合预期吗？&quot;</span><br><span class="line">   TPM 比对 → 符合 → 释放密钥 → 系统解密磁盘</span><br><span class="line">            → 不符合（换了引导程序、有人改启动项）</span><br><span class="line">              → 拒绝释放 → 屏幕让你插恢复 U 盘</span><br></pre></td></tr></table></figure>
@@ -546,7 +546,7 @@ TPM：三个日常场景</h3>
 <p>注意 PCR 值来自 TPM
 自己的保险柜，<strong>不是软件报告的</strong>——软件想谎报
 PCR？它没有权限写 PCR。</p>
-<h3 id="blob-与两层加密">🔑 blob 与两层加密</h3>
+<h2 id="blob-与两层加密">🔑 blob 与两层加密</h2>
 <p><strong>blob = Binary Large Object（二进制大对象）</strong>，在 TPM
 语境里特指被父密钥加密后的密钥对象文件：</p>
 <p>磁盘上的一个密钥文件（比如 keyA.bin）：</p>
@@ -559,8 +559,8 @@ PCR？它没有权限写 PCR。</p>
 <p>类比三层套娃：保险箱（SRK，永远在芯片内）→ 钥匙盒（blob，里面是加密的
 AES 密钥材料）→ 信（数据，用这把钥匙加密）。blob
 保护钥匙不泄露，数据密文保护内容不泄露，各管一层。</p>
-<h3 id="密钥树与-nvram容器和结构的关系">🧅 密钥树与
-NVRAM：容器和结构的关系</h3>
+<h2 id="密钥树与-nvram容器和结构的关系">🧅 密钥树与
+NVRAM：容器和结构的关系</h2>
 <p><strong>TPM 密钥体系是洋葱式的，绝大多数密钥根本不在 TPM
 芯片里</strong>：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">芯片内（NVRAM/内部）：SRK、EK、种子（根节点）</span><br><span class="line">芯片外（磁盘/文件）：  所有子密钥 = &quot;用父密钥加密的 blob&quot;</span><br><span class="line">                          ↓ 要用时，blob 装进 TPM，父密钥在芯片内解开</span><br></pre></td></tr></table></figure>
@@ -627,8 +627,8 @@ NVRAM：容器和结构的关系</h3>
 <p>密钥树的<strong>根</strong>（SRK/种子）必须呆在芯片内；<strong>枝叶</strong>（blob）可以放
 NVRAM，也可以放外部磁盘（更常见）。小结：<strong>密钥树是家谱，NVRAM
 是保险柜里的抽屉；重要的东西锁在抽屉里，其余的放在外面的保险箱（加密磁盘）里也一样安全。</strong></p>
-<h3 id="完整例子用-tpm-加密一个文件6-步">🎬 完整例子：用 TPM
-加密一个文件（6 步）</h3>
+<h2 id="完整例子用-tpm-加密一个文件6-步">🎬 完整例子：用 TPM
+加密一个文件（6 步）</h2>
 <p><strong>场景</strong>：把 <code>存折密码.txt</code>
 加密，要求只有这台机器、且系统没被动过手脚时才能解开。</p>
 <p><strong>Step 1：芯片初始化</strong>（出厂时发生，不是你做的）</p>
@@ -650,7 +650,7 @@ NVRAM，也可以放外部磁盘（更常见）。小结：<strong>密钥树是�
 <p><strong>TPM
 的工作模式</strong>：秘密（密钥）永远在芯片里；你永远只能命令它（加载
 blob、让它解密、让它签名）；它永远只把结果给你，不给秘密。</p>
-<h3 id="常见误区">⚠️ 常见误区</h3>
+<h2 id="常见误区">⚠️ 常见误区</h2>
 <table>
 <colgroup>
 <col style="width: 50%" />
@@ -702,7 +702,7 @@ blob</td>
 </tr>
 </tbody>
 </table>
-<h3 id="总结">✅ 总结</h3>
+<h2 id="总结">✅ 总结</h2>
 <blockquote>
 <p>TPM
 是一台只能通过命令指挥、密钥永不出柜的保险箱电脑：根密钥锁芯片内，子密钥以

@@ -30,7 +30,7 @@
 <meta property="og:description" content="如果把 CPU 比作“多才多艺的总管”，GPU 更像“高效的流水线工厂”：CPU 擅长复杂分支与少量任务的低延迟处理，GPU 擅长大量相同&#x2F;相似任务的高吞吐处理。本文先给出关键概念，再用 CPU 对比串起 GPU 的架构、执行模型、内存层次与性能要点。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-08-10T09:38:06.000Z">
-<meta property="article:modified_time" content="2026-09-10T03:34:17.808Z">
+<meta property="article:modified_time" content="2026-09-29T00:41:02.698Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CPU">
@@ -174,13 +174,13 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5"><span class="nav-number">1.</span> <span class="nav-text">📚 核心概念</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cpu-vs-gpu%E8%AE%BE%E8%AE%A1%E5%8F%96%E8%88%8D%E4%B8%80%E5%9B%BE%E7%9C%8B%E6%87%82"><span class="nav-number">2.</span> <span class="nav-text">🆚 CPU vs GPU：设计取舍一图看懂</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#gpu-%E6%9E%B6%E6%9E%84%E9%80%9F%E5%86%99%E6%8A%BD%E8%B1%A1"><span class="nav-number">3.</span> <span class="nav-text">🧩 GPU 架构速写（抽象）</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#smcu-%E8%AF%A6%E8%A7%A3%E5%81%9A%E4%BB%80%E4%B9%88-%E6%80%8E%E4%B9%88%E8%B0%83%E5%BA%A6"><span class="nav-number">3.1.</span> <span class="nav-text">SM&#x2F;CU 详解（做什么 + 怎么调度）</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%89%A7%E8%A1%8C%E6%A8%A1%E5%9E%8Bsimt-%E4%B8%8E-warp-%E5%A6%82%E4%BD%95%E9%85%8D%E5%90%88"><span class="nav-number">4.</span> <span class="nav-text">⚙️ 执行模型：SIMT 与 Warp
-如何配合</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%88%86%E6%AD%A7%E4%BC%9A%E9%99%8D%E4%BD%8E%E5%88%A9%E7%94%A8%E7%8E%87"><span class="nav-number">4.1.</span> <span class="nav-text">为什么分歧会降低利用率</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%B1%82%E6%AC%A1%E4%B8%8E%E6%95%B0%E6%8D%AE%E8%B7%AF%E5%BE%84%E8%B6%8A%E8%BF%91%E8%B6%8A%E5%BF%AB"><span class="nav-number">5.</span> <span class="nav-text">📦
-内存层次与数据路径（越近越快）</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%B1%82%E6%AC%A1%E8%A1%A5%E5%85%85%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98-vs-%E7%BC%93%E5%AD%98%E4%BA%8B%E5%8A%A1%E4%B8%8E-bank"><span class="nav-number">5.1.</span> <span class="nav-text">内存层次补充（共享内存
-vs 缓存、事务与 bank）</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#pcie-%E4%B8%8E-nvlink-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">5.2.</span> <span class="nav-text">PCIe 与 NVLink 是什么？</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BB%B6%E8%BF%9F-vs-%E5%B8%A6%E5%AE%BD"><span class="nav-number">5.3.</span> <span class="nav-text">延迟 vs 带宽</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E8%A6%81%E7%82%B9"><span class="nav-number">6.</span> <span class="nav-text">🚀 性能要点</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9C%80%E5%B0%8F%E5%B7%A5%E4%BD%9C%E6%B5%81"><span class="nav-number">7.</span> <span class="nav-text">🧪 最小工作流</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A4%BA%E4%BE%8B%E6%9C%80%E5%B0%8F-cuda-kernel%E7%9B%B4%E8%A7%89%E5%BB%BA%E7%AB%8B"><span class="nav-number">8.</span> <span class="nav-text">🧾 示例：最小 CUDA
-Kernel（直觉建立）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BD%95%E6%97%B6%E7%94%A8-gpu%E4%BD%95%E6%97%B6%E7%94%A8-cpu"><span class="nav-number">9.</span> <span class="nav-text">🤔 何时用 GPU，何时用 CPU？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">10.</span> <span class="nav-text">🧨 常见误区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%88%86%E6%AD%A7%E5%8F%AF%E8%A7%86%E5%8C%96%E6%97%A0%E5%88%86%E6%AD%A7-vs-%E6%9C%89%E5%88%86%E6%AD%A7"><span class="nav-number">11.</span> <span class="nav-text">👀 分歧可视化（无分歧 vs
-有分歧）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 小结</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BF%E5%AD%98%E6%A8%A1%E5%BC%8F%E5%AF%B9%E6%AF%94aos-vs-soa%E5%90%88%E5%B9%B6%E8%AE%BF%E5%AD%98%E6%9B%B4%E5%8F%8B%E5%A5%BD"><span class="nav-number">13.</span> <span class="nav-text">🧭 访存模式对比：AoS vs
-SoA（合并访存更友好）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BC%A0%E9%87%8F%E6%A0%B8%E5%BF%83%E4%B8%8E%E6%B7%B7%E5%90%88%E7%B2%BE%E5%BA%A6dl-%E5%B8%B8%E8%A7%81"><span class="nav-number">14.</span> <span class="nav-text">🧱 张量核心与混合精度（DL 常见）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E6%8C%87%E6%A0%87%E4%B8%8E%E5%B7%A5%E5%85%B7"><span class="nav-number">15.</span> <span class="nav-text">🧰 性能指标与工具</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E5%9D%91%E6%B8%85%E5%8D%95%E9%81%BF%E5%9D%91%E9%80%9F%E8%A7%88"><span class="nav-number">16.</span> <span class="nav-text">⚠️ 常见坑清单（避坑速览）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BB%E6%9C%BA-%E8%AE%BE%E5%A4%87%E6%95%B0%E6%8D%AE%E9%80%9A%E9%81%93%E4%BC%98%E5%8C%96"><span class="nav-number">17.</span> <span class="nav-text">🔗 主机-设备数据通道优化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%9A-gpu-%E4%B8%8E%E9%80%9A%E4%BF%A1%E5%85%A5%E9%97%A8%E5%90%91"><span class="nav-number">18.</span> <span class="nav-text">🧬 多 GPU 与通信（入门向）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9C%AF%E8%AF%AD%E9%80%9F%E6%9F%A5"><span class="nav-number">19.</span> <span class="nav-text">📒 术语速查</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5"><span class="nav-number">1.</span> <span class="nav-text">📚 核心概念</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#cpu-vs-gpu%E8%AE%BE%E8%AE%A1%E5%8F%96%E8%88%8D%E4%B8%80%E5%9B%BE%E7%9C%8B%E6%87%82"><span class="nav-number">2.</span> <span class="nav-text">🆚 CPU vs GPU：设计取舍一图看懂</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#gpu-%E6%9E%B6%E6%9E%84%E9%80%9F%E5%86%99%E6%8A%BD%E8%B1%A1"><span class="nav-number">3.</span> <span class="nav-text">🧩 GPU 架构速写（抽象）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#smcu-%E8%AF%A6%E8%A7%A3%E5%81%9A%E4%BB%80%E4%B9%88-%E6%80%8E%E4%B9%88%E8%B0%83%E5%BA%A6"><span class="nav-number">3.1.</span> <span class="nav-text">SM&#x2F;CU 详解（做什么 + 怎么调度）</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%89%A7%E8%A1%8C%E6%A8%A1%E5%9E%8Bsimt-%E4%B8%8E-warp-%E5%A6%82%E4%BD%95%E9%85%8D%E5%90%88"><span class="nav-number">4.</span> <span class="nav-text">⚙️ 执行模型：SIMT 与 Warp
+如何配合</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%88%86%E6%AD%A7%E4%BC%9A%E9%99%8D%E4%BD%8E%E5%88%A9%E7%94%A8%E7%8E%87"><span class="nav-number">4.1.</span> <span class="nav-text">为什么分歧会降低利用率</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%B1%82%E6%AC%A1%E4%B8%8E%E6%95%B0%E6%8D%AE%E8%B7%AF%E5%BE%84%E8%B6%8A%E8%BF%91%E8%B6%8A%E5%BF%AB"><span class="nav-number">5.</span> <span class="nav-text">📦
+内存层次与数据路径（越近越快）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%B1%82%E6%AC%A1%E8%A1%A5%E5%85%85%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98-vs-%E7%BC%93%E5%AD%98%E4%BA%8B%E5%8A%A1%E4%B8%8E-bank"><span class="nav-number">5.1.</span> <span class="nav-text">内存层次补充（共享内存
+vs 缓存、事务与 bank）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#pcie-%E4%B8%8E-nvlink-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">5.2.</span> <span class="nav-text">PCIe 与 NVLink 是什么？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BB%B6%E8%BF%9F-vs-%E5%B8%A6%E5%AE%BD"><span class="nav-number">5.3.</span> <span class="nav-text">延迟 vs 带宽</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E8%A6%81%E7%82%B9"><span class="nav-number">6.</span> <span class="nav-text">🚀 性能要点</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9C%80%E5%B0%8F%E5%B7%A5%E4%BD%9C%E6%B5%81"><span class="nav-number">7.</span> <span class="nav-text">🧪 最小工作流</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%A4%BA%E4%BE%8B%E6%9C%80%E5%B0%8F-cuda-kernel%E7%9B%B4%E8%A7%89%E5%BB%BA%E7%AB%8B"><span class="nav-number">8.</span> <span class="nav-text">🧾 示例：最小 CUDA
+Kernel（直觉建立）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BD%95%E6%97%B6%E7%94%A8-gpu%E4%BD%95%E6%97%B6%E7%94%A8-cpu"><span class="nav-number">9.</span> <span class="nav-text">🤔 何时用 GPU，何时用 CPU？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E8%AF%AF%E5%8C%BA"><span class="nav-number">10.</span> <span class="nav-text">🧨 常见误区</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%86%E6%AD%A7%E5%8F%AF%E8%A7%86%E5%8C%96%E6%97%A0%E5%88%86%E6%AD%A7-vs-%E6%9C%89%E5%88%86%E6%AD%A7"><span class="nav-number">11.</span> <span class="nav-text">👀 分歧可视化（无分歧 vs
+有分歧）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">✅ 小结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AE%BF%E5%AD%98%E6%A8%A1%E5%BC%8F%E5%AF%B9%E6%AF%94aos-vs-soa%E5%90%88%E5%B9%B6%E8%AE%BF%E5%AD%98%E6%9B%B4%E5%8F%8B%E5%A5%BD"><span class="nav-number">13.</span> <span class="nav-text">🧭 访存模式对比：AoS vs
+SoA（合并访存更友好）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BC%A0%E9%87%8F%E6%A0%B8%E5%BF%83%E4%B8%8E%E6%B7%B7%E5%90%88%E7%B2%BE%E5%BA%A6dl-%E5%B8%B8%E8%A7%81"><span class="nav-number">14.</span> <span class="nav-text">🧱 张量核心与混合精度（DL 常见）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E6%8C%87%E6%A0%87%E4%B8%8E%E5%B7%A5%E5%85%B7"><span class="nav-number">15.</span> <span class="nav-text">🧰 性能指标与工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B8%B8%E8%A7%81%E5%9D%91%E6%B8%85%E5%8D%95%E9%81%BF%E5%9D%91%E9%80%9F%E8%A7%88"><span class="nav-number">16.</span> <span class="nav-text">⚠️ 常见坑清单（避坑速览）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BB%E6%9C%BA-%E8%AE%BE%E5%A4%87%E6%95%B0%E6%8D%AE%E9%80%9A%E9%81%93%E4%BC%98%E5%8C%96"><span class="nav-number">17.</span> <span class="nav-text">🔗 主机-设备数据通道优化</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A4%9A-gpu-%E4%B8%8E%E9%80%9A%E4%BF%A1%E5%85%A5%E9%97%A8%E5%90%91"><span class="nav-number">18.</span> <span class="nav-text">🧬 多 GPU 与通信（入门向）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9C%AF%E8%AF%AD%E9%80%9F%E6%9F%A5"><span class="nav-number">19.</span> <span class="nav-text">📒 术语速查</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -272,7 +272,7 @@ SoA（合并访存更友好）</span></a></li><li class="nav-item nav-level-3"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-10 11:34:17" itemprop="dateModified" datetime="2026-09-10T11:34:17+08:00">2026-09-10</time>
+      <time title="Modified: 2026-09-29 08:41:02" itemprop="dateModified" datetime="2026-09-29T08:41:02+08:00">2026-09-29</time>
     </span>
 
   
@@ -311,7 +311,7 @@ SoA（合并访存更友好）</span></a></li><li class="nav-item nav-level-3"><
 擅长大量相同/相似任务的高吞吐处理。本文先给出关键概念，再用 CPU 对比串起
 GPU 的架构、执行模型、内存层次与性能要点。</p>
 <span id="more"></span>
-<h3 id="核心概念">📚 核心概念</h3>
+<h2 id="核心概念">📚 核心概念</h2>
 <ul>
 <li>指令级并行 ILP（Instruction-Level Parallelism）
 <ul>
@@ -361,7 +361,7 @@ Unit）上被调度执行。</li>
 <li>省流：越近越快、越远越慢；把常用东西放在手边。</li>
 </ul></li>
 </ul>
-<h3 id="cpu-vs-gpu设计取舍一图看懂">🆚 CPU vs GPU：设计取舍一图看懂</h3>
+<h2 id="cpu-vs-gpu设计取舍一图看懂">🆚 CPU vs GPU：设计取舍一图看懂</h2>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -408,7 +408,7 @@ Unit）上被调度执行。</li>
 </tr>
 </tbody>
 </table>
-<h3 id="gpu-架构速写抽象">🧩 GPU 架构速写（抽象）</h3>
+<h2 id="gpu-架构速写抽象">🧩 GPU 架构速写（抽象）</h2>
 <ul>
 <li>指挥与前端：命令处理、硬件队列、前端调度。</li>
 <li>计算集群：多个 SM（NVIDIA）/CU（AMD），含标量/向量
@@ -432,7 +432,7 @@ graph LR
     L2 --&gt; VRAM[显存 GDDR&#x2F;HBM]
 </code>
 </pre>
-<h4 id="smcu-详解做什么-怎么调度">SM/CU 详解（做什么 + 怎么调度）</h4>
+<h3 id="smcu-详解做什么-怎么调度">SM/CU 详解（做什么 + 怎么调度）</h3>
 <ul>
 <li>组成：一个 SM/CU 内通常包含多条算术逻辑管线（标量/向量
 ALU）、特殊函数单元（SFU，计算 sin/cos/exp
@@ -451,8 +451,8 @@ ALU）、特殊函数单元（SFU，计算 sin/cos/exp
 <li>班里每个学生（线程）要用的课本（寄存器）越多，教室能同时容纳的班级就越少。</li>
 </ul></li>
 </ul>
-<h3 id="执行模型simt-与-warp-如何配合">⚙️ 执行模型：SIMT 与 Warp
-如何配合</h3>
+<h2 id="执行模型simt-与-warp-如何配合">⚙️ 执行模型：SIMT 与 Warp
+如何配合</h2>
 <ul>
 <li>编程视角：写“每线程”的内核函数（kernel），通过 Grid/Block
 组织。这里的“每线程”指逻辑线程（thread），非
@@ -462,7 +462,7 @@ warp；硬件会把若干逻辑线程打包为 warp
 成组执行；遇分歧需串行化；遇访存等待就“切 Warp”。</li>
 <li>Warp 尺寸：NVIDIA 常见 32，AMD 常见 64（概念相同）。</li>
 </ul>
-<h4 id="为什么分歧会降低利用率">为什么分歧会降低利用率</h4>
+<h3 id="为什么分歧会降低利用率">为什么分歧会降低利用率</h3>
 <ul>
 <li>SIMT 锁步：一个 warp（如 32 线程）必须“同一步执行同一条指令”。if
 分叉后，硬件用掩码把不相关线程关掉，先跑一支，再跑另一支。</li>
@@ -474,8 +474,8 @@ else；总时间≈两段时间相加，平均利用率下降。</li>
 warp”隐藏内存延迟，但同一 warp
 的分支分歧仍要分段跑完，无法被这种切换抵消。</li>
 </ul>
-<h3 id="内存层次与数据路径越近越快">📦
-内存层次与数据路径（越近越快）</h3>
+<h2 id="内存层次与数据路径越近越快">📦
+内存层次与数据路径（越近越快）</h2>
 <ul>
 <li>寄存器：每线程私有，最快；数量限制影响占用率。</li>
 <li>共享内存（近似 L1）：Block 内共享、低延迟；注意 bank
@@ -494,8 +494,8 @@ flowchart TD
     VRAM --&gt; Host[&quot;主机内存（PCIe&#x2F;NVLink）&quot;]
 </code>
 </pre>
-<h4 id="内存层次补充共享内存-vs-缓存事务与-bank">内存层次补充（共享内存
-vs 缓存、事务与 bank）</h4>
+<h3 id="内存层次补充共享内存-vs-缓存事务与-bank">内存层次补充（共享内存
+vs 缓存、事务与 bank）</h3>
 <ul>
 <li>共享内存 vs L1：共享内存是软件可控的片上
 SRAM，线程块内可见；L1/统一缓存由硬件自动管理。很多架构将“共享内存与
@@ -511,7 +511,7 @@ L1”设计为可配比的同一物理池。</li>
 <li>bank 冲突像“同时挤同一扇门”，需要分流。</li>
 </ul></li>
 </ul>
-<h4 id="pcie-与-nvlink-是什么">PCIe 与 NVLink 是什么？</h4>
+<h3 id="pcie-与-nvlink-是什么">PCIe 与 NVLink 是什么？</h3>
 <ul>
 <li>PCIe：主机与 GPU
 常用的通用互联总线，按代际与通道数提供不同带宽（例如 PCIe 4.0 x16
@@ -526,7 +526,7 @@ PCIe，并支持内存一致性/地址空间统一的特性（随架构而异）
 彼此传东西更快更省时间。</li>
 </ul></li>
 </ul>
-<h4 id="延迟-vs-带宽">延迟 vs 带宽</h4>
+<h3 id="延迟-vs-带宽">延迟 vs 带宽</h3>
 <ul>
 <li>延迟 Latency
 <ul>
@@ -552,7 +552,7 @@ ns/µs/ms，越小越好。</li>
 Warp/提占用率”隐藏等待；用共享内存/合并访存把热数据放近身；用异步拷贝与计算重叠，减少干等。</li>
 </ul></li>
 </ul>
-<h3 id="性能要点">🚀 性能要点</h3>
+<h2 id="性能要点">🚀 性能要点</h2>
 <ul>
 <li>访存合并：相邻线程访问相邻地址。</li>
 <li>共享内存分块（tiling）：把重复数据留近身，减显存往返。</li>
@@ -560,19 +560,19 @@ Warp/提占用率”隐藏等待；用共享内存/合并访存把热数据放�
 <li>控制流优化：减少同 Warp 内分歧，可用重排/掩码等方式。</li>
 <li>传输重叠：异步拷贝、多 Stream 藏 PCIe 延迟。</li>
 </ul>
-<h3 id="最小工作流">🧪 最小工作流</h3>
+<h2 id="最小工作流">🧪 最小工作流</h2>
 <ol type="1">
 <li>主机准备/加载数据；</li>
 <li>复制到显存（或使用统一内存/页迁移）；</li>
 <li>启动 kernel（grid, block）；</li>
 <li>同步/异步收集结果，可与下批次流水线并行。</li>
 </ol>
-<h3 id="示例最小-cuda-kernel直觉建立">🧾 示例：最小 CUDA
-Kernel（直觉建立）</h3>
+<h2 id="示例最小-cuda-kernel直觉建立">🧾 示例：最小 CUDA
+Kernel（直觉建立）</h2>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// vadd.cu</span></span><br><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">vadd</span><span class="params">(<span class="type">const</span> <span class="type">float</span>* a, <span class="type">const</span> <span class="type">float</span>* b, <span class="type">float</span>* y, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">  <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x; <span class="comment">// 逻辑“每线程”索引</span></span><br><span class="line">  <span class="keyword">if</span> (i &lt; n) y[i] = a[i] + b[i];</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">thresh_abs</span><span class="params">(<span class="type">const</span> <span class="type">float</span>* x, <span class="type">float</span>* y, <span class="type">int</span> n)</span> </span>&#123;</span><br><span class="line">  <span class="type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">  <span class="keyword">if</span> (i &lt; n) y[i] = (x[i] &gt; <span class="number">0.f</span>) ? x[i] : -x[i]; <span class="comment">// 分支：若 warp 内正负混杂会产生分歧</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 启动（host）</span></span><br><span class="line"><span class="comment">// int threads = 256; int blocks = (n + threads - 1) / threads;</span></span><br><span class="line"><span class="comment">// vadd&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(d_a, d_b, d_y, n);</span></span><br></pre></td></tr></table></figure>
 <p>省流：每个逻辑线程处理一个元素；Grid/Block
 决定并行规模；分支一致更快。</p>
-<h3 id="何时用-gpu何时用-cpu">🤔 何时用 GPU，何时用 CPU？</h3>
+<h2 id="何时用-gpu何时用-cpu">🤔 何时用 GPU，何时用 CPU？</h2>
 <ul>
 <li>适合 GPU：高算术密度、强
 DLP、可分块重用数据（如矩阵乘、卷积、光线追踪）。</li>
@@ -584,14 +584,14 @@ CPU：复杂分支、状态机密集、数据量小且延迟敏感（如事务�
 <li>单请求首响应（µs 级）/强交互/大量系统调用 → 倾向 CPU</li>
 <li>高算术密度/规则批处理/大规模并行 → 倾向 GPU</li>
 </ul>
-<h3 id="常见误区">🧨 常见误区</h3>
+<h2 id="常见误区">🧨 常见误区</h2>
 <ul>
 <li>“GPU 频率高就一定更快？”——吞吐取决于并行度与访存模式。</li>
 <li>“线程越多越好？”——资源配额有限，盲堆线程会掉占用率或引入开销。</li>
 <li>“分支无所谓？”——同 Warp 分歧会串行化，是吞吐杀手。</li>
 </ul>
-<h3 id="分歧可视化无分歧-vs-有分歧">👀 分歧可视化（无分歧 vs
-有分歧）</h3>
+<h2 id="分歧可视化无分歧-vs-有分歧">👀 分歧可视化（无分歧 vs
+有分歧）</h2>
 <pre>
 <code class="mermaid">
 
@@ -601,13 +601,13 @@ flowchart TD
   B1 --&gt; B2[&quot;再跑 else：12 活动 ／ 20 掩码&quot;]
 </code>
 </pre>
-<h3 id="小结">✅ 小结</h3>
+<h2 id="小结">✅ 小结</h2>
 <ul>
 <li>记忆点：GPU 用成群线程换吞吐，用切 Warp
 藏延迟；真正的性能来自对齐访问 + 合理占用 + 少分歧 + 数据重用。</li>
 </ul>
-<h3 id="访存模式对比aos-vs-soa合并访存更友好">🧭 访存模式对比：AoS vs
-SoA（合并访存更友好）</h3>
+<h2 id="访存模式对比aos-vs-soa合并访存更友好">🧭 访存模式对比：AoS vs
+SoA（合并访存更友好）</h2>
 <ul>
 <li><p>AoS（Array of Structs） <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Pt</span> &#123; <span class="type">float</span> x,y,z; &#125;;</span><br><span class="line">Pt* pts; <span class="comment">// pts[i].x 连续性差，warp 取 x 会跨步</span></span><br></pre></td></tr></table></figure></p></li>
 <li><p>SoA（Struct of Arrays） <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Pts</span> &#123; <span class="type">float</span>* x; <span class="type">float</span>* y; <span class="type">float</span>* z; &#125;;</span><br><span class="line"><span class="comment">// 连续访问 x[i] 更易合并为少量内存事务</span></span><br></pre></td></tr></table></figure></p></li>
@@ -625,7 +625,7 @@ SoA（合并访存更友好）</h3>
 更容易一次性打包；读整点（x,y,z 都要）时 AoS
 也未必差，但要注意对齐与访问顺序。</p>
 <p>省流：相邻线程访问相邻地址（SoA）→ 合并事务更容易，带宽利用更高。</p>
-<h3 id="张量核心与混合精度dl-常见">🧱 张量核心与混合精度（DL 常见）</h3>
+<h2 id="张量核心与混合精度dl-常见">🧱 张量核心与混合精度（DL 常见）</h2>
 <ul>
 <li>张量核心/Tensor
 Core：面向矩阵乘累加（MMA）的专用单元，吞吐远高于标量/向量 ALU。</li>
@@ -633,7 +633,7 @@ Core：面向矩阵乘累加（MMA）的专用单元，吞吐远高于标量/向
 以轻微精度损失换显著吞吐提升（常见于训练/推理）。
 省流：矩阵算子走“专用快车道”，吞吐更猛；前提是算子形状/对齐满足要求。</li>
 </ul>
-<h3 id="性能指标与工具">🧰 性能指标与工具</h3>
+<h2 id="性能指标与工具">🧰 性能指标与工具</h2>
 <ul>
 <li>指标：
 <ul>
@@ -649,7 +649,7 @@ Core：面向矩阵乘累加（MMA）的专用单元，吞吐远高于标量/向
 <li>compute-sanitizer（memcheck/racecheck）</li>
 </ul></li>
 </ul>
-<h3 id="常见坑清单避坑速览">⚠️ 常见坑清单（避坑速览）</h3>
+<h2 id="常见坑清单避坑速览">⚠️ 常见坑清单（避坑速览）</h2>
 <ul>
 <li>寄存器溢出到“本地内存”（栈）→ 延迟飙升</li>
 <li>共享内存 bank 冲突/容量不足 → 吞吐打折</li>
@@ -657,21 +657,21 @@ Core：面向矩阵乘累加（MMA）的专用单元，吞吐远高于标量/向
 <li>kernel 太小 → 启动/调度开销占比过大</li>
 <li>统一内存频繁页迁移 → 带宽/延迟抖动</li>
 </ul>
-<h3 id="主机-设备数据通道优化">🔗 主机-设备数据通道优化</h3>
+<h2 id="主机-设备数据通道优化">🔗 主机-设备数据通道优化</h2>
 <ul>
 <li>固定页内存（pinned）+ cudaMemcpyAsync →
 提升带宽、支持拷贝与计算重叠</li>
 <li>双缓冲/多 stream → pipeline 化生产与消费</li>
 <li>P2P/NVLink（多 GPU）→ 绕开主机内存，直连更快</li>
 </ul>
-<h3 id="多-gpu-与通信入门向">🧬 多 GPU 与通信（入门向）</h3>
+<h2 id="多-gpu-与通信入门向">🧬 多 GPU 与通信（入门向）</h2>
 <ul>
 <li>NCCL：多 GPU 通信库，提供 all-reduce/all-gather/broadcast
 等原语</li>
 <li>拓扑：同节点内优先 NVLink/同交换域，跨节点看
 IB/RoCE；拓扑差异决定带宽与延迟</li>
 </ul>
-<h3 id="术语速查">📒 术语速查</h3>
+<h2 id="术语速查">📒 术语速查</h2>
 <table>
 <thead>
 <tr>

@@ -30,7 +30,7 @@
 <meta property="og:description" content="前三篇的语法与思想，最终都落在一个真实的模块上：VGA 文本模式的 vga_buffer.rs。这篇不贴全文，而是把它拆成九块来读——从颜色怎么压进一个字节，一直讲到 println! 怎么变成对显存的一次写。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-09-07T04:05:00.000Z">
-<meta property="article:modified_time" content="2026-09-15T03:07:15.836Z">
+<meta property="article:modified_time" content="2026-09-29T00:41:03.346Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="Rust">
 <meta property="article:tag" content="VGA">
@@ -177,16 +177,16 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B4%A0%E6%9D%90%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 素材速读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E5%B1%82color-%E4%B8%8E-colorcode%E9%A2%9C%E8%89%B2%E6%80%8E%E4%B9%88%E5%8E%8B%E8%BF%9B%E4%B8%80%E4%B8%AA%E5%AD%97%E8%8A%82"><span class="nav-number">2.</span> <span class="nav-text">🎨 第一层：Color
-与 ColorCode——颜色怎么压进一个字节</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E5%B1%82screenchar-%E4%B8%8E-buffer%E4%B8%80%E4%B8%AA%E6%A0%BC%E5%AD%90%E4%B8%8E%E6%95%B4%E5%9D%97%E5%B1%8F%E5%B9%95"><span class="nav-number">3.</span> <span class="nav-text">🧱
-第二层：ScreenChar 与 Buffer——一个格子与整块屏幕</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E5%B1%82writer%E5%86%99%E5%AD%97%E7%9A%84%E4%BA%BA"><span class="nav-number">4.</span> <span class="nav-text">🖋️ 第三层：Writer——写字的人</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E5%B1%82write_byte%E5%BE%80%E6%98%BE%E5%AD%98%E5%86%99%E4%B8%80%E4%B8%AA%E5%AD%97%E7%AC%A6"><span class="nav-number">5.</span> <span class="nav-text">✍️
-第四层：write_byte——往显存写一个字符</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E5%B1%82new_line-%E4%B8%8E-clear_row%E5%B1%8F%E5%B9%95%E6%BB%9A%E5%8A%A8"><span class="nav-number">6.</span> <span class="nav-text">📜 第五层：new_line 与
-clear_row——屏幕滚动</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%85%AD%E5%B1%82write_string%E4%BB%8E%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%B0%E5%AD%97%E8%8A%82"><span class="nav-number">7.</span> <span class="nav-text">🔤
-第六层：write_string——从字符串到字节</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%83%E5%B1%82fmtwrite%E6%8A%8A-writer-%E6%8E%A5%E8%BF%9B%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%8D%8F%E8%AE%AE"><span class="nav-number">8.</span> <span class="nav-text">🖨️
-第七层：fmt::Write——把 Writer 接进格式化协议</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%85%AB%E5%B1%82lazy_static-%E4%B8%8E-mutex%E9%80%A0%E4%B8%80%E4%B8%AA%E5%85%A8%E5%B1%80-writer"><span class="nav-number">9.</span> <span class="nav-text">🌍
-第八层：lazy_static 与 Mutex——造一个全局 Writer</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B9%9D%E5%B1%82print-%E4%B8%8E-println%E5%AE%8F%E4%B8%8E-_print"><span class="nav-number">10.</span> <span class="nav-text">🔗 第九层：print! 与
-println!——宏与 _print</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E9%93%BE%E8%B7%AF"><span class="nav-number">11.</span> <span class="nav-text">🧭 完整链路</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0%E6%96%B9%E6%B3%95rust-%E4%BB%A3%E7%A0%81%E5%8F%AF%E4%BB%A5%E5%89%A5%E6%B4%8B%E8%91%B1"><span class="nav-number">12.</span> <span class="nav-text">🧅 学习方法：Rust
-代码可以剥洋葱</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%B4%A0%E6%9D%90%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 素材速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E5%B1%82color-%E4%B8%8E-colorcode%E9%A2%9C%E8%89%B2%E6%80%8E%E4%B9%88%E5%8E%8B%E8%BF%9B%E4%B8%80%E4%B8%AA%E5%AD%97%E8%8A%82"><span class="nav-number">2.</span> <span class="nav-text">🎨 第一层：Color
+与 ColorCode——颜色怎么压进一个字节</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E5%B1%82screenchar-%E4%B8%8E-buffer%E4%B8%80%E4%B8%AA%E6%A0%BC%E5%AD%90%E4%B8%8E%E6%95%B4%E5%9D%97%E5%B1%8F%E5%B9%95"><span class="nav-number">3.</span> <span class="nav-text">🧱
+第二层：ScreenChar 与 Buffer——一个格子与整块屏幕</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E5%B1%82writer%E5%86%99%E5%AD%97%E7%9A%84%E4%BA%BA"><span class="nav-number">4.</span> <span class="nav-text">🖋️ 第三层：Writer——写字的人</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E5%B1%82write_byte%E5%BE%80%E6%98%BE%E5%AD%98%E5%86%99%E4%B8%80%E4%B8%AA%E5%AD%97%E7%AC%A6"><span class="nav-number">5.</span> <span class="nav-text">✍️
+第四层：write_byte——往显存写一个字符</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E5%B1%82new_line-%E4%B8%8E-clear_row%E5%B1%8F%E5%B9%95%E6%BB%9A%E5%8A%A8"><span class="nav-number">6.</span> <span class="nav-text">📜 第五层：new_line 与
+clear_row——屏幕滚动</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%85%AD%E5%B1%82write_string%E4%BB%8E%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%B0%E5%AD%97%E8%8A%82"><span class="nav-number">7.</span> <span class="nav-text">🔤
+第六层：write_string——从字符串到字节</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%83%E5%B1%82fmtwrite%E6%8A%8A-writer-%E6%8E%A5%E8%BF%9B%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%8D%8F%E8%AE%AE"><span class="nav-number">8.</span> <span class="nav-text">🖨️
+第七层：fmt::Write——把 Writer 接进格式化协议</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%85%AB%E5%B1%82lazy_static-%E4%B8%8E-mutex%E9%80%A0%E4%B8%80%E4%B8%AA%E5%85%A8%E5%B1%80-writer"><span class="nav-number">9.</span> <span class="nav-text">🌍
+第八层：lazy_static 与 Mutex——造一个全局 Writer</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B9%9D%E5%B1%82print-%E4%B8%8E-println%E5%AE%8F%E4%B8%8E-_print"><span class="nav-number">10.</span> <span class="nav-text">🔗 第九层：print! 与
+println!——宏与 _print</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E9%93%BE%E8%B7%AF"><span class="nav-number">11.</span> <span class="nav-text">🧭 完整链路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AD%A6%E4%B9%A0%E6%96%B9%E6%B3%95rust-%E4%BB%A3%E7%A0%81%E5%8F%AF%E4%BB%A5%E5%89%A5%E6%B4%8B%E8%91%B1"><span class="nav-number">12.</span> <span class="nav-text">🧅 学习方法：Rust
+代码可以剥洋葱</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -278,7 +278,7 @@ println!——宏与 _print</span></a></li><li class="nav-item nav-level-3"><a c
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-15 11:07:15" itemprop="dateModified" datetime="2026-09-15T11:07:15+08:00">2026-09-15</time>
+      <time title="Modified: 2026-09-29 08:41:03" itemprop="dateModified" datetime="2026-09-29T08:41:03+08:00">2026-09-29</time>
     </span>
 
   
@@ -322,7 +322,7 @@ href="/posts/4b7500f7/">借用与生命周期</a>》《<a
 href="/posts/7ddab86c/">属性与内存布局</a>》，以及《<a
 href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
 </blockquote>
-<h3 id="素材速读">📚 素材速读</h3>
+<h2 id="素材速读">📚 素材速读</h2>
 <p>要拆的部件和它们所属的层：</p>
 <table>
 <colgroup>
@@ -386,8 +386,8 @@ href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
 </tr>
 </tbody>
 </table>
-<h3 id="第一层color-与-colorcode颜色怎么压进一个字节">🎨 第一层：Color
-与 ColorCode——颜色怎么压进一个字节</h3>
+<h2 id="第一层color-与-colorcode颜色怎么压进一个字节">🎨 第一层：Color
+与 ColorCode——颜色怎么压进一个字节</h2>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[allow(dead_code)]</span>                             <span class="comment">// 有些颜色用不到，关掉警告</span></span><br><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span>    <span class="comment">// 能打印、能复制、能比较（篇三）</span></span><br><span class="line"><span class="meta">#[repr(u8)]</span>                                     <span class="comment">// 每个变体用一个 u8 表示</span></span><br><span class="line"><span class="keyword">pub</span> <span class="keyword">enum</span> <span class="title class_">Color</span> &#123;</span><br><span class="line">    Black = <span class="number">0</span>,</span><br><span class="line">    Blue = <span class="number">1</span>,</span><br><span class="line">    <span class="comment">// ... 共 16 个变体：8 个基础色 + 8 个亮色</span></span><br><span class="line">    White = <span class="number">15</span>,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="meta">#[repr(transparent)]</span>                            <span class="comment">// 布局与 u8 完全一致（篇三）</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ColorCode</span>(<span class="type">u8</span>);</span><br><span class="line"></span><br><span class="line"><span class="keyword">impl</span> <span class="title class_">ColorCode</span> &#123;</span><br><span class="line">    <span class="keyword">fn</span> <span class="title function_">new</span>(foreground: Color, background: Color) <span class="punctuation">-&gt;</span> ColorCode &#123;</span><br><span class="line">        <span class="title function_ invoke__">ColorCode</span>((background <span class="keyword">as</span> <span class="type">u8</span>) &lt;&lt; <span class="number">4</span> | (foreground <span class="keyword">as</span> <span class="type">u8</span>))</span><br><span class="line">        <span class="comment">//         背景移到高 4 位     |  前景留在低 4 位</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>#[repr(u8)]</code>
 是这里的枢纽：没有它，枚举的底层类型不由你决定，<code>Color::Yellow as u8</code>
@@ -396,8 +396,8 @@ href="/posts/b07aa795/">Rust OS 入门：VGA 字符模式</a>》。</p>
 <code>#[repr(transparent)]</code>
 保证它真的还只是一个字节，能直接塞进下一层的 struct 里。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">ColorCode::new(Yellow, Black)</span><br><span class="line">   (background as u8) &lt;&lt; 4  |  (foreground as u8)</span><br><span class="line">        0000 0000             0000 1110</span><br><span class="line">              └─────── | ─────────┘</span><br><span class="line">                     0000 1110</span><br><span class="line">         ┌────────┬────────┐</span><br><span class="line">         │ 0000   │ 1110   │</span><br><span class="line">         └────────┴────────┘</span><br></pre></td></tr></table></figure>
-<h3 id="第二层screenchar-与-buffer一个格子与整块屏幕">🧱
-第二层：ScreenChar 与 Buffer——一个格子与整块屏幕</h3>
+<h2 id="第二层screenchar-与-buffer一个格子与整块屏幕">🧱
+第二层：ScreenChar 与 Buffer——一个格子与整块屏幕</h2>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[derive(Debug, Clone, Copy, PartialEq, Eq)]</span></span><br><span class="line"><span class="meta">#[repr(C)]</span>                                      <span class="comment">// ASCII 在前、颜色在后，和硬件一致</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScreenChar</span> &#123;</span><br><span class="line">    ascii_character: <span class="type">u8</span>,                        <span class="comment">// 一个字符单元的第一字节</span></span><br><span class="line">    color_code: ColorCode,                      <span class="comment">// 第二字节（布局等同 u8）</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> BUFFER_HEIGHT: <span class="type">usize</span> = <span class="number">25</span>;                <span class="comment">// 行数（篇一：const）</span></span><br><span class="line"><span class="keyword">const</span> BUFFER_WIDTH: <span class="type">usize</span> = <span class="number">80</span>;                 <span class="comment">// 列数</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">use</span> volatile::Volatile;                         <span class="comment">// 显存必须用 volatile 访问，理由见下</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Buffer</span> &#123;</span><br><span class="line">    chars: [[Volatile&lt;ScreenChar&gt;; BUFFER_WIDTH]; BUFFER_HEIGHT],   <span class="comment">// 25 行 × 80 列</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>Volatile</code> 是这一层唯一需要展开的地方。显存是内存映射
 I/O（MMIO），它的内容会被硬件改动，而编译器看不到这件事；没有这层包装，编译器可能把连续的多次写合并掉，也可能认为刚写进去的值还在寄存器里、读取时不必回内存。第五层的
@@ -407,18 +407,18 @@ I/O（MMIO），它的内容会被硬件改动，而编译器看不到这件事�
 <code>Buffer</code> 在内存里仍然严格是 25 × 80 × 2
 字节，和显存逐格对应。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Buffer = 25 × 80 个格子，每格 2 字节</span><br><span class="line">        ┌───────────────────┐</span><br><span class="line">Row 0   │ . . . . . . . . . │</span><br><span class="line">Row 1   │ . . . . . . . . . │</span><br><span class="line"> ...    │        ...        │</span><br><span class="line">Row 24  │ . . . . . . . . . │</span><br><span class="line">        └───────────────────┘</span><br></pre></td></tr></table></figure>
-<h3 id="第三层writer写字的人">🖋️ 第三层：Writer——写字的人</h3>
+<h2 id="第三层writer写字的人">🖋️ 第三层：Writer——写字的人</h2>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">struct</span> <span class="title class_">Writer</span> &#123;                  <span class="comment">// pub：模块外可见（篇一）</span></span><br><span class="line">    column_position: <span class="type">usize</span>,          <span class="comment">// 当前写到第几列（0～79）</span></span><br><span class="line">    color_code: ColorCode,           <span class="comment">// 整屏统一的颜色，构造后不再改</span></span><br><span class="line">    buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer,     <span class="comment">// 可变：要往里写；&#x27;static：显存一直存在（篇二）</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>三个字段凑起来就是一句话：<strong>光标在哪、用什么颜色、往哪写</strong>。后面所有方法都只是围绕这三件事操作。</p>
-<h3 id="第四层write_byte往显存写一个字符">✍️
-第四层：write_byte——往显存写一个字符</h3>
+<h2 id="第四层write_byte往显存写一个字符">✍️
+第四层：write_byte——往显存写一个字符</h2>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">fn</span> <span class="title function_">write_byte</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, byte: <span class="type">u8</span>) &#123;</span><br><span class="line">    <span class="keyword">match</span> byte &#123;</span><br><span class="line">        <span class="string">b&#x27;<span class="char escape_">\n</span>&#x27;</span> =&gt; <span class="keyword">self</span>.<span class="title function_ invoke__">new_line</span>(),               <span class="comment">// 换行：单独一路</span></span><br><span class="line">        byte =&gt; &#123;</span><br><span class="line">            <span class="keyword">if</span> <span class="keyword">self</span>.column_position &gt;= BUFFER_WIDTH &#123;</span><br><span class="line">                <span class="keyword">self</span>.<span class="title function_ invoke__">new_line</span>();                <span class="comment">// 这一行写满了，先换行</span></span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">let</span> <span class="variable">row</span> = BUFFER_HEIGHT - <span class="number">1</span>;        <span class="comment">// 始终写最后一行</span></span><br><span class="line">            <span class="keyword">let</span> <span class="variable">col</span> = <span class="keyword">self</span>.column_position;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">let</span> <span class="variable">color_code</span> = <span class="keyword">self</span>.color_code;</span><br><span class="line">            <span class="keyword">self</span>.buffer.chars[row][col].<span class="title function_ invoke__">write</span>(ScreenChar &#123;</span><br><span class="line">                ascii_character: byte,</span><br><span class="line">                color_code,</span><br><span class="line">            &#125;);                                 <span class="comment">// Volatile::write：一次真实的内存写</span></span><br><span class="line">            <span class="keyword">self</span>.column_position += <span class="number">1</span>;          <span class="comment">// 光标推到下一列</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>&amp;mut self</code> 是必需的：写一个字符要同时改
 <code>column_position</code> 和显存内容，属于可变借用（篇二）。另外留意
 <code>row</code>
 固定取最后一行——这一版实现里光标不高亮也不移动，始终停在末行，写满一行就把整屏上滚，这也是第五层存在的理由。</p>
-<h3 id="第五层new_line-与-clear_row屏幕滚动">📜 第五层：new_line 与
-clear_row——屏幕滚动</h3>
+<h2 id="第五层new_line-与-clear_row屏幕滚动">📜 第五层：new_line 与
+clear_row——屏幕滚动</h2>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">fn</span> <span class="title function_">new_line</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>) &#123;</span><br><span class="line">    <span class="keyword">for</span> <span class="variable">row</span> <span class="keyword">in</span> <span class="number">1</span>..BUFFER_HEIGHT &#123;         <span class="comment">// 1～24，第 0 行会被覆盖（篇一）</span></span><br><span class="line">        <span class="keyword">for</span> <span class="variable">col</span> <span class="keyword">in</span> <span class="number">0</span>..BUFFER_WIDTH &#123;</span><br><span class="line">            <span class="keyword">let</span> <span class="variable">character</span> = <span class="keyword">self</span>.buffer.chars[row][col].<span class="title function_ invoke__">read</span>();     <span class="comment">// volatile 读</span></span><br><span class="line">            <span class="keyword">self</span>.buffer.chars[row - <span class="number">1</span>][col].<span class="title function_ invoke__">write</span>(character);       <span class="comment">// 写到上一行</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">self</span>.<span class="title function_ invoke__">clear_row</span>(BUFFER_HEIGHT - <span class="number">1</span>);          <span class="comment">// 最后一行清空</span></span><br><span class="line">    <span class="keyword">self</span>.column_position = <span class="number">0</span>;                   <span class="comment">// 光标回到行首</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">fn</span> <span class="title function_">clear_row</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, row: <span class="type">usize</span>) &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="variable">blank</span> = ScreenChar &#123;</span><br><span class="line">        ascii_character: <span class="string">b&#x27; &#x27;</span>,                  <span class="comment">// 空格</span></span><br><span class="line">        color_code: <span class="keyword">self</span>.color_code,            <span class="comment">// 带上当前颜色，清出来才干净</span></span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">for</span> <span class="variable">col</span> <span class="keyword">in</span> <span class="number">0</span>..BUFFER_WIDTH &#123;</span><br><span class="line">        <span class="keyword">self</span>.buffer.chars[row][col].<span class="title function_ invoke__">write</span>(blank);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>这段的语义是
 <strong>把显存里的内容搬到显存里的另一个位置</strong>，所以它必须用
@@ -427,8 +427,8 @@ volatile
 <code>pub</code>，滚动和清行是内部细节，只由 <code>write_byte</code>
 调用（篇一：pub、私有）。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">new_line()：整体上滚一行</span><br><span class="line">┌────────────────┐</span><br><span class="line">│ Row 0          │  ← 被第 1 行覆盖</span><br><span class="line">│ Row 1          │  ← 上移到第 0 行</span><br><span class="line">│ ...            │</span><br><span class="line">│ Row 24         │  ← 清空成空格</span><br><span class="line">└────────────────┘</span><br><span class="line">        ↓</span><br><span class="line">  column_position = 0</span><br></pre></td></tr></table></figure>
-<h3 id="第六层write_string从字符串到字节">🔤
-第六层：write_string——从字符串到字节</h3>
+<h2 id="第六层write_string从字符串到字节">🔤
+第六层：write_string——从字符串到字节</h2>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">fn</span> <span class="title function_">write_string</span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, s: &amp;<span class="type">str</span>) &#123;</span><br><span class="line">    <span class="keyword">for</span> <span class="variable">byte</span> <span class="keyword">in</span> s.<span class="title function_ invoke__">bytes</span>() &#123;                             <span class="comment">// 按 UTF-8 字节迭代（篇一）</span></span><br><span class="line">        <span class="keyword">match</span> byte &#123;</span><br><span class="line">            <span class="number">0x20</span>..=<span class="number">0x7e</span> | <span class="string">b&#x27;<span class="char escape_">\n</span>&#x27;</span> =&gt; <span class="keyword">self</span>.<span class="title function_ invoke__">write_byte</span>(byte),   <span class="comment">// 可打印 ASCII + 换行</span></span><br><span class="line">            _ =&gt; <span class="keyword">self</span>.<span class="title function_ invoke__">write_byte</span>(<span class="number">0xfe</span>),                     <span class="comment">// 其余一律写实心方块</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p><code>0x20..=0x7e</code> 是可打印 ASCII（空格到
 <code>~</code>），加上换行符，这两类原样写屏；其余字节统一写成
@@ -436,8 +436,8 @@ volatile
 个字节且都大于
 <code>0x7e</code>，所以走的是这一路——屏幕上一串方块字的来历，也是这套
 VGA 打印只适合英文的原因。</p>
-<h3 id="第七层fmtwrite把-writer-接进格式化协议">🖨️
-第七层：fmt::Write——把 Writer 接进格式化协议</h3>
+<h2 id="第七层fmtwrite把-writer-接进格式化协议">🖨️
+第七层：fmt::Write——把 Writer 接进格式化协议</h2>
 <p>前六层已经攒出一套能用的写屏能力，但只能这么调用：<code>writer.write_string("Hello")</code>。想要
 <code>println!("x = &#123;&#125;", x)</code> 这种带占位符的写法，就得走 Rust
 的格式化机制——<code>&#123;&#125;</code> 怎么变成最终文本、参数怎么拼进去，由
@@ -482,8 +482,8 @@ VGA 打印只适合英文的原因。</p>
 写在文件中部——<code>use</code>
 可以出现在模块里的任何位置，作用范围都是整个模块（篇一）。</li>
 </ul>
-<h3 id="第八层lazy_static-与-mutex造一个全局-writer">🌍
-第八层：lazy_static 与 Mutex——造一个全局 Writer</h3>
+<h2 id="第八层lazy_static-与-mutex造一个全局-writer">🌍
+第八层：lazy_static 与 Mutex——造一个全局 Writer</h2>
 <p>前面所有方法都要 <code>&amp;mut self</code>，所以得先有
 <code>Writer</code> 实例。屏幕只有一块，这个 <code>Writer</code>
 也就应该只有一个，而且内核各处都要能拿到——结论是把它做成全局变量。这一层解决的就是怎么造出这个全局变量。</p>
@@ -548,8 +548,8 @@ Writer 使用。</strong></p>
 块还隐含另一个承诺：这块显存只会经由这一个引用访问，不会同时造出别名——这正是它被放进
 <code>Mutex</code> 的原因。另外，这个地址能直接解引用，是因为此时
 bootloader 已经做好分页映射，让这个虚拟地址正对着物理显存。</p>
-<h3 id="第九层print-与-println宏与-_print">🔗 第九层：print! 与
-println!——宏与 _print</h3>
+<h2 id="第九层print-与-println宏与-_print">🔗 第九层：print! 与
+println!——宏与 _print</h2>
 <p><code>WRITER</code> 有了，但每次打印都写
 <code>WRITER.lock().write_fmt(format_args!(...))</code>
 太啰嗦；而且想写出 <code>println!("x = &#123;&#125;", x)</code>
@@ -633,14 +633,14 @@ tree（一个词，或一对括号括起来的整体），<code>$( ... )*</code>
 <code>write_str</code>；<code>unwrap()</code> 不会 panic，因为
 <code>write_str</code> 恒返回 <code>Ok</code>。</li>
 </ul>
-<h3 id="完整链路">🧭 完整链路</h3>
+<h2 id="完整链路">🧭 完整链路</h2>
 <p>把整条链画出来：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">println!(&quot;Hello&quot;)</span><br><span class="line">   ↓ 展开为 print!(&quot;&#123;&#125;\n&quot;, format_args!(&quot;Hello&quot;))</span><br><span class="line">fmt::Arguments</span><br><span class="line">   ↓ _print</span><br><span class="line">WRITER.lock() → MutexGuard&lt;Writer&gt;</span><br><span class="line">   ↓ write_fmt（fmt::Write 的默认实现）</span><br><span class="line">Writer::write_str</span><br><span class="line">   ↓ write_string</span><br><span class="line">s.bytes() 逐个字节</span><br><span class="line">   ↓ write_byte</span><br><span class="line">Volatile::write(ScreenChar &#123; ... &#125;)</span><br><span class="line">   ↓ 一次真实的内存写</span><br><span class="line">0xb8000 处对应的格子</span><br><span class="line">   ↓ VGA 硬件读取这块内存</span><br><span class="line">屏幕</span><br></pre></td></tr></table></figure>
 <p>上半段（从宏到锁）是 Rust 的抽象层，下半段（从
 <code>Volatile::write</code>
 到屏幕）是硬件事实。整篇文章拆的就是这两段之间的接缝。</p>
-<h3 id="学习方法rust-代码可以剥洋葱">🧅 学习方法：Rust
-代码可以剥洋葱</h3>
+<h2 id="学习方法rust-代码可以剥洋葱">🧅 学习方法：Rust
+代码可以剥洋葱</h2>
 <p>看到类似的表达式不要当成一整坨语法，而是<strong>从右往左一层层拆</strong>：</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">unsafe</span> &#123; &amp;<span class="keyword">mut</span> *(<span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer) &#125;</span><br></pre></td></tr></table></figure>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">unsafe            这里有 Rust 无法自动证明安全的操作</span><br><span class="line">0xb8000           一个整数地址</span><br><span class="line">as *mut Buffer    把地址解释成 Buffer 的裸指针</span><br><span class="line">*                 解引用，找到 Buffer</span><br><span class="line">&amp;mut              把 Buffer 借成可修改引用</span><br></pre></td></tr></table></figure>
@@ -653,7 +653,7 @@ tree（一个词，或一对括号括起来的整体），<code>$( ... )*</code>
 <p>这条线弄明白后，后面
 <code>Writer</code>、<code>Volatile</code>、<code>lazy_static!</code>、<code>spin::Mutex</code>、中断处理这些模块，基本都围绕同一套思想展开——只是包装越来越厚。这篇文章从第一层拆到第九层也是同一个道理：每一层单独看都不难，难的是把它们串成一条从
 <code>println!</code> 到显存的通路。</p>
-<h3 id="总结">✅ 总结</h3>
+<h2 id="总结">✅ 总结</h2>
 <blockquote>
 <p>VGA 的 <code>Writer</code>
 把前三篇的语法串成了一条完整链路：<code>repr(u8)</code> 的
