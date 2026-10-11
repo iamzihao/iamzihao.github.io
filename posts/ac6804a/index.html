@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="概括成一段话：把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包">
+<meta property="og:url" content="https://iamzihao.github.io/posts/ac6804a/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="概括成一段话：把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-10-12T03:00:00.000Z">
+<meta property="article:modified_time" content="2026-10-11T08:25:23.274Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="FPGA">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="侧信道">
+<meta property="article:tag" content="硬件攻击">
+<meta property="article:tag" content="中间人攻击">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/ac6804a/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/ac6804a/","path":"posts/ac6804a/","title":"PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E4%B8%BA%E4%BA%86%E4%B8%80%E6%AC%A1%E8%83%BD%E8%AF%95%E4%B8%80%E7%99%BE%E4%B8%87%E4%B8%AA%E5%AF%86%E7%A0%81"><span class="nav-number">2.</span> <span class="nav-text">🎯
+起点：为了一次能试一百万个密码</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%AD%E9%97%B4%E4%BA%BA%E8%83%BD%E6%8F%92%E5%9C%A8%E5%93%AA%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%A4%E7%AB%AF%E4%B8%8D%E5%AE%B9%E6%98%93%E5%8F%91%E7%8E%B0"><span class="nav-number">3.</span> <span class="nav-text">🧩
+中间人能插在哪，为什么两端不容易发现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%AD%E9%97%B4%E4%BA%BA%E6%80%8E%E4%B9%88%E6%90%AD%E5%9B%9B%E5%9D%97-ip-%E6%8B%BC%E5%87%BA%E6%9D%A5"><span class="nav-number">4.</span> <span class="nav-text">🛠️ 中间人怎么搭：四块 IP 拼出来</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%A3%85%E4%B8%8A%E4%B9%8B%E5%90%8E%E8%83%BD%E5%81%9A%E4%B8%89%E4%BB%B6%E4%BA%8B"><span class="nav-number">5.</span> <span class="nav-text">🔍 装上之后能做三件事</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E6%B5%8B%E4%BB%A3%E4%BB%B7%E6%9C%89%E5%A4%9A%E5%B0%8F"><span class="nav-number">6.</span> <span class="nav-text">📊 实测：代价有多小</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E7%AF%87%E8%AE%BA%E6%96%87%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">7.</span> <span class="nav-text">⚠️ 这篇论文的边界</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">8.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">90</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">219</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/ac6804a/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-12 11:00:00" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-11 16:25:23" itemprop="dateModified" datetime="2026-10-11T16:25:23+08:00">2026-10-11</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>5.3k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>10 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>概括成一段话：<strong>把一块 FPGA 板插进 PCIe
+链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到
+FPGA 资源的 1%，跑在 250 MHz、16 Gb/s 上。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>Toward a hardware man-in-the-middle attack on PCIe
+bus</strong>（Microprocessors and Microsystems 77 (2020) 103198）</p>
+<p>作者：Mohamed Amine Khelif、Jordane Lorandel、Olivier Romain（CY
+Cergy Paris Université，ETIS 实验室）、Matthieu Regnery、Denis
+Baheux（法国宪兵刑事研究所 IRCGN）、Guillaume Barbu（IDEMIA）</p>
+</blockquote>
+<p>在 PCIe 链路上做观测这件事，已有工作（比如
+Hermes）已经证明能从明文流量里还原出整个模型，不过那些实验用的是商用协议分析仪，回答的是<strong>能看见什么</strong>。这篇论文补的是另一半：<strong>如果要自己造一个能看见、能改写、还能复制的东西插进链路，它得满足什么条件，代价有多大。</strong>顺着这个问题的答案往下读，也能看清一件和后续所有
+PCIe 侧信道有关的事——包头从来不加密。</p>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PCIe</strong></td>
+<td>CPU 与 GPU、NVMe、网卡这类外设之间的高速串行总线</td>
+<td>今天的显卡和 SSD 都挂在这条链路上</td>
+</tr>
+<tr>
+<td><strong>Lane（通道）</strong></td>
+<td>PCIe 由若干条双向串行链路组成，每条 4 根线，即两对差分信号</td>
+<td>x1、x4、x8、x16 说的就是 lane 的条数</td>
+</tr>
+<tr>
+<td><strong>TLP</strong>（Transaction Layer Packet）</td>
+<td>事务层的包，真正承载读写请求与数据的那一类</td>
+<td>有 header（3 或 4 个 DW，1 DW = 32 bit），可能带 payload</td>
+</tr>
+<tr>
+<td><strong>DLLP</strong>（Data Link Layer Packet）</td>
+<td>数据链路层的包，负责流控、电源管理与确认</td>
+<td>不承载用户数据</td>
+</tr>
+<tr>
+<td><strong>MitM</strong>（Man-in-the-Middle，中间人）</td>
+<td>把自己插进两端通信之间，转发之余读写内容</td>
+<td>对两端不可见是它的前提，不是附加要求</td>
+</tr>
+<tr>
+<td><strong>Endpoint / Root Port</strong></td>
+<td>PCIe 的两个端点角色：设备侧与主机侧</td>
+<td>做中间人要同时扮演这两个角色</td>
+</tr>
+<tr>
+<td><strong>Shadow copy（影子拷贝）</strong></td>
+<td>把数据另存一份，需要时用这份顶替真实数据</td>
+<td>论文用它冻结密码尝试计数器</td>
+</tr>
+<tr>
+<td><strong>Interposer（转接板）</strong></td>
+<td>插在两个器件之间、把信号引出来的小板子</td>
+<td>真机上做物理插入要靠它</td>
+</tr>
+<tr>
+<td><strong>SignalTap / ILA</strong></td>
+<td>FPGA 内部抓信号的逻辑分析仪</td>
+<td>论文用它验证中间人的时序</td>
+</tr>
+</tbody>
+</table>
+<h2 id="起点为了一次能试一百万个密码">🎯
+起点：为了一次能试一百万个密码</h2>
+<p>这篇论文的出发点不是攻击，而是<strong>取证</strong>。作者里有两位来自法国宪兵刑事研究所（IRCGN），他们要打交道的是加密手机。</p>
+<p>iPhone 这类设备把两样东西看得很紧。一样是用户数据，由 SoC
+里的加密引擎加密；另一样是<strong>密码尝试计数器</strong>，通常存两份，一份在
+SoC 内部，一份在独立的 EEPROM
+里，两份对不上手机就自动锁死。按下几次错误密码之后，手机会把密钥材料一起抹掉，数据就再也取不出来了。</p>
+<p>论文把正常情况和自己的方案摆在一起做了对比（§2.3）：</p>
+<table>
+<thead>
+<tr>
+<th>尝试次数</th>
+<th>正常情况的耗时</th>
+<th>这套方案的耗时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4 次</td>
+<td>320 ms</td>
+<td>320 ms</td>
+</tr>
+<tr>
+<td>5 次</td>
+<td>1 分钟</td>
+<td>400 ms</td>
+</tr>
+<tr>
+<td>6 次</td>
+<td>6 分钟</td>
+<td>480 ms</td>
+</tr>
+<tr>
+<td>8 次</td>
+<td>36 分钟</td>
+<td>640 ms</td>
+</tr>
+<tr>
+<td>9 次</td>
+<td>1 小时 36 分</td>
+<td>720 ms</td>
+</tr>
+<tr>
+<td>10 次</td>
+<td>25 小时 36 分</td>
+<td>800 ms</td>
+</tr>
+<tr>
+<td>11 次</td>
+<td>数据已被抹掉</td>
+<td>880 ms</td>
+</tr>
+<tr>
+<td>1,000,000 次</td>
+<td>不可能</td>
+<td>约 22 小时 5 分</td>
+</tr>
+</tbody>
+</table>
+<p>扛住一百万次尝试，差不多等于把 6
+位数字密码的整个空间跑一遍。做法并不复杂：<strong>把计数器冻住</strong>。中间人记住计数器的初值，之后主机每次来读，它就把初值重新递回去。主机那边看到计数器一直没变，也就不解锁、不抹数据。</p>
+<p>这里有个关键点值得先记住：<strong>做这件事不需要破解任何加密</strong>。数据是不是密文无所谓，中间人只认地址——哪个地址被读了、读了多少次，这就足够把计数器找出来。</p>
+<h2 id="中间人能插在哪为什么两端不容易发现">🧩
+中间人能插在哪，为什么两端不容易发现</h2>
+<p>PCIe
+是一条点对点的串行链路，两端直接相连，中间本来没有一条可供搭线的共享总线，这一点和早期的并行
+PCI
+不同。要插进去，就得<strong>物理上把链路断开，中间接一块板子</strong>，由这块板子分别扮演两端的角色。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">原来的连接</span><br><span class="line">   SoC / CPU ──────────────────── NAND / NVMe</span><br><span class="line">                 （一条 PCIe 链路）</span><br><span class="line"></span><br><span class="line">插了中间人之后</span><br><span class="line">   SoC / CPU ───── FPGA 板 ────── NAND / NVMe</span><br><span class="line">                 ↑              ↑</span><br><span class="line">             装作内存        装作主机</span><br></pre></td></tr></table></figure>
+<p>板子要同时装成两个样子：对主机一侧，它就是那块 NAND；对 NAND
+一侧，它就是主机。这样它才既能转发、又能顺手读写。</p>
+<p>论文给这套架构列了五条硬要求（§3.1）：</p>
+<ul>
+<li><strong>PCIe 3.0</strong>，传输率 8 GT/s，单 lane 0.985 GB/s；</li>
+<li><strong>响应时间不超过 1 ms</strong>；</li>
+<li><strong>物理接口保持信号完整性</strong>，否则链路直接降速甚至断开；</li>
+<li><strong>对通信双方不可见</strong>，不能触发任何安全机制；</li>
+<li><strong>能访问经过的包</strong>。</li>
+</ul>
+<p>第三条和第四条是真正卡人的地方。PCIe
+是高速串行链路，板子插进去时<strong>自己引入的延迟必须小到让两端察觉不出来</strong>，论文反复讲的不可见就是指这件事。注意这里的不可见说的是<strong>不打断通信、不触发安全机制</strong>，而不是电学上查不到——作者后来在真机上干脆直接拿探头去量信号了。</p>
+<h2 id="中间人怎么搭四块-ip-拼出来">🛠️ 中间人怎么搭：四块 IP 拼出来</h2>
+<p>论文没有直接在手机上动手，而是先做了一个 PC 规模的仿真器：用一台 PC
+假装手机 SoC，用 FPGA 上的一个 IP 假装
+NAND。这样验证成本低，调试也方便。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────────────────────────────────┐</span><br><span class="line">│ Host PC (plays the role of SoC)          │  ← 主机，扮演手机 SoC</span><br><span class="line">└──────────────────────────────────────────┘</span><br><span class="line">          │ PCIe 3.0 x2</span><br><span class="line">          ↓</span><br><span class="line">┌──────────────────────────────────────────┐</span><br><span class="line">│ ST-Avalon IP                             │  ← 物理接口：只处理链路层</span><br><span class="line">│                                          │</span><br><span class="line">│ 1. MitM IP                               │  ← 核心：分析 / 过滤 / 改包</span><br><span class="line">│ 2. Xillybus IP                           │  ← 假装成内存，自带驱动</span><br><span class="line">│ 3. NIOS II softcore                      │  ← 把结果报给攻击者的电脑</span><br><span class="line">└──────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>四块的分工是这样的：</p>
+<ul>
+<li><strong>ST-Avalon</strong>：Intel 提供的 PCIe 接口 IP（底层基于
+PIPE），负责和真实链路打交道。各种 DLLP 它自己就处理掉了，只把含有数据的
+TLP 往上交；</li>
+<li><strong>MitM IP</strong>：论文自己写的核心。它夹在 ST-Avalon 和
+Xillybus 之间，所以经过的每一个包都得从它手里过；</li>
+<li><strong>Xillybus</strong>：商业 IP，能把 FPGA
+变成一个主机可以访问的外设。论文拿它来扮演那块要被读取的内存，它还自带驱动，省掉了自己写驱动的功夫；</li>
+<li><strong>NIOS II</strong>：Stratix V 这块板子上没有硬核
+CPU，于是塞一个软核进去，用来把分析结果送到攻击者的电脑，以及在几种攻击模式之间切换（切换不用重新综合
+FPGA）。</li>
+</ul>
+<h2 id="装上之后能做三件事">🔍 装上之后能做三件事</h2>
+<p>论文把能力拆成三个递进的场景，前一个的结果是后一个的输入。</p>
+<p><strong>① 分析过滤，先把敏感数据找出来</strong></p>
+<p>第一件事是定位。论文从头到尾强调同一个前提：<strong>包的内容可能是密文，但包头永远不加密</strong>。包头里有包大小、读地址、写地址这些元数据，于是中间人可以统计某个地址被访问了多少次、访问得多频繁，再把这些统计和正在发生的事件对上号，比如用户正在尝试解锁。密码计数器就是这么被找出来的。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Host PC 发起一次 unlock</span><br><span class="line">        ↓</span><br><span class="line">PCIe 上出现一串 TLP</span><br><span class="line">        ↓</span><br><span class="line">MitM IP 只读 header</span><br><span class="line">        ↓  packet type / address / length</span><br><span class="line">统计某地址的访问次数与频率</span><br><span class="line">        ↓</span><br><span class="line">定位到密码尝试计数器所在的位置</span><br></pre></td></tr></table></figure>
+<p><strong>② 在线改包，一个时钟周期就够</strong></p>
+<p>找到位置之后就能动手改。实测里，包从到达 MitM
+到被改写后转发出去只花了<strong>一个时钟周期</strong>；它还会重新生成包的起止标记和有效信号，让改过的包在时序上看起来完全正常。</p>
+<p>论文演示的是改
+WMR（写内存请求）里的数据段，但同时说明能改的字段不止数据——<strong>包类型、写地址这些一样可以改</strong>。</p>
+<p><strong>③ 影子拷贝，把读请求截下来</strong></p>
+<p>第三个能力是为冻结计数器准备的。中间人把主机写往内存的数据全部复制一份存进自己的
+shadow
+memory；之后主机每次来读那个地址，它就不再转发真实数据，而是把自己存的那一份递回去。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">正常写：Host ── WMR ──→ Memory        MitM 顺手存一份进 shadow memory</span><br><span class="line">正常读：Host ←── Cpl ─── Memory       读回来的是当前真实值</span><br><span class="line"></span><br><span class="line">影子拷贝开启后：</span><br><span class="line">        Host ── RMR ──→ MitM          读请求被截住，不再往下走</span><br><span class="line">        Host ←── Cpl ─── MitM         递回来的是 shadow memory 里的初值</span><br></pre></td></tr></table></figure>
+<p>结果就是主机以为计数器一直没变，实际上它早被改过很多次了。</p>
+<h2 id="实测代价有多小">📊 实测：代价有多小</h2>
+<p>论文用 Xillybus 的 StreamWrite / StreamRead 驱动发随机数据（payload
+从 1 DW 到 1024 DW），把三种模式的资源占用和时序测了一遍。测试平台是一块
+Intel Stratix V DSP 开发板，带 PCIe 3.0 x8 的 endpoint 接口、1 GB
+DDR3、939k 寄存器与 622k 逻辑单元。</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>模式</th>
+<th>ALUT</th>
+<th>寄存器</th>
+<th>频率</th>
+<th>延迟</th>
+<th>吞吐</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logger（只记录与过滤）</td>
+<td>25（&lt; 1%）</td>
+<td>137</td>
+<td>250 MHz</td>
+<td>1 cycle</td>
+<td>16 Gb/s</td>
+</tr>
+<tr>
+<td>MitM（可改包）</td>
+<td>56（&lt; 1%）</td>
+<td>138</td>
+<td>250 MHz</td>
+<td>1 cycle</td>
+<td>16 Gb/s</td>
+</tr>
+<tr>
+<td>Shadow Copy</td>
+<td>187（&lt; 1%）</td>
+<td>276</td>
+<td>250 MHz</td>
+<td>9 cycles</td>
+<td>16 Gb/s</td>
+</tr>
+</tbody>
+</table>
+<p>几点值得留意：</p>
+<ul>
+<li>资源占用<strong>都在 1%
+以下</strong>。论文提到，省下来的空间可以拿去做更复杂的实时处理，比如完整的协议解码；</li>
+<li><strong>延迟小得惊人</strong>。改包只花 1 个时钟周期，影子拷贝只要 9
+个周期，而这 9 个周期的来源很具体：要把 64 bit 的数据流用两个 FIFO 转成
+32 bit 输出，好和 Xillybus 对接；</li>
+<li>影子拷贝的测试<strong>零错误、不丢数据</strong>，一路做到 PCIe gen3
+x2；</li>
+<li>论文还测了不同 PCIe 配置下的资源占用（Gen1 x1 到 Gen3 x2），MitM
+加上 ST-Avalon 一共用掉 601 到 821 个 ALUT，同样都在 1% 以下。</li>
+</ul>
+<p>还有一条细节挺有意思：中间人的解码与记录<strong>比 Xillybus 自己还快
+4
+个时钟周期</strong>。也就是说，在真正的内存开始处理之前，它早就把数据存好了。</p>
+<h2 id="这篇论文的边界">⚠️ 这篇论文的边界</h2>
+<p>读的时候要把已经做到的和打算做的分清楚，否则很容易高估它。</p>
+<p><strong>已经做到的</strong>：在一个 PC 加 FPGA 的仿真环境里，把 PCIe
+3.0
+上的中间人跑通了，三种场景都有实测数据，资源开销与延迟都量了出来。</p>
+<p><strong>还只是计划中的</strong>（§5 用 currently working on
+开头）：</p>
+<ul>
+<li><strong>真机上一个都没跑</strong>。作者的下一步是逆向智能手机主板，找到
+SoC 与 NAND 之间最合适的插入位置；</li>
+<li>真机上做插入要自制
+<strong>interposer（转接板）</strong>。他们用有源差分探头测到了真实手机的时钟与数据信号，但论文说这些信号需要用更高频的探头来改进；</li>
+<li>需要换成<strong>双口 PCIe 的 FPGA 板</strong>（Intel Arria 10，两个
+gen3.0 x4 口，一个 endpoint、一个 root
+port），这样才能一侧接手机主板、一侧接内存。现在的板子只有一个 endpoint
+口；</li>
+<li>如果目标手机的存储走 NVMe，还要加一层 NVMe 解码
+overlay，论文说这<strong>会抬高延迟</strong>；</li>
+<li><strong>对策研究没做</strong>。论文最后只说之后会研究。</li>
+</ul>
+<p>还有几处口径要在引用时注意：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>位置</th>
+<th>要注意的地方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>它是什么</strong></td>
+<td>这是一篇期刊论文（Microprocessors and
+Microsystems），不是安全四大那类会议论文；作者来自大学与法国宪兵取证机构，目标是验证取证工具的可行性</td>
+</tr>
+<tr>
+<td><strong>PCIe 版本</strong></td>
+<td>只做到 <strong>3.0</strong>（8 GT/s）。今天 GPU、NVMe 常见的 PCIe
+4.0 / 5.0 速率是它的 2 到 4 倍，这套设计能否直接沿用要重新评估</td>
+</tr>
+<tr>
+<td><strong>只到 x2</strong></td>
+<td>实测跑的是 gen3 x2 这个很窄的配置（论文说要贴近手机的接口），不是 x8
+或 x16</td>
+</tr>
+<tr>
+<td><strong>不可见的含义</strong></td>
+<td>论文说的不可见指不打断通信、不触发安全机制，不是电学上无法察觉——作者自己就在真机上用探头量信号</td>
+</tr>
+<tr>
+<td><strong>加密无关的边界</strong></td>
+<td>论文明确的是包头不加密、可用来做访问模式统计；它并没有演示在密文通信里读出内容，只有定位</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<p><strong>把一块 FPGA 插进 PCIe
+链路中间、扮演两端、转发之余读写经过的包，这件事在工程上是成立的：资源占用不到
+1%，改包只花一个时钟周期，而且两端察觉不到。</strong></p>
+<p>三个可以带走的要点：</p>
+<ol type="1">
+<li><strong>中间人的门槛在延迟与信号完整性，不在算力</strong>。论文反复强调不可见性，落实下来就是几项很具体的指标：8
+GT/s、响应不超过 1 ms、每个包只许增加极少量的时钟周期；</li>
+<li><strong>包头不加密，这一条撑起了整个观测面</strong>。即使 payload
+是密文，凭包头里的类型、地址、长度就能统计出访问模式，进而定位敏感数据；</li>
+<li><strong>它的价值在于把观测点做实</strong>。Hermes
+那类工作证明的是链路上能拿到什么，这篇证明的是——<strong>用什么代价可以把观测点放进链路里，而且放进去不被发现</strong>。</li>
+</ol>
+<p>从能看见什么，到能不能插进去还不被发现，这篇补的是后半句。</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/FPGA/" rel="tag"># FPGA</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/%E4%BE%A7%E4%BF%A1%E9%81%93/" rel="tag"># 侧信道</a>
+              <a href="/tags/%E7%A1%AC%E4%BB%B6%E6%94%BB%E5%87%BB/" rel="tag"># 硬件攻击</a>
+              <a href="/tags/%E4%B8%AD%E9%97%B4%E4%BA%BA%E6%94%BB%E5%87%BB/" rel="tag"># 中间人攻击</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/c3674e62/" rel="prev" title="Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token">
+                  <i class="fa fa-angle-left"></i> Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">506k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">15:19</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
