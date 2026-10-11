@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="论文：Spill The Beans: Exploiting CPU Cache Side-Channels to Leak Tokens from Large Language Models（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号 25-0107） 作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Poly">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token">
+<meta property="og:url" content="https://iamzihao.github.io/posts/c3674e62/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="论文：Spill The Beans: Exploiting CPU Cache Side-Channels to Leak Tokens from Large Language Models（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号 25-0107） 作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Poly">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-10-11T02:30:00.000Z">
+<meta property="article:modified_time" content="2026-10-11T02:57:11.181Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="LLM">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="侧信道">
+<meta property="article:tag" content="缓存攻击">
+<meta property="article:tag" content="flush+reload">
+<meta property="article:tag" content="隐私泄漏">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/c3674e62/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/c3674e62/","path":"posts/c3674e62/","title":"Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9C%BA%E6%99%AF%E4%B8%8D%E6%98%AF%E6%9C%AC%E6%9C%BA%E8%80%8C%E6%98%AF%E5%90%8C%E7%A7%9F%E4%B8%80%E5%8F%B0%E6%9C%BA%E5%99%A8"><span class="nav-number">2.</span> <span class="nav-text">🎬
+场景：不是「本机」，而是「同租一台机器」</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%84%E6%BC%8F%E6%BA%90embedding-%E6%98%AF%E6%9F%A5%E8%A1%A8%E4%B8%8D%E6%98%AF%E4%B9%98%E6%B3%95"><span class="nav-number">3.</span> <span class="nav-text">🔍 泄漏源：embedding
+是查表，不是乘法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88gpu-%E4%B8%8A%E7%9A%84%E8%AE%BF%E9%97%AEcpu-%E4%B9%9F%E8%83%BD%E7%9C%8B%E5%88%B0"><span class="nav-number">3.1.</span> <span class="nav-text">🔗 为什么「GPU 上的访问」CPU
+也能看到</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%A1%E5%87%86%E5%91%BD%E4%B8%AD-100-cycle%E6%9C%AA%E5%91%BD%E4%B8%AD-370-cycle"><span class="nav-number">4.</span> <span class="nav-text">🛠️ 校准：命中 100
+cycle，未命中 370 cycle</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E8%BF%9B%E7%A8%8B%E6%94%BE%E5%93%AA%E4%B8%AA%E6%A0%B8%E5%85%84%E5%BC%9F%E6%A0%B8%E8%BF%98%E6%98%AF%E5%90%8C%E4%B8%80%E9%A2%97%E6%A0%B8"><span class="nav-number">5.</span> <span class="nav-text">🎧
+攻击进程放哪个核：兄弟核还是同一颗核</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%8E%E5%8D%95%E4%B8%AA-token-%E5%88%B0-round-robin"><span class="nav-number">6.</span> <span class="nav-text">🎯 从单个 token 到 round-robin</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%A8%E6%96%87%E7%9A%84%E6%A0%B8%E5%BF%83%E6%9D%83%E8%A1%A1%E7%9B%AF%E5%A4%9A%E5%B0%91%E4%B8%AA-token"><span class="nav-number">7.</span> <span class="nav-text">⚖️ 全文的核心权衡：盯多少个
+token</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A1%88%E4%BE%8B%E4%B8%80%E4%BB%8E-prompt-%E9%87%8C%E7%9A%84-api-key-%E6%8D%9E%E8%B5%B0%E5%87%AD%E6%8D%AE"><span class="nav-number">8.</span> <span class="nav-text">🔑 案例一：从 prompt 里的
+API key 捞走凭据</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%8D%E7%9B%B4%E8%A7%89%E7%9A%84%E5%9C%B0%E6%96%B9%E9%AB%98%E7%86%B5%E5%8F%8D%E8%80%8C%E6%9B%B4%E5%A5%BD%E6%8A%93"><span class="nav-number">8.1.</span> <span class="nav-text">🎲 反直觉的地方：高熵反而更好抓</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%9C%80%E8%A6%81%E7%9B%AF%E5%A4%9A%E5%B0%91%E8%A6%81%E8%81%8A%E5%87%A0%E8%BD%AE"><span class="nav-number">8.2.</span> <span class="nav-text">📈 需要盯多少、要聊几轮</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A1%88%E4%BE%8B%E4%BA%8C%E6%99%AE%E9%80%9A%E8%8B%B1%E6%96%87%E6%96%87%E6%9C%AC%E8%83%BD%E6%8D%9E%E5%A4%9A%E5%B0%91"><span class="nav-number">9.</span> <span class="nav-text">🗣️ 案例二：普通英文文本能捞多少</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E8%87%AA%E5%B7%B1%E6%8C%87%E5%87%BA%E7%9A%84%E6%94%B9%E8%BF%9B%E6%96%B9%E5%90%91"><span class="nav-number">10.</span> <span class="nav-text">🚧 论文自己指出的改进方向</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%B9%E7%AD%96%E4%B8%8E%E4%BB%A3%E4%BB%B7"><span class="nav-number">11.</span> <span class="nav-text">🛡️ 对策与代价</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%BB%E5%8E%9F%E6%96%87%E6%97%B6%E8%A6%81%E6%B3%A8%E6%84%8F%E7%9A%84%E5%87%A0%E5%A4%84%E5%8F%A3%E5%BE%84"><span class="nav-number">12.</span> <span class="nav-text">📎 读原文时要注意的几处口径</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">89</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">217</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/c3674e62/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-10-11 10:30:00 / Modified: 10:57:11" itemprop="dateCreated datePublished" datetime="2026-10-11T10:30:00+08:00">2026-10-11</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>11k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>19 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>论文：<strong>Spill The Beans: Exploiting CPU Cache Side-Channels to
+Leak Tokens from Large Language
+Models</strong>（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号
+25-0107）</p>
+<p>作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Polytechnic
+Institute，伍斯特理工学院）</p>
+<p>概括成一段话：<strong>和受害者租在同一颗物理 CPU
+上的另一个进程，只要盯住 embedding 表里自己挑出来的那几百个 token
+的缓存行、用 flush+reload 一圈圈轮询，就能在 LLM
+生成的时候把落在这些位置上的 token
+逐个记下来——在多租户部署里，这条路子能单次捞走 80%～90% 的高熵 API
+key。</strong></p>
+</blockquote>
+<p>这个系列已经精读过三篇同一方向的论文：Hermes 站在 CPU 与 GPU 之间的
+PCIe 总线上抓明文流量，偷的是模型本身；IKnowWhatYouSaid 站在 CPU
+缓存上，用访存模式加时序把输入输出文本整个还原出来；LeftoverLocals 换到
+GPU 显存，捡上一个程序留下的数据残渣。这篇 Spill The Beans 回到了 CPU
+缓存这条线，而且是这支线里出发得最早的一篇（2025-05-01
+首发），做法也最朴素：<strong>不做时序信号处理，不训语言模型，也不还原输入，只用一轮
+flush+reload，回答一个问题——在缓存行被驱逐之前，我最多能盯得住多少个
+token。</strong></p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Embedding layer（嵌入层）</strong></td>
+<td>一张「token id → 稠密向量」的查表结构，每一行对应词表里的一个
+token</td>
+<td>全文唯一的观测面：查了哪一行，就暴露了哪个 token</td>
+</tr>
+<tr>
+<td><strong>GGUF</strong></td>
+<td>llama.cpp 系的模型文件格式，分为 Header、Metadata &amp; Tensor
+Info、Embedding Layer、Other Tensors 四段</td>
+<td>偏移量从公开格式里就能自己算，不需要模型或框架的任何秘密</td>
+</tr>
+<tr>
+<td><strong>Flush+Reload</strong></td>
+<td>共享内存下的缓存侧信道原语：擦掉一条缓存行，等一会儿再读一次并计时</td>
+<td>读得快 = 这期间有人把它搬回来过</td>
+</tr>
+<tr>
+<td><strong>clflush</strong></td>
+<td>x86 指令，把某个地址所在的缓存行从各级缓存里踢出去</td>
+<td>给每一轮扫描创造干净的初始状态</td>
+</tr>
+<tr>
+<td><strong>RDTSC</strong></td>
+<td>x86 读时间戳计数器的指令</td>
+<td>计时精度的来源，攻击者用它给每次 reload 打时间</td>
+</tr>
+<tr>
+<td><strong>Round-robin 监控</strong></td>
+<td>对一组候选 token 的地址循环扫，每圈都 flush 一遍再 reload 一遍</td>
+<td>「能盯几个 token」这个问题的载体</td>
+</tr>
+<tr>
+<td><strong>Overhead（检测开销）</strong></td>
+<td>从检测到一次命中、到能继续下一轮扫描之间花掉的计算时间</td>
+<td>开销越大漏得越多：每多 100 µs，可泄漏的 token 比例掉约 5%</td>
+</tr>
+<tr>
+<td><strong>Cache eviction（缓存驱逐）</strong></td>
+<td>一条缓存行被后来的访存挤出缓存</td>
+<td>大词表的天然对手，也是全文权衡的来源</td>
+</tr>
+<tr>
+<td><strong>Sibling cores（兄弟核）</strong></td>
+<td>同一物理核上的两个超线程，共享 L2/L3、各自有私有 L1</td>
+<td>攻击进程的默认落点</td>
+</tr>
+<tr>
+<td><strong>Unified memory（统一内存）</strong></td>
+<td>CUDA 6/8 起提供的机制，CPU 与 GPU
+共享同一套地址空间，靠页错误维持两边数据一致</td>
+<td>论文「CPU 上能观察到 GPU 访问」这一解释的支点</td>
+</tr>
+<tr>
+<td><strong>KSM / 页去重</strong></td>
+<td>内核把内容相同的物理页合并成一份并标成写时复制（COW）</td>
+<td>攻击者拿到共享内存的另一条路子</td>
+</tr>
+<tr>
+<td><strong>高熵凭据（UUID API key）</strong></td>
+<td>形如 <code>b81132e3-2129-42e3-91f4-d8b64c93fbec</code> 的 36
+字符随机串</td>
+<td>被 tokenizer 切成一批低频 token，候选集反而更小、更好盯</td>
+</tr>
+<tr>
+<td><strong>Zipf 定律</strong></td>
+<td>自然语言里第 n 个常见词的频率大致正比于 1/n</td>
+<td>盯住最常见的一千个词，就能覆盖英文文本的一大块</td>
+</tr>
+</tbody>
+</table>
+<h2 id="场景不是本机而是同租一台机器">🎬
+场景：不是「本机」，而是「同租一台机器」</h2>
+<p>先看这篇论文把攻击者放在哪儿。</p>
+<p>IKnowWhatYouSaid 的场景是本地部署——攻击者以普通应用的身份和 LLM
+跑在同一台用户机器上，还能读到同一个模型文件。这篇换成了<strong>多租户</strong>：受害者把
+LLM
+跑在共享服务器上，攻击者只是同一台物理机上租了另一个实例的另一个用户。论文列了三种具体场景：消费级应用背后的
+LLM
+服务、企业内部共享服务器上同事之间的窥探、以及把监控能力塞进浏览器标签页。</p>
+<p>威胁模型写得比前几篇更克制，四条边界都在收紧：</p>
+<ol type="1">
+<li><strong>目标系统没有任何软硬件漏洞</strong>，进程隔离、虚拟机隔离、沙箱全都正常在位；</li>
+<li>攻击者只是与受害者<strong>共处同一颗物理
+CPU</strong>，只有软件层面的处理器与内存访问权，<strong>不需要物理距离</strong>，不需要示波器或探针这类物理手段；</li>
+<li>攻击者<strong>拿不到受害者的 GPU</strong>，但 CPU
+内存空间的物理页是共享的（物理上共享、逻辑上仍然隔离）；</li>
+<li>受害者的推理本身跑在 GPU 上。</li>
+</ol>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────────────── 同一颗物理 CPU ────────────────────────┐</span><br><span class="line">│                                                                │</span><br><span class="line">│  ┌──────────────────┐   clflush + reload   ┌────────────────┐  │</span><br><span class="line">│  │ 受害者进程        │◄─────────────────────│ 攻击者进程      │  │</span><br><span class="line">│  │ LLM 推理（GPU）   │  （只测时间，不通信） │ 轮询候选地址集  │  │</span><br><span class="line">│  └────────┬─────────┘                       └────────────────┘  │</span><br><span class="line">│           │  进程隔离在位，但缓存与物理内存页是共享的            │</span><br><span class="line">│  ┌────────▼──────────────────────────────────────────────────┐  │</span><br><span class="line">│  │ 共享 LLC：embedding 表的缓存行                             │  │</span><br><span class="line">│  └───────────────────────────────────────────────────────────┘  │</span><br><span class="line">└────────────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>第 3 条和第 4
+条放在一起，就是这篇论文最需要解释、也最容易被忽略的一处：<strong>推理在
+GPU 上跑，embedding 表按理应该待在显存里，那么只守着 CPU
+侧的攻击者凭什么看得到？</strong></p>
+<h2 id="泄漏源embedding-是查表不是乘法">🔍 泄漏源：embedding
+是查表，不是乘法</h2>
+<p>泄漏源这一步和前几篇是同一个道理，这里再用一遍。</p>
+<p>LLM 把输入输出都表示成 token 序列，模型要先给每个 token
+找一条稠密向量，这一步叫 token embedding。写成矩阵形式是对 one-hot
+编码做一次线性投影 <code>E = W·x</code>；因为 one-hot 里只有一个
+1，实现上不会真去做矩阵乘法，而是退化成<strong>取 W 的第 i
+行</strong>——查表。</p>
+<p>查表就是访存，访存要经过缓存，于是「第 i
+行被载入缓存」这件事可以被外部观察到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">             ┌──────────────────────────────┐</span><br><span class="line">x = one-hot  │ Embedding Table W            │</span><br><span class="line">  第 i 位是 1 │ row 0                        │</span><br><span class="line">      │      │ row 1                        │</span><br><span class="line">      └─────►│ row i        ← cache hit     │   ← 处理 token i 时只有这一行被读</span><br><span class="line">             │ ...                          │</span><br><span class="line">             │ row |V|-1                    │</span><br><span class="line">             └──────────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p><strong>攻击者要算的，只是「第 i 行落在哪个地址」。</strong> GGUF 的
+Metadata &amp; Tensor Info 段里直接记着 embedding
+层的字节偏移、embedding 层的总大小、词表里 token
+的总数，于是两条公式就够：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Size_token    = Size_embedding_layer / Number_of_tokens      (2)</span><br><span class="line"></span><br><span class="line">Offset_token  = Offset_embedding_layer + Token ID × Size_token   (1)</span><br></pre></td></tr></table></figure>
+<p>这两步不需要模型权重、不需要框架源码、不需要知道模型结构——文件格式是公开的，算偏移是纯算术。论文因此把「校准」这一步列成攻击流程的第二环：先算地址，再谈监控。</p>
+<h3 id="为什么gpu-上的访问cpu-也能看到">🔗 为什么「GPU 上的访问」CPU
+也能看到</h3>
+<p>这是这篇论文与前几篇最不一样的地方，也是它给人留下疑问最多的地方。</p>
+<p>论文的解释是 <strong>NVIDIA CUDA
+8（2017）引入的统一内存</strong>：GPU 代码可以超量分配内存（像 CPU
+上的虚拟内存那样），而且 GPU 侧的页错误机制让 CPU 与 GPU
+之间<strong>不需要显式同步就能保持数据一致</strong>。既然 embedding
+向量留在统一内存里，两台设备上就各有一份同步的副本；攻击者在本地 CPU
+上跑 flush+reload，就能监视到 embedding 表的访问。</p>
+<p>需要留意措辞：原文用的是 <em>“we suspect that the attack capitalizes
+on unified CPU/GPU memory introduced in Nvidia Cuda
+8”</em>——<strong>这是作者的推测，不是论文验证过的机制</strong>。论文后续的实验都在一台带
+NVIDIA 显卡的机器上做（overhead 实验用 2070S + CUDA 后端，英文文本实验用
+llama.cpp 跑 8B 模型），但全文没有安排一个把 embedding
+表钉在显存上、再从 CPU
+侧观察命中的对照实验。这一点在文末的口径一节还会再提一次。</p>
+<h2 id="校准命中-100-cycle未命中-370-cycle">🛠️ 校准：命中 100
+cycle，未命中 370 cycle</h2>
+<p>在动手偷 token
+之前，论文先做了一件很基础的事：<strong>量清楚命中和未命中的延迟差多少。</strong></p>
+<p>实验设计刻意最小化：跑两个进程，一个反复读 GGUF
+文件里某个地址的字节，另一个在那个地址附近做
+flush+reload。这里<strong>没有引入推理，也没有真正跑模型</strong>——作者自己写明了，就是为了先量出系统噪声（比如预取器活动）的影响，并顺便对比两种核亲和性配置。计时用
+RDTSC，擦除用 clflush。</p>
+<p>结果很干净，两个分布几乎不重叠：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">命中（cache hit）：约 100 cycles</span><br><span class="line">未命中（miss）  ：约 370 cycles</span><br></pre></td></tr></table></figure>
+<p>阈值的取法是「覆盖 99%
+的命中延迟，再加一个标准差」，这样阈值稳稳落在两个分布中间，不会来回误判。这个校准是后面一切的基准——<strong>判定「这一行刚才被访问过」的能力，最终就落在这两个数字的差距上。</strong></p>
+<h2 id="攻击进程放哪个核兄弟核还是同一颗核">🎧
+攻击进程放哪个核：兄弟核还是同一颗核</h2>
+<p>接下来论文问了一个工程问题：攻击进程该跑在哪里？它试了两种配置。</p>
+<ul>
+<li><strong>兄弟核（sibling
+cores）</strong>：两个进程分别跑在一个物理核的两个超线程上。它们共享 L2
+和 L3，但各自有私有的 L1。</li>
+<li><strong>同一颗核（same
+core）</strong>：两个进程跑在同一个超线程上，L1、L2、L3 全都共享。</li>
+</ul>
+<p>两种配置的表现差别很明显：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>配置</th>
+<th>观测到的命中分布</th>
+<th>论文的解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>兄弟核</td>
+<td>命中主要落在<strong>被访问地址的附近</strong>，而不是地址本身</td>
+<td>共享的 L2/L3
+贡献了附近地址的命中，可能还受推测执行与预取机制影响</td>
+</tr>
+<tr>
+<td>同一颗核</td>
+<td>命中<strong>精确落在被访问的地址上</strong>，周围也有</td>
+<td>共享 L1 带来的、更细粒度的访问模式，检测精度更高</td>
+</tr>
+</tbody>
+</table>
+<p>论文据此下的结论是：<strong>两个进程跑在同一颗核上，是检测内存访问更精确的机制。</strong>
+这句结论本身没问题，但和后面的实验安排有点对不上——round-robin
+监控（§4.4）和英文文本泄漏（§6）里，攻击进程都被明说 <strong>pinned to a
+sibling
+core</strong>。论文没有解释这个选择，本篇精读把它记在文末的口径表里。</p>
+<h2 id="从单个-token-到-round-robin">🎯 从单个 token 到 round-robin</h2>
+<p>有了地址和阈值，剩下一件事：<strong>怎么盯。</strong></p>
+<p>论文先用最朴素的形态做了证明：给 Meta 的 Llama 模型一个只含单个 token
+的 prompt，然后在预期的那条 embedding 向量地址附近做 flush+reload。对 5
+个不同的 token
+各跑一遍，得到的命中分布各不相同——也就是说，<strong>从缓存命中的位置上，确实能分辨出模型此刻在处理哪个
+token</strong>。论文把这一步称为（在它知道的范围内）第一个从 LLM 里泄漏
+token 的 CPU 缓存侧信道。</p>
+<p>注意这里说的是<strong>观测到的命中分布不同</strong>，还不是「输出文本被还原」。要往文本上靠，就得同时盯多个
+token，于是有了 round-robin：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">攻击进程 pin 在一个核上，对候选 token 的地址循环执行：</span><br><span class="line"></span><br><span class="line">  ① Access  读一次这个 offset 上的缓存行</span><br><span class="line">  ② Time    用 RDTSC 记这次读的耗时</span><br><span class="line">  ③ Flush   立刻 clflush 掉同一条缓存行</span><br><span class="line">  ④ Record  若耗时低于阈值（如 200 cycles），记一次命中 → token ID</span><br><span class="line">  ⑤ Next    轮到下一个候选 token</span><br></pre></td></tr></table></figure>
+<p>阈值 200 cycles 落在 100 与 370
+之间。还有一条实现约束：<strong>检测期间不写文件、不做磁盘
+I/O</strong>，所有后处理都推到监控循环结束之后——因为一旦在循环中间插入重活，后面几个
+token 就可能在这段时间里被漏掉。</p>
+<h2 id="全文的核心权衡盯多少个-token">⚖️ 全文的核心权衡：盯多少个
+token</h2>
+<p>到这里，论文最有价值的一节来了。</p>
+<p><strong>候选 token
+盯得越少，轮一圈越快，回到某个地址时它的缓存行大概率还在，命中就抓得住；但能覆盖的词表范围也越小。盯得越多，覆盖面越大，可轮一圈的时间线性变长，回到这个地址时缓存行早被驱逐了，反而漏得多。</strong></p>
+<p>两边都不划算，中间存在一个甜点。先把两头摆清楚：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>监控集大小</th>
+<th>轮询一圈的代价</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>只盯 5 个 token</td>
+<td>极快，几乎不会漏</td>
+<td>覆盖太窄，就算一个不漏，也看不出受害者在说什么</td>
+</tr>
+<tr>
+<td>盯 1000 个以上</td>
+<td>一圈要走很久</td>
+<td>回到某个 offset 时，它的数据大概率已被驱逐，检测不到</td>
+</tr>
+</tbody>
+</table>
+<p>论文先把这个代价量化了。它在一个 1 亿参数的小模型上（CUDA
+后端，NVIDIA 2070S）监控 200 个 token 做
+round-robin，然后人为插入不同长度的「检测开销」，看 200 个 token
+里能抓到多少：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">结论：检测开销每增加 100 µs，可泄漏到的 token 比例下降约 5%。</span><br></pre></td></tr></table></figure>
+<p>这个数字直接推着作者把检测路径做得尽可能轻。至于甜点在哪，论文做了两组独立的实验，答案落得很接近：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">可泄漏到的 token 比例</span><br><span class="line">  ^</span><br><span class="line">  |            ___________</span><br><span class="line">  |          /             \___</span><br><span class="line">  |        /                    \___</span><br><span class="line">  |      /                           \___</span><br><span class="line">  |    /</span><br><span class="line">  |  /</span><br><span class="line">  +--+-------+------------------------+------&gt; 监控的 token 数</span><br><span class="line">     50    150~250                 1000+</span><br><span class="line">     覆盖不足            轮询一圈太久，回来时已被驱逐</span><br><span class="line"></span><br><span class="line">  §4.4（用已知输出的 prompt 做的对照实验）：甜点约 200 个 token</span><br><span class="line">  §6  （英文文本）：150~250 是拐点，超过之后边际收益递减</span><br></pre></td></tr></table></figure>
+<p><strong>「约 200 个 token」就是这篇论文的核心工程结论。</strong>
+论文也承认，这个数字随模型的 embedding 尺寸、缓存特性、token
+生成的时间规律而变，需要现场标定——但它点出了要害：既不是越少越好，也不是越多越好，中间那一段才两头都占。</p>
+<h2 id="案例一从-prompt-里的-api-key-捞走凭据">🔑 案例一：从 prompt 里的
+API key 捞走凭据</h2>
+<p>甜点确定之后，论文拿它去打两种目标，先说最值钱的那种。</p>
+<p>场景是很多人的真实习惯：把 API key 直接贴进 prompt，让 LLM
+帮你写调用的代码。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">User: Please write a script that checks the value of my Bitcoin wallet.</span><br><span class="line">      My API key is: &quot;b81132e3-2129-42e3-91f4-d8b64c93fbec&quot;.</span><br><span class="line">      Please only give me the code</span><br><span class="line"></span><br><span class="line">Llama:</span><br><span class="line">      import requests</span><br><span class="line">      def get_bitcoin_balance():</span><br><span class="line">          api_key = &quot;b81132e3-2129-42e3-91f4-d8b64c93fbec&quot;</span><br><span class="line">          response = requests.get(f&quot;https://pro-api.coingecko.com/api/v3/...&quot;)</span><br></pre></td></tr></table></figure>
+<h3 id="反直觉的地方高熵反而更好抓">🎲 反直觉的地方：高熵反而更好抓</h3>
+<p>按常识，随机的高熵字符串应该比自然语言难猜。这里正好相反，原因在
+tokenizer 上。</p>
+<p>LLM 的分词器主要在自然语言上训练，所以常见词有专门的 token；而
+<code>b81132e3</code>
+这串十六进制字符不符合自然语言分布，会被切成若干个<strong>平时很少出现的子串
+token</strong>。于是攻击者要盯的候选集合反而变小了——不用去覆盖「def、and、import
+这些 Python
+代码里的高频词」那一大片，只要盯住对应这些罕见子串的少数几个地址。</p>
+<p>换句话说，<strong>UUID
+的「随机」保护的是暴力猜解，在这里却变成了帮凶：它把需要监控的地址压缩成了一个稀疏的集合。</strong></p>
+<h3 id="需要盯多少要聊几轮">📈 需要盯多少、要聊几轮</h3>
+<p>论文先做了一次统计：生成 10 万个随机 UUID
+并按目标模型分词，再用另一组 10 万个 UUID 去评估——<strong>在被监控的
+token 数量与「整条 key
+被完整捕获」的概率之间，存在一条明确的曲线。</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>监控的 token 数</th>
+<th>整条 API key 被完整捕获的概率</th>
+<th>平均覆盖到的 key 内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>250（策略起点）</td>
+<td>1.4%</td>
+<td>86.3%</td>
+</tr>
+<tr>
+<td>1250</td>
+<td>83.4%</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>这两个数字看着矛盾，其实是同一枚硬币的两面：<strong>86.3%
+是「平均能看到多少内容」，1.4%
+是「一次不漏地看到全部」</strong>。平均每七个 token
+里就有一个没被盯住，而一条 key
+要完整拼出来，这些缺口得一次都不落下——所以覆盖率可以很高，全捕获概率仍然很低。论文的对策，就是把「重复出现」当成资源用起来：</p>
+<ol type="1">
+<li><strong>先广后窄地轮换</strong>：第一轮宽范围监控（例如最靠前的 250
+个
+token），记下哪些位置命中了；没命中的那些，说明它们属于这个凭据里更难碰上的子串；</li>
+<li><strong>下一轮换一批</strong>：把已经确认过的 token
+划掉，换成另一片区域里、上次没监控的 token；</li>
+<li>用户和模型的对话里，key
+常常会出现不止一次（贴一次、让模型写进代码一次、再让模型重构一次），每出现一次就是一轮新的机会。两三次曝光之后，完整捕获的概率就能被推到接近
+100%。</li>
+</ol>
+<p>论文在 llama.cpp（Intel Comet Lake 服务器 CPU + NVIDIA
+2070S）上端到端跑了一组实验，结果是把「监控多少
+token」换算成了「要聊几轮」：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>监控集大小</th>
+<th>泄漏 50% 需要几轮</th>
+<th>泄漏 80% 需要几轮</th>
+<th>泄漏 100% 需要几轮</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>50</td>
+<td>1</td>
+<td>7</td>
+<td>66</td>
+</tr>
+<tr>
+<td>100</td>
+<td>1</td>
+<td>4</td>
+<td>33</td>
+</tr>
+<tr>
+<td>200</td>
+<td>1</td>
+<td>1</td>
+<td>18</td>
+</tr>
+<tr>
+<td>250</td>
+<td>1</td>
+<td>1</td>
+<td>15</td>
+</tr>
+<tr>
+<td>300</td>
+<td>1</td>
+<td>1</td>
+<td>12</td>
+</tr>
+<tr>
+<td>350</td>
+<td>1</td>
+<td>2</td>
+<td>12</td>
+</tr>
+<tr>
+<td>400</td>
+<td>1</td>
+<td>2</td>
+<td>9</td>
+</tr>
+</tbody>
+</table>
+<p>这张表把权衡讲得最直白：<strong>盯 50 个 token
+时，一轮就能捞出一半内容，但要捞全得聊 66 轮；盯 400 个时，9
+轮就够。</strong> 论文由此得出对 API key
+的总体结论——一次就完美还原不太现实，<strong>但平均能泄漏
+80%～90%，再配合重复曝光和动态挑选，整条 key
+大概率能拼回来。</strong></p>
+<h2 id="案例二普通英文文本能捞多少">🗣️ 案例二：普通英文文本能捞多少</h2>
+<p>第二种目标是纯英文对话，没有高熵凭据可捡，只剩下最普通的话。</p>
+<p>监控集是这样挑的：从 Cornell Movie Dialogs
+语料里抽出原始台词做词频分析，取频率最高的一千个
+token——主要是冠词、连词、介词（<code>and</code>、<code>the</code>、<code>it</code>、<code>to</code>
+这一档）。依据是 <strong>Zipf 定律</strong>：第 n 个常见词的频率大致是
+1/n，所以一千个高频词就能覆盖英文书面材料的很大一块。这一步有个坑：LLM
+的分词器经常把词切成子词，所以高频「词」还得逐个对齐到模型 GGUF 里真正的
+token ID，监控集才算准。</p>
+<p>攻击设置则更贴近真实：从 Quora 问题集里随机取问题（例如 <em>What is
+the best way to learn Python?</em>）作为单次 prompt，模型是
+<code>Meta-Llama-3.1-8B-Instruct-Q8_0.gguf</code>，走
+llama.cpp；攻击进程 pin 在兄弟核上，对那一千个目标 token 做
+round-robin。<strong>攻击者不假设任何关于问题内容或回答内容的先验知识。</strong></p>
+<p>然后变化监控的 token 数（50 到
+650），每个配置都只跑<strong>一次</strong>（single-shot），看能抓到回答里多大比例的
+token：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">可泄漏的英文 token 比例</span><br><span class="line">  ^</span><br><span class="line">  |              ______</span><br><span class="line">  |            /        \____</span><br><span class="line">  |          /                \___</span><br><span class="line">  |        /</span><br><span class="line">  |      /</span><br><span class="line">  |    /</span><br><span class="line">  +--+-----+----------------------+-----&gt; 监控的 token 数</span><br><span class="line">     50   150~250                650</span><br><span class="line">      太少        拐点          开销与驱逐开始占上风</span><br></pre></td></tr></table></figure>
+<p>结果和上一节是同一个形状：<strong>盯 150～250 个 token
+时收益最高，再往上加只增加了往返延迟和驱逐概率，白花力气。</strong>
+论文给出的数字是<strong>单次可达约 40% 的恢复率</strong>（写在摘要与 §1
+的贡献列表里），并且强调这个比例高度依赖所选的监控集——针对更专门的输出领域（比如固定格式的代码、日志），覆盖率还能再提。</p>
+<p>一个值得注意的推论是：<strong>「攻击者只对随机数据感兴趣」这个假设站不住。</strong>
+即使是普通的英文提问，只要被推出来的比例够高，也可能暴露个人细节、医疗信息或企业机密。</p>
+<h2 id="论文自己指出的改进方向">🚧 论文自己指出的改进方向</h2>
+<p>论文在收尾时列了三条可以往下走的路，其中两条正好和同系列的另外两篇呼应：</p>
+<ul>
+<li><strong>换用别的缓存侧信道</strong>：Prime+Probe 和 Prime+Scope
+都不需要共享页，在大规模监控和信号稳定性上可能更好；代价是需要更懂缓存的索引与关联度参数，而且换个
+CPU 型号就得重新摸一遍。</li>
+<li><strong>上下文感知的轮换监控</strong>：让监控集跟着已经捞到的内容变。最简单的例子是——检测到句号这类句末
+token，就把监控重点切到句首更容易出现的词（比如首字母大写的词）；更复杂的做法是用马尔可夫链或概率语言模型预测下几个最可能出现的
+token，把不相关的监控项换掉。</li>
+<li><strong>用语言模型做后处理</strong>：漏掉或者拼歪的
+token，用已知上下文让
+LLM「填空」。论文特意指出这一步是<strong>离线</strong>做的，不会干扰实时测量——这正是
+IKnowWhatYouSaid 里 LLMA 和 LLMB
+两个微调模型在做的事，只不过那一篇把它做成了攻击管线的主干，这一篇只把它列为「未来可以加」。</li>
+</ul>
+<h2 id="对策与代价">🛡️ 对策与代价</h2>
+<p>论文给的对策覆盖应用层、系统层与硬件层，共同点是都要在性能或部署上付账：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>措施</th>
+<th>做法</th>
+<th>代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>时间与空间随机化</strong></td>
+<td>推理时随机去读 embedding
+层里那些用不到的段，把「缓存命中」和「真的在用这个
+token」之间的关联冲淡；或者学密码库的常数时间写法，让向量访问的模式变得整齐</td>
+<td>额外的访存会让推理变慢；常数时间访问是否实用，论文说还需进一步研究</td>
+</tr>
+<tr>
+<td><strong>不让攻击者共享内存页</strong></td>
+<td>保证攻击者与受害者不共享含模型参数的物理页，在 hypervisor
+或容器层面强制隔离，不共享库和模型</td>
+<td>隔离本身有性能开销；这一条能挡住依赖共享页的 flush+reload</td>
+</tr>
+<tr>
+<td><strong>硬件层缓存划分</strong></td>
+<td>用 Intel CAT 之类的技术按进程／虚拟机切分缓存路数，或者用 CacheGuard
+这类带分区能力的缓存设计</td>
+<td>需要特定硬件支持，公开云与消费级平台不一定提供；论文把它算作最直接有效的缓解</td>
+</tr>
+<tr>
+<td><strong>关掉页去重（KSM）</strong></td>
+<td>关掉内核同页合并，攻击者就拿不到去重产生的共享页</td>
+<td>内存占用上升。论文明确说这条一般<strong>不推荐</strong>，理由就是这份开销（原文
+<em>performance losses</em>）不划算</td>
+</tr>
+</tbody>
+</table>
+<h2 id="读原文时要注意的几处口径">📎 读原文时要注意的几处口径</h2>
+<p>精读对照时，有几处值得先分清楚，免得引用时张冠李戴：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>位置</th>
+<th>需要注意的地方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>机制是推测</strong></td>
+<td>全文「CPU 上能观察到 GPU 内存访问」这一环，建立在对 CUDA
+统一内存一致性的<strong>猜测</strong>上（原文 <em>we
+suspect</em>），论文没有设计对照实验来验证 embedding
+表真的驻留在显存一侧、又能从 CPU 侧被观察到</td>
+</tr>
+<tr>
+<td><strong>两篇论文给出相反判断</strong></td>
+<td>IKnowWhatYouSaid 对同一问题做了对照实验，结论是「一旦 embedding
+查表被放到 GPU 上，CPU 缓存侧信道就看不到了（离散 GPU 的缓存与 CPU
+不保持一致）」，并且列出了唯一失败的框架配置。两篇论文在这里的分歧，正好说明
+Spill The Beans 缺的那一步验证有多关键</td>
+</tr>
+<tr>
+<td><strong>两个百分比不是一回事</strong></td>
+<td>摘要里的「80%～90%」指的是<strong>平均泄漏到多少比例的 key
+内容</strong>；Figure 8 里的「1250 个 token 对应
+83.4%」指的是<strong>整条 key
+被完整捕获的概率</strong>。前者是覆盖率，后者是「一次全对」的概率，混用会得出很不一样的结论</td>
+</tr>
+<tr>
+<td><strong>「首个」是自称</strong></td>
+<td>论文多次声明自己是第一个用硬件级缓存侧信道泄漏 LLM token
+的工作（<em>to our knowledge</em>）。它与 IKnowWhatYouSaid
+属于同一时期的同源思路——都是 flush+reload 盯 embedding
+表——但一个只做输出、靠一轮轮询；另一个做了输入输出双向还原和语言模型驱动的去噪管线</td>
+</tr>
+<tr>
+<td><strong>核亲和性前后不一致</strong></td>
+<td>§4.2 的结论是「两个进程跑在同一颗核上检测更精确」，但 §4.4 与 §6
+的实际实验都把攻击进程 pin
+在<strong>兄弟核</strong>上，论文没有解释这个选择</td>
+</tr>
+<tr>
+<td><strong>地址那一步没有交代</strong></td>
+<td>公式算出的是 GGUF <strong>文件内的字节偏移</strong>，而 flush+reload
+需要的是攻击者进程地址空间里的<strong>虚拟地址</strong>。论文没有写明攻击者是怎么把文件偏移变成自己可
+flush 的地址（对照之下，IKnowWhatYouSaid 明确解释了 mmap
+共享模型文件这条路径）</td>
+</tr>
+<tr>
+<td><strong>40% 没有落到图上</strong></td>
+<td>英文文本「单次可恢复约 40%」这个数字只出现在摘要与 §1
+的贡献列表里，对应的 Figure
+9（§6.1）只给出曲线形状，没有标出各监控配置下的具体百分比</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<p><strong>在同一颗物理 CPU 上共享缓存的另一个进程，可以盯着 embedding
+表里自己选定的那几百个 token，用 flush+reload
+一圈圈轮询，把模型生成时落在那几个位置上的 token
+逐个记下来。论文真正解决的问题不是「能不能看见」，而是「在缓存行被驱逐之前，最多能盯住多少个」——答案是两百个左右。</strong></p>
+<p>三个可以带走的要点：</p>
+<ol type="1">
+<li><strong>这是缓存侧信道里最朴素的一种形态</strong>：没有时序信号处理，不训模型，只用一轮
+flush+reload
+加一张阈值表。它换来的能力也相应有限——只还原输出、只覆盖被监控的那部分词表，单次约
+40% 的英文 token、80%～90% 的高熵凭据。</li>
+<li><strong>全文的核心是一个两端都堵的权衡</strong>：盯得少则轮询快、抓得住，但看得窄；盯得多则看得宽，但一圈走完缓存行早没了。<strong>约
+200 个 token
+是两头相交的位置</strong>，也是这篇论文最实用的一条结论。</li>
+<li><strong>「高熵反而更好抓」值得单独记住</strong>：Tokenizers
+是为自然语言训练的，UUID 这种随机串被切成一批罕见子串
+token，候选集因此变稀疏；再叠上「凭据会在对话里重复出现」这一点，一次抓不全的概率可以在两三轮里补回来。</li>
+</ol>
+<p>把它放回这个系列里看，位置就清楚了：<strong>Hermes
+偷模型，IKnowWhatYouSaid 偷输入输出，LeftoverLocals 捡显存残渣，而 Spill
+The Beans 是这支线里出发得最早的一篇，把「共享缓存里的访存模式会泄漏
+token」摆到了台面上。</strong>
+它的威胁模型也最贴合云上多租户——攻击者不需要读模型文件，不需要物理接近，只要和别人租到同一颗
+CPU 上。至于「GPU 上跑的推理为什么能从 CPU
+看见」这个环节，它是靠推论串起来的，而这一点恰恰是后来那篇做了对照实验、并给出相反结论的地方——<strong>读这一篇时，最该带着疑问的就是这里。</strong></p>
+<p>（本文为 arXiv:2505.00817v1 论文 <em>Spill The Beans: Exploiting CPU
+Cache Side-Channels to Leak Tokens from Large Language Models</em>
+的精读笔记，正文表格内的数据取自论文原文。）</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/LLM/" rel="tag"># LLM</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/%E4%BE%A7%E4%BF%A1%E9%81%93/" rel="tag"># 侧信道</a>
+              <a href="/tags/%E7%BC%93%E5%AD%98%E6%94%BB%E5%87%BB/" rel="tag"># 缓存攻击</a>
+              <a href="/tags/flush-reload/" rel="tag"># flush+reload</a>
+              <a href="/tags/%E9%9A%90%E7%A7%81%E6%B3%84%E6%BC%8F/" rel="tag"># 隐私泄漏</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/5d9e4b21/" rel="prev" title="LeftoverLocals 精读：从 GPU 显存残渣里偷听本地 LLM 的回复">
+                  <i class="fa fa-angle-left"></i> LeftoverLocals 精读：从 GPU 显存残渣里偷听本地 LLM 的回复
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">499k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">15:07</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
