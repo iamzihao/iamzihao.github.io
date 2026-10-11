@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IOTLB-SC 精读：IOMMU 的地址翻译缓存，也在向隔壁设备泄漏">
+<meta property="og:url" content="https://iamzihao.github.io/posts/dab7c292/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-10-13T03:00:00.000Z">
+<meta property="article:modified_time" content="2026-10-11T08:27:35.105Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="FPGA">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="侧信道">
+<meta property="article:tag" content="IOMMU">
+<meta property="article:tag" content="云安全">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/dab7c292/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/dab7c292/","path":"posts/dab7c292/","title":"IOTLB-SC 精读：IOMMU 的地址翻译缓存，也在向隔壁设备泄漏"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>IOTLB-SC 精读：IOMMU 的地址翻译缓存，也在向隔壁设备泄漏 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E4%B8%80%E5%9D%97%E6%B2%A1%E4%BA%BA%E7%9B%AF%E8%BF%87%E7%9A%84%E7%BC%93%E5%AD%98"><span class="nav-number">2.</span> <span class="nav-text">🧭 起点：一块没人盯过的缓存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E6%B5%8B%E5%87%BA%E6%9D%A5%E6%8B%BF-fpga-%E5%BD%93%E7%A7%92%E8%A1%A8"><span class="nav-number">3.</span> <span class="nav-text">🔬 怎么测出来：拿 FPGA 当秒表</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%89%BE-eviction-set%E4%B8%8D%E7%9F%A5%E9%81%93%E7%BB%93%E6%9E%84%E4%B9%9F%E8%83%BD%E6%89%BE"><span class="nav-number">4.</span> <span class="nav-text">🎯 找 eviction
+set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%83%BD%E7%9C%8B%E5%88%B0%E4%BB%80%E4%B9%88%E5%85%B6%E5%AE%9E%E9%9D%9E%E5%B8%B8%E6%9C%89%E9%99%90"><span class="nav-number">5.</span> <span class="nav-text">🕵️ 能看到什么：其实非常有限</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%81%E6%98%8E%E5%AE%83%E7%9C%9F%E8%83%BD%E9%80%9A%E4%B8%A4%E6%9D%A1-covert-channel"><span class="nav-number">6.</span> <span class="nav-text">📡 证明它真能通：两条 covert
+channel</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E9%98%B2"><span class="nav-number">7.</span> <span class="nav-text">🛡️ 怎么防</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E7%AF%87%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 这篇的边界</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">91</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">221</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/dab7c292/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="IOTLB-SC 精读：IOMMU 的地址翻译缓存，也在向隔壁设备泄漏 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          IOTLB-SC 精读：IOMMU 的地址翻译缓存，也在向隔壁设备泄漏
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-13 11:00:00" itemprop="dateCreated datePublished" datetime="2026-10-13T11:00:00+08:00">2026-10-13</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-11 16:27:35" itemprop="dateModified" datetime="2026-10-11T16:27:35+08:00">2026-10-11</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>5.4k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>10 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>概括成一段话：<strong>设备要访问内存得先做地址翻译，翻译结果被 IOMMU
+缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU
+下的所有设备共用。于是控制一块可编程 PCIe 卡（比如
+FPGA）的一方，只要盯着自己 DMA
+访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的
+GPU——有没有在干活，全程不需要任何内核权限。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>IOTLB-SC: An Accelerator-Independent Leakage Source in
+Modern Cloud Systems</strong>（ASIA CCS ’23，2023-07）</p>
+<p>作者：Thore Tiemann、Thomas Eisenbarth（University of Lübeck）、Zane
+Weissman、Berk Sunar（Worcester Polytechnic Institute）</p>
+</blockquote>
+<p>CPU 缓存侧信道已经被翻来覆去研究了很多年，但缓存并不只在 CPU
+里。设备要访问内存也得先做地址翻译，翻译结果同样会被缓存起来，这块缓存叫
+IOTLB，它属于 IOMMU，而且被挂在同一个 IOMMU
+下的所有设备共用。这篇论文问的正是这件事：<strong>这块缓存会不会泄漏，泄漏出来的又是什么。</strong></p>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>DMA</strong>（Direct Memory Access）</td>
+<td>设备不经 CPU 直接读写主存</td>
+<td>现代网卡、GPU、SSD 都靠它</td>
+</tr>
+<tr>
+<td><strong>IOMMU</strong></td>
+<td>挡在 PCIe 设备与主存之间的地址翻译与保护单元</td>
+<td>CPU 里的 MMU 是给它做参考的样板</td>
+</tr>
+<tr>
+<td><strong>IOVA</strong>（I/O Virtual Address）</td>
+<td>设备侧使用的虚拟地址</td>
+<td>要和物理地址区分开</td>
+</tr>
+<tr>
+<td><strong>IOTLB</strong></td>
+<td>IOMMU 里的地址翻译缓存，存下最近的 IOVA 到物理地址的映射</td>
+<td>全文的主角，也是被共享的那块资源</td>
+</tr>
+<tr>
+<td><strong>Eviction set</strong></td>
+<td>一组地址，访问它们能稳定地把某个缓存组里的其他条目全挤出去</td>
+<td>侧信道攻击的抓手</td>
+</tr>
+<tr>
+<td><strong>Prime+Probe</strong></td>
+<td>先用 eviction set 填满目标组，等一会儿，再访问一次并计时</td>
+<td>不需要攻击者与受害者共享内存</td>
+</tr>
+<tr>
+<td><strong>Flush+Reload</strong></td>
+<td>先清掉目标缓存行，等受害者执行，再读一次并计时</td>
+<td>需要共享内存，但时间分辨率更高</td>
+</tr>
+<tr>
+<td><strong>PAC</strong>（Programmable Acceleration Card）</td>
+<td>Intel 的可编程加速卡，卡上是 FPGA</td>
+<td>论文里攻击者用的就是它，云上可以按需租</td>
+</tr>
+<tr>
+<td><strong>ATS</strong>（Address Translation Services）</td>
+<td>允许设备自己维护一份本地翻译表、绕过 IOMMU 翻译</td>
+<td>论文的对策之一，也是双刃剑</td>
+</tr>
+</tbody>
+</table>
+<h2 id="起点一块没人盯过的缓存">🧭 起点：一块没人盯过的缓存</h2>
+<p>先分清两条地址翻译的路。CPU 访问内存时，由 MMU
+把虚拟地址翻译成物理地址，翻译结果缓存在 TLB
+里。设备访问内存时也有对应的一套：IOMMU 负责翻译，缓存就叫 IOTLB。</p>
+<p>两者的结构非常像，都按组（set）和路（way）组织，都有容量上限，也都需要一套替换策略来决定挤掉谁。但它们的暴露面完全不同：CPU
+的 TLB 是每个核私有的，而 IOTLB
+在硬件上就是<strong>一块被多个设备共用的表</strong>。</p>
+<p>论文给了一个很具体的层次图：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">地址翻译的两条路</span><br><span class="line"></span><br><span class="line">CPU 侧：   应用程序 → MMU → TLB（每核私有）        → 主存</span><br><span class="line">设备侧：   设备 DMA → IOMMU → IOTLB（多设备共用）  → 主存</span><br><span class="line">                              ↑</span><br><span class="line">                        这条路上的缓存被共享</span><br></pre></td></tr></table></figure>
+<p>共享这件事本身不新鲜，CPU
+缓存也是共享的。新的是这块缓存的<strong>位置</strong>：IOTLB
+夹在设备与主存之间，任何走 DMA
+的设备都得经过它，而它在此之前几乎没有被当成攻击面研究过。</p>
+<p>论文还特别交代了它相对前人的假设更弱。此前有两项工作靠 PCIe
+总线拥塞做侧信道，它们的前提是攻击者设备与受害者设备<strong>挂在同一个
+PCIe switch 上</strong>；这篇只要求两者<strong>共享一个 root
+port</strong>。后一个条件更松：共享 switch 的设备一定共享 root
+port，反过来不成立。</p>
+<h2 id="怎么测出来拿-fpga-当秒表">🔬 怎么测出来：拿 FPGA 当秒表</h2>
+<p>想观测 IOTLB，得有一个能自己发 DMA 请求、还能精确计时的设备。CPU
+做不到这件事——IOMMU 是给设备用的，CPU
+没法直接去探它的状态。所以论文的观测工具就是一块 FPGA。</p>
+<p>先要确认时延差真的存在。论文引了他人的测量：一次 IOTLB
+未命中会让访问延迟增加约 <strong>330 ns</strong>。他们的 FPGA 跑在 200
+MHz，换算下来期望看到 66 个时钟周期的差距。实测吻合：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>主存读延迟（FPGA 时钟周期）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>关闭 IOMMU</td>
+<td>160～185</td>
+</tr>
+<tr>
+<td>开启 IOMMU，首次访问（翻译不在 IOTLB 里）</td>
+<td>225～270</td>
+</tr>
+<tr>
+<td>开启 IOMMU，后续访问（翻译已在 IOTLB 里）</td>
+<td>与关闭 IOMMU 时接近</td>
+</tr>
+<tr>
+<td><strong>可测量的差值</strong></td>
+<td><strong>65～85</strong></td>
+</tr>
+</tbody>
+</table>
+<p>65 到 85
+个周期的差距相当充裕，足以稳定区分命中与未命中。论文在三套系统上验证过这一点，其中两套是云上的机器，只有普通用户权限。</p>
+<p>硬件那一侧，论文写了一个叫 <code>iotlb_pnp</code> 的模块，可编程 7
+条指令，实际支持 5
+条：<code>evset_prime</code>、<code>evset_probe</code>、<code>target_prime</code>、<code>target_probe</code>、<code>wait</code>。顾名思义，前两条是访问一组
+eviction set，中间两条是访问单个目标地址，<code>wait</code>
+就让模块空转指定的周期数。其中 probe
+类指令会数时钟周期——它是整套攻击的测量仪器。</p>
+<p>另外还有一个只能在高权限环境用的辅助工具：一个内核模块，可以清空某个
+IOMMU 的整个 IOTLB。加载内核模块需要 root，所以它只在作者能拿到 root
+的那套本地机器上用了。</p>
+<h2 id="找-eviction-set不知道结构也能找">🎯 找 eviction
+set：不知道结构也能找</h2>
+<p>有了秒表，下一个问题是找到 eviction set——一组能可靠地把目标地址从
+IOTLB 里挤出去的地址。</p>
+<p>论文一开始的假设是 IOTLB 和传统 TLB
+一样：页地址的最低若干位决定它落在哪一组。结果这个假设<strong>被实验推翻</strong>了（细节放在附录
+A.1）。既然组织方式猜不出来，就只能用不依赖结构假设的办法。</p>
+<p>他们提出的是 grow-reduce 算法，两步循环：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">地址池（4096 个页）</span><br><span class="line">      ↓ 随机挑地址加进候选集合，直到能稳定挤掉目标</span><br><span class="line">  确定能挤掉（grow）</span><br><span class="line">      ↓ 逐个把地址拿出来试，拿掉之后还能挤掉，说明这个地址是多余的</span><br><span class="line">  只留必要的（reduce）</span><br><span class="line">      ↓</span><br><span class="line">  eviction set：118 个地址，成功率 100%</span><br></pre></td></tr></table></figure>
+<p>这里有一个很实际的结论，和攻击者的权限直接相关：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>是否清空 IOTLB</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每次 Prime+Probe 前清空</td>
+<td>两套算法都能给出单个 118 地址的 eviction set，实测成功率
+<strong>100%</strong></td>
+</tr>
+<tr>
+<td>不清空</td>
+<td>没有算法能稳定给出这么规整的结果；此时 grow-reduce
+的优势体现出来——它给出的集合更小、可靠性是 grow-split 的两倍</td>
+</tr>
+</tbody>
+</table>
+<p>清空 IOTLB
+需要内核权限，而云上的租户通常没有。也就是说，<strong>有权限的人能拿到近乎完美的
+eviction
+set；没有权限的人得接受更粗糙的集合</strong>。论文因此把威胁模型按权限拆成了四档（1u/1k/2u/2k，u
+表示只有用户权限、k
+表示还有内核权限），主要分析的是无内核权限的那两档。</p>
+<h2 id="能看到什么其实非常有限">🕵️ 能看到什么：其实非常有限</h2>
+<p>这部分是全文最诚实、也最值得记住的地方。</p>
+<p>论文搭的实验场景是：FPGA 与一块 NVIDIA Tesla T4 共处同一个 IOMMU，T4
+上跑一个 GPU 加速的 SQL 数据库。攻击流程就是标准的 Prime+Probe：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1. Prime：FPGA 访问 eviction set，把 IOTLB 里那一组填满</span><br><span class="line">      ↓</span><br><span class="line">2. Wait：让 GPU 去跑一次 SQL 查询</span><br><span class="line">      ↓</span><br><span class="line">3. Probe：FPGA 再访问 eviction set 并计时</span><br><span class="line">      ↓</span><br><span class="line">   变慢 → 有别的翻译挤进了这一组 → GPU 动过</span><br></pre></td></tr></table></figure>
+<p>结果是分层的，得一层层看：</p>
+<p><strong>第一层，能不能看见</strong>：能。GPU 跑查询时确实会在 IOTLB
+里留下足迹，平均每次查询挤掉 18 到 20 个条目。</p>
+<p><strong>第二层，能不能区分查询内容</strong>：不能。论文特意挑了几个<strong>结果规模差别很大</strong>的查询（返回
+0 行、1 行、409600 行），测量出来的 IOTLB
+活动几乎一样。结果大的查询只会让痕迹持续更久，因为算得慢，痕迹的<strong>形状</strong>没有区别。</p>
+<p><strong>第三层，为什么区分不了</strong>：原因有两个，而且都来自当下的实现惯例：</p>
+<ul>
+<li>结果从 GPU 传回 CPU 时，走的是 <strong>MMIO</strong> 而不是
+DMA。论文用 PCIe 性能计数器核实过：回传期间 IOTLB 一片安静，而 MMIO
+读请求的量正好对得上返回结果的大小。地址翻译在 CPU 的 MMU
+里做了，压根没走 IOMMU；</li>
+<li>常规的 DMA
+是<strong>批量传输</strong>：把一大块数据搬进设备、算完再整块搬回去。整块搬运不产生与数据相关的访问模式，也就没什么可泄漏的。</li>
+</ul>
+<p>把这两条合起来，论文给出的判断很直白：<strong>目前从 IOTLB
+能稳定读到的基本上只有一位——隔壁那块加速器在不在干活。</strong></p>
+<p>不过两位作者没有停在这里，他们接着说了为什么这一位会变得越来越值钱：</p>
+<ul>
+<li>PCIe 5.0
+的速率已经逼近主存访问，设备厂商可能会因此减小设备本地内存，转而<strong>更频繁地访问主存</strong>；</li>
+<li>CXL
+带来的一致性协议会鼓励设备与主存之间更细粒度的数据交换，开发者会<strong>从批量传输转向数据相关的细粒度
+DMA</strong>。</li>
+</ul>
+<p>一旦这两件事发生，与数据相关的访问模式就会出现，而它正好落在 IOTLB
+能看见的范围内。论文对自己的定位很清楚：<strong>现在不危险，但要赶在它变危险之前先把它讲出来。</strong></p>
+<h2 id="证明它真能通两条-covert-channel">📡 证明它真能通：两条 covert
+channel</h2>
+<p>侧信道能看见东西之后，论文用它搭了两条隐蔽通道，一条外设到外设，一条
+CPU 到外设。</p>
+<p>外设到外设那条很巧妙：发送方是 GPU 上的 SQL
+数据库，跑一次查询编码一个 1，不跑编码一个 0；接收方就是
+FPGA。论文实际传了 <code>Hello</code> 这个词（图 4 里能看见 01001000
+01100101… 的位序）。</p>
+<p>两条通道的性能放在一起对比，差距大得值得单独看一眼：</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>通道</th>
+<th>方法</th>
+<th>环境</th>
+<th>吞吐</th>
+<th>错误率</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>外设 → 外设（§6.1）</td>
+<td>Prime+Probe</td>
+<td>裸金属</td>
+<td>3.4 bps（全 1）／6.65 bps（1 与 0 各半）／246.15 bps（全 0）</td>
+<td>0%／0%／0.1%</td>
+</tr>
+<tr>
+<td>外设 → 外设，ASCII 文本</td>
+<td>Prime+Probe</td>
+<td>裸金属</td>
+<td>7.58 bps</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>CPU → 外设（附录 A.2）</td>
+<td>Flush+Reload</td>
+<td>裸金属</td>
+<td>15023 bps</td>
+<td>30.09%</td>
+</tr>
+</tbody>
+</table>
+<p>这里有个容易被误读的地方：外设到外设的通道<strong>速率完全取决于消息里有几个
+1</strong>——每个 1 都要跑一次 SQL 查询，而一次查询要花大约 0.3
+秒。所以全是 0 的消息能跑到 246 bps，一旦混进 1，速率就掉到几 bps。而
+CPU 到外设那条快到 15023 bps，靠的是 CPU 直接刷
+IOTLB（Flush+Reload），代价是它需要内核权限，且错误率高达 30%。</p>
+<p>也就是说，<strong>越快的那条越不实际，越慢的那条才落在真实的威胁模型里</strong>。</p>
+<h2 id="怎么防">🛡️ 怎么防</h2>
+<p>论文按<strong>现在能做</strong>和<strong>将来该做</strong>分了两层。</p>
+<p><strong>现在能做的</strong>：</p>
+<ul>
+<li><strong>隔离</strong>：让互不信任的用户不要共用同一块 IOMMU
+硬件。这是最彻底的一条，代价是牺牲扩展性——论文举了个很具体的例子：一块有
+8 个满速 PCIe 插槽、但只有 4 块 IOMMU 的主板，没法配成 8
+个彼此隔离的单卡实例，尽管物理上插得下 8 张卡；</li>
+<li><strong>常量访问模式</strong>：让涉及秘密的计算以恒定的内存访问模式执行。密码学实现里这是常规操作，但数据库这类应用很难做到；</li>
+<li><strong>ATS</strong>：允许设备自己维护本地翻译表，翻译不走
+IOMMU，也就不在 IOTLB
+里留痕。但它只能开给可信设备——论文指出，恶意设备可以利用 ATS
+把任意物理地址标成已翻译，从而绕开全部限制。</li>
+</ul>
+<p><strong>硬件层面该做的</strong>：IOTLB
+按组或按路分区（论文提到可以借鉴 Intel CAT
+的思路）；或者干脆支持把某些页标记为不可缓存，让它永远不进
+IOTLB。后一条的代价很直白——<strong>这些页的每一次访问都会像未命中一样慢</strong>。</p>
+<h2 id="这篇的边界">⚠️ 这篇的边界</h2>
+<p>这篇论文的贡献和它的限制一样清楚，引用时最好一起带上：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>位置</th>
+<th>要注意的地方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>当前泄漏量</strong></td>
+<td>论文自己写得很明白：现阶段能观测到的基本只有一位，即隔壁加速器是否在工作。它是一份<strong>未来威胁</strong>的报告，而不是一个能立刻偷数据的攻击</td>
+</tr>
+<tr>
+<td><strong>为什么现在不危险</strong></td>
+<td>两个当代事实撑着：结果回传走 MMIO（翻译在 CPU 侧做）、DMA
+是批量传输（没有数据相关的访问模式）。这两条都是实现惯例，不是原理上的保证</td>
+</tr>
+<tr>
+<td><strong>未命中延迟的出处</strong></td>
+<td>330 ns 这个数字引自 Neugebauer 等人的 PCIe
+性能基准测试，不是本文自己测的；本文测的是差值落在 65～85
+个时钟周期</td>
+</tr>
+<tr>
+<td><strong>三套系统的差异</strong></td>
+<td>本地系统（a10l）作者有
+root，云上两套（a10v、s10v）只有用户权限。所以侧信道与隐蔽通道实验只在
+a10l 上跑，算法评估才覆盖三套</td>
+</tr>
+<tr>
+<td><strong>攻击者要有什么</strong></td>
+<td>一块可编程、能做 DMA 的 PCIe 设备（FPGA 或
+GPU），且与受害者共享同一个
+IOMMU。论文特意指出，AWS、阿里云这类平台已经允许租用带 DMA 能力的
+FPGA，所以这个前提在云上是可达的</td>
+</tr>
+<tr>
+<td><strong>威胁模型编号</strong></td>
+<td>论文用的是 1u／1k／2u／2k 这套记号，后半的 u／k
+表示攻击者是否另有内核权限。读的时候别把 k 档的结论套到 u 档上</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<p><strong>IOMMU 里的地址翻译缓存（IOTLB）是一块被多个设备共用的表，同一
+IOMMU 下的另一块可编程 PCIe 设备能靠自己的 DMA
+时延读出它的活动；但就目前而言，读到的基本只有</strong>隔壁设备在不在用<strong>这一位信息。</strong></p>
+<p>三个可以带走的要点：</p>
+<ol type="1">
+<li><strong>共享缓存的清单比想象的更长</strong>。CPU 缓存、TLB
+之外，设备侧的地址翻译缓存同样是共享资源，而且它挡在每一条 DMA
+路径上；</li>
+<li><strong>威胁模型的门槛比想象中低</strong>。只需要一块和受害者共享
+IOMMU 的可编程 PCIe
+设备，不需要内核权限，也不需要与受害者共享内存——云上按需租一块 FPGA
+就够了；</li>
+<li><strong>这篇的价值在于时点，而不是当下的杀伤力</strong>。作者反复强调
+PCIe 5.0 与 CXL 会改变设备的访存习惯，把批量传输推向细粒度、数据相关的
+DMA——而那正是这类侧信道真正需要的东西。<strong>先把话讲在前面，等条件成熟时它就不再是一个假说。</strong></li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/FPGA/" rel="tag"># FPGA</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/%E4%BE%A7%E4%BF%A1%E9%81%93/" rel="tag"># 侧信道</a>
+              <a href="/tags/IOMMU/" rel="tag"># IOMMU</a>
+              <a href="/tags/%E4%BA%91%E5%AE%89%E5%85%A8/" rel="tag"># 云安全</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/ac6804a/" rel="prev" title="PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包">
+                  <i class="fa fa-angle-left"></i> PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">511k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">15:29</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
