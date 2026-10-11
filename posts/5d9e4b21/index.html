@@ -22,16 +22,16 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="论文：LeftoverLocals: Listening to LLM Responses Through Leaked GPU Local Memory（arXiv:2401.16603，2024-01-16 公开披露，CVE-2023-49691） 作者：Tyler Sorensen（Trail of Bits &#x2F; UC Santa Cruz）、Heidy Khlaaf（Trail of B">
+    <meta name="description" content="概括成一段话：GPU 里有一块叫 local memory 的高速暂存区，上一个程序用完不擦，下一个程序可以直接把它整块 dump 出来。对于跑在 GPU 上的 LLM，攻击者只要偷到最后一层的输入向量（4 KB），配上从开源模型库匹配到的权重，就能自己算出模型吐出的下一个 token。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="LeftoverLocals 精读：从 GPU 显存残渣里偷听本地 LLM 的回复">
 <meta property="og:url" content="https://iamzihao.github.io/posts/5d9e4b21/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="论文：LeftoverLocals: Listening to LLM Responses Through Leaked GPU Local Memory（arXiv:2401.16603，2024-01-16 公开披露，CVE-2023-49691） 作者：Tyler Sorensen（Trail of Bits &#x2F; UC Santa Cruz）、Heidy Khlaaf（Trail of B">
+<meta property="og:description" content="概括成一段话：GPU 里有一块叫 local memory 的高速暂存区，上一个程序用完不擦，下一个程序可以直接把它整块 dump 出来。对于跑在 GPU 上的 LLM，攻击者只要偷到最后一层的输入向量（4 KB），配上从开源模型库匹配到的权重，就能自己算出模型吐出的下一个 token。">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://iamzihao.github.io/assets/leftoverlocals-01.png">
 <meta property="article:published_time" content="2026-09-29T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-29T23:59:28.441Z">
+<meta property="article:modified_time" content="2026-10-11T03:05:32.996Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -276,7 +276,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-09-30 07:59:28" itemprop="dateModified" datetime="2026-09-30T07:59:28+08:00">2026-09-30</time>
+      <time title="Modified: 2026-10-11 11:05:32" itemprop="dateModified" datetime="2026-10-11T11:05:32+08:00">2026-10-11</time>
     </span>
 
   
@@ -311,21 +311,23 @@
     
     
     <div class="post-body" itemprop="articleBody"><blockquote>
-<p>论文：<strong>LeftoverLocals: Listening to LLM Responses Through
-Leaked GPU Local Memory</strong>（arXiv:2401.16603，2024-01-16
-公开披露，CVE-2023-49691）</p>
-<p>作者：Tyler Sorensen（Trail of Bits / UC Santa Cruz）、Heidy
-Khlaaf（Trail of Bits）</p>
 <p>概括成一段话：<strong>GPU 里有一块叫 local memory
 的高速暂存区，上一个程序用完不擦，下一个程序可以直接把它整块 dump
 出来。对于跑在 GPU 上的 LLM，攻击者只要偷到最后一层的输入向量（4
 KB），配上从开源模型库匹配到的权重，就能自己算出模型吐出的下一个
 token。</strong></p>
 </blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>LeftoverLocals: Listening to LLM Responses Through
+Leaked GPU Local Memory</strong>（arXiv:2401.16603，2024-01-16
+公开披露，CVE-2023-49691）</p>
+<p>作者：Tyler Sorensen（Trail of Bits / UC Santa Cruz）、Heidy
+Khlaaf（Trail of Bits）</p>
+</blockquote>
 <p>上一篇 <a href="/posts/2a9c1827/">IKnowWhatYouSaid</a> 讲的是 CPU
 缓存上的泄漏，靠的是<strong>访存模式</strong>（读了哪一行）和<strong>时序</strong>（什么时候读的）。这一篇完全不同：它偷的是显存里的<strong>数据残渣</strong>——不需要时序精度，不需要共享内存，也不需要理解受害者用什么算法，只要能在同一块
 GPU 上跑自己的程序就行。</p>
-<span id="more"></span>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>

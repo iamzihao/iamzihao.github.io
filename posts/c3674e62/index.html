@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="论文：Spill The Beans: Exploiting CPU Cache Side-Channels to Leak Tokens from Large Language Models（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号 25-0107） 作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Poly">
+    <meta name="description" content="概括成一段话：和受害者租在同一颗物理 CPU 上的另一个进程，只要盯住 embedding 表里自己挑出来的那几百个 token 的缓存行、用 flush+reload 一圈圈轮询，就能在 LLM 生成的时候把落在这些位置上的 token 逐个记下来——在多租户部署里，这条路子能单次捞走 80%～90% 的高熵 API key。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token">
 <meta property="og:url" content="https://iamzihao.github.io/posts/c3674e62/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="论文：Spill The Beans: Exploiting CPU Cache Side-Channels to Leak Tokens from Large Language Models（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号 25-0107） 作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Poly">
+<meta property="og:description" content="概括成一段话：和受害者租在同一颗物理 CPU 上的另一个进程，只要盯住 embedding 表里自己挑出来的那几百个 token 的缓存行、用 flush+reload 一圈圈轮询，就能在 LLM 生成的时候把落在这些位置上的 token 逐个记下来——在多租户部署里，这条路子能单次捞走 80%～90% 的高熵 API key。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-11T02:30:00.000Z">
-<meta property="article:modified_time" content="2026-10-11T02:57:11.181Z">
+<meta property="article:modified_time" content="2026-10-11T03:05:32.996Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -271,7 +271,7 @@ API key 捞走凭据</span></a><ol class="nav-child"><li class="nav-item nav-lev
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-10-11 10:30:00 / Modified: 10:57:11" itemprop="dateCreated datePublished" datetime="2026-10-11T10:30:00+08:00">2026-10-11</time>
+      <time title="Created: 2026-10-11 10:30:00 / Modified: 11:05:32" itemprop="dateCreated datePublished" datetime="2026-10-11T10:30:00+08:00">2026-10-11</time>
     </span>
 
   
@@ -306,18 +306,21 @@ API key 捞走凭据</span></a><ol class="nav-child"><li class="nav-item nav-lev
     
     
     <div class="post-body" itemprop="articleBody"><blockquote>
-<p>论文：<strong>Spill The Beans: Exploiting CPU Cache Side-Channels to
-Leak Tokens from Large Language
-Models</strong>（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号
-25-0107）</p>
-<p>作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Polytechnic
-Institute，伍斯特理工学院）</p>
 <p>概括成一段话：<strong>和受害者租在同一颗物理 CPU
 上的另一个进程，只要盯住 embedding 表里自己挑出来的那几百个 token
 的缓存行、用 flush+reload 一圈圈轮询，就能在 LLM
 生成的时候把落在这些位置上的 token
 逐个记下来——在多租户部署里，这条路子能单次捞走 80%～90% 的高熵 API
 key。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>Spill The Beans: Exploiting CPU Cache Side-Channels to
+Leak Tokens from Large Language
+Models</strong>（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号
+25-0107）</p>
+<p>作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Polytechnic
+Institute，伍斯特理工学院）</p>
 </blockquote>
 <p>这个系列已经精读过三篇同一方向的论文：Hermes 站在 CPU 与 GPU 之间的
 PCIe 总线上抓明文流量，偷的是模型本身；IKnowWhatYouSaid 站在 CPU
@@ -327,7 +330,6 @@ GPU 显存，捡上一个程序留下的数据残渣。这篇 Spill The Beans �
 首发），做法也最朴素：<strong>不做时序信号处理，不训语言模型，也不还原输入，只用一轮
 flush+reload，回答一个问题——在缓存行被驱逐之前，我最多能盯得住多少个
 token。</strong></p>
-<span id="more"></span>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>

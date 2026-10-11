@@ -1840,6 +1840,115 @@ Communication，近场通信）是一种短距离无线通信技术，工作频�
       </tags>
   </entry>
   <entry>
+    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
+    <url>/posts/f520f9c/</url>
+    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
+<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
+<span id="more"></span>
+<h3 id="网络分层模型">网络分层模型</h3>
+<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
+<ul>
+<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
+<li>传输层:TCP、UDP等传输控制协议</li>
+<li>网络层:IP、ICMP等网络协议</li>
+<li>网络接口层:以太网、WiFi等物理传输协议</li>
+</ul>
+<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
+<h2 id="协议栈的演进">协议栈的演进</h2>
+<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
+<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
+<p>TCP(传输控制协议):</p>
+<ul>
+<li>面向连接:通信前需要建立连接(三次握手)</li>
+<li>可靠传输:使用确认机制和重传机制保证数据可靠到达</li>
+<li>流量控制:根据接收方处理能力调整发送速率</li>
+<li>拥塞控制:根据网络状况调整发送速率</li>
+<li>适用场景:文件传输、网页访问等对可靠性要求高的应用</li>
+</ul>
+<p>UDP(用户数据报协议):</p>
+<ul>
+<li>无连接:不需要建立连接即可传输数据</li>
+<li>不可靠:不保证数据一定送达</li>
+<li>无流量控制和拥塞控制</li>
+<li>开销小、延迟低</li>
+<li>适用场景:视频直播、游戏等对实时性要求高的应用</li>
+</ul>
+<h3 id="应用层的发展">应用层的发展</h3>
+<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
+<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
+<p>HTTP/1.1:</p>
+<ul>
+<li>持久连接:复用TCP连接</li>
+<li>管道化请求:支持多个请求排队</li>
+<li>但存在队头阻塞问题</li>
+</ul>
+<p>HTTP/2:</p>
+<ul>
+<li>多路复用:在同一连接上并发处理多个请求</li>
+<li>头部压缩:减少传输开销</li>
+<li>服务器推送:主动推送相关资源</li>
+<li>二进制分帧:更高效的数据传输</li>
+</ul>
+<h4 id="grpc---现代分布式系统的新选择">gRPC -
+现代分布式系统的新选择</h4>
+<p>gRPC是基于HTTP/2构建的高性能RPC框架:</p>
+<ul>
+<li>协议层次:
+<ul>
+<li>应用层:gRPC API</li>
+<li>中间层:HTTP/2</li>
+<li>传输层:TCP</li>
+<li>安全层:TLS(可选)</li>
+</ul></li>
+</ul>
+<p>四种通信模式:</p>
+<ol type="1">
+<li>一元RPC(Unary):
+<ul>
+<li>类似HTTP/1.1的请求-响应模式</li>
+<li>适用于传统的客户端-服务器交互</li>
+</ul></li>
+<li>服务器流式RPC(Server Streaming):
+<ul>
+<li>客户端发送一个请求,服务器返回数据流</li>
+<li>适用于服务器推送场景,如订阅更新</li>
+</ul></li>
+<li>客户端流式RPC(Client Streaming):
+<ul>
+<li>客户端发送数据流,服务器返回一个响应</li>
+<li>适用于数据上传场景</li>
+</ul></li>
+<li>双向流式RPC(Bidirectional Streaming):
+<ul>
+<li>客户端和服务器同时收发数据流</li>
+<li>适用于实时通信场景,如在线游戏</li>
+</ul></li>
+</ol>
+<p>gRPC的优势:</p>
+<ul>
+<li>基于HTTP/2的高性能</li>
+<li>Protocol Buffers的高效序列化</li>
+<li>强类型接口定义</li>
+<li>跨语言支持</li>
+<li>内置流控和安全机制</li>
+</ul>
+<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
+<p>TLS在传输层和应用层之间提供了安全保障:</p>
+<ul>
+<li>加密:保护数据不被窃听</li>
+<li>认证:验证通信双方身份</li>
+<li>完整性:确保数据不被篡改</li>
+</ul>
+<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
+]]></content>
+      <tags>
+        <tag>网络协议</tag>
+        <tag>gRPC</tag>
+        <tag>TLS</tag>
+        <tag>HTTP</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>TLS Note</title>
     <url>/posts/32f5e233/</url>
     <content><![CDATA[<h2 id="什么是tls">什么是TLS</h2>
@@ -1982,115 +2091,6 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
         <tag>网络安全</tag>
         <tag>加密</tag>
         <tag>HTTPS</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>计算机网络通信漫谈 - 从TCP/IP到gRPC</title>
-    <url>/posts/f520f9c/</url>
-    <content><![CDATA[<h2 id="计算机通信的层次">计算机通信的层次</h2>
-<p>计算机通信是计算机网络形成的基础，这篇博客我们来简单了解一下现有的计算机网络通信协议。</p>
-<span id="more"></span>
-<h3 id="网络分层模型">网络分层模型</h3>
-<p>理论上有OSI七层模型,但在实际应用中我们更常用TCP/IP四层模型:</p>
-<ul>
-<li>应用层:HTTP、FTP、SMTP、gRPC等应用协议</li>
-<li>传输层:TCP、UDP等传输控制协议</li>
-<li>网络层:IP、ICMP等网络协议</li>
-<li>网络接口层:以太网、WiFi等物理传输协议</li>
-</ul>
-<p>这种分层设计让我们可以在不改变其他层的情况下优化或替换某一层的实现。就像我们可以在同样的TCP协议上开发HTTP、FTP等不同的应用协议,也可以用WiFi或网线作为物理传输介质。</p>
-<h2 id="协议栈的演进">协议栈的演进</h2>
-<h3 id="基础传输层---tcp与udp">基础传输层 - TCP与UDP</h3>
-<p>传输层是整个协议栈的核心,提供了两种主要的传输服务:</p>
-<p>TCP(传输控制协议):</p>
-<ul>
-<li>面向连接:通信前需要建立连接(三次握手)</li>
-<li>可靠传输:使用确认机制和重传机制保证数据可靠到达</li>
-<li>流量控制:根据接收方处理能力调整发送速率</li>
-<li>拥塞控制:根据网络状况调整发送速率</li>
-<li>适用场景:文件传输、网页访问等对可靠性要求高的应用</li>
-</ul>
-<p>UDP(用户数据报协议):</p>
-<ul>
-<li>无连接:不需要建立连接即可传输数据</li>
-<li>不可靠:不保证数据一定送达</li>
-<li>无流量控制和拥塞控制</li>
-<li>开销小、延迟低</li>
-<li>适用场景:视频直播、游戏等对实时性要求高的应用</li>
-</ul>
-<h3 id="应用层的发展">应用层的发展</h3>
-<h4 id="http---互联网的通用语言">HTTP - 互联网的通用语言</h4>
-<p>HTTP协议构建在TCP之上,经历了几个重要版本:</p>
-<p>HTTP/1.1:</p>
-<ul>
-<li>持久连接:复用TCP连接</li>
-<li>管道化请求:支持多个请求排队</li>
-<li>但存在队头阻塞问题</li>
-</ul>
-<p>HTTP/2:</p>
-<ul>
-<li>多路复用:在同一连接上并发处理多个请求</li>
-<li>头部压缩:减少传输开销</li>
-<li>服务器推送:主动推送相关资源</li>
-<li>二进制分帧:更高效的数据传输</li>
-</ul>
-<h4 id="grpc---现代分布式系统的新选择">gRPC -
-现代分布式系统的新选择</h4>
-<p>gRPC是基于HTTP/2构建的高性能RPC框架:</p>
-<ul>
-<li>协议层次:
-<ul>
-<li>应用层:gRPC API</li>
-<li>中间层:HTTP/2</li>
-<li>传输层:TCP</li>
-<li>安全层:TLS(可选)</li>
-</ul></li>
-</ul>
-<p>四种通信模式:</p>
-<ol type="1">
-<li>一元RPC(Unary):
-<ul>
-<li>类似HTTP/1.1的请求-响应模式</li>
-<li>适用于传统的客户端-服务器交互</li>
-</ul></li>
-<li>服务器流式RPC(Server Streaming):
-<ul>
-<li>客户端发送一个请求,服务器返回数据流</li>
-<li>适用于服务器推送场景,如订阅更新</li>
-</ul></li>
-<li>客户端流式RPC(Client Streaming):
-<ul>
-<li>客户端发送数据流,服务器返回一个响应</li>
-<li>适用于数据上传场景</li>
-</ul></li>
-<li>双向流式RPC(Bidirectional Streaming):
-<ul>
-<li>客户端和服务器同时收发数据流</li>
-<li>适用于实时通信场景,如在线游戏</li>
-</ul></li>
-</ol>
-<p>gRPC的优势:</p>
-<ul>
-<li>基于HTTP/2的高性能</li>
-<li>Protocol Buffers的高效序列化</li>
-<li>强类型接口定义</li>
-<li>跨语言支持</li>
-<li>内置流控和安全机制</li>
-</ul>
-<h2 id="安全传输---tls的重要性">安全传输 - TLS的重要性</h2>
-<p>TLS在传输层和应用层之间提供了安全保障:</p>
-<ul>
-<li>加密:保护数据不被窃听</li>
-<li>认证:验证通信双方身份</li>
-<li>完整性:确保数据不被篡改</li>
-</ul>
-<p>现代应用如HTTPS和gRPC都默认集成了TLS,为应用提供端到端的安全保障。</p>
-]]></content>
-      <tags>
-        <tag>TLS</tag>
-        <tag>网络协议</tag>
-        <tag>gRPC</tag>
-        <tag>HTTP</tag>
       </tags>
   </entry>
   <entry>
@@ -5283,199 +5283,6 @@ GPU，与预期硬件相符。</li>
       </tags>
   </entry>
   <entry>
-    <title>Python 语法与工程骨架</title>
-    <url>/posts/6a8247a7/</url>
-    <content><![CDATA[<p>本文按 <strong>抽象基类 → 生成器 → 类型提示 → 模块组织</strong>
-四个部分，整理一套适合大型项目的 Python 工程骨架。 <span id="more"></span></p>
-<h2 id="省流图">📚 省流图</h2>
-<table>
-<thead>
-<tr>
-<th>主题</th>
-<th>记忆点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>抽象基类</td>
-<td><code>from abc import ABC, abstractmethod</code> →
-逼子类覆写接口</td>
-</tr>
-<tr>
-<td>生成器</td>
-<td><code>yield</code> → 一次返回多批结果，<code>for</code>
-自动迭代</td>
-</tr>
-<tr>
-<td>类型提示</td>
-<td><code>Tuple[int, ...]</code> 读作“不可变整型序列”</td>
-</tr>
-<tr>
-<td>模块路径</td>
-<td><code>package.sub.module</code> → 对应
-<code>package/sub/module.py</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="面向对象abc继承重写">面向对象：ABC、继承、重写</h2>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> abc <span class="keyword">import</span> ABC, abstractmethod</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">AbsSolver</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;抽象求解器：定义统一接口&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">solve</span>(<span class="params">self, *args, **kwargs</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;计算一次解，子类必须实现&quot;&quot;&quot;</span></span><br><span class="line">        <span class="keyword">pass</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">dump</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;可选钩子：子类按需重写&quot;&quot;&quot;</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;&lt;default dump&gt;\n&quot;</span>, <span class="variable language_">self</span>.__dict__)</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong>ABC</strong>：<code>AbsSolver</code> 继承自
-<code>ABC</code>，内部 <strong>至少有一个</strong>
-<code>@abstractmethod</code>。</li>
-<li><strong>强制实现</strong>：实例化子类前，Python
-会检查是否实现了所有抽象方法；否则 <code>TypeError</code>。</li>
-<li><strong>可选覆写</strong>：<code>dump</code>
-不是抽象的，子类可按需扩展。</li>
-</ul>
-<h3 id="abstractmethod-用法速览"><code>@abstractmethod</code>
-用法速览</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># 无实现体或仅 raise NotImplementedError</span></span><br><span class="line">        <span class="keyword">raise</span> NotImplementedError</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Impl</span>(<span class="title class_ inherited__">Base</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># ✅ 覆写，才能实例化</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;ok&quot;</span>)</span><br><span class="line"></span><br><span class="line">Impl().foo()  <span class="comment"># 若省略 foo → TypeError: Can&#x27;t instantiate abstract class</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>省流：ABC = “接口”，“抽象方法” = “必须实现”。</p>
-</blockquote>
-<h3 id="什么是钩子-hook">🔗 什么是“钩子 (Hook)”？</h3>
-<ul>
-<li>非抽象、带默认实现的方法，<strong>子类可选</strong>地覆写。<br />
-</li>
-<li>框架在合适时机回调它，让开发者“插入自定义逻辑”。<br />
-</li>
-<li>例：<code>dump()</code> 就是调试钩子，PyTorch 的
-<code>forward_hook</code> 同理。</li>
-</ul>
-<h3 id="什么是鸭子接口-duck-typing">🦆 什么是“鸭子接口 / Duck
-Typing”？</h3>
-<ul>
-<li>不关心对象真实类型，只要 <strong>行为/look like a duck</strong>
-就当成合法。<br />
-</li>
-<li><code>ops.py</code> 用 <code>pass</code> 而非
-<code>@abstractmethod</code>，就是“鸭子接口”：谁实现了同名方法谁就能用。<br />
-</li>
-<li>优点：灵活、少耦合；缺点：漏实现时运行期才炸。</li>
-</ul>
-<blockquote>
-<p>记忆：<strong>Hook = 可选扩展点</strong>；<strong>Duck Typing =
-不验血统，只看会不会叫、会不会游。</strong></p>
-</blockquote>
-<h2 id="生成器与迭代持续产出多解">生成器与迭代：持续产出多解</h2>
-<p>在 <code>ops.py</code> 里，<code>materialize()</code> 用
-<code>yield</code> <strong>按需吐出</strong> 不同框架的层对象：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">AbsBaseOp</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="comment"># ...</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">materialize</span>(<span class="params">self, framework</span>):</span><br><span class="line">        solver = z3.Solver()</span><br><span class="line">        <span class="keyword">while</span> solver.check() == z3.sat:</span><br><span class="line">            <span class="variable language_">self</span>.model = solver.model()</span><br><span class="line">            <span class="keyword">yield</span> <span class="variable language_">self</span>._to_framework(framework)  <span class="comment"># 产出一次解</span></span><br><span class="line">            <span class="variable language_">self</span>._add_diff_constraint(solver)    <span class="comment"># 追加“与上次不同”的约束</span></span><br><span class="line">        <span class="keyword">yield</span> <span class="literal">None</span>  <span class="comment"># 无更多解</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong><code>yield</code></strong>：函数变生成器，<code>for layer in op.materialize('torch'):</code>
-可逐层迭代。</li>
-<li><strong>多解采样</strong>：在循环内
-<strong>动态给求解器加“不等”约束</strong>，驱动 Z3 返回新模型。</li>
-<li><strong>终止信号</strong>：最后 <code>yield None</code>
-让上层知道“解完了”。</li>
-</ul>
-<h3 id="yield-from-简洁重用"><code>yield from</code> 简洁重用</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">pipeline</span>(<span class="params">frameworks</span>):</span><br><span class="line">    <span class="keyword">for</span> fw <span class="keyword">in</span> frameworks:</span><br><span class="line">        <span class="keyword">yield</span> <span class="keyword">from</span> <span class="variable language_">self</span>.materialize(fw)  <span class="comment"># 直接把子生成器产物向上透传</span></span><br></pre></td></tr></table></figure>
-<h3 id="如何读取-消费生成器">🏃 如何读取 / 消费生成器？</h3>
-<ol type="1">
-<li><strong>for-loop 最省心</strong> <figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> layer <span class="keyword">in</span> op.materialize(<span class="string">&#x27;torch&#x27;</span>):</span><br><span class="line">    <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        <span class="keyword">break</span>  <span class="comment"># 无更多解</span></span><br><span class="line">    <span class="built_in">print</span>(layer)</span><br></pre></td></tr></table></figure></li>
-<li><strong><code>next()</code> 手动拉取</strong>（需要捕获
-<code>StopIteration</code>） <figure class="highlight python"><table><tr><td class="code"><pre><span class="line">g = op.materialize(<span class="string">&#x27;paddle&#x27;</span>)</span><br><span class="line"><span class="keyword">try</span>:</span><br><span class="line">    <span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">        layer = <span class="built_in">next</span>(g)</span><br><span class="line">        <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        use(layer)</span><br><span class="line"><span class="keyword">except</span> StopIteration:</span><br><span class="line">    <span class="keyword">pass</span></span><br></pre></td></tr></table></figure></li>
-<li><strong>切片取前 N
-个</strong>：<code>import itertools; first5 = list(itertools.islice(op.materialize('tf'), 5))</code></li>
-</ol>
-<blockquote>
-<p>记忆：<code>yield</code> 负责产，<code>for / next / islice</code>
-负责取。</p>
-</blockquote>
-<h2 id="类型提示速读">类型提示速读</h2>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>读法</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>List[int]</code></td>
-<td><strong>可变</strong> 整型列表</td>
-<td><code>[1, 2, 3]</code></td>
-</tr>
-<tr>
-<td><code>Tuple[str, int]</code></td>
-<td>长度固定 <code>(str, int)</code></td>
-<td><code>("id", 3)</code></td>
-</tr>
-<tr>
-<td><code>Tuple[int, ...]</code></td>
-<td>不定长整型元组</td>
-<td><code>(1,2,3,4)</code></td>
-</tr>
-<tr>
-<td><code>Dict[str, Any]</code></td>
-<td>key 是 str, value 任意</td>
-<td><code>&#123;"a":1&#125;</code></td>
-</tr>
-<tr>
-<td><code>Union[int, str]</code></td>
-<td>int <strong>或</strong> str</td>
-<td><code>42</code> / <code>"42"</code></td>
-</tr>
-<tr>
-<td><code>Optional[Foo]</code></td>
-<td><code>Union[Foo, None]</code></td>
-<td>可能返回 <code>None</code></td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>检查工具：<code>mypy</code>, <code>pyright</code>，CI
-一跑便知类型是否对。</p>
-</blockquote>
-<h2 id="模块组织与导入路径">模块组织与导入路径</h2>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">project/</span><br><span class="line"> ├─ ops/                 # 功能包</span><br><span class="line"> │   ├─ __init__.py      # 导入门面，暴露 API</span><br><span class="line"> │   ├─ base.py          # 抽象基类与通用工具</span><br><span class="line"> │   ├─ nn.py            # 神经网络相关 Op</span><br><span class="line"> │   └─ shape.py         # 形状求解逻辑</span><br><span class="line"> ├─ scripts/             # CLI / demo / benchmark</span><br><span class="line"> └─ tests/               # pytest 单元测试</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong>相对导入</strong>：包内部用
-<code>from .base import AbsBaseOp</code>，防止顶层路径污染。</li>
-<li><strong>绝对导入</strong>：外部调用写
-<code>from ops.nn import ConvOp</code>，IDE/类型检查友好。</li>
-<li><strong><code>__init__.py</code></strong>：在包级暴露高层
-API，隐藏实现细节。</li>
-</ul>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    subgraph &quot;ops 包&quot;
-      base[&quot;base.py\nAbsBaseOp&quot;]
-      nn[&quot;nn.py\nConvOp &#x2F; PoolOp&quot;]
-      shape[&quot;shape.py\nZ3 求解&quot;]
-    end
-    scripts[&quot;scripts&#x2F;train.py&quot;] --&gt; nn
-    scripts --&gt; base
-    nn --&gt; shape
-</code>
-</pre>
-<h2 id="小结">📝 小结</h2>
-<ol type="1">
-<li><strong>ABC + 抽象方法</strong> → 先定接口，再写实现。</li>
-<li><strong>生成器 (<code>yield</code>)</strong> →
-惰性产出多解/多批数据，节省内存。</li>
-<li><strong>Typing</strong> →
-<code>Tuple[int, ...]</code>=不定长；<code>Union</code>=多选；配合 IDE
-CI 早点发现错。</li>
-<li><strong>模块化</strong> → “包内相对、包外绝对”，在
-<code>__init__.py</code> 只输出你想给用户看的接口。</li>
-</ol>
-<blockquote>
-<p>熟练掌握这四招，你的 Python 项目就能又 <strong>清晰</strong> 又
-<strong>可维护</strong> 🚀</p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>Python</tag>
-        <tag>工程实践</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>CUDA核心概念与内存层次</title>
     <url>/posts/d4b8f045/</url>
     <content><![CDATA[<p>GPU 的线程组织与内存层次是理解 CUDA 性能的基础。本文用表格、Mermaid
@@ -5865,6 +5672,199 @@ Warp”藏延迟，性能归根结底是访存模式与并行度的艺术 ✨</s
         <tag>内存</tag>
         <tag>Kernel</tag>
         <tag>Warp</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Python 语法与工程骨架</title>
+    <url>/posts/6a8247a7/</url>
+    <content><![CDATA[<p>本文按 <strong>抽象基类 → 生成器 → 类型提示 → 模块组织</strong>
+四个部分，整理一套适合大型项目的 Python 工程骨架。 <span id="more"></span></p>
+<h2 id="省流图">📚 省流图</h2>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>抽象基类</td>
+<td><code>from abc import ABC, abstractmethod</code> →
+逼子类覆写接口</td>
+</tr>
+<tr>
+<td>生成器</td>
+<td><code>yield</code> → 一次返回多批结果，<code>for</code>
+自动迭代</td>
+</tr>
+<tr>
+<td>类型提示</td>
+<td><code>Tuple[int, ...]</code> 读作“不可变整型序列”</td>
+</tr>
+<tr>
+<td>模块路径</td>
+<td><code>package.sub.module</code> → 对应
+<code>package/sub/module.py</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="面向对象abc继承重写">面向对象：ABC、继承、重写</h2>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> abc <span class="keyword">import</span> ABC, abstractmethod</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">AbsSolver</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;抽象求解器：定义统一接口&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">solve</span>(<span class="params">self, *args, **kwargs</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;计算一次解，子类必须实现&quot;&quot;&quot;</span></span><br><span class="line">        <span class="keyword">pass</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">dump</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;可选钩子：子类按需重写&quot;&quot;&quot;</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;&lt;default dump&gt;\n&quot;</span>, <span class="variable language_">self</span>.__dict__)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>ABC</strong>：<code>AbsSolver</code> 继承自
+<code>ABC</code>，内部 <strong>至少有一个</strong>
+<code>@abstractmethod</code>。</li>
+<li><strong>强制实现</strong>：实例化子类前，Python
+会检查是否实现了所有抽象方法；否则 <code>TypeError</code>。</li>
+<li><strong>可选覆写</strong>：<code>dump</code>
+不是抽象的，子类可按需扩展。</li>
+</ul>
+<h3 id="abstractmethod-用法速览"><code>@abstractmethod</code>
+用法速览</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Base</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line"><span class="meta">    @abstractmethod</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># 无实现体或仅 raise NotImplementedError</span></span><br><span class="line">        <span class="keyword">raise</span> NotImplementedError</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Impl</span>(<span class="title class_ inherited__">Base</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">foo</span>(<span class="params">self</span>):  <span class="comment"># ✅ 覆写，才能实例化</span></span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;ok&quot;</span>)</span><br><span class="line"></span><br><span class="line">Impl().foo()  <span class="comment"># 若省略 foo → TypeError: Can&#x27;t instantiate abstract class</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>省流：ABC = “接口”，“抽象方法” = “必须实现”。</p>
+</blockquote>
+<h3 id="什么是钩子-hook">🔗 什么是“钩子 (Hook)”？</h3>
+<ul>
+<li>非抽象、带默认实现的方法，<strong>子类可选</strong>地覆写。<br />
+</li>
+<li>框架在合适时机回调它，让开发者“插入自定义逻辑”。<br />
+</li>
+<li>例：<code>dump()</code> 就是调试钩子，PyTorch 的
+<code>forward_hook</code> 同理。</li>
+</ul>
+<h3 id="什么是鸭子接口-duck-typing">🦆 什么是“鸭子接口 / Duck
+Typing”？</h3>
+<ul>
+<li>不关心对象真实类型，只要 <strong>行为/look like a duck</strong>
+就当成合法。<br />
+</li>
+<li><code>ops.py</code> 用 <code>pass</code> 而非
+<code>@abstractmethod</code>，就是“鸭子接口”：谁实现了同名方法谁就能用。<br />
+</li>
+<li>优点：灵活、少耦合；缺点：漏实现时运行期才炸。</li>
+</ul>
+<blockquote>
+<p>记忆：<strong>Hook = 可选扩展点</strong>；<strong>Duck Typing =
+不验血统，只看会不会叫、会不会游。</strong></p>
+</blockquote>
+<h2 id="生成器与迭代持续产出多解">生成器与迭代：持续产出多解</h2>
+<p>在 <code>ops.py</code> 里，<code>materialize()</code> 用
+<code>yield</code> <strong>按需吐出</strong> 不同框架的层对象：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">AbsBaseOp</span>(<span class="title class_ inherited__">ABC</span>):</span><br><span class="line">    <span class="comment"># ...</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">materialize</span>(<span class="params">self, framework</span>):</span><br><span class="line">        solver = z3.Solver()</span><br><span class="line">        <span class="keyword">while</span> solver.check() == z3.sat:</span><br><span class="line">            <span class="variable language_">self</span>.model = solver.model()</span><br><span class="line">            <span class="keyword">yield</span> <span class="variable language_">self</span>._to_framework(framework)  <span class="comment"># 产出一次解</span></span><br><span class="line">            <span class="variable language_">self</span>._add_diff_constraint(solver)    <span class="comment"># 追加“与上次不同”的约束</span></span><br><span class="line">        <span class="keyword">yield</span> <span class="literal">None</span>  <span class="comment"># 无更多解</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong><code>yield</code></strong>：函数变生成器，<code>for layer in op.materialize('torch'):</code>
+可逐层迭代。</li>
+<li><strong>多解采样</strong>：在循环内
+<strong>动态给求解器加“不等”约束</strong>，驱动 Z3 返回新模型。</li>
+<li><strong>终止信号</strong>：最后 <code>yield None</code>
+让上层知道“解完了”。</li>
+</ul>
+<h3 id="yield-from-简洁重用"><code>yield from</code> 简洁重用</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">pipeline</span>(<span class="params">frameworks</span>):</span><br><span class="line">    <span class="keyword">for</span> fw <span class="keyword">in</span> frameworks:</span><br><span class="line">        <span class="keyword">yield</span> <span class="keyword">from</span> <span class="variable language_">self</span>.materialize(fw)  <span class="comment"># 直接把子生成器产物向上透传</span></span><br></pre></td></tr></table></figure>
+<h3 id="如何读取-消费生成器">🏃 如何读取 / 消费生成器？</h3>
+<ol type="1">
+<li><strong>for-loop 最省心</strong> <figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> layer <span class="keyword">in</span> op.materialize(<span class="string">&#x27;torch&#x27;</span>):</span><br><span class="line">    <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        <span class="keyword">break</span>  <span class="comment"># 无更多解</span></span><br><span class="line">    <span class="built_in">print</span>(layer)</span><br></pre></td></tr></table></figure></li>
+<li><strong><code>next()</code> 手动拉取</strong>（需要捕获
+<code>StopIteration</code>） <figure class="highlight python"><table><tr><td class="code"><pre><span class="line">g = op.materialize(<span class="string">&#x27;paddle&#x27;</span>)</span><br><span class="line"><span class="keyword">try</span>:</span><br><span class="line">    <span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">        layer = <span class="built_in">next</span>(g)</span><br><span class="line">        <span class="keyword">if</span> layer <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        use(layer)</span><br><span class="line"><span class="keyword">except</span> StopIteration:</span><br><span class="line">    <span class="keyword">pass</span></span><br></pre></td></tr></table></figure></li>
+<li><strong>切片取前 N
+个</strong>：<code>import itertools; first5 = list(itertools.islice(op.materialize('tf'), 5))</code></li>
+</ol>
+<blockquote>
+<p>记忆：<code>yield</code> 负责产，<code>for / next / islice</code>
+负责取。</p>
+</blockquote>
+<h2 id="类型提示速读">类型提示速读</h2>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>读法</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>List[int]</code></td>
+<td><strong>可变</strong> 整型列表</td>
+<td><code>[1, 2, 3]</code></td>
+</tr>
+<tr>
+<td><code>Tuple[str, int]</code></td>
+<td>长度固定 <code>(str, int)</code></td>
+<td><code>("id", 3)</code></td>
+</tr>
+<tr>
+<td><code>Tuple[int, ...]</code></td>
+<td>不定长整型元组</td>
+<td><code>(1,2,3,4)</code></td>
+</tr>
+<tr>
+<td><code>Dict[str, Any]</code></td>
+<td>key 是 str, value 任意</td>
+<td><code>&#123;"a":1&#125;</code></td>
+</tr>
+<tr>
+<td><code>Union[int, str]</code></td>
+<td>int <strong>或</strong> str</td>
+<td><code>42</code> / <code>"42"</code></td>
+</tr>
+<tr>
+<td><code>Optional[Foo]</code></td>
+<td><code>Union[Foo, None]</code></td>
+<td>可能返回 <code>None</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>检查工具：<code>mypy</code>, <code>pyright</code>，CI
+一跑便知类型是否对。</p>
+</blockquote>
+<h2 id="模块组织与导入路径">模块组织与导入路径</h2>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">project/</span><br><span class="line"> ├─ ops/                 # 功能包</span><br><span class="line"> │   ├─ __init__.py      # 导入门面，暴露 API</span><br><span class="line"> │   ├─ base.py          # 抽象基类与通用工具</span><br><span class="line"> │   ├─ nn.py            # 神经网络相关 Op</span><br><span class="line"> │   └─ shape.py         # 形状求解逻辑</span><br><span class="line"> ├─ scripts/             # CLI / demo / benchmark</span><br><span class="line"> └─ tests/               # pytest 单元测试</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>相对导入</strong>：包内部用
+<code>from .base import AbsBaseOp</code>，防止顶层路径污染。</li>
+<li><strong>绝对导入</strong>：外部调用写
+<code>from ops.nn import ConvOp</code>，IDE/类型检查友好。</li>
+<li><strong><code>__init__.py</code></strong>：在包级暴露高层
+API，隐藏实现细节。</li>
+</ul>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    subgraph &quot;ops 包&quot;
+      base[&quot;base.py\nAbsBaseOp&quot;]
+      nn[&quot;nn.py\nConvOp &#x2F; PoolOp&quot;]
+      shape[&quot;shape.py\nZ3 求解&quot;]
+    end
+    scripts[&quot;scripts&#x2F;train.py&quot;] --&gt; nn
+    scripts --&gt; base
+    nn --&gt; shape
+</code>
+</pre>
+<h2 id="小结">📝 小结</h2>
+<ol type="1">
+<li><strong>ABC + 抽象方法</strong> → 先定接口，再写实现。</li>
+<li><strong>生成器 (<code>yield</code>)</strong> →
+惰性产出多解/多批数据，节省内存。</li>
+<li><strong>Typing</strong> →
+<code>Tuple[int, ...]</code>=不定长；<code>Union</code>=多选；配合 IDE
+CI 早点发现错。</li>
+<li><strong>模块化</strong> → “包内相对、包外绝对”，在
+<code>__init__.py</code> 只输出你想给用户看的接口。</li>
+</ol>
+<blockquote>
+<p>熟练掌握这四招，你的 Python 项目就能又 <strong>清晰</strong> 又
+<strong>可维护</strong> 🚀</p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>Python</tag>
+        <tag>工程实践</tag>
       </tags>
   </entry>
   <entry>
@@ -8162,6 +8162,189 @@ API。</p>
       </tags>
   </entry>
   <entry>
+    <title>pytorch入门</title>
+    <url>/posts/5f1831aa/</url>
+    <content><![CDATA[<p>PyTorch 为深度学习提供了强大的数据加载和可视化工具。掌握
+<code>Dataset</code>、<code>DataLoader</code>、<code>Transforms</code>
+和 <code>TensorBoard</code>
+是高效训练模型的关键。本文将带你快速入门这四大核心组件。 <span id="more"></span></p>
+<h2 id="核心组件速记">📚 核心组件速记</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 66%" />
+</colgroup>
+<thead>
+<tr>
+<th>组件</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Dataset</code></td>
+<td><code>__getitem__</code> 和 <code>__len__</code> →
+封装你的数据源，按索引取数据</td>
+</tr>
+<tr>
+<td><code>DataLoader</code></td>
+<td><code>batch_size</code>, <code>shuffle</code> → 从
+<code>Dataset</code> 中批量、随机地取数据</td>
+</tr>
+<tr>
+<td><code>Transforms</code></td>
+<td><code>Compose</code>, <code>ToTensor</code> →
+数据预处理与增强的“流水线”</td>
+</tr>
+<tr>
+<td><code>TensorBoard</code></td>
+<td><code>SummaryWriter</code> → 训练过程可视化，调参与Debug的神器</td>
+</tr>
+</tbody>
+</table>
+<h2 id="数据流转示意图">🎨 数据流转示意图</h2>
+<p>在 PyTorch
+中，数据通常经历从磁盘文件到模型输入的转换过程。理解这个流程是掌握数据加载机制的第一步。</p>
+<pre>
+<code class="mermaid">
+
+graph TD
+    subgraph &quot;硬盘&quot;
+        A[&quot;图片文件 (cat.jpg)&quot;]
+    end
+    subgraph &quot;CPU 内存&quot;
+        B[&quot;PIL Image &#x2F; OpenCV (numpy array)&quot;]
+    end
+    subgraph &quot;GPU&#x2F;CPU 内存&quot;
+        C[&quot;Torch Tensor&lt;br&#x2F;&gt;[C, H, W]&quot;]
+        D[&quot;Batch Tensor&lt;br&#x2F;&gt;[B, C, H, W]&quot;]
+        C -- &quot;DataLoader 批量化&quot; --&gt; D
+    end
+
+    A -- &quot;Image.open()&quot; --&gt; B
+    B -- &quot;transforms.ToTensor()&quot; --&gt; C
+    D &#x3D;&#x3D;&gt; E[模型输入]
+</code>
+</pre>
+<h2
+id="torch.utils.data.dataset封装你的数据"><code>torch.utils.data.Dataset</code>：封装你的数据</h2>
+<p><code>Dataset</code>
+是一个抽象类，用于表示数据集。所有自定义的数据集都应该继承它，并重写两个核心方法：</p>
+<ul>
+<li><code>__len__(self)</code>: 返回数据集的大小。</li>
+<li><code>__getitem__(self, idx)</code>: 根据索引 <code>idx</code>
+返回一条数据（通常是一个样本和对应的标签）。</li>
+</ul>
+<p>这提供了一个统一的接口，让 <code>DataLoader</code>
+等工具可以方便地处理各种不同来源的数据。</p>
+<h3 id="示例创建一个自定义-dataset">示例：创建一个自定义
+<code>Dataset</code></h3>
+<p>假设我们有一些图片路径和对应的标签，我们可以这样创建一个
+<code>Dataset</code>：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> Dataset</span><br><span class="line"><span class="keyword">from</span> PIL <span class="keyword">import</span> Image</span><br><span class="line"><span class="keyword">import</span> os</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">MyImageDataset</span>(<span class="title class_ inherited__">Dataset</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, image_paths, labels, transform=<span class="literal">None</span></span>):</span><br><span class="line">        <span class="variable language_">self</span>.image_paths = image_paths</span><br><span class="line">        <span class="variable language_">self</span>.labels = labels</span><br><span class="line">        <span class="variable language_">self</span>.transform = transform</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__len__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">len</span>(<span class="variable language_">self</span>.image_paths)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__getitem__</span>(<span class="params">self, idx</span>):</span><br><span class="line">        <span class="comment"># 读取图片</span></span><br><span class="line">        image_path = <span class="variable language_">self</span>.image_paths[idx]</span><br><span class="line">        image = Image.<span class="built_in">open</span>(image_path).convert(<span class="string">&quot;RGB&quot;</span>)</span><br><span class="line">        </span><br><span class="line">        <span class="comment"># 获取标签</span></span><br><span class="line">        label = <span class="variable language_">self</span>.labels[idx]</span><br><span class="line">        </span><br><span class="line">        <span class="comment"># 应用数据变换</span></span><br><span class="line">        <span class="keyword">if</span> <span class="variable language_">self</span>.transform:</span><br><span class="line">            image = <span class="variable language_">self</span>.transform(image)</span><br><span class="line">            </span><br><span class="line">        <span class="keyword">return</span> image, label</span><br><span class="line"></span><br><span class="line"><span class="comment"># 使用示例</span></span><br><span class="line">image_files = [<span class="string">&quot;./data/cat.png&quot;</span>, <span class="string">&quot;./data/dog.png&quot;</span>]</span><br><span class="line">image_labels = [<span class="number">0</span>, <span class="number">1</span>]</span><br><span class="line">custom_dataset = MyImageDataset(image_files, image_labels)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">f&quot;数据总数: <span class="subst">&#123;<span class="built_in">len</span>(custom_dataset)&#125;</span>&quot;</span>)</span><br><span class="line">first_item = custom_dataset[<span class="number">0</span>]</span><br><span class="line"><span class="built_in">print</span>(<span class="string">f&quot;第一个样本: <span class="subst">&#123;first_item&#125;</span>&quot;</span>)</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>记忆：<code>Dataset</code> 就是个“数据地图”，<code>__getitem__</code>
+负责“按图索骥”。</p>
+</blockquote>
+<h2
+id="torchvision.transforms数据预处理与增强"><code>torchvision.transforms</code>：数据预处理与增强</h2>
+<p>在将数据喂给模型之前，通常需要进行预处理，例如转换为
+Tensor、归一化、裁剪、旋转等。<code>transforms</code>
+就是用来完成这些操作的工具箱。</p>
+<ul>
+<li><strong>常见变换</strong>：<code>ToTensor()</code>,
+<code>Resize()</code>, <code>CenterCrop()</code>,
+<code>RandomHorizontalFlip()</code>, <code>Normalize()</code> 等。</li>
+<li><strong><code>transforms.Compose()</code></strong>:
+将多个变换操作串联成一个“流水线”。</li>
+</ul>
+<h3 id="示例定义一个变换流水线">示例：定义一个变换流水线</h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torchvision <span class="keyword">import</span> transforms</span><br><span class="line"></span><br><span class="line"><span class="comment"># 定义一个转换流水线</span></span><br><span class="line">data_transform = transforms.Compose([</span><br><span class="line">    transforms.Resize((<span class="number">224</span>, <span class="number">224</span>)),      <span class="comment"># 调整图片大小</span></span><br><span class="line">    transforms.RandomHorizontalFlip(),  <span class="comment"># 随机水平翻转</span></span><br><span class="line">    transforms.ToTensor(),              <span class="comment"># 将 PIL Image 或 numpy.ndarray 转换为 tensor</span></span><br><span class="line">    transforms.Normalize(mean=[<span class="number">0.485</span>, <span class="number">0.456</span>, <span class="number">0.406</span>], std=[<span class="number">0.229</span>, <span class="number">0.224</span>, <span class="number">0.225</span>]) <span class="comment"># 归一化</span></span><br><span class="line">])</span><br><span class="line"></span><br><span class="line"><span class="comment"># 将 transform 应用到 Dataset</span></span><br><span class="line">custom_dataset = MyImageDataset(image_files, image_labels, transform=data_transform)</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>为什么要随机翻转？</strong></p>
+<p><code>RandomHorizontalFlip</code> 是一种<strong>数据增强</strong>
+(Data Augmentation)
+技术。它的目的是在不改变图片语义（猫翻转了还是猫）的前提下，增加训练数据的多样性。</p>
+<ul>
+<li><strong>提高泛化能力</strong>：模型会学习到，无论是正着还是反着的猫，都应该被识别为猫，从而对真实世界中更多样的数据表现更好，避免<strong>过拟合</strong>。</li>
+<li><strong>扩充数据集</strong>：相当于免费让你的数据集大小翻倍。</li>
+</ul>
+<p>提示：数据增强（如随机翻转）只在训练时使用，验证和测试时应去掉，以保证结果的一致性。</p>
+</blockquote>
+<h2
+id="torch.utils.data.dataloader批量加载数据"><code>torch.utils.data.DataLoader</code>：批量加载数据</h2>
+<p><code>DataLoader</code> 是一个迭代器，它从 <code>Dataset</code>
+中自动拉取数据，并将其打包成批次 (batch)。它还提供了许多有用的功能：</p>
+<ul>
+<li><strong><code>batch_size</code></strong>:
+每个批次包含的样本数。</li>
+<li><strong><code>shuffle=True</code></strong>: 在每个 epoch
+开始时打乱数据顺序，有助于提高模型泛化能力。</li>
+<li><strong><code>num_workers</code></strong>:
+使用多少个子进程来预加载数据。增加此值可以加快数据加载速度，但会消耗更多内存和
+CPU。</li>
+</ul>
+<h3 id="示例使用-dataloader">示例：使用 <code>DataLoader</code></h3>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> DataLoader</span><br><span class="line"></span><br><span class="line"><span class="comment"># 假设 custom_dataset 已经创建好</span></span><br><span class="line">custom_dataset = MyImageDataset(image_files, image_labels, transform=data_transform)</span><br><span class="line"></span><br><span class="line">data_loader = DataLoader(</span><br><span class="line">    dataset=custom_dataset,</span><br><span class="line">    batch_size=<span class="number">32</span>,</span><br><span class="line">    shuffle=<span class="literal">True</span>,</span><br><span class="line">    num_workers=<span class="number">4</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 像遍历列表一样遍历 DataLoader</span></span><br><span class="line"><span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="built_in">range</span>(num_epochs):</span><br><span class="line">    <span class="keyword">for</span> images, labels <span class="keyword">in</span> data_loader:</span><br><span class="line">        <span class="comment"># 在这里执行模型训练</span></span><br><span class="line">        <span class="comment"># images 的形状: [32, 3, 224, 224] (假设batch_size=32)</span></span><br><span class="line">        <span class="comment"># labels 的形状: [32]</span></span><br><span class="line">        <span class="keyword">pass</span></span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+graph TD
+    A[原始数据文件] --&gt; B(Dataset);
+    B -- 按索引 __getitem__ --&gt; C{单条数据};
+    D(Transforms) -- 应用于 --&gt; C;
+    C --&gt; E(DataLoader);
+    E -- 打包成 batch --&gt; F[模型];
+</code>
+</pre>
+<h2
+id="torch.utils.tensorboard可视化训练过程"><code>torch.utils.tensorboard</code>：可视化训练过程</h2>
+<p><code>TensorBoard</code>
+是一个强大的可视化工具，可以帮助你理解、调试和优化你的模型。PyTorch 通过
+<code>SummaryWriter</code> 类与其集成。</p>
+<p><strong>主要功能</strong>：</p>
+<ul>
+<li>记录标量（如 loss、accuracy）的变化曲线。</li>
+<li>可视化图像、模型图、embedding 等。</li>
+</ul>
+<h3 id="示例使用-summarywriter">示例：使用
+<code>SummaryWriter</code></h3>
+<p><code>add_scalar</code>
+是最常用的方法之一，它用于记录单个标量值的变化。</p>
+<ul>
+<li><code>tag</code>: 图表的标题，例如 ‘Loss/train’ 或
+‘Accuracy/validation’。使用 <code>/</code> 可以帮助在 TensorBoard
+中对图表进行分组。</li>
+<li><code>scalar_value</code>: 要记录的数值，通常是 loss
+值或准确率。</li>
+<li><code>global_step</code>: x 轴坐标，通常是训练的步数（batch
+index）或轮数（epoch index）。</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torch.utils.tensorboard <span class="keyword">import</span> SummaryWriter</span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 创建一个 writer 实例，日志会保存在 &#x27;logs&#x27; 目录下</span></span><br><span class="line">writer = SummaryWriter(<span class="string">&#x27;logs/experiment_1&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 在训练循环中记录信息</span></span><br><span class="line"><span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="built_in">range</span>(num_epochs):</span><br><span class="line">    running_loss = <span class="number">0.0</span></span><br><span class="line">    <span class="keyword">for</span> i, data <span class="keyword">in</span> <span class="built_in">enumerate</span>(data_loader, <span class="number">0</span>):</span><br><span class="line">        <span class="comment"># ... 训练代码 ...</span></span><br><span class="line">        loss = criterion(outputs, labels)</span><br><span class="line">        running_loss += loss.item()</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 每 100 个 batch 记录一次 loss</span></span><br><span class="line">        <span class="keyword">if</span> i % <span class="number">100</span> == <span class="number">99</span>:</span><br><span class="line">            writer.add_scalar(<span class="string">&#x27;training loss&#x27;</span>, running_loss / <span class="number">100</span>, epoch * <span class="built_in">len</span>(data_loader) + i)</span><br><span class="line">            running_loss = <span class="number">0.0</span></span><br><span class="line"></span><br><span class="line">    假设在每个 epoch 结束后记录一张图片</span><br><span class="line">    writer.add_image(<span class="string">&#x27;one_image&#x27;</span>, images[<span class="number">0</span>], epoch)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 训练结束后关闭 writer</span></span><br><span class="line">writer.close()</span><br></pre></td></tr></table></figure>
+<p>记录完成后，在终端中运行
+<code>tensorboard --logdir=logs</code>，然后访问浏览器中显示的地址（通常是
+<code>http://localhost:6006</code>）即可查看可视化结果。</p>
+<h2 id="小结">📝 小结</h2>
+<ol type="1">
+<li><strong><code>Dataset</code></strong>：数据源的标准化封装，核心是
+<code>__len__</code> 和 <code>__getitem__</code>。</li>
+<li><strong><code>Transforms</code></strong>：数据预处理和增强的流水线，使用
+<code>Compose</code> 组合。</li>
+<li><strong><code>DataLoader</code></strong>：将 <code>Dataset</code>
+包装成可迭代对象，实现批量、随机和并行加载。</li>
+<li><strong><code>TensorBoard</code></strong>：通过
+<code>SummaryWriter</code> 记录训练过程，实现可视化分析。</li>
+</ol>
+<p>熟练运用这四大组件，你的 PyTorch 项目将变得更加规范、高效和易于调试
+🚀</p>
+]]></content>
+      <tags>
+        <tag>PyTorch</tag>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>pytorch train 模板</title>
     <url>/posts/14ba9e2c/</url>
     <content><![CDATA[<p>本文提供了一个完整、通用的 PyTorch
@@ -8390,191 +8573,8 @@ href="https://www.bilibili.com/video/BV1hE411t7RN?spm_id_from=333.788.videopod.e
       <tags>
         <tag>PyTorch</tag>
         <tag>深度学习</tag>
+        <tag>AI</tag>
         <tag>训练模板</tag>
-        <tag>AI</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>pytorch入门</title>
-    <url>/posts/5f1831aa/</url>
-    <content><![CDATA[<p>PyTorch 为深度学习提供了强大的数据加载和可视化工具。掌握
-<code>Dataset</code>、<code>DataLoader</code>、<code>Transforms</code>
-和 <code>TensorBoard</code>
-是高效训练模型的关键。本文将带你快速入门这四大核心组件。 <span id="more"></span></p>
-<h2 id="核心组件速记">📚 核心组件速记</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 66%" />
-</colgroup>
-<thead>
-<tr>
-<th>组件</th>
-<th>记忆点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>Dataset</code></td>
-<td><code>__getitem__</code> 和 <code>__len__</code> →
-封装你的数据源，按索引取数据</td>
-</tr>
-<tr>
-<td><code>DataLoader</code></td>
-<td><code>batch_size</code>, <code>shuffle</code> → 从
-<code>Dataset</code> 中批量、随机地取数据</td>
-</tr>
-<tr>
-<td><code>Transforms</code></td>
-<td><code>Compose</code>, <code>ToTensor</code> →
-数据预处理与增强的“流水线”</td>
-</tr>
-<tr>
-<td><code>TensorBoard</code></td>
-<td><code>SummaryWriter</code> → 训练过程可视化，调参与Debug的神器</td>
-</tr>
-</tbody>
-</table>
-<h2 id="数据流转示意图">🎨 数据流转示意图</h2>
-<p>在 PyTorch
-中，数据通常经历从磁盘文件到模型输入的转换过程。理解这个流程是掌握数据加载机制的第一步。</p>
-<pre>
-<code class="mermaid">
-
-graph TD
-    subgraph &quot;硬盘&quot;
-        A[&quot;图片文件 (cat.jpg)&quot;]
-    end
-    subgraph &quot;CPU 内存&quot;
-        B[&quot;PIL Image &#x2F; OpenCV (numpy array)&quot;]
-    end
-    subgraph &quot;GPU&#x2F;CPU 内存&quot;
-        C[&quot;Torch Tensor&lt;br&#x2F;&gt;[C, H, W]&quot;]
-        D[&quot;Batch Tensor&lt;br&#x2F;&gt;[B, C, H, W]&quot;]
-        C -- &quot;DataLoader 批量化&quot; --&gt; D
-    end
-
-    A -- &quot;Image.open()&quot; --&gt; B
-    B -- &quot;transforms.ToTensor()&quot; --&gt; C
-    D &#x3D;&#x3D;&gt; E[模型输入]
-</code>
-</pre>
-<h2
-id="torch.utils.data.dataset封装你的数据"><code>torch.utils.data.Dataset</code>：封装你的数据</h2>
-<p><code>Dataset</code>
-是一个抽象类，用于表示数据集。所有自定义的数据集都应该继承它，并重写两个核心方法：</p>
-<ul>
-<li><code>__len__(self)</code>: 返回数据集的大小。</li>
-<li><code>__getitem__(self, idx)</code>: 根据索引 <code>idx</code>
-返回一条数据（通常是一个样本和对应的标签）。</li>
-</ul>
-<p>这提供了一个统一的接口，让 <code>DataLoader</code>
-等工具可以方便地处理各种不同来源的数据。</p>
-<h3 id="示例创建一个自定义-dataset">示例：创建一个自定义
-<code>Dataset</code></h3>
-<p>假设我们有一些图片路径和对应的标签，我们可以这样创建一个
-<code>Dataset</code>：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> Dataset</span><br><span class="line"><span class="keyword">from</span> PIL <span class="keyword">import</span> Image</span><br><span class="line"><span class="keyword">import</span> os</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">MyImageDataset</span>(<span class="title class_ inherited__">Dataset</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, image_paths, labels, transform=<span class="literal">None</span></span>):</span><br><span class="line">        <span class="variable language_">self</span>.image_paths = image_paths</span><br><span class="line">        <span class="variable language_">self</span>.labels = labels</span><br><span class="line">        <span class="variable language_">self</span>.transform = transform</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__len__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">len</span>(<span class="variable language_">self</span>.image_paths)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__getitem__</span>(<span class="params">self, idx</span>):</span><br><span class="line">        <span class="comment"># 读取图片</span></span><br><span class="line">        image_path = <span class="variable language_">self</span>.image_paths[idx]</span><br><span class="line">        image = Image.<span class="built_in">open</span>(image_path).convert(<span class="string">&quot;RGB&quot;</span>)</span><br><span class="line">        </span><br><span class="line">        <span class="comment"># 获取标签</span></span><br><span class="line">        label = <span class="variable language_">self</span>.labels[idx]</span><br><span class="line">        </span><br><span class="line">        <span class="comment"># 应用数据变换</span></span><br><span class="line">        <span class="keyword">if</span> <span class="variable language_">self</span>.transform:</span><br><span class="line">            image = <span class="variable language_">self</span>.transform(image)</span><br><span class="line">            </span><br><span class="line">        <span class="keyword">return</span> image, label</span><br><span class="line"></span><br><span class="line"><span class="comment"># 使用示例</span></span><br><span class="line">image_files = [<span class="string">&quot;./data/cat.png&quot;</span>, <span class="string">&quot;./data/dog.png&quot;</span>]</span><br><span class="line">image_labels = [<span class="number">0</span>, <span class="number">1</span>]</span><br><span class="line">custom_dataset = MyImageDataset(image_files, image_labels)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">f&quot;数据总数: <span class="subst">&#123;<span class="built_in">len</span>(custom_dataset)&#125;</span>&quot;</span>)</span><br><span class="line">first_item = custom_dataset[<span class="number">0</span>]</span><br><span class="line"><span class="built_in">print</span>(<span class="string">f&quot;第一个样本: <span class="subst">&#123;first_item&#125;</span>&quot;</span>)</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p>记忆：<code>Dataset</code> 就是个“数据地图”，<code>__getitem__</code>
-负责“按图索骥”。</p>
-</blockquote>
-<h2
-id="torchvision.transforms数据预处理与增强"><code>torchvision.transforms</code>：数据预处理与增强</h2>
-<p>在将数据喂给模型之前，通常需要进行预处理，例如转换为
-Tensor、归一化、裁剪、旋转等。<code>transforms</code>
-就是用来完成这些操作的工具箱。</p>
-<ul>
-<li><strong>常见变换</strong>：<code>ToTensor()</code>,
-<code>Resize()</code>, <code>CenterCrop()</code>,
-<code>RandomHorizontalFlip()</code>, <code>Normalize()</code> 等。</li>
-<li><strong><code>transforms.Compose()</code></strong>:
-将多个变换操作串联成一个“流水线”。</li>
-</ul>
-<h3 id="示例定义一个变换流水线">示例：定义一个变换流水线</h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torchvision <span class="keyword">import</span> transforms</span><br><span class="line"></span><br><span class="line"><span class="comment"># 定义一个转换流水线</span></span><br><span class="line">data_transform = transforms.Compose([</span><br><span class="line">    transforms.Resize((<span class="number">224</span>, <span class="number">224</span>)),      <span class="comment"># 调整图片大小</span></span><br><span class="line">    transforms.RandomHorizontalFlip(),  <span class="comment"># 随机水平翻转</span></span><br><span class="line">    transforms.ToTensor(),              <span class="comment"># 将 PIL Image 或 numpy.ndarray 转换为 tensor</span></span><br><span class="line">    transforms.Normalize(mean=[<span class="number">0.485</span>, <span class="number">0.456</span>, <span class="number">0.406</span>], std=[<span class="number">0.229</span>, <span class="number">0.224</span>, <span class="number">0.225</span>]) <span class="comment"># 归一化</span></span><br><span class="line">])</span><br><span class="line"></span><br><span class="line"><span class="comment"># 将 transform 应用到 Dataset</span></span><br><span class="line">custom_dataset = MyImageDataset(image_files, image_labels, transform=data_transform)</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>为什么要随机翻转？</strong></p>
-<p><code>RandomHorizontalFlip</code> 是一种<strong>数据增强</strong>
-(Data Augmentation)
-技术。它的目的是在不改变图片语义（猫翻转了还是猫）的前提下，增加训练数据的多样性。</p>
-<ul>
-<li><strong>提高泛化能力</strong>：模型会学习到，无论是正着还是反着的猫，都应该被识别为猫，从而对真实世界中更多样的数据表现更好，避免<strong>过拟合</strong>。</li>
-<li><strong>扩充数据集</strong>：相当于免费让你的数据集大小翻倍。</li>
-</ul>
-<p>提示：数据增强（如随机翻转）只在训练时使用，验证和测试时应去掉，以保证结果的一致性。</p>
-</blockquote>
-<h2
-id="torch.utils.data.dataloader批量加载数据"><code>torch.utils.data.DataLoader</code>：批量加载数据</h2>
-<p><code>DataLoader</code> 是一个迭代器，它从 <code>Dataset</code>
-中自动拉取数据，并将其打包成批次 (batch)。它还提供了许多有用的功能：</p>
-<ul>
-<li><strong><code>batch_size</code></strong>:
-每个批次包含的样本数。</li>
-<li><strong><code>shuffle=True</code></strong>: 在每个 epoch
-开始时打乱数据顺序，有助于提高模型泛化能力。</li>
-<li><strong><code>num_workers</code></strong>:
-使用多少个子进程来预加载数据。增加此值可以加快数据加载速度，但会消耗更多内存和
-CPU。</li>
-</ul>
-<h3 id="示例使用-dataloader">示例：使用 <code>DataLoader</code></h3>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> DataLoader</span><br><span class="line"></span><br><span class="line"><span class="comment"># 假设 custom_dataset 已经创建好</span></span><br><span class="line">custom_dataset = MyImageDataset(image_files, image_labels, transform=data_transform)</span><br><span class="line"></span><br><span class="line">data_loader = DataLoader(</span><br><span class="line">    dataset=custom_dataset,</span><br><span class="line">    batch_size=<span class="number">32</span>,</span><br><span class="line">    shuffle=<span class="literal">True</span>,</span><br><span class="line">    num_workers=<span class="number">4</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 像遍历列表一样遍历 DataLoader</span></span><br><span class="line"><span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="built_in">range</span>(num_epochs):</span><br><span class="line">    <span class="keyword">for</span> images, labels <span class="keyword">in</span> data_loader:</span><br><span class="line">        <span class="comment"># 在这里执行模型训练</span></span><br><span class="line">        <span class="comment"># images 的形状: [32, 3, 224, 224] (假设batch_size=32)</span></span><br><span class="line">        <span class="comment"># labels 的形状: [32]</span></span><br><span class="line">        <span class="keyword">pass</span></span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-graph TD
-    A[原始数据文件] --&gt; B(Dataset);
-    B -- 按索引 __getitem__ --&gt; C{单条数据};
-    D(Transforms) -- 应用于 --&gt; C;
-    C --&gt; E(DataLoader);
-    E -- 打包成 batch --&gt; F[模型];
-</code>
-</pre>
-<h2
-id="torch.utils.tensorboard可视化训练过程"><code>torch.utils.tensorboard</code>：可视化训练过程</h2>
-<p><code>TensorBoard</code>
-是一个强大的可视化工具，可以帮助你理解、调试和优化你的模型。PyTorch 通过
-<code>SummaryWriter</code> 类与其集成。</p>
-<p><strong>主要功能</strong>：</p>
-<ul>
-<li>记录标量（如 loss、accuracy）的变化曲线。</li>
-<li>可视化图像、模型图、embedding 等。</li>
-</ul>
-<h3 id="示例使用-summarywriter">示例：使用
-<code>SummaryWriter</code></h3>
-<p><code>add_scalar</code>
-是最常用的方法之一，它用于记录单个标量值的变化。</p>
-<ul>
-<li><code>tag</code>: 图表的标题，例如 ‘Loss/train’ 或
-‘Accuracy/validation’。使用 <code>/</code> 可以帮助在 TensorBoard
-中对图表进行分组。</li>
-<li><code>scalar_value</code>: 要记录的数值，通常是 loss
-值或准确率。</li>
-<li><code>global_step</code>: x 轴坐标，通常是训练的步数（batch
-index）或轮数（epoch index）。</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> torch.utils.tensorboard <span class="keyword">import</span> SummaryWriter</span><br><span class="line"></span><br><span class="line"><span class="comment"># 1. 创建一个 writer 实例，日志会保存在 &#x27;logs&#x27; 目录下</span></span><br><span class="line">writer = SummaryWriter(<span class="string">&#x27;logs/experiment_1&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 在训练循环中记录信息</span></span><br><span class="line"><span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="built_in">range</span>(num_epochs):</span><br><span class="line">    running_loss = <span class="number">0.0</span></span><br><span class="line">    <span class="keyword">for</span> i, data <span class="keyword">in</span> <span class="built_in">enumerate</span>(data_loader, <span class="number">0</span>):</span><br><span class="line">        <span class="comment"># ... 训练代码 ...</span></span><br><span class="line">        loss = criterion(outputs, labels)</span><br><span class="line">        running_loss += loss.item()</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 每 100 个 batch 记录一次 loss</span></span><br><span class="line">        <span class="keyword">if</span> i % <span class="number">100</span> == <span class="number">99</span>:</span><br><span class="line">            writer.add_scalar(<span class="string">&#x27;training loss&#x27;</span>, running_loss / <span class="number">100</span>, epoch * <span class="built_in">len</span>(data_loader) + i)</span><br><span class="line">            running_loss = <span class="number">0.0</span></span><br><span class="line"></span><br><span class="line">    假设在每个 epoch 结束后记录一张图片</span><br><span class="line">    writer.add_image(<span class="string">&#x27;one_image&#x27;</span>, images[<span class="number">0</span>], epoch)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 训练结束后关闭 writer</span></span><br><span class="line">writer.close()</span><br></pre></td></tr></table></figure>
-<p>记录完成后，在终端中运行
-<code>tensorboard --logdir=logs</code>，然后访问浏览器中显示的地址（通常是
-<code>http://localhost:6006</code>）即可查看可视化结果。</p>
-<h2 id="小结">📝 小结</h2>
-<ol type="1">
-<li><strong><code>Dataset</code></strong>：数据源的标准化封装，核心是
-<code>__len__</code> 和 <code>__getitem__</code>。</li>
-<li><strong><code>Transforms</code></strong>：数据预处理和增强的流水线，使用
-<code>Compose</code> 组合。</li>
-<li><strong><code>DataLoader</code></strong>：将 <code>Dataset</code>
-包装成可迭代对象，实现批量、随机和并行加载。</li>
-<li><strong><code>TensorBoard</code></strong>：通过
-<code>SummaryWriter</code> 记录训练过程，实现可视化分析。</li>
-</ol>
-<p>熟练运用这四大组件，你的 PyTorch 项目将变得更加规范、高效和易于调试
-🚀</p>
-]]></content>
-      <tags>
-        <tag>PyTorch</tag>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
       </tags>
   </entry>
   <entry>
@@ -23884,6 +23884,245 @@ Writer：println! 背后是什么</h2>
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 前置：借用与生命周期——引用、裸指针与 unsafe</title>
+    <url>/posts/4b7500f7/</url>
+    <content><![CDATA[<p>Rust 与 C 的分水岭在内存归谁管：C 靠程序员自觉，Rust
+用一套编译期规则保证安全。这套规则的核心就是所有权、借用（<code>&amp;</code>
+/ <code>&amp;mut</code>）与生命周期，而 OS
+开发还要在此基础上接触裸指针与
+<code>unsafe</code>。这篇把这条主线一次讲清。</p>
+<span id="more"></span>
+<blockquote>
+<p>接上一篇《<a href="/posts/5bfe3d1c/">Rust OS 前置：从 C 到
+Rust</a>》。建议先记住一句主线：<strong>对象 → 所有权 → 引用 → 借用 →
+<code>&amp;mut</code> → 裸指针 → <code>unsafe</code> →
+生命周期</strong>。</p>
+</blockquote>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>含义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&amp;T</code></td>
+<td>不可变引用（借用）</td>
+<td>借用但不拿走</td>
+</tr>
+<tr>
+<td><code>&amp;mut T</code></td>
+<td>可变引用</td>
+<td>借来并允许修改</td>
+</tr>
+<tr>
+<td><code>*T</code></td>
+<td>解引用</td>
+<td>访问指向的东西</td>
+</tr>
+<tr>
+<td><code>*const T</code> / <code>*mut T</code></td>
+<td>裸指针</td>
+<td>一个地址</td>
+</tr>
+<tr>
+<td><code>unsafe</code></td>
+<td>绕过无法自动证明的操作</td>
+<td>自己负责安全</td>
+</tr>
+<tr>
+<td><code>as</code></td>
+<td>类型转换</td>
+<td>整数 → 裸指针</td>
+</tr>
+<tr>
+<td><code>'static</code></td>
+<td>生命周期：持续到程序结束</td>
+<td>硬件映射内存常用</td>
+</tr>
+<tr>
+<td><code>'a</code></td>
+<td>生命周期名字</td>
+<td>引用有效的区间</td>
+</tr>
+<tr>
+<td><code>static</code></td>
+<td>全局变量（不是生命周期）</td>
+<td>初值必须编译期算出</td>
+</tr>
+</tbody>
+</table>
+<h2 id="引用-借用但不拿走">🔗 引用
+<code>&amp;</code>：借用，但不拿走</h2>
+<p>假设 <code>x</code> 是一个值：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">let</span> <span class="variable">r</span> = &amp;x;      <span class="comment">// r: &amp;i32，借用 x</span></span><br></pre></td></tr></table></figure>
+<p><code>&amp;x</code> 的含义是：<strong>借用 x，但不拿走
+x</strong>。类型是 <code>&amp;i32</code>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x: [ 10 ]      r: &amp;i32 ──► x</span><br></pre></td></tr></table></figure>
+<p>读 <code>r</code> 不会移动或复制 <code>x</code>
+的所有权，只是临时看一眼。所有权仍在原变量手里。</p>
+<h2 id="可变引用-mut">✏️ 可变引用 <code>&amp;mut</code></h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">let</span> <span class="variable">r</span> = &amp;<span class="keyword">mut</span> x;   <span class="comment">// r: &amp;mut i32</span></span><br><span class="line">*r = <span class="number">20</span>;          <span class="comment">// 通过 r 修改 x</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x: [ 10 ]  ◄── r = &amp;mut x（可借来修改）</span><br></pre></td></tr></table></figure>
+<p>简单对照：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">&amp;x      → 只读借用</span><br><span class="line">&amp;mut x  → 可修改借用</span><br></pre></td></tr></table></figure>
+<h2 id="解引用">🎯 解引用 <code>*</code></h2>
+<p><code>*r</code> 表示访问 <code>r</code> 所指向的那个东西：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">r</span> = &amp;x;</span><br><span class="line"><span class="built_in">println!</span>(<span class="string">&quot;&#123;&#125;&quot;</span>, *r);   <span class="comment">// 取出 r 指向的值</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">r ──&amp;x──► x</span><br><span class="line">*r = &quot;把 r 指向的东西拿出来访问&quot;</span><br></pre></td></tr></table></figure>
+<h2 id="mut-buffer三步拆开看">🧩
+<code>&amp;mut *buffer</code>：三步拆开看</h2>
+<p>这是 OS 代码里常见的一串组合：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">&amp;<span class="keyword">mut</span> *buffer</span><br></pre></td></tr></table></figure>
+<p>分三步理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">buffer</span><br><span class="line">   │  *（解引用）</span><br><span class="line">   ▼</span><br><span class="line">Buffer</span><br><span class="line">   │  &amp;mut（可变借用）</span><br><span class="line">   ▼</span><br><span class="line">&amp;mut Buffer</span><br></pre></td></tr></table></figure>
+<p>也就是：<strong>通过指针找到
+<code>Buffer</code>，再把它借成一个可修改的 Rust 引用</strong>。后面学
+VGA <code>Writer</code> 时，<code>unsafe &#123; &amp;mut *buffer &#125;</code>
+就是这句话。</p>
+<h2 id="裸指针-mut-t只是一个地址">📌 裸指针
+<code>*mut T</code>：只是一个地址</h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>*mut Buffer</code> 不是
+<code>&amp;mut Buffer</code>，而是<strong>裸指针</strong>：把
+<code>0xb8000</code> 这个整数地址解释成指向 Buffer 的地址。粗略对应 C 的
+<code>Buffer *buffer;</code>。</p>
+<h2 id="mut-t-和-mut-t-一定要分清">⚖️ <code>&amp;mut T</code> 和
+<code>*mut T</code> 一定要分清</h2>
+<table>
+<thead>
+<tr>
+<th>Rust</th>
+<th>含义</th>
+<th>粗略 C 对应</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>一个对象</td>
+<td><code>T</code></td>
+</tr>
+<tr>
+<td><code>&amp;T</code></td>
+<td>不可变引用</td>
+<td><code>T *</code></td>
+</tr>
+<tr>
+<td><code>&amp;mut T</code></td>
+<td>可变引用（受借用规则约束）</td>
+<td><code>T *</code></td>
+</tr>
+<tr>
+<td><code>*const T</code></td>
+<td>裸指针（只读）</td>
+<td><code>const T *</code></td>
+</tr>
+<tr>
+<td><code>*mut T</code></td>
+<td>裸指针（可写）</td>
+<td><code>T *</code></td>
+</tr>
+</tbody>
+</table>
+<p>最简理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">*mut T  → &quot;这是一个地址&quot;</span><br><span class="line">&amp;mut T  → &quot;这是一个我借来修改的 T&quot;</span><br></pre></td></tr></table></figure>
+<p>区别在于：<code>&amp;mut T</code>
+受借用检查器约束（同一时刻只能有一个），而 <code>*mut T</code>
+是裸地址，编译器不替你保证什么——所以使用裸指针通常需要
+<code>unsafe</code>。</p>
+<h2 id="unsafe你承担安全责任">⚠️ unsafe：你承担安全责任</h2>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">unsafe</span> &#123;</span><br><span class="line">    (*buffer).chars[<span class="number">0</span>][<span class="number">0</span>] = ScreenChar &#123; <span class="comment">/* ... */</span> &#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为什么需要 <code>unsafe</code>？因为 Rust 无法证明
+<code>0xb8000</code> 处真的有一个合法的
+<code>Buffer</code>——地址是硬件规定的，编译器看不到。<code>unsafe</code>
+是说：</p>
+<blockquote>
+<p>这个操作我知道是安全的，由我负责。</p>
+</blockquote>
+<p><strong>但 <code>unsafe</code> 不是进入 C 模式</strong>，不是说 Rust
+规则全部关闭：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">unsafe</span><br><span class="line">  ↓</span><br><span class="line">允许执行某些 Rust 无法自动证明安全的操作</span><br><span class="line">（解引用裸指针、读写静态变量、调用 FFI 等）</span><br></pre></td></tr></table></figure>
+<p>在 <code>unsafe</code> 块里取得的
+<code>&amp;mut Buffer</code>，拿出来的仍然是一个正常引用，之后继续受类型系统与借用检查约束。这正是把危险的硬件访问封装在安全抽象里的基础：内部小范围
+<code>unsafe</code>，外部暴露安全接口。</p>
+<h2 id="as类型转换">🔁 as：类型转换</h2>
+<p><code>0xb8000 as *mut Buffer</code> 里的 <code>as</code>
+是类型转换：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">u8</span> = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">let</span> <span class="variable">y</span> = x <span class="keyword">as</span> <span class="type">u32</span>;      <span class="comment">// u8 → u32</span></span><br></pre></td></tr></table></figure>
+<p>所以 <code>0xb8000 as *mut Buffer</code> 就是：把这个整数地址解释成
+<code>*mut Buffer</code>。整数与裸指针之间的转换，是
+OS/裸机代码操作硬件地址的标准入口。</p>
+<h2 id="生命周期static-与-a">🕰️ 生命周期：’static 与 ’a</h2>
+<p>先看最常见的 <code>'static</code>：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer</span><br></pre></td></tr></table></figure>
+<p>拆开读：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">&amp;       引用</span><br><span class="line">&#x27;static 生命周期（持续整个程序）</span><br><span class="line">mut     可修改</span><br><span class="line">Buffer  类型</span><br></pre></td></tr></table></figure>
+<p><code>&amp;'static mut Buffer</code> ≈
+一个能活到程序结束的可变引用。VGA 显存 <code>0xb8000</code>
+从程序开始到结束都存在，所以可以用 <code>'static</code> 描述。</p>
+<p>后面还会看到 <code>'a</code>、<code>'b</code> 这类生命周期名字：</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">fn</span> <span class="title function_">foo</span>&lt;<span class="symbol">&#x27;a</span>&gt;(x: &amp;<span class="symbol">&#x27;a</span> <span class="type">i32</span>) <span class="punctuation">-&gt;</span> &amp;<span class="symbol">&#x27;a</span> <span class="type">i32</span> &#123; x &#125;</span><br></pre></td></tr></table></figure>
+<p><code>'a</code>
+只是给某段引用有效区间起的名字：<code>&amp;'a T</code> 是生命周期为
+<code>'a</code> 的 T
+的引用。编译器靠这些名字检查：<strong>返回的引用不会比它借的东西活得更久</strong>（防止悬垂引用）。<code>'static</code>
+是其中最长的一个特例。</p>
+<h2 id="static全局变量和-static-不是一回事">🌐 static：全局变量，和
+<code>'static</code> 不是一回事</h2>
+<p><code>'static</code>
+是<strong>生命周期</strong>，回答”这个引用能活多久”；<code>static</code>
+是<strong>变量</strong>，回答”这份数据是不是全程序只有一份”。两个词只差一个撇号，管的却是两件事。</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">static</span> COUNT: <span class="type">u32</span> = <span class="number">0</span>;    <span class="comment">// 全局变量：全程序一份，有固定的内存地址</span></span><br><span class="line"><span class="keyword">const</span> MAX: <span class="type">u32</span> = <span class="number">100</span>;     <span class="comment">// 编译期常量：不占地址，用到哪就把 100 填到哪</span></span><br></pre></td></tr></table></figure>
+<p><code>static</code>
+有一条硬要求：<strong>初值必须在编译期就算出来</strong>。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">static A: u32 = 1 + 2;                          // ✅ 编译期算得出</span><br><span class="line">static P: *mut Buffer = 0xb8000 as *mut Buffer; // ✅ 只是造个地址值，不解引用</span><br><span class="line">static B: Buffer = load_from(0xb8000);          // ❌ 要跑起来才知道（示意）</span><br></pre></td></tr></table></figure>
+<p>原因和 <code>const</code> 一样：<code>static</code>
+的值会被直接编进可执行文件——程序还没运行，这份数据已经在二进制里了。所以任何”跑起来才能算”的初值都不行，比如解引用裸指针、调用非
+<code>const fn</code>。</p>
+<p>那”可变的全局变量”怎么办？</p>
+<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">mut</span> X: <span class="type">u32</span> = <span class="number">0</span>;    <span class="comment">// 能改，但每次访问都要 unsafe</span></span><br></pre></td></tr></table></figure>
+<p><code>static mut</code>
+能过编译，代价是责任全在程序员：编译器不再保证”同一时刻只有一个人拿着
+<code>&amp;mut</code>“，两处同时改就是未定义行为。所以 Rust
+里常见的做法是把值交给一把锁——<code>static</code> 里放
+<code>Mutex&lt;T&gt;</code>，谁拿到锁谁才能改。</p>
+<p><strong>《逐行拆解 VGA 的 Writer》第八层的 <code>lazy_static!</code>
++ <code>spin::Mutex</code>
+就是这套解法</strong>：既解决了可变全局的唯一性，又顺手绕过”初值必须编译期算出”——它把构造推迟到第一次访问时才执行。</p>
+<p>最后把两个词的关系记牢：<code>static</code> 变量的引用天然是
+<code>'static</code>（它确实活到程序结束）；但反过来不成立——<code>'static</code>
+只是一个生命周期，和”是不是全局变量”无关。<code>"hello"</code>
+这样的字面量也被编进二进制、活到程序结束，所以
+<code>&amp;'static str</code> 一样成立。</p>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>借用与生命周期的主线是：<code>&amp;</code> 借而不取 →
+<code>&amp;mut</code> 借来修改 → <code>*</code> 解引用 → 裸指针
+<code>*mut T</code> 只是地址 → 访问裸指针要 <code>unsafe</code>
+且自己负责 → 生命周期（<code>'static</code> /
+<code>'a</code>）描述引用能活多久。</p>
+</blockquote>
+<p>另外记住 <code>'static</code>（生命周期）和
+<code>static</code>（全局变量）这对只差一个撇号的名字：前者说引用能活多久，后者说数据是不是只有一份。</p>
+<p>下一篇讲 OS
+代码里高频出现的属性与内存布局（<code>repr(C)</code>、<code>repr(transparent)</code>、<code>derive</code>），它们回答这个
+struct 在内存里到底长什么样。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>Rust</tag>
+        <tag>借用</tag>
+        <tag>裸指针</tag>
+        <tag>unsafe</tag>
+        <tag>生命周期</tag>
+        <tag>所有权</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 前置：从 C 到 Rust——变量、类型与 struct</title>
     <url>/posts/5bfe3d1c/</url>
     <content><![CDATA[<p>学 Rust OS 时会密集碰到
@@ -24205,8 +24444,8 @@ Rust，变量、类型、<code>struct</code>、数组、函数这些零件大多
         <tag>操作系统</tag>
         <tag>Rust</tag>
         <tag>裸机</tag>
-        <tag>Rust 基础</tag>
         <tag>所有权</tag>
+        <tag>Rust 基础</tag>
       </tags>
   </entry>
   <entry>
@@ -24313,245 +24552,6 @@ struct，基本都要用 <code>repr</code> 系列声明布局。</p>
         <tag>repr</tag>
         <tag>derive</tag>
         <tag>FFI</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 前置：借用与生命周期——引用、裸指针与 unsafe</title>
-    <url>/posts/4b7500f7/</url>
-    <content><![CDATA[<p>Rust 与 C 的分水岭在内存归谁管：C 靠程序员自觉，Rust
-用一套编译期规则保证安全。这套规则的核心就是所有权、借用（<code>&amp;</code>
-/ <code>&amp;mut</code>）与生命周期，而 OS
-开发还要在此基础上接触裸指针与
-<code>unsafe</code>。这篇把这条主线一次讲清。</p>
-<span id="more"></span>
-<blockquote>
-<p>接上一篇《<a href="/posts/5bfe3d1c/">Rust OS 前置：从 C 到
-Rust</a>》。建议先记住一句主线：<strong>对象 → 所有权 → 引用 → 借用 →
-<code>&amp;mut</code> → 裸指针 → <code>unsafe</code> →
-生命周期</strong>。</p>
-</blockquote>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>含义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&amp;T</code></td>
-<td>不可变引用（借用）</td>
-<td>借用但不拿走</td>
-</tr>
-<tr>
-<td><code>&amp;mut T</code></td>
-<td>可变引用</td>
-<td>借来并允许修改</td>
-</tr>
-<tr>
-<td><code>*T</code></td>
-<td>解引用</td>
-<td>访问指向的东西</td>
-</tr>
-<tr>
-<td><code>*const T</code> / <code>*mut T</code></td>
-<td>裸指针</td>
-<td>一个地址</td>
-</tr>
-<tr>
-<td><code>unsafe</code></td>
-<td>绕过无法自动证明的操作</td>
-<td>自己负责安全</td>
-</tr>
-<tr>
-<td><code>as</code></td>
-<td>类型转换</td>
-<td>整数 → 裸指针</td>
-</tr>
-<tr>
-<td><code>'static</code></td>
-<td>生命周期：持续到程序结束</td>
-<td>硬件映射内存常用</td>
-</tr>
-<tr>
-<td><code>'a</code></td>
-<td>生命周期名字</td>
-<td>引用有效的区间</td>
-</tr>
-<tr>
-<td><code>static</code></td>
-<td>全局变量（不是生命周期）</td>
-<td>初值必须编译期算出</td>
-</tr>
-</tbody>
-</table>
-<h2 id="引用-借用但不拿走">🔗 引用
-<code>&amp;</code>：借用，但不拿走</h2>
-<p>假设 <code>x</code> 是一个值：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">let</span> <span class="variable">r</span> = &amp;x;      <span class="comment">// r: &amp;i32，借用 x</span></span><br></pre></td></tr></table></figure>
-<p><code>&amp;x</code> 的含义是：<strong>借用 x，但不拿走
-x</strong>。类型是 <code>&amp;i32</code>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x: [ 10 ]      r: &amp;i32 ──► x</span><br></pre></td></tr></table></figure>
-<p>读 <code>r</code> 不会移动或复制 <code>x</code>
-的所有权，只是临时看一眼。所有权仍在原变量手里。</p>
-<h2 id="可变引用-mut">✏️ 可变引用 <code>&amp;mut</code></h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="keyword">mut </span><span class="variable">x</span> = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">let</span> <span class="variable">r</span> = &amp;<span class="keyword">mut</span> x;   <span class="comment">// r: &amp;mut i32</span></span><br><span class="line">*r = <span class="number">20</span>;          <span class="comment">// 通过 r 修改 x</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x: [ 10 ]  ◄── r = &amp;mut x（可借来修改）</span><br></pre></td></tr></table></figure>
-<p>简单对照：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">&amp;x      → 只读借用</span><br><span class="line">&amp;mut x  → 可修改借用</span><br></pre></td></tr></table></figure>
-<h2 id="解引用">🎯 解引用 <code>*</code></h2>
-<p><code>*r</code> 表示访问 <code>r</code> 所指向的那个东西：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">r</span> = &amp;x;</span><br><span class="line"><span class="built_in">println!</span>(<span class="string">&quot;&#123;&#125;&quot;</span>, *r);   <span class="comment">// 取出 r 指向的值</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">r ──&amp;x──► x</span><br><span class="line">*r = &quot;把 r 指向的东西拿出来访问&quot;</span><br></pre></td></tr></table></figure>
-<h2 id="mut-buffer三步拆开看">🧩
-<code>&amp;mut *buffer</code>：三步拆开看</h2>
-<p>这是 OS 代码里常见的一串组合：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">&amp;<span class="keyword">mut</span> *buffer</span><br></pre></td></tr></table></figure>
-<p>分三步理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">buffer</span><br><span class="line">   │  *（解引用）</span><br><span class="line">   ▼</span><br><span class="line">Buffer</span><br><span class="line">   │  &amp;mut（可变借用）</span><br><span class="line">   ▼</span><br><span class="line">&amp;mut Buffer</span><br></pre></td></tr></table></figure>
-<p>也就是：<strong>通过指针找到
-<code>Buffer</code>，再把它借成一个可修改的 Rust 引用</strong>。后面学
-VGA <code>Writer</code> 时，<code>unsafe &#123; &amp;mut *buffer &#125;</code>
-就是这句话。</p>
-<h2 id="裸指针-mut-t只是一个地址">📌 裸指针
-<code>*mut T</code>：只是一个地址</h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>*mut Buffer</code> 不是
-<code>&amp;mut Buffer</code>，而是<strong>裸指针</strong>：把
-<code>0xb8000</code> 这个整数地址解释成指向 Buffer 的地址。粗略对应 C 的
-<code>Buffer *buffer;</code>。</p>
-<h2 id="mut-t-和-mut-t-一定要分清">⚖️ <code>&amp;mut T</code> 和
-<code>*mut T</code> 一定要分清</h2>
-<table>
-<thead>
-<tr>
-<th>Rust</th>
-<th>含义</th>
-<th>粗略 C 对应</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>T</code></td>
-<td>一个对象</td>
-<td><code>T</code></td>
-</tr>
-<tr>
-<td><code>&amp;T</code></td>
-<td>不可变引用</td>
-<td><code>T *</code></td>
-</tr>
-<tr>
-<td><code>&amp;mut T</code></td>
-<td>可变引用（受借用规则约束）</td>
-<td><code>T *</code></td>
-</tr>
-<tr>
-<td><code>*const T</code></td>
-<td>裸指针（只读）</td>
-<td><code>const T *</code></td>
-</tr>
-<tr>
-<td><code>*mut T</code></td>
-<td>裸指针（可写）</td>
-<td><code>T *</code></td>
-</tr>
-</tbody>
-</table>
-<p>最简理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">*mut T  → &quot;这是一个地址&quot;</span><br><span class="line">&amp;mut T  → &quot;这是一个我借来修改的 T&quot;</span><br></pre></td></tr></table></figure>
-<p>区别在于：<code>&amp;mut T</code>
-受借用检查器约束（同一时刻只能有一个），而 <code>*mut T</code>
-是裸地址，编译器不替你保证什么——所以使用裸指针通常需要
-<code>unsafe</code>。</p>
-<h2 id="unsafe你承担安全责任">⚠️ unsafe：你承担安全责任</h2>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">buffer</span> = <span class="number">0xb8000</span> <span class="keyword">as</span> *<span class="keyword">mut</span> Buffer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">unsafe</span> &#123;</span><br><span class="line">    (*buffer).chars[<span class="number">0</span>][<span class="number">0</span>] = ScreenChar &#123; <span class="comment">/* ... */</span> &#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>为什么需要 <code>unsafe</code>？因为 Rust 无法证明
-<code>0xb8000</code> 处真的有一个合法的
-<code>Buffer</code>——地址是硬件规定的，编译器看不到。<code>unsafe</code>
-是说：</p>
-<blockquote>
-<p>这个操作我知道是安全的，由我负责。</p>
-</blockquote>
-<p><strong>但 <code>unsafe</code> 不是进入 C 模式</strong>，不是说 Rust
-规则全部关闭：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">unsafe</span><br><span class="line">  ↓</span><br><span class="line">允许执行某些 Rust 无法自动证明安全的操作</span><br><span class="line">（解引用裸指针、读写静态变量、调用 FFI 等）</span><br></pre></td></tr></table></figure>
-<p>在 <code>unsafe</code> 块里取得的
-<code>&amp;mut Buffer</code>，拿出来的仍然是一个正常引用，之后继续受类型系统与借用检查约束。这正是把危险的硬件访问封装在安全抽象里的基础：内部小范围
-<code>unsafe</code>，外部暴露安全接口。</p>
-<h2 id="as类型转换">🔁 as：类型转换</h2>
-<p><code>0xb8000 as *mut Buffer</code> 里的 <code>as</code>
-是类型转换：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> <span class="variable">x</span>: <span class="type">u8</span> = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">let</span> <span class="variable">y</span> = x <span class="keyword">as</span> <span class="type">u32</span>;      <span class="comment">// u8 → u32</span></span><br></pre></td></tr></table></figure>
-<p>所以 <code>0xb8000 as *mut Buffer</code> 就是：把这个整数地址解释成
-<code>*mut Buffer</code>。整数与裸指针之间的转换，是
-OS/裸机代码操作硬件地址的标准入口。</p>
-<h2 id="生命周期static-与-a">🕰️ 生命周期：’static 与 ’a</h2>
-<p>先看最常见的 <code>'static</code>：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line">buffer: &amp;<span class="symbol">&#x27;static</span> <span class="keyword">mut</span> Buffer</span><br></pre></td></tr></table></figure>
-<p>拆开读：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">&amp;       引用</span><br><span class="line">&#x27;static 生命周期（持续整个程序）</span><br><span class="line">mut     可修改</span><br><span class="line">Buffer  类型</span><br></pre></td></tr></table></figure>
-<p><code>&amp;'static mut Buffer</code> ≈
-一个能活到程序结束的可变引用。VGA 显存 <code>0xb8000</code>
-从程序开始到结束都存在，所以可以用 <code>'static</code> 描述。</p>
-<p>后面还会看到 <code>'a</code>、<code>'b</code> 这类生命周期名字：</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">fn</span> <span class="title function_">foo</span>&lt;<span class="symbol">&#x27;a</span>&gt;(x: &amp;<span class="symbol">&#x27;a</span> <span class="type">i32</span>) <span class="punctuation">-&gt;</span> &amp;<span class="symbol">&#x27;a</span> <span class="type">i32</span> &#123; x &#125;</span><br></pre></td></tr></table></figure>
-<p><code>'a</code>
-只是给某段引用有效区间起的名字：<code>&amp;'a T</code> 是生命周期为
-<code>'a</code> 的 T
-的引用。编译器靠这些名字检查：<strong>返回的引用不会比它借的东西活得更久</strong>（防止悬垂引用）。<code>'static</code>
-是其中最长的一个特例。</p>
-<h2 id="static全局变量和-static-不是一回事">🌐 static：全局变量，和
-<code>'static</code> 不是一回事</h2>
-<p><code>'static</code>
-是<strong>生命周期</strong>，回答”这个引用能活多久”；<code>static</code>
-是<strong>变量</strong>，回答”这份数据是不是全程序只有一份”。两个词只差一个撇号，管的却是两件事。</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">static</span> COUNT: <span class="type">u32</span> = <span class="number">0</span>;    <span class="comment">// 全局变量：全程序一份，有固定的内存地址</span></span><br><span class="line"><span class="keyword">const</span> MAX: <span class="type">u32</span> = <span class="number">100</span>;     <span class="comment">// 编译期常量：不占地址，用到哪就把 100 填到哪</span></span><br></pre></td></tr></table></figure>
-<p><code>static</code>
-有一条硬要求：<strong>初值必须在编译期就算出来</strong>。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">static A: u32 = 1 + 2;                          // ✅ 编译期算得出</span><br><span class="line">static P: *mut Buffer = 0xb8000 as *mut Buffer; // ✅ 只是造个地址值，不解引用</span><br><span class="line">static B: Buffer = load_from(0xb8000);          // ❌ 要跑起来才知道（示意）</span><br></pre></td></tr></table></figure>
-<p>原因和 <code>const</code> 一样：<code>static</code>
-的值会被直接编进可执行文件——程序还没运行，这份数据已经在二进制里了。所以任何”跑起来才能算”的初值都不行，比如解引用裸指针、调用非
-<code>const fn</code>。</p>
-<p>那”可变的全局变量”怎么办？</p>
-<figure class="highlight rust"><table><tr><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">mut</span> X: <span class="type">u32</span> = <span class="number">0</span>;    <span class="comment">// 能改，但每次访问都要 unsafe</span></span><br></pre></td></tr></table></figure>
-<p><code>static mut</code>
-能过编译，代价是责任全在程序员：编译器不再保证”同一时刻只有一个人拿着
-<code>&amp;mut</code>“，两处同时改就是未定义行为。所以 Rust
-里常见的做法是把值交给一把锁——<code>static</code> 里放
-<code>Mutex&lt;T&gt;</code>，谁拿到锁谁才能改。</p>
-<p><strong>《逐行拆解 VGA 的 Writer》第八层的 <code>lazy_static!</code>
-+ <code>spin::Mutex</code>
-就是这套解法</strong>：既解决了可变全局的唯一性，又顺手绕过”初值必须编译期算出”——它把构造推迟到第一次访问时才执行。</p>
-<p>最后把两个词的关系记牢：<code>static</code> 变量的引用天然是
-<code>'static</code>（它确实活到程序结束）；但反过来不成立——<code>'static</code>
-只是一个生命周期，和”是不是全局变量”无关。<code>"hello"</code>
-这样的字面量也被编进二进制、活到程序结束，所以
-<code>&amp;'static str</code> 一样成立。</p>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>借用与生命周期的主线是：<code>&amp;</code> 借而不取 →
-<code>&amp;mut</code> 借来修改 → <code>*</code> 解引用 → 裸指针
-<code>*mut T</code> 只是地址 → 访问裸指针要 <code>unsafe</code>
-且自己负责 → 生命周期（<code>'static</code> /
-<code>'a</code>）描述引用能活多久。</p>
-</blockquote>
-<p>另外记住 <code>'static</code>（生命周期）和
-<code>static</code>（全局变量）这对只差一个撇号的名字：前者说引用能活多久，后者说数据是不是只有一份。</p>
-<p>下一篇讲 OS
-代码里高频出现的属性与内存布局（<code>repr(C)</code>、<code>repr(transparent)</code>、<code>derive</code>），它们回答这个
-struct 在内存里到底长什么样。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>Rust</tag>
-        <tag>所有权</tag>
-        <tag>借用</tag>
-        <tag>裸指针</tag>
-        <tag>unsafe</tag>
-        <tag>生命周期</tag>
       </tags>
   </entry>
   <entry>
@@ -25166,262 +25166,6 @@ System for AI Computing</em> 的入门精读笔记。）</p>
       </tags>
   </entry>
   <entry>
-    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
-    <url>/posts/9f387285/</url>
-    <content><![CDATA[<blockquote>
-<p>接前两篇：<a
-href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
-href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
-work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
-逐个验证兼容性、安全性、性能和极端场景。</p>
-</blockquote>
-<span id="more"></span>
-<h2 id="rq-总览">📋 RQ 总览</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>RQ</th>
-<th>问题</th>
-<th>答案</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RQ1</td>
-<td>与现有方案比，兼容性如何？</td>
-<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
-</tr>
-<tr>
-<td>RQ2</td>
-<td>能不能防住攻击者？</td>
-<td>链路完整：可信 + 保密 + 防篡改</td>
-</tr>
-<tr>
-<td>RQ3</td>
-<td>LLM 上性能损失多少？</td>
-<td>overhead 只有 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>RQ4</td>
-<td>换不同 LLM / xPU 呢？</td>
-<td>依然稳定，且不随模型大小线性变差</td>
-</tr>
-<tr>
-<td>RQ5</td>
-<td>优化有没有用？</td>
-<td>E2E overhead 直接降约 89%</td>
-</tr>
-<tr>
-<td>RQ6</td>
-<td>极端情况呢？</td>
-<td>带宽砍半、显存不够也不崩</td>
-</tr>
-</tbody>
-</table>
-<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
-搭的 PCIe-SC 原型。</p>
-<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
-<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
-2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
-TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
-即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
-软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
-加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
-<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
-RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
-12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
-硬件、NVIDIA driver、CUDA 或 AI
-application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
-<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
-上实际跑起来慢多少，是后面 RQ4 的事。</p>
-<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
-RQ2：安全性——假设攻击者控制特权软件</h2>
-<p>RQ2
-假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
-software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
-<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
-完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
-通信完整</strong>，缺一不可。</p>
-<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
-怎么来的？</h2>
-<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
-<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
-<table>
-<thead>
-<tr>
-<th>指标</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>E2E Latency</strong></td>
-<td>从输入问题到完整回答生成的总时长</td>
-</tr>
-<tr>
-<td><strong>TPS</strong></td>
-<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
-</tr>
-<tr>
-<td><strong>TTFT</strong></td>
-<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
-</tr>
-</tbody>
-</table>
-<p>结果：<strong>overhead
-0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
-100ms，5% overhead 就是约 105ms。</p>
-<p><strong>为什么没慢很多？</strong>
-因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
-加密；大量普通包走 A4
-免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
-<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
-xPU——稳定性验证</h2>
-<h3 id="不同-llm">不同 LLM</h3>
-<p>从小到大多种模型都测了，整体 overhead
-<strong>0.72%～4.76%</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
-<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
-是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
-2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
-带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
-<h3 id="不同-xpu">不同 xPU</h3>
-<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
-Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
-<strong>0.58%～2.40%</strong>。</p>
-<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
-的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
-重新设计安全机制。</p>
-<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
-89%</h2>
-<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
-latency overhead 降低了 88.7%～89.8%</strong>。</p>
-<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
-再读一点 → 再问一次）。三个优化对症下药：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
-<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
-次数大幅减少。</p>
-<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
-<p>最后作者主动加难度：</p>
-<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
-一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
-<strong>4.45%</strong>。</p>
-<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
-<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
-间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
-<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
-overhead 小于 2%</strong>。</p>
-<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
-的额外代价依然可控。</p>
-<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
-<table>
-<thead>
-<tr>
-<th>维度</th>
-<th>结果</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>兼容性</td>
-<td>✅</td>
-<td>5 种不同 xPU，不改硬件/驱动/应用</td>
-</tr>
-<tr>
-<td>安全性</td>
-<td>✅</td>
-<td>加密 + 完整性 + 可信建立全链路</td>
-</tr>
-<tr>
-<td>LLM 性能</td>
-<td>✅</td>
-<td>overhead 0.05%～5.67%</td>
-</tr>
-<tr>
-<td>多模型</td>
-<td>✅</td>
-<td>0.72%～4.76%，不随模型大小线性恶化</td>
-</tr>
-<tr>
-<td>多 xPU</td>
-<td>✅</td>
-<td>0.58%～2.40%</td>
-</tr>
-<tr>
-<td>优化效果</td>
-<td>✅</td>
-<td>E2E overhead 降低约 89%</td>
-</tr>
-<tr>
-<td>极端场景</td>
-<td>✅</td>
-<td>带宽减半 / 显存溢出仍可控</td>
-</tr>
-</tbody>
-</table>
-<p>整套系统概括起来：</p>
-<blockquote>
-<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
-PCIe
-通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
-</blockquote>
-<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
-layer（共同抽象层）</strong>。</p>
-<h3 id="怎么读才有收获">怎么读才有收获</h3>
-<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
-<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
-5（Filter 规则）/ 6（Attestation 协议）/
-7-8（实验）</strong>，串起来就是全篇。</p>
-<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
-<ul>
-<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
-LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
-的表现需要另外验证。</li>
-<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
-分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
-<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
-固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
-两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
-sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
-</ul>
-<h2 id="系列回顾">📚 系列回顾</h2>
-<ul>
-<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
-精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
-背景</li>
-<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
-精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
-Handler / Adaptor / 信任建立 / 实现</li>
-<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
-</ul>
-<p>如果对背景概念想补课，可以看站内的 <a
-href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
-href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
-<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
-System for AI Computing</em>
-的入门精读笔记，全部实验数据来自论文原文。）</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>GPU</tag>
-        <tag>AI</tag>
-        <tag>机密计算</tag>
-        <tag>论文精读</tag>
-        <tag>性能测试</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>ccAI 精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</title>
     <url>/posts/25a4a786/</url>
     <content><![CDATA[<blockquote>
@@ -25830,6 +25574,262 @@ System for AI Computing</em> 的入门精读笔记。）</p>
         <tag>机密计算</tag>
         <tag>论文精读</tag>
         <tag>FPGA</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ccAI 精读（三）：0.05% 的开销是怎么来的？——实验与总结</title>
+    <url>/posts/9f387285/</url>
+    <content><![CDATA[<blockquote>
+<p>接前两篇：<a
+href="https://iamzihao.github.io/posts/878640d9/">动机与背景</a> → <a
+href="https://iamzihao.github.io/posts/25a4a786/">设计与实现</a>。机制讲完了，本篇看作者怎么证明它真的
+work——§8 Evaluation 用 <strong>6 个 Research Questions（RQ）</strong>
+逐个验证兼容性、安全性、性能和极端场景。</p>
+</blockquote>
+<span id="more"></span>
+<h2 id="rq-总览">📋 RQ 总览</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>RQ</th>
+<th>问题</th>
+<th>答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RQ1</td>
+<td>与现有方案比，兼容性如何？</td>
+<td>不改 App / 驱动 / 硬件，通用 TVM 即可</td>
+</tr>
+<tr>
+<td>RQ2</td>
+<td>能不能防住攻击者？</td>
+<td>链路完整：可信 + 保密 + 防篡改</td>
+</tr>
+<tr>
+<td>RQ3</td>
+<td>LLM 上性能损失多少？</td>
+<td>overhead 只有 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>RQ4</td>
+<td>换不同 LLM / xPU 呢？</td>
+<td>依然稳定，且不随模型大小线性变差</td>
+</tr>
+<tr>
+<td>RQ5</td>
+<td>优化有没有用？</td>
+<td>E2E overhead 直接降约 89%</td>
+</tr>
+<tr>
+<td>RQ6</td>
+<td>极端情况呢？</td>
+<td>带宽砍半、显存不够也不崩</td>
+</tr>
+</tbody>
+</table>
+<p>实验平台是 <strong>Intel 服务器 + Intel Agilex 7 SoC FPGA</strong>
+搭的 PCIe-SC 原型。</p>
+<h2 id="rq1与现有方案比兼容性">✅ RQ1：与现有方案比兼容性</h2>
+<p>论文的 RQ1 不是跑分，而是和现有方案做定性对比（Table
+2：按用户透明性、是否改 xPU 软件/硬件、支持哪些 xPU 与
+TVM、是否改主机特权软件等维度）。结论是 ccAI 一样都不用改、用通用 TVM
+即可：相比之下，CPU-TEE 类方案（SGX / SEV / CCA 等）大多要改 xPU
+软件栈，硬件类方案要改 GPU 硬件或定制 API，HETEE 要定制 API
+加专用硬件，TDISP 方案则要求 TDISP 兼容的 xPU。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">NVIDIA A100 / RTX 4090 Ti / T4     （GPU）</span><br><span class="line">Tenstorrent N150d                  （NPU）</span><br><span class="line">Enflame S60                        （国产 GPU）</span><br></pre></td></tr></table></figure>
+<p>兼容性也不只是纸面结论——论文原型确实跑通了 5 种不同架构的 xPU（A100 /
+RTX 4090 Ti / T4 / Tenstorrent N150d / Enflame S60），用真实软件栈：CUDA
+12.1、NVIDIA Driver 550.90.07、Tenstorrent 的 tt-buda 等。全程没改 GPU
+硬件、NVIDIA driver、CUDA 或 AI
+application，只是在原生软件栈下面垫了一层 Adaptor + PCIe-SC：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line"> AI App</span><br><span class="line">    ↓</span><br><span class="line">原生软件栈     ← 一行不改</span><br><span class="line">    ↓</span><br><span class="line">Adaptor</span><br><span class="line">    ↓</span><br><span class="line">PCIe-SC</span><br><span class="line">    ↓</span><br><span class="line">  xPU</span><br></pre></td></tr></table></figure>
+<p>对原有应用的透明性，正是 ccAI 兼容性设计的核心；至于在不同 xPU
+上实际跑起来慢多少，是后面 RQ4 的事。</p>
+<h2 id="rq2安全性假设攻击者控制特权软件">🛡️
+RQ2：安全性——假设攻击者控制特权软件</h2>
+<p>RQ2
+假设的攻击者权限相当高：<strong>能控制云服务器上的特权软件（privileged
+software）</strong>。ccAI 靠的不是单一加密，而是一整条链：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Secure Boot        → 平台没被换</span><br><span class="line">Remote Attestation → 用户远程确认可信</span><br><span class="line">Key Exchange       → 密钥安全送达</span><br><span class="line">PCIe packet 保护   → 数据保密 + 防篡改</span><br></pre></td></tr></table></figure>
+<p>攻击者想偷看 PCIe 上的数据 → 看到的是密文；想篡改 packet →
+完整性检查发现异常。结论是：<strong>身份可信 + 环境可信 + 通信保密 +
+通信完整</strong>，缺一不可。</p>
+<h2 id="rq3性能0.055.67-怎么来的">🔥 RQ3：性能——0.05%～5.67%
+怎么来的？</h2>
+<p>最受关注的问题：加了这么多安全操作，慢多少？作者用
+<strong>Llama-2-7B-Chat</strong> 在 A100 上测了三个指标：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E2E Latency</strong></td>
+<td>从输入问题到完整回答生成的总时长</td>
+</tr>
+<tr>
+<td><strong>TPS</strong></td>
+<td>Tokens Per Second，每秒生成的 token 数，越高越好</td>
+</tr>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token，发出问题后第一个 token 出现的延迟</td>
+</tr>
+</tbody>
+</table>
+<p>结果：<strong>overhead
+0.05%～5.67%</strong>（相对原系统的性能下降比例，不是绝对秒数）。比如原本
+100ms，5% overhead 就是约 105ms。</p>
+<p><strong>为什么没慢很多？</strong>
+因为前面讲过的细粒度策略：只有真正敏感、需要保护的包才走昂贵的 A2
+加密；大量普通包走 A4
+免检直接通过。<strong>只对值得加密的东西加密</strong>，是开销低的核心原因。</p>
+<h2 id="rq4换模型换-xpu稳定性验证">🔁 RQ4：换模型、换
+xPU——稳定性验证</h2>
+<h3 id="不同-llm">不同 LLM</h3>
+<p>从小到大多种模型都测了，整体 overhead
+<strong>0.72%～4.76%</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">小模型   OPT-1.3B / BLOOM-3B</span><br><span class="line">中模型   Deepseek-7B / Llama-2-7B / Llama-3-8B</span><br><span class="line">大模型   Deepseek-R1-32B / Deepseek-R1-70B / Llama-3-70B / Babel-83B</span><br></pre></td></tr></table></figure>
+<p>有意思的是 overhead <strong>并不随模型大小线性增长</strong>：BLOOM-3B
+是 1.61%，Deepseek-R1-32B 冲到 4.76%，但更大的 Deepseek-R1-70B 反而只有
+2.14%、Babel-83B 是 2.84%。作者的解释是：prototype 的 PCIe
+带宽是一个限制因素，但传输量增大并不会让 overhead 成比例恶化。</p>
+<h3 id="不同-xpu">不同 xPU</h3>
+<p>RQ1 的五种 xPU 再次登场：A100 / RTX 4090 Ti / Enflame S60 跑
+Llama-2-7B；显存小的 T4 / N150d 跑 OPT-1.3B。最终 overhead
+<strong>0.58%～2.40%</strong>。</p>
+<p>这个实验支撑了论文的核心 claim：NVIDIA、Enflame、Tenstorrent
+的设备<strong>共用 PCIe 这一层</strong>，所以不需要为每种 xPU
+重新设计安全机制。</p>
+<h2 id="rq5优化overhead-降了约-89">⚡ RQ5：优化——overhead 降了约
+89%</h2>
+<p>作者把未优化的 ccAI 和优化后的 ccAI 对比，效果显著：<strong>E2E
+latency overhead 降低了 88.7%～89.8%</strong>。</p>
+<p>慢的根源是 Adaptor 和 PCIe-SC 之间来回的小 I/O（读一点 → 问一次 →
+再读一点 → 再问一次）。三个优化对症下药：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 批量读取   read A+B+C+D   代替  read A; read B; read C; read D</span><br><span class="line">② 批量写入   write A+B+C+D  代替  write A; write B; ...</span><br><span class="line">③ AES 并行   AES-NI + 额外 CPU threads/cores 并行做安全操作</span><br></pre></td></tr></table></figure>
+<p>加密一块就通知一次 → 变成批量处理完一次性通知 PCIe-SC，I/O
+次数大幅减少。</p>
+<h2 id="rq6极端情况故意把环境搞差">🌪️ RQ6：极端情况——故意把环境搞差</h2>
+<p>最后作者主动加难度：</p>
+<p><strong>情况 1：PCIe 带宽降低。</strong> 从 16GT/s × 16 lanes
+一路降到 8GT/s × 8 lanes。ccAI 的 overhead 没有突然恶化，最差测试之一约
+<strong>4.45%</strong>。</p>
+<p><strong>情况 2：xPU 显存不够。</strong> 显存被 KV Cache 占满后，发生
+<strong>KV-cache swapping</strong>（KV Cache 在 CPU RAM 和 GPU VRAM
+间频繁搬运），此时性能本来就会掉：普通系统和 ccAI 系统都下降到原来的约
+<strong>83%</strong>。但 ccAI 在本来就慢的基础上，<strong>额外增加的
+overhead 小于 2%</strong>。</p>
+<p>结论：即使在带宽减半、显存溢出这种恶劣场景，ccAI
+的额外代价依然可控。</p>
+<h2 id="总结这篇论文到底证明了什么">🧾 总结：这篇论文到底证明了什么</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>兼容性</td>
+<td>✅</td>
+<td>5 种不同 xPU，不改硬件/驱动/应用</td>
+</tr>
+<tr>
+<td>安全性</td>
+<td>✅</td>
+<td>加密 + 完整性 + 可信建立全链路</td>
+</tr>
+<tr>
+<td>LLM 性能</td>
+<td>✅</td>
+<td>overhead 0.05%～5.67%</td>
+</tr>
+<tr>
+<td>多模型</td>
+<td>✅</td>
+<td>0.72%～4.76%，不随模型大小线性恶化</td>
+</tr>
+<tr>
+<td>多 xPU</td>
+<td>✅</td>
+<td>0.58%～2.40%</td>
+</tr>
+<tr>
+<td>优化效果</td>
+<td>✅</td>
+<td>E2E overhead 降低约 89%</td>
+</tr>
+<tr>
+<td>极端场景</td>
+<td>✅</td>
+<td>带宽减半 / 显存溢出仍可控</td>
+</tr>
+</tbody>
+</table>
+<p>整套系统概括起来：</p>
+<blockquote>
+<p><strong>不要求改 GPU/NPU 的硬件和软件，而是在所有 xPU 都必须经过的
+PCIe
+通道上加一个安全检查站（PCIe-SC），旁边配一个软件翻译员（Adaptor）。</strong></p>
+</blockquote>
+<p>这也是全系列反复强调的那句话：<strong>PCIe = common abstraction
+layer（共同抽象层）</strong>。</p>
+<h3 id="怎么读才有收获">怎么读才有收获</h3>
+<p>论文机制部分读懂后，要把核心图串起来，能讲清下面这条链的每一步发生了什么：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">一个真实的 AI inference 请求：</span><br><span class="line">User → TVM → Adaptor（识别+加密数据）→ PCIe-SC（Filter 决策 + Handler 执行）</span><br><span class="line">     → xPU 计算 → 结果加密返回 → TVM</span><br></pre></td></tr></table></figure>
+<p>对应论文的 <strong>Figure 3（系统架构）/ 4（Handler 数据流）/
+5（Filter 规则）/ 6（Attestation 协议）/
+7-8（实验）</strong>，串起来就是全篇。</p>
+<h3 id="一些值得带着走的观察">一些值得带着走的观察</h3>
+<ul>
+<li><strong>性能数字的边界</strong>：0.05%～5.67% 是在 FPGA 原型 + 特定
+LLM 上测的，作者也承认 prototype 的 PCIe 带宽是限制因素；真实量产 ASIC
+的表现需要另外验证。</li>
+<li><strong>细粒度是性能钥匙</strong>：A2/A3/A4
+分级不是论文的锦上添花，而是安全性和性能可兼得的命门——只保护值得保护的数据。</li>
+<li><strong>信任边界与不防的攻击</strong>：整套安全建立在 TVM 可信、xPU
+固件无恶意代码（信任硬件厂商）的前提上；攻击者可尝试篡改 PCIe-SC / xPU /
+两者的内部连接——固件层篡改由 Secure Boot + 远程证明防护，物理篡改由机箱
+sealing 机制检测；论文明确不防 side-channel 与 DoS 攻击。</li>
+</ul>
+<h2 id="系列回顾">📚 系列回顾</h2>
+<ul>
+<li><a href="https://iamzihao.github.io/posts/878640d9/">ccAI
+精读（一）：为什么 GPU 跑 AI 需要保密？</a> —— 动机、威胁模型、PCIe
+背景</li>
+<li><a href="https://iamzihao.github.io/posts/25a4a786/">ccAI
+精读（二）：不换 GPU 也能机密计算——Adaptor 与 PCIe-SC</a> —— Filter /
+Handler / Adaptor / 信任建立 / 实现</li>
+<li><strong>ccAI 精读（三）：实验与总结</strong> —— 本篇</li>
+</ul>
+<p>如果对背景概念想补课，可以看站内的 <a
+href="https://iamzihao.github.io/posts/d1a2c3b4/">GPU 工作原理</a> 和 <a
+href="https://iamzihao.github.io/posts/e5b1c8d2/">CUDA 入门</a>。</p>
+<p>（本系列为 MICRO 2025 论文 <em>ccAI: A Compatible and Confidential
+System for AI Computing</em>
+的入门精读笔记，全部实验数据来自论文原文。）</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>GPU</tag>
+        <tag>AI</tag>
+        <tag>机密计算</tag>
+        <tag>论文精读</tag>
+        <tag>性能测试</tag>
       </tags>
   </entry>
   <entry>
@@ -27362,19 +27362,21 @@ href="https://iamzihao.github.io/posts/f50af83e/">PCIe TLP
     <title>Hermes Attack 精读：如何从 PCIe 明文流量里偷走一个 DNN 模型</title>
     <url>/posts/c41f8e02/</url>
     <content><![CDATA[<blockquote>
+<p>概括成一段话：<strong>在 CPU 与 GPU 之间那条没有加密的 PCIe
+总线上抓包，从 GPU 命令与数据搬运里反推出受害者 DNN
+的结构、超参数和全部权重，重建出的模型推理精度与原模型完全一致。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
 <p>论文：<strong>Hermes Attack: Steal DNN Models with Lossless Inference
 Accuracy</strong>（USENIX Security 2021）</p>
 <p>作者：Yuankun Zhu（UT Dallas）、Yueqiang Cheng（Baidu
 Security）、Husheng Zhou（VMware）、Yantao Lu（Syracuse University）</p>
-<p>概括成一段话：<strong>在 CPU 与 GPU 之间那条没有加密的 PCIe
-总线上抓包，从 GPU 命令与数据搬运里反推出受害者 DNN
-的结构、超参数和全部权重，重建出的模型推理精度与原模型完全一致。</strong></p>
 </blockquote>
 <p>模型文件放在加密盘里、主机开了 SGX、GPU
 也独占不共享，模型文件一个字节都没泄露。但模型仍然可能被整个偷走——Hermes
 Attack 盯上的不是模型文件，而是模型在 GPU 上跑推理时留下的 PCIe
 通信痕迹。</p>
-<span id="more"></span>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
@@ -28711,16 +28713,19 @@ Models with Lossless Inference Accuracy</em>
     <title>IKnowWhatYouSaid 精读：从 CPU 缓存里读出本地 LLM 的输入与输出</title>
     <url>/posts/2a9c1827/</url>
     <content><![CDATA[<blockquote>
+<p>概括成一段话：<strong>把 LLM
+部署到本地并不等于对话内容留在本地——同一台机器上一个没有特权的普通应用，只要盯住
+CPU
+缓存的访问模式和自回归解码的时序，就能把这次推理的输入与输出文本还原出来。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
 <p>论文：<strong>I Know What You Said: Unveiling Hardware Cache
 Side-Channels in Local Large Language Model Inference</strong>（USENIX
 Security 2025）</p>
 <p>作者：Zibo Gao、Junjie Hu、Feng Guo、Yixin Zhang、Yinglong
 Han、Siyuan Liu、Haiyang Li、Zhiqiang
 Lv（中国科学院信息工程研究所、中国科学院大学网络空间安全学院）</p>
-<p>概括成一段话：<strong>把 LLM
-部署到本地并不等于对话内容留在本地——同一台机器上一个没有特权的普通应用，只要盯住
-CPU
-缓存的访问模式和自回归解码的时序，就能把这次推理的输入与输出文本还原出来。</strong></p>
 </blockquote>
 <p>本地部署 LLM 的出发点是把数据留在自己机器上：不发给第三方
 API，隐私敏感的内容不出门。这篇论文指出的是另一条路径——机器内部还有一条不属于软件层的泄漏通道。<strong>token
@@ -28728,7 +28733,6 @@ embedding 查表时的访存模式泄漏了 token 的值，解码阶段每个 to
 的时间点泄漏了 token 的顺序</strong>，两者都落在硬件缓存上。攻击者不与
 LLM
 进程交互，也不需要任何特权，用一个普通应用在后台记录缓存访问即可。</p>
-<span id="more"></span>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
@@ -29562,21 +29566,23 @@ Inference</em> 的精读笔记，正文表格内的数据取自论文原文。�
     <title>LeftoverLocals 精读：从 GPU 显存残渣里偷听本地 LLM 的回复</title>
     <url>/posts/5d9e4b21/</url>
     <content><![CDATA[<blockquote>
-<p>论文：<strong>LeftoverLocals: Listening to LLM Responses Through
-Leaked GPU Local Memory</strong>（arXiv:2401.16603，2024-01-16
-公开披露，CVE-2023-49691）</p>
-<p>作者：Tyler Sorensen（Trail of Bits / UC Santa Cruz）、Heidy
-Khlaaf（Trail of Bits）</p>
 <p>概括成一段话：<strong>GPU 里有一块叫 local memory
 的高速暂存区，上一个程序用完不擦，下一个程序可以直接把它整块 dump
 出来。对于跑在 GPU 上的 LLM，攻击者只要偷到最后一层的输入向量（4
 KB），配上从开源模型库匹配到的权重，就能自己算出模型吐出的下一个
 token。</strong></p>
 </blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>LeftoverLocals: Listening to LLM Responses Through
+Leaked GPU Local Memory</strong>（arXiv:2401.16603，2024-01-16
+公开披露，CVE-2023-49691）</p>
+<p>作者：Tyler Sorensen（Trail of Bits / UC Santa Cruz）、Heidy
+Khlaaf（Trail of Bits）</p>
+</blockquote>
 <p>上一篇 <a href="/posts/2a9c1827/">IKnowWhatYouSaid</a> 讲的是 CPU
 缓存上的泄漏，靠的是<strong>访存模式</strong>（读了哪一行）和<strong>时序</strong>（什么时候读的）。这一篇完全不同：它偷的是显存里的<strong>数据残渣</strong>——不需要时序精度，不需要共享内存，也不需要理解受害者用什么算法，只要能在同一块
 GPU 上跑自己的程序就行。</p>
-<span id="more"></span>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
@@ -30027,18 +30033,21 @@ token。</strong></p>
     <title>Spill The Beans 精读：在共享 CPU 上从 embedding 表里偷出 LLM 的输出 token</title>
     <url>/posts/c3674e62/</url>
     <content><![CDATA[<blockquote>
-<p>论文：<strong>Spill The Beans: Exploiting CPU Cache Side-Channels to
-Leak Tokens from Large Language
-Models</strong>（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号
-25-0107）</p>
-<p>作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Polytechnic
-Institute，伍斯特理工学院）</p>
 <p>概括成一段话：<strong>和受害者租在同一颗物理 CPU
 上的另一个进程，只要盯住 embedding 表里自己挑出来的那几百个 token
 的缓存行、用 flush+reload 一圈圈轮询，就能在 LLM
 生成的时候把落在这些位置上的 token
 逐个记下来——在多租户部署里，这条路子能单次捞走 80%～90% 的高熵 API
 key。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>Spill The Beans: Exploiting CPU Cache Side-Channels to
+Leak Tokens from Large Language
+Models</strong>（arXiv:2505.00817v1，2025-05-01；MITRE 公开批准号
+25-0107）</p>
+<p>作者：Andrew Adiletta（MITRE）、Berk Sunar（Worcester Polytechnic
+Institute，伍斯特理工学院）</p>
 </blockquote>
 <p>这个系列已经精读过三篇同一方向的论文：Hermes 站在 CPU 与 GPU 之间的
 PCIe 总线上抓明文流量，偷的是模型本身；IKnowWhatYouSaid 站在 CPU
@@ -30048,7 +30057,6 @@ GPU 显存，捡上一个程序留下的数据残渣。这篇 Spill The Beans �
 首发），做法也最朴素：<strong>不做时序信号处理，不训语言模型，也不还原输入，只用一轮
 flush+reload，回答一个问题——在缓存行被驱逐之前，我最多能盯得住多少个
 token。</strong></p>
-<span id="more"></span>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
