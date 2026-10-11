@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：和受害者租在同一颗物理 CPU 上的另一个进程，只要盯住 embedding 表里自己挑出来的那几百个 token 的缓存行、用 flush+reload 一圈圈轮询，就能在 LLM 生成的时候把落在这些位置上的 token 逐个记下来——在多租户部署里，这条路子能单次捞走 80%～90% 的高熵 API key。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-11T02:30:00.000Z">
-<meta property="article:modified_time" content="2026-10-11T03:17:39.008Z">
+<meta property="article:modified_time" content="2026-10-11T08:02:15.249Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -183,7 +183,7 @@
 是查表，不是乘法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88gpu-%E4%B8%8A%E7%9A%84%E8%AE%BF%E9%97%AEcpu-%E4%B9%9F%E8%83%BD%E7%9C%8B%E5%88%B0"><span class="nav-number">3.1.</span> <span class="nav-text">🔗 为什么「GPU 上的访问」CPU
 也能看到</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%A1%E5%87%86%E5%91%BD%E4%B8%AD-100-cycle%E6%9C%AA%E5%91%BD%E4%B8%AD-370-cycle"><span class="nav-number">4.</span> <span class="nav-text">🛠️ 校准：命中 100
 cycle，未命中 370 cycle</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%94%BB%E5%87%BB%E8%BF%9B%E7%A8%8B%E6%94%BE%E5%93%AA%E4%B8%AA%E6%A0%B8%E5%85%84%E5%BC%9F%E6%A0%B8%E8%BF%98%E6%98%AF%E5%90%8C%E4%B8%80%E9%A2%97%E6%A0%B8"><span class="nav-number">5.</span> <span class="nav-text">🎧
-攻击进程放哪个核：兄弟核还是同一颗核</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%8E%E5%8D%95%E4%B8%AA-token-%E5%88%B0-round-robin"><span class="nav-number">6.</span> <span class="nav-text">🎯 从单个 token 到 round-robin</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%A8%E6%96%87%E7%9A%84%E6%A0%B8%E5%BF%83%E6%9D%83%E8%A1%A1%E7%9B%AF%E5%A4%9A%E5%B0%91%E4%B8%AA-token"><span class="nav-number">7.</span> <span class="nav-text">⚖️ 全文的核心权衡：盯多少个
+攻击进程放哪个核：兄弟核还是同一颗核</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E8%AF%B4%E6%B8%85%E6%A5%9A%E8%B6%85%E7%BA%BF%E7%A8%8B%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">5.1.</span> <span class="nav-text">🧵 先说清楚「超线程」是什么</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%8E%E5%8D%95%E4%B8%AA-token-%E5%88%B0-round-robin"><span class="nav-number">6.</span> <span class="nav-text">🎯 从单个 token 到 round-robin</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%A8%E6%96%87%E7%9A%84%E6%A0%B8%E5%BF%83%E6%9D%83%E8%A1%A1%E7%9B%AF%E5%A4%9A%E5%B0%91%E4%B8%AA-token"><span class="nav-number">7.</span> <span class="nav-text">⚖️ 全文的核心权衡：盯多少个
 token</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A1%88%E4%BE%8B%E4%B8%80%E4%BB%8E-prompt-%E9%87%8C%E7%9A%84-api-key-%E6%8D%9E%E8%B5%B0%E5%87%AD%E6%8D%AE"><span class="nav-number">8.</span> <span class="nav-text">🔑 案例一：从 prompt 里的
 API key 捞走凭据</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%8D%E7%9B%B4%E8%A7%89%E7%9A%84%E5%9C%B0%E6%96%B9%E9%AB%98%E7%86%B5%E5%8F%8D%E8%80%8C%E6%9B%B4%E5%A5%BD%E6%8A%93"><span class="nav-number">8.1.</span> <span class="nav-text">🎲 反直觉的地方：高熵反而更好抓</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%9C%80%E8%A6%81%E7%9B%AF%E5%A4%9A%E5%B0%91%E8%A6%81%E8%81%8A%E5%87%A0%E8%BD%AE"><span class="nav-number">8.2.</span> <span class="nav-text">📈 需要盯多少、要聊几轮</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A1%88%E4%BE%8B%E4%BA%8C%E6%99%AE%E9%80%9A%E8%8B%B1%E6%96%87%E6%96%87%E6%9C%AC%E8%83%BD%E6%8D%9E%E5%A4%9A%E5%B0%91"><span class="nav-number">9.</span> <span class="nav-text">🗣️ 案例二：普通英文文本能捞多少</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AE%BA%E6%96%87%E8%87%AA%E5%B7%B1%E6%8C%87%E5%87%BA%E7%9A%84%E6%94%B9%E8%BF%9B%E6%96%B9%E5%90%91"><span class="nav-number">10.</span> <span class="nav-text">🚧 论文自己指出的改进方向</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%B9%E7%AD%96%E4%B8%8E%E4%BB%A3%E4%BB%B7"><span class="nav-number">11.</span> <span class="nav-text">🛡️ 对策与代价</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%BB%E5%8E%9F%E6%96%87%E6%97%B6%E8%A6%81%E6%B3%A8%E6%84%8F%E7%9A%84%E5%87%A0%E5%A4%84%E5%8F%A3%E5%BE%84"><span class="nav-number">12.</span> <span class="nav-text">📎 读原文时要注意的几处口径</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">✅ 总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E6%9D%A1%E8%B7%AF%E7%BA%BF%E4%B8%8A%E8%BF%98%E6%9C%89%E5%93%AA%E4%BA%9B%E5%B7%A5%E4%BD%9C"><span class="nav-number">14.</span> <span class="nav-text">🔗 这条路线上还有哪些工作</span></a></li></ol></div>
         </div>
@@ -271,7 +271,7 @@ API key 捞走凭据</span></a><ol class="nav-child"><li class="nav-item nav-lev
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-10-11 10:30:00 / Modified: 11:17:39" itemprop="dateCreated datePublished" datetime="2026-10-11T10:30:00+08:00">2026-10-11</time>
+      <time title="Created: 2026-10-11 10:30:00 / Modified: 16:02:15" itemprop="dateCreated datePublished" datetime="2026-10-11T10:30:00+08:00">2026-10-11</time>
     </span>
 
   
@@ -295,7 +295,7 @@ API key 捞走凭据</span></a><ol class="nav-child"><li class="nav-item nav-lev
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>20 mins.</span>
+      <span>21 mins.</span>
     </span>
 </div>
 
@@ -388,9 +388,15 @@ Info、Embedding Layer、Other Tensors 四段</td>
 <td>大词表的天然对手，也是全文权衡的来源</td>
 </tr>
 <tr>
+<td><strong>超线程（Hyper-Threading / SMT）</strong></td>
+<td>一个物理核当两个处理器用：多一份寄存器状态，执行部件与 L1/L2
+是共享的</td>
+<td>判断两个进程共享到哪一级缓存</td>
+</tr>
+<tr>
 <td><strong>Sibling cores（兄弟核）</strong></td>
-<td>同一物理核上的两个超线程，共享 L2/L3、各自有私有 L1</td>
-<td>攻击进程的默认落点</td>
+<td>两个进程放在各自有私有 L1 的两个核上，只共享 L2/L3</td>
+<td>论文里攻击进程的默认落点</td>
 </tr>
 <tr>
 <td><strong>Unified memory（统一内存）</strong></td>
@@ -441,7 +447,6 @@ GPU 上跑，embedding 表按理应该待在显存里，那么只守着 CPU
 侧的攻击者凭什么看得到？</strong></p>
 <h2 id="泄漏源embedding-是查表不是乘法">🔍 泄漏源：embedding
 是查表，不是乘法</h2>
-<p>泄漏源这一步和前几篇是同一个道理，这里再用一遍。</p>
 <p>LLM 把输入输出都表示成 token 序列，模型要先给每个 token
 找一条稠密向量，这一步叫 token embedding。写成矩阵形式是对 one-hot
 编码做一次线性投影 <code>E = W·x</code>；因为 one-hot 里只有一个
@@ -487,12 +492,21 @@ RDTSC，擦除用 clflush。</p>
 <h2 id="攻击进程放哪个核兄弟核还是同一颗核">🎧
 攻击进程放哪个核：兄弟核还是同一颗核</h2>
 <p>接下来论文问了一个工程问题：攻击进程该跑在哪里？它试了两种配置。</p>
+<h3 id="先说清楚超线程是什么">🧵 先说清楚「超线程」是什么</h3>
+<p>两种配置的差别最终都落在缓存上，而这里要用到一个词，先补上定义。</p>
+<p><strong>超线程（Hyper-Threading，Intel 对同步多线程 SMT
+的实现）是把一个物理核当成两个处理器交给操作系统用。</strong>
+物理核内部的执行部件只有一套（算术逻辑单元、浮点单元这些），但核里多留了一份架构状态（寄存器、程序计数器），于是操作系统看到两个逻辑处理器，可以各自跑一条线程，两条线程的指令在同一个核里交错发射、共用那套执行部件。</p>
+<p>它和双核不是一回事：双核是两套完整的执行部件、各自有私有的
+L1；<strong>超线程共享执行部件，L1 与 L2
+也是共享的</strong>，只有寄存器状态各自一份——这也是它的性能提升远不到一倍（通常只有一两成）的原因。</p>
+<p>放到侧信道上有一条容易搞反：<strong>同一个物理核上的两个超线程，L1
+是同一份</strong>。所以两个进程能互相看到多细，看的不是同不同核，而是<strong>它们共享到哪一级缓存</strong>。</p>
 <ul>
-<li><strong>兄弟核（sibling
-cores）</strong>：两个进程分别跑在一个物理核的两个超线程上。它们共享 L2
-和 L3，但各自有私有的 L1。</li>
+<li><strong>兄弟核（sibling cores）</strong>：两个进程放在各自有私有 L1
+的两个核上，只共享 L2 与 L3。</li>
 <li><strong>同一颗核（same
-core）</strong>：两个进程跑在同一个超线程上，L1、L2、L3 全都共享。</li>
+core）</strong>：两个进程放在同一个核上，L1、L2、L3 全部共享。</li>
 </ul>
 <p>两种配置的表现差别很明显：</p>
 <table>
@@ -522,7 +536,8 @@ core）</strong>：两个进程跑在同一个超线程上，L1、L2、L3 全都
 </tr>
 </tbody>
 </table>
-<p>论文据此下的结论是：<strong>两个进程跑在同一颗核上，是检测内存访问更精确的机制。</strong>
+<p>论文据此下的结论是：<strong>两个进程共享 L1
+时（同一颗核的配置），检测内存访问更精确。</strong>
 这句结论本身没问题，但和后面的实验安排有点对不上——round-robin
 监控（§4.4）和英文文本泄漏（§6）里，攻击进程都被明说 <strong>pinned to a
 sibling
@@ -993,7 +1008,7 @@ Cache Side-Channels to Leak Tokens from Large Language Models</em>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:09</span>
+    <span title="Reading time total">15:10</span>
   </span>
 </div>
 <div class="busuanzi-count">
