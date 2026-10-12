@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：监测点不放主机、不放 GPU，而是直接坐落在 PCIe 链路上——把主机发往 GPU 的指令流顺手复制一份，用一个硬件版的多模式匹配引擎逐条扫过，命中了挖矿程序的指令特征就报警。因为整套逻辑跑在 FPGA 里，它对被监测的程序零运行时开销，而且只为了这件事花掉 2.3 瓦。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-15T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:21:32.847Z">
+<meta property="article:modified_time" content="2026-10-12T08:55:14.413Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -273,7 +273,7 @@ Aho-Corasick 改成认 GPU 指令</span></a></li><li class="nav-item nav-level-2
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 16:21:32" itemprop="dateModified" datetime="2026-10-12T16:21:32+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-12 16:55:14" itemprop="dateModified" datetime="2026-10-12T16:55:14+08:00">2026-10-12</time>
     </span>
 
   
@@ -290,14 +290,14 @@ Aho-Corasick 改成认 GPU 指令</span></a></li><li class="nav-item nav-level-2
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>3.8k</span>
+      <span>4.3k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>7 mins.</span>
+      <span>8 mins.</span>
     </span>
 </div>
 
@@ -340,6 +340,21 @@ Georgopoulos、Sotiris Ioannidis（Technical University of Crete）</p>
 </thead>
 <tbody>
 <tr>
+<td><strong>PCIe</strong></td>
+<td>CPU 与 GPU、网卡这类外设之间的高速串行总线</td>
+<td>显卡、SSD 都挂在这条链路上</td>
+</tr>
+<tr>
+<td><strong>TLP</strong>（Transaction Layer Packet）</td>
+<td>PCIe 上真正承载读写请求与数据的包</td>
+<td>有包头（地址、长度、类型）与载荷</td>
+</tr>
+<tr>
+<td><strong>DMA</strong>（Direct Memory Access）</td>
+<td>设备不经 CPU 直接读写主存（也就是内存条）</td>
+<td>XDMA 里的 DMA 就是这件事</td>
+</tr>
+<tr>
 <td><strong>Endpoint</strong></td>
 <td>PCIe 链路里设备侧的那一端</td>
 <td>本文用一块 FPGA 板扮演 GPU</td>
@@ -361,7 +376,8 @@ Georgopoulos、Sotiris Ioannidis（Technical University of Crete）</p>
 </tr>
 <tr>
 <td><strong>MPSoC</strong></td>
-<td>自带处理器核的 FPGA SoC</td>
+<td>自带处理器核的 FPGA 芯片（SoC 指把
+CPU、内存控制器等整合进一颗芯片）</td>
 <td>本文用 ZCU102 当主机</td>
 </tr>
 <tr>
@@ -383,13 +399,14 @@ Georgopoulos、Sotiris Ioannidis（Technical University of Crete）</p>
 </table>
 <h2 id="起点一个很实际的运维问题">🎬 起点：一个很实际的运维问题</h2>
 <p>论文的开场不是学术动机，而是一类真实事故：<strong>有人在你不知情的情况下，拿你的
-GPU 挖矿</strong>。</p>
+GPU 挖加密货币</strong>（用显卡反复算哈希来赚币，以下简称挖矿）。</p>
 <p>微软和思科都报告过这类事件。GPU
 被挖矿程序占满，租户的关键任务跑不动，可用性直接受损。而论文对现有手段的评价相当直接：</p>
 <ul>
 <li><strong>软件工具</strong>：可以查，但随时可能被恶意用户绕过或关掉；</li>
 <li><strong>TEE</strong>：把代码隔离起来执行，安全性有了，但会给系统加上额外开销；</li>
-<li><strong>商用 PCIe 分析仪</strong>：能看链路，但很贵。</li>
+<li><strong>商用 PCIe
+分析仪</strong>：能看链路（专门串在链路上抓包的仪器），但很贵。</li>
 </ul>
 <p>于是论文提了一个折中的思路：<strong>不改变主机、也不改变
 GPU，只是在链路上放一个硬件监测器</strong>。主机把 GPU
@@ -420,16 +437,17 @@ SNORT 这类 IDS 的底座。</p>
 <p>论文做的主要改造是<strong>换输入类型</strong>：原版 Aho-Corasick
 处理的是字符流，这里要处理的是 <strong>GPU
 指令流</strong>。为此他们把每个 IP
-核做成两级流水线，每级内部再拆成两个子级，用一个有限状态机沿着预存的状态树走，每进来一条指令就往前推进一格。走完之后输出一个分数，表示匹配上了多少条恶意模式。</p>
+核做成两级流水线（流水线就像工厂的传送带：把处理拆成几段，不同数据同时处在不同段上），每级内部再拆成两个子级，再用一个有限状态机（只有有限几个状态、按输入在这些状态之间跳转的逻辑）沿着预存的状态树走，每进来一条指令就往前推一格。走完之后输出一个分数，表示匹配上了多少条恶意模式。</p>
 <p>有一个工程细节值得记下：<strong>IP 核可以按 PCIe
-流通道数复制多份并行跑</strong>。论文测的就是 1 份和 2
-份两种情况——这个数字在后面会决定它到底比 CPU 快还是慢。</p>
+流通道数复制多份并行跑</strong>（一条流通道就是一路独立的数据流）。论文测的就是
+1 份和 2 份两种情况——这个数字在后面会决定它到底比 CPU 快还是慢。</p>
 <h2 id="规则从哪来从真实的挖矿程序里挖指令模式">🎯
 规则从哪来：从真实的挖矿程序里挖指令模式</h2>
 <p>监测器需要规则，而这篇论文的规则不是手写的，是<strong>挖出来的</strong>。</p>
 <p>流程是这样的：先用 NVIDIA 的 <code>cuobjdump</code> 从真实的 GPU
 程序里导出汇编，再转成十六进制，最后只保留操作码（opcode）——也就是把指令序列抽出来，把操作数全丢掉。候选的挖矿程序包括
-xmrMiner、yadaGPUminer、一个简单的 CUDA 比特币矿工和 Blake2s
+xmrMiner、yadaGPUminer、一个简单的用 CUDA（NVIDIA 的 GPU
+编程接口）写的比特币矿工和 Blake2s
 矿工；对照组则从排序、哈希表、遗传算法等常规程序里选，以保证两边有足够差异。</p>
 <p>对比之后浮出来一个信号：<strong>SHF 和 LOP 这两类指令在普通程序里约占
 20%，在挖矿程序里占到 40%</strong>。于是论文用
@@ -464,8 +482,9 @@ SPMF（一个数据挖掘工具集）配合 BIDE+
 <p>论文把它们当规则用，逐条确认了各个挖矿程序命中哪些、常规程序又是否误报。</p>
 <h2 id="代价快-1.55-倍省-543-倍电">📊 代价：快 1.55 倍，省 543 倍电</h2>
 <p>评估平台是 Intel 第 13 代 i5（4.3 GHz）对 KC705（100
-MHz），基线是<strong>在 CPU 上跑同一个 Aho-Corasick
-算法</strong>（也就是 SNORT 那一套）。</p>
+MHz）——两者主频差了 40
+多倍，所以下面的对比看的不是单次运算谁快，而是整件事谁划算。基线是<strong>在
+CPU 上跑同一个 Aho-Corasick 算法</strong>（也就是 SNORT 那一套）。</p>
 <table>
 <colgroup>
 <col style="width: 50%" />
@@ -501,7 +520,8 @@ MHz），基线是<strong>在 CPU 上跑同一个 Aho-Corasick
 <p>这里有一个论文自己写得很坦白的细节，值得单独拎出来：<strong>只放 1 个
 AC 核的时候，FPGA 在延迟和吞吐上都不如 CPU</strong>。加上第 2
 个核并行跑之后才反超——因为并行把计算时间砍了一半。而功耗几乎没变（2.267
-W 到 2.294 W），多出来的那点差异全在动态功耗里。</p>
+W 到 2.294
+W），多出来的那点差异全在动态功耗里（芯片真正跑起来时才产生的那部分功耗，与之相对的是待机也在耗的静态功耗）。</p>
 <p>这也解释了它为什么能同时赢两头：<strong>功耗的差距来自平台本身</strong>（不是
 FPGA 效率高，而是 CPU 这个平台本身耗电 30
 瓦），而性能的差距靠并行度补上。</p>
@@ -535,7 +555,9 @@ FPGA 效率高，而是 CPU 这个平台本身耗电 30
 </tr>
 <tr>
 <td><strong>规则是静态的</strong></td>
-<td>状态表在部署时就烧进去了，运行中改规则是论文的未来工作（要靠增加流通道去部分重配置）。而且规则集只覆盖挖矿这一类，论文也把它列为可以继续扩展的方向</td>
+<td>状态表在部署时就烧进去了，运行中改规则是论文的未来工作（要靠增加流通道去做部分重配置，也就是在
+FPGA
+运行期间只换掉其中一部分电路）。而且规则集只覆盖挖矿这一类，论文也把它列为可以继续扩展的方向</td>
 </tr>
 <tr>
 <td><strong>发表场所</strong></td>
@@ -545,7 +567,8 @@ Resilience）的会议论文，不是安全四大，定位更偏向工程原型�
 </tbody>
 </table>
 <p>论文列的未来工作里，有一条和链路监测这件事的走向关系最大：<strong>用一块
-PCIe interposer（转接板）加上可编程逻辑，插进真实的 CPU 与 GPU
+PCIe interposer（转接板）加上可编程逻辑（PL，指 FPGA
+上那块可以自由配置成各种电路的区域），插进真实的 CPU 与 GPU
 之间</strong>，把监测器嵌进去。从两块 FPGA
 板互相演，到插进真机，差的正是这一步——而这步也是所有链路侧工作的共同门槛。</p>
 <h2 id="总结">✅ 总结</h2>
@@ -620,13 +643,13 @@ GPU 指令流；</li>
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">523k</span>
+    <span title="Word count total">524k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:51</span>
+    <span title="Reading time total">15:52</span>
   </span>
 </div>
 <div class="busuanzi-count">
