@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-12T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:21:15.938Z">
+<meta property="article:modified_time" content="2026-10-12T08:52:56.709Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -266,7 +266,7 @@
       <span class="post-meta-item-text">Posted on</span>
       
 
-      <time title="Created: 2026-10-12 11:00:00 / Modified: 16:21:15" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
+      <time title="Created: 2026-10-12 11:00:00 / Modified: 16:52:56" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
     </span>
 
   
@@ -283,14 +283,14 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.6k</span>
+      <span>5.9k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>10 mins.</span>
+      <span>11 mins.</span>
     </span>
 </div>
 
@@ -314,7 +314,7 @@ Cergy Paris Université，ETIS 实验室）、Matthieu Regnery、Denis
 Baheux（法国宪兵刑事研究所 IRCGN）、Guillaume Barbu（IDEMIA）</p>
 </blockquote>
 <p>在 PCIe 链路上做观测这件事，已有工作（比如
-Hermes）已经证明能从明文流量里还原出整个模型，不过那些实验用的是商用协议分析仪，回答的是<strong>能看见什么</strong>。这篇论文补的是另一半：<strong>如果要自己造一个能看见、能改写、还能复制的东西插进链路，它得满足什么条件，代价有多大。</strong>顺着这个问题的答案往下读，也能看清一件和后续所有
+Hermes）已经证明能从明文流量里还原出整个模型，不过那些实验用的是商用协议分析仪（专门串在链路上抓包分析的仪器），回答的是<strong>能看见什么</strong>。这篇论文补的是另一半：<strong>如果要自己造一个能看见、能改写、还能复制的东西插进链路，它得满足什么条件，代价有多大。</strong>顺着这个问题的答案往下读，也能看清一件和后续所有
 PCIe 侧信道有关的事——包头从来不加密。</p>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
@@ -338,18 +338,25 @@ PCIe 侧信道有关的事——包头从来不加密。</p>
 </tr>
 <tr>
 <td><strong>Lane（通道）</strong></td>
-<td>PCIe 由若干条双向串行链路组成，每条 4 根线，即两对差分信号</td>
+<td>PCIe 由若干条双向串行链路组成，每条 4
+根线（两组差分线，一发一收）</td>
 <td>x1、x4、x8、x16 说的就是 lane 的条数</td>
 </tr>
 <tr>
 <td><strong>TLP</strong>（Transaction Layer Packet）</td>
 <td>事务层的包，真正承载读写请求与数据的那一类</td>
-<td>有 header（3 或 4 个 DW，1 DW = 32 bit），可能带 payload</td>
+<td>有 header（包头，3 或 4 个 DW 长；1 DW 是个 32 位的字），可能带
+payload（载荷，真正要传的数据）</td>
 </tr>
 <tr>
 <td><strong>DLLP</strong>（Data Link Layer Packet）</td>
 <td>数据链路层的包，负责流控、电源管理与确认</td>
 <td>不承载用户数据</td>
+</tr>
+<tr>
+<td><strong>IP core（IP 核）</strong></td>
+<td>FPGA 里可以拿来即用的现成硬件功能模块</td>
+<td>论文的架构就是几块 IP 拼起来的</td>
 </tr>
 <tr>
 <td><strong>MitM</strong>（Man-in-the-Middle，中间人）</td>
@@ -459,9 +466,10 @@ PCI
 上的硬盘协议）。两端挂的是什么设备不影响做法，因为中间人利用的是链路本身。</p>
 <p>论文给这套架构列了五条硬要求（§3.1）：</p>
 <ul>
-<li><strong>PCIe 3.0</strong>，传输率 8 GT/s，单 lane 0.985 GB/s；</li>
+<li><strong>PCIe 3.0</strong>，传输率 8 GT/s（每秒 80 亿次信号跳变），单
+lane 0.985 GB/s；</li>
 <li><strong>响应时间不超过 1 ms</strong>；</li>
-<li><strong>物理接口保持信号完整性</strong>，否则链路直接降速甚至断开；</li>
+<li><strong>物理接口保持信号完整性</strong>（插进去的板子不能让信号波形变形），否则链路直接降速甚至断开；</li>
 <li><strong>对通信双方不可见</strong>，不能触发任何安全机制；</li>
 <li><strong>能访问经过的包</strong>。</li>
 </ul>
@@ -469,8 +477,8 @@ PCI
 是高速串行链路，板子插进去时<strong>自己引入的延迟必须小到让两端察觉不出来</strong>，论文反复讲的不可见就是指这件事。注意这里的不可见说的是<strong>不打断通信、不触发安全机制</strong>，而不是电学上查不到——作者后来在真机上干脆直接拿探头去量信号了。</p>
 <h2 id="中间人怎么搭四块-ip-拼出来">🛠️ 中间人怎么搭：四块 IP 拼出来</h2>
 <p>论文没有直接在手机上动手，而是先做了一个 PC 规模的仿真器：用一台 PC
-假装手机 SoC，用 FPGA 上的一个 IP 假装
-NAND。这样验证成本低，调试也方便。</p>
+假装手机 SoC，用 FPGA 上的一个 IP（可以理解成一块在 FPGA
+里现成可用的硬件功能模块）假装 NAND。这样验证成本低，调试也方便。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────────────────────────────────┐</span><br><span class="line">│ Host PC (plays the role of SoC)          │  ← 主机，扮演手机 SoC</span><br><span class="line">└──────────────────────────────────────────┘</span><br><span class="line">          │ PCIe 3.0 x2</span><br><span class="line">          ↓</span><br><span class="line">┌──────────────────────────────────────────┐</span><br><span class="line">│ ST-Avalon IP                             │  ← 物理接口：只处理链路层</span><br><span class="line">│                                          │</span><br><span class="line">│ 1. MitM IP                               │  ← 核心：分析 / 过滤 / 改包</span><br><span class="line">│ 2. Xillybus IP                           │  ← 假装成内存，自带驱动</span><br><span class="line">│ 3. NIOS II softcore                      │  ← 把结果报给攻击者的电脑</span><br><span class="line">└──────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
 <p>四块的分工是这样的：</p>
 <ul>
@@ -481,9 +489,10 @@ TLP 往上交；</li>
 Xillybus 之间，所以经过的每一个包都得从它手里过；</li>
 <li><strong>Xillybus</strong>：商业 IP，能把 FPGA
 变成一个主机可以访问的外设。论文拿它来扮演那块要被读取的内存，它还自带驱动，省掉了自己写驱动的功夫；</li>
-<li><strong>NIOS II</strong>：Stratix V 这块板子上没有硬核
-CPU，于是塞一个软核进去，用来把分析结果送到攻击者的电脑，以及在几种攻击模式之间切换（切换不用重新综合
-FPGA）。</li>
+<li><strong>NIOS II</strong>：Stratix V
+这块板子上没有现成的处理器，于是用 FPGA
+的逻辑资源搭了一个软核（softcore）进去，用来把分析结果送到攻击者的电脑，以及在几种攻击模式之间切换（切换不用重新综合
+FPGA，也就是不必把硬件设计重新编一遍）。</li>
 </ul>
 <h2 id="装上之后能做三件事">🔍 装上之后能做三件事</h2>
 <p>论文把能力拆成三个递进的场景，前一个的结果是后一个的输入。</p>
@@ -492,7 +501,7 @@ FPGA）。</li>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Host PC 发起一次 unlock</span><br><span class="line">        ↓</span><br><span class="line">PCIe 上出现一串 TLP</span><br><span class="line">        ↓</span><br><span class="line">MitM IP 只读 header</span><br><span class="line">        ↓  packet type / address / length</span><br><span class="line">统计某地址的访问次数与频率</span><br><span class="line">        ↓</span><br><span class="line">定位到密码尝试计数器所在的位置</span><br></pre></td></tr></table></figure>
 <p><strong>② 在线改包，一个时钟周期就够</strong></p>
 <p>找到位置之后就能动手改。实测里，包从到达 MitM
-到被改写后转发出去只花了<strong>一个时钟周期</strong>；它还会重新生成包的起止标记和有效信号，让改过的包在时序上看起来完全正常。</p>
+到被改写后转发出去只花了<strong>一个时钟周期</strong>——芯片是按自己的节拍一跳一跳工作的，一跳就是一个时钟周期；它还会重新生成包的起止标记和有效信号，让改过的包在时序上看起来完全正常。</p>
 <p>论文演示的是改
 WMR（写内存请求）里的数据段，但同时说明能改的字段不止数据——<strong>包类型、写地址这些一样可以改</strong>。</p>
 <p><strong>③ 影子拷贝，把读请求截下来</strong></p>
@@ -501,11 +510,14 @@ shadow
 memory；之后主机每次来读那个地址，它就不再转发真实数据，而是把自己存的那一份递回去。</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">正常写：Host ── WMR ──→ Memory        MitM 顺手存一份进 shadow memory</span><br><span class="line">正常读：Host ←── Cpl ─── Memory       读回来的是当前真实值</span><br><span class="line"></span><br><span class="line">影子拷贝开启后：</span><br><span class="line">        Host ── RMR ──→ MitM          读请求被截住，不再往下走</span><br><span class="line">        Host ←── Cpl ─── MitM         递回来的是 shadow memory 里的初值</span><br></pre></td></tr></table></figure>
 <p>结果就是主机以为计数器一直没变，实际上它早被改过很多次了。</p>
+<p>（上面两张图里的缩写：WMR = 写内存请求，RMR = 读内存请求，Cpl =
+内存把数据送回来的完成包。）</p>
 <h2 id="实测代价有多小">📊 实测：代价有多小</h2>
 <p>论文用 Xillybus 的 StreamWrite / StreamRead 驱动发随机数据（payload
 从 1 DW 到 1024 DW），把三种模式的资源占用和时序测了一遍。测试平台是一块
 Intel Stratix V DSP 开发板，带 PCIe 3.0 x8 的 endpoint 接口、1 GB
-DDR3、939k 寄存器与 622k 逻辑单元。</p>
+DDR3、939k 寄存器与 622k 逻辑单元（ALUT——FPGA
+里实现逻辑的基本单元，下面表里的占比都按它算）。</p>
 <table style="width:100%;">
 <colgroup>
 <col style="width: 16%" />
@@ -557,8 +569,9 @@ DDR3、939k 寄存器与 622k 逻辑单元。</p>
 <li>资源占用<strong>都在 1%
 以下</strong>。论文提到，省下来的空间可以拿去做更复杂的实时处理，比如完整的协议解码；</li>
 <li><strong>延迟小得惊人</strong>。改包只花 1 个时钟周期，影子拷贝只要 9
-个周期，而这 9 个周期的来源很具体：要把 64 bit 的数据流用两个 FIFO 转成
-32 bit 输出，好和 Xillybus 对接；</li>
+个周期，而这 9 个周期的来源很具体：要把 64 bit 的数据流用两个
+FIFO（先进先出的数据缓冲队列）转成 32 bit 输出，好和 Xillybus
+对接；</li>
 <li>影子拷贝的测试<strong>零错误、不丢数据</strong>，一路做到 PCIe gen3
 x2；</li>
 <li>论文还测了不同 PCIe 配置下的资源占用（Gen1 x1 到 Gen3 x2），MitM
@@ -578,13 +591,14 @@ x2；</li>
 <li><strong>真机上一个都没跑</strong>。作者的下一步是逆向智能手机主板，找到
 SoC 与 NAND 之间最合适的插入位置；</li>
 <li>真机上做插入要自制
-<strong>interposer（转接板）</strong>。他们用有源差分探头测到了真实手机的时钟与数据信号，但论文说这些信号需要用更高频的探头来改进；</li>
+<strong>interposer（转接板）</strong>。他们用有源差分探头（夹在信号线上把波形读出来的一种测量探头）测到了真实手机的时钟与数据信号，但论文说这些信号需要用更高频的探头来改进；</li>
 <li>需要换成<strong>双口 PCIe 的 FPGA 板</strong>（Intel Arria 10，两个
 gen3.0 x4 口，一个 endpoint、一个 root
 port），这样才能一侧接手机主板、一侧接内存。现在的板子只有一个 endpoint
 口；</li>
 <li>如果目标手机的存储走 NVMe，还要加一层 NVMe 解码
-overlay，论文说这<strong>会抬高延迟</strong>；</li>
+overlay（叠在现有处理之上、专门认 NVMe
+包格式的一层逻辑），论文说这<strong>会抬高延迟</strong>；</li>
 <li><strong>对策研究没做</strong>。论文最后只说之后会研究。</li>
 </ul>
 <p>还有几处口径要在引用时注意：</p>
@@ -699,7 +713,7 @@ GT/s、响应不超过 1 ms、每个包只许增加极少量的时钟周期；</
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">522k</span>
+    <span title="Word count total">523k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
