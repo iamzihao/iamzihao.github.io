@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-13T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:21:32.844Z">
+<meta property="article:modified_time" content="2026-10-12T08:47:36.383Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -179,8 +179,7 @@
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
             <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E4%B8%80%E5%9D%97%E6%B2%A1%E4%BA%BA%E7%9B%AF%E8%BF%87%E7%9A%84%E7%BC%93%E5%AD%98"><span class="nav-number">2.</span> <span class="nav-text">🧭 起点：一块没人盯过的缓存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E6%B5%8B%E5%87%BA%E6%9D%A5%E6%8B%BF-fpga-%E5%BD%93%E7%A7%92%E8%A1%A8"><span class="nav-number">3.</span> <span class="nav-text">🔬 怎么测出来：拿 FPGA 当秒表</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%89%BE-eviction-set%E4%B8%8D%E7%9F%A5%E9%81%93%E7%BB%93%E6%9E%84%E4%B9%9F%E8%83%BD%E6%89%BE"><span class="nav-number">4.</span> <span class="nav-text">🎯 找 eviction
-set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%83%BD%E7%9C%8B%E5%88%B0%E4%BB%80%E4%B9%88%E5%85%B6%E5%AE%9E%E9%9D%9E%E5%B8%B8%E6%9C%89%E9%99%90"><span class="nav-number">5.</span> <span class="nav-text">🕵️ 能看到什么：其实非常有限</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%81%E6%98%8E%E5%AE%83%E7%9C%9F%E8%83%BD%E9%80%9A%E4%B8%A4%E6%9D%A1-covert-channel"><span class="nav-number">6.</span> <span class="nav-text">📡 证明它真能通：两条 covert
-channel</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E9%98%B2"><span class="nav-number">7.</span> <span class="nav-text">🛡️ 怎么防</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E7%AF%87%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 这篇的边界</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%83%BD%E7%9C%8B%E5%88%B0%E4%BB%80%E4%B9%88%E5%85%B6%E5%AE%9E%E9%9D%9E%E5%B8%B8%E6%9C%89%E9%99%90"><span class="nav-number">5.</span> <span class="nav-text">🕵️ 能看到什么：其实非常有限</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%AF%81%E6%98%8E%E5%AE%83%E7%9C%9F%E8%83%BD%E9%80%9A%E4%B8%A4%E6%9D%A1%E9%9A%90%E8%94%BD%E9%80%9A%E9%81%93"><span class="nav-number">6.</span> <span class="nav-text">📡 证明它真能通：两条隐蔽通道</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E9%98%B2"><span class="nav-number">7.</span> <span class="nav-text">🛡️ 怎么防</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E7%AF%87%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 这篇的边界</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -272,7 +271,7 @@ channel</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 16:21:32" itemprop="dateModified" datetime="2026-10-12T16:21:32+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-12 16:47:36" itemprop="dateModified" datetime="2026-10-12T16:47:36+08:00">2026-10-12</time>
     </span>
 
   
@@ -289,14 +288,14 @@ channel</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.5k</span>
+      <span>6.3k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>10 mins.</span>
+      <span>11 mins.</span>
     </span>
 </div>
 
@@ -522,28 +521,119 @@ DMA</strong>。</li>
 </ul>
 <p>一旦这两件事发生，与数据相关的访问模式就会出现，而它正好落在 IOTLB
 能看见的范围内。论文对自己的定位很清楚：<strong>现在不危险，但要赶在它变危险之前先把它讲出来。</strong></p>
-<h2 id="证明它真能通两条-covert-channel">📡 证明它真能通：两条 covert
-channel</h2>
-<p>侧信道能看见东西之后，论文用它搭了两条隐蔽通道，一条外设到外设，一条
-CPU 到外设。</p>
-<p>外设到外设那条很巧妙：发送方是 GPU 上的 SQL
-数据库，跑一次查询编码一个 1，不跑编码一个 0；接收方就是
-FPGA。论文实际传了 <code>Hello</code> 这个词（图 4 里能看见 01001000
-01100101… 的位序）。</p>
-<p>两条通道的性能放在一起对比，差距大得值得单独看一眼：</p>
+<h2 id="证明它真能通两条隐蔽通道">📡 证明它真能通：两条隐蔽通道</h2>
+<p>上一节的结果是：攻击者能从 IOTLB
+里读到<strong>一位</strong>信息——隔壁那台加速器动过没有。一位信息本身做不了什么，但只要攻击方能反过来<strong>主动控制</strong>这一位，它就成了一条信道：两侧约定好哪一段信号算
+1、哪一段算 0，就能把消息一比特一比特地传出去。</p>
+<p>这里要先分清两个容易混的概念，<strong>侧信道</strong>和<strong>隐蔽通道</strong>说的不是同一件事：</p>
 <table>
 <colgroup>
-<col style="width: 20%" />
-<col style="width: 20%" />
-<col style="width: 20%" />
-<col style="width: 20%" />
-<col style="width: 20%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>谁在传</th>
+<th>传的是什么</th>
+<th>本文里的角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>侧信道</td>
+<td>受害者，且不知情</td>
+<td>受害者的行为</td>
+<td>跑着 SQL 查询的那块 GPU</td>
+</tr>
+<tr>
+<td>隐蔽通道</td>
+<td>两个串通的恶意方，主动发</td>
+<td>他们自己的消息</td>
+<td>发送方是外设或 CPU，接收方是 FPGA</td>
+</tr>
+</tbody>
+</table>
+<p>隐蔽通道是一条<strong>合作</strong>的通道，它的价值不在偷数据，而在于证明这一位确实可控、可读、能稳定复现——这正是上一节停在<strong>只看到一位</strong>之后，需要补上的那一环。</p>
+<p>论文搭了两条，区别在<strong>发送方是谁</strong>：一条由外设发，一条由
+CPU 发；接收方都是那块 FPGA。</p>
+<p><strong>第一条：外设当发送方，跑一次查询编一个 1</strong></p>
+<p>既然 GPU 每跑一次 SQL 查询就会挤掉 IOTLB
+里十几个条目，编码规则可以直接建在这上面：</p>
+<ul>
+<li>发送方跑一次查询 → 接收方探测到一片未命中 → 记作
+<strong>1</strong>；</li>
+<li>发送方什么都不做 → 探测结果保持不变 → 记作 <strong>0</strong>。</li>
+</ul>
+<p>论文实际传的是 <code>Hello</code> 这个词，图 4
+里能看到这一串比特在时间轴上的形状。</p>
+<p>这条通道的速率有一个很好算的来源：<strong>每一个 1 都要花掉一次 SQL
+查询</strong>，而一次查询大约 0.3 秒。所以消息里 1 越多，传得越慢：</p>
+<table>
+<thead>
+<tr>
+<th>消息内容</th>
+<th>吞吐</th>
+<th>错误率</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全是 1</td>
+<td>3.4 bps</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>1 与 0 各一半</td>
+<td>6.65 bps</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>全是 0</td>
+<td>246.15 bps</td>
+<td>0.1%</td>
+</tr>
+<tr>
+<td>真实文本（ASCII）</td>
+<td>7.58 bps</td>
+<td>0%</td>
+</tr>
+</tbody>
+</table>
+<p>真实文本那一行最能说明问题：<code>Hello</code> 是 5 个字节、40
+个比特，按 7.58 bps 算要 <strong>40 ÷ 7.58 ≈ 5.3 秒</strong>；换成传一份
+1 MB
+的文件得花十几天。所以这条通道的价值是<strong>证明它成立</strong>，而不是拿来搬数据。</p>
+<p><strong>第二条：让 CPU 当发送方，靠刷 IOTLB</strong></p>
+<p>第二条反过来，由 CPU 发、外设收。这里有个前提得先讲清楚：<strong>CPU
+自己是碰不到 IOTLB 的</strong>。IOMMU 只负责翻译外设的地址，CPU
+访问内存走的是自己的 MMU 和 TLB，压根不经过 IOTLB。CPU
+能影响它的方式只有两种——改页表项，或者直接命令 IOMMU 把条目刷掉。</p>
+<p>而这两件事平时只有操作系统和 hypervisor 会做，所以 Linux
+并不给用户态提供刷 IOTLB
+的接口；论文的办法是自己写一个内核模块，把这个能力开出来。有了它，编码同样直白：</p>
+<ul>
+<li><strong>传 1</strong>：CPU 刷一次整个 IOTLB，耗时约 17 µs；</li>
+<li><strong>传 0</strong>：CPU 静默 17 µs，什么都不做；</li>
+<li>接收方还是那块 FPGA，它持续探测同一个固定地址——<strong>慢就是
+1，快就是 0</strong>。</li>
+</ul>
+<p>两边没做纠错，也没做严格同步（只是让 FPGA 按固定周期数等待），结果是
+<strong>15023 bps</strong>，但错误率高达 <strong>30%</strong>。</p>
+<p><strong>两条放在一起看，结论比数字本身重要</strong></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
 </colgroup>
 <thead>
 <tr>
 <th>通道</th>
-<th>方法</th>
-<th>环境</th>
+<th>发送方要什么</th>
 <th>吞吐</th>
 <th>错误率</th>
 </tr>
@@ -551,33 +641,22 @@ FPGA。论文实际传了 <code>Hello</code> 这个词（图 4 里能看见 0100
 <tbody>
 <tr>
 <td>外设 → 外设（§6.1）</td>
-<td>Prime+Probe</td>
-<td>裸金属</td>
-<td>3.4 bps（全 1）／6.65 bps（1 与 0 各半）／246.15 bps（全 0）</td>
-<td>0%／0%／0.1%</td>
-</tr>
-<tr>
-<td>外设 → 外设，ASCII 文本</td>
-<td>Prime+Probe</td>
-<td>裸金属</td>
-<td>7.58 bps</td>
-<td>0%</td>
+<td>能控制一个外设即可</td>
+<td>3.4～246 bps，取决于消息里有几个 1</td>
+<td>≤ 0.1%</td>
 </tr>
 <tr>
 <td>CPU → 外设（附录 A.2）</td>
-<td>Flush+Reload</td>
-<td>裸金属</td>
+<td><strong>内核权限</strong>（得先装内核模块）</td>
 <td>15023 bps</td>
 <td>30.09%</td>
 </tr>
 </tbody>
 </table>
-<p>这里有个容易被误读的地方：外设到外设的通道<strong>速率完全取决于消息里有几个
-1</strong>——每个 1 都要跑一次 SQL 查询，而一次查询要花大约 0.3
-秒。所以全是 0 的消息能跑到 246 bps，一旦混进 1，速率就掉到几 bps。而
-CPU 到外设那条快到 15023 bps，靠的是 CPU 直接刷
-IOTLB（Flush+Reload），代价是它需要内核权限，且错误率高达 30%。</p>
-<p>也就是说，<strong>越快的那条越不实际，越慢的那条才落在真实的威胁模型里</strong>。</p>
+<p>快的那条要内核权限，而且错误率高到必须纠错才能用；慢的那条几乎不出错，而且只要用户权限——<strong>它才落在论文真正的威胁模型里</strong>。这也解释了论文为什么把
+CPU 那条放进附录：它更像一个可行性证明。</p>
+<p>论文还试过把方向反过来（外设发、CPU 收），没成功：刷 IOTLB 的耗时和
+IOTLB 里装着什么无关，稳定在 17 µs 左右，起不了信道作用。</p>
 <h2 id="怎么防">🛡️ 怎么防</h2>
 <p>论文按<strong>现在能做</strong>和<strong>将来该做</strong>分了两层。</p>
 <p><strong>现在能做的</strong>：</p>
@@ -722,13 +801,13 @@ DMA——而那正是这类侧信道真正需要的东西。<strong>先把话讲
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">521k</span>
+    <span title="Word count total">522k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:47</span>
+    <span title="Reading time total">15:48</span>
   </span>
 </div>
 <div class="busuanzi-count">
