@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存，得先经过 IOMMU 做地址翻译，翻译结果缓存在 IOTLB 里，而这块缓存被同一 IOMMU 下的所有设备共用。于是攻击者不需要跟受害者共享任何内存，只要让自己的 GPU 或网卡反复发起 DMA 请求并给时延计时，就能从 IOTLB 的状态变化里读出隔壁设备在做什么——这套手法同样适用于跨 VM，甚至能隔着 RDMA 网络从远端机器上读出对方在访问哪个键值、在浏览">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-14T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:21:32.847Z">
+<meta property="article:modified_time" content="2026-10-12T08:54:11.059Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -271,7 +271,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 16:21:32" itemprop="dateModified" datetime="2026-10-12T16:21:32+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-12 16:54:11" itemprop="dateModified" datetime="2026-10-12T16:54:11+08:00">2026-10-12</time>
     </span>
 
   
@@ -288,14 +288,14 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.6k</span>
+      <span>6.3k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>10 mins.</span>
+      <span>11 mins.</span>
     </span>
 </div>
 
@@ -322,7 +322,8 @@ IOMMU</strong>（IEEE S&amp;P 2023）</p>
 Shin（Korea University）、Seunghee Shin（SUNY Binghamton）</p>
 </blockquote>
 <p>CPU
-缓存侧信道的前提通常写得很清楚：攻击者与受害者要共享内存、共享一级或末级缓存、共享某个地址空间。这篇论文把前提换掉了——<strong>不再从
+缓存侧信道的前提通常写得很清楚：攻击者与受害者要共享内存、共享某一级 CPU
+缓存（比如所有核共用的末级缓存）、共享某个地址空间。这篇论文把前提换掉了——<strong>不再从
 CPU
 发起请求，而是让设备自己发</strong>。这一换带来两个后果：攻击者不需要与受害者共享任何内存，而且整条信道不经过
 CPU 缓存与 TLB。后面那一点，恰好是它能绕开一大堆现成防御的原因。</p>
@@ -341,6 +342,31 @@ CPU 缓存与 TLB。后面那一点，恰好是它能绕开一大堆现成防御
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><strong>DMA</strong>（Direct Memory Access）</td>
+<td>设备不经 CPU 直接读写主存（也就是内存条）</td>
+<td>全文所有请求都是它</td>
+</tr>
+<tr>
+<td><strong>虚拟地址 / 物理地址</strong></td>
+<td>程序与设备用的是虚拟地址，真正落到内存条上的位置叫物理地址</td>
+<td>两者之间的换算就是地址翻译</td>
+</tr>
+<tr>
+<td><strong>页（page）</strong></td>
+<td>内存被切成大小固定的块，翻译和分配都以块为单位</td>
+<td>常见 4 KB，大页 2 MB</td>
+</tr>
+<tr>
+<td><strong>TLB</strong></td>
+<td>CPU 侧缓存地址翻译结果的地方</td>
+<td>设备侧的对应物就是 IOTLB</td>
+</tr>
+<tr>
+<td><strong>组（set）/ 路（way）</strong></td>
+<td>缓存不是一个大池子：地址先决定落在哪一组，每组只有固定几个位置，那些位置叫路</td>
+<td>一个组填满后，要按替换策略挤掉旧的</td>
+</tr>
 <tr>
 <td><strong>IOMMU</strong></td>
 <td>CPU 里管设备 DMA 的硬件，负责把设备的 I/O
@@ -380,7 +406,17 @@ CPU 缓存与 TLB。后面那一点，恰好是它能绕开一大堆现成防御
 <tr>
 <td><strong>Eviction set</strong></td>
 <td>一组地址，访问它们能把目标缓存组里的条目全挤掉</td>
-<td>攻击的抓手，和上一类攻击一样</td>
+<td>攻击的抓手，和 CPU 缓存侧信道用的是同一套方法</td>
+</tr>
+<tr>
+<td><strong>Prime+Probe</strong></td>
+<td>先用 eviction set 填满目标组，等一会儿，再访问一次并计时</td>
+<td>不需要攻击者与受害者共享内存</td>
+</tr>
+<tr>
+<td><strong>Flush+Reload / Evict+Reload</strong></td>
+<td>先把目标从缓存里清掉或挤掉，等受害者执行，再读一次并计时</td>
+<td>需要双方能碰到同一块内存</td>
 </tr>
 <tr>
 <td><strong>DDIO</strong></td>
@@ -407,9 +443,15 @@ TLB</strong>。论文反复强调这一点，因为它的直接后果是：那�
 <p>要攻击一块缓存，得先知道它长什么样。IOTLB
 在此之前从没被公开逆向过，所以论文自己动手做了一遍。目标是一颗 Intel
 Xeon Silver 4316（第三代 Xeon 可扩展处理器）。</p>
-<p>观测手段是 Intel 从第三代 Xeon 开始提供的 IOMMU
-性能监控（PMON）。其中与 IOTLB 相关的三个事件：</p>
+<p>观测手段是 Intel 从第三代 Xeon 开始提供的 IOMMU 性能监控（PMON）——CPU
+里的一组硬件计数器，可以指定监听哪类事件，同一个事件还能用 umask
+这个掩码再细分。其中与 IOTLB 相关的三个事件：</p>
 <table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
 <thead>
 <tr>
 <th>事件</th>
@@ -431,7 +473,7 @@ Xeon Silver 4316（第三代 Xeon 可扩展处理器）。</p>
 <tr>
 <td>CTX_CACHE_LOOKUP</td>
 <td>0x40</td>
-<td>未命中后去查上下文缓存的次数</td>
+<td>未命中后去查上下文缓存（记录每个设备翻译上下文的表）的次数</td>
 </tr>
 </tbody>
 </table>
@@ -442,6 +484,11 @@ Xeon Silver 4316（第三代 Xeon 可扩展处理器）。</p>
 做不到这个粒度。</p>
 <p>逆向出来的结果如下：</p>
 <table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
 <thead>
 <tr>
 <th>属性</th>
@@ -462,11 +509,11 @@ Xeon Silver 4316（第三代 Xeon 可扩展处理器）。</p>
 </tr>
 <tr>
 <td>映射方式</td>
-<td>线性</td>
-<td>线性</td>
+<td>线性（直接拿地址的几位当组号）</td>
+<td>线性（同左）</td>
 </tr>
 <tr>
-<td>用地址的哪几位选组</td>
+<td>取地址哪几位当组号（中括号表示取第几位到第几位）</td>
 <td>IOVA[16:12]</td>
 <td>IOVA[24:21]</td>
 </tr>
@@ -492,7 +539,9 @@ Used，最久没被访问的条目最先被挤出去）。</p>
 <p>有了 IOTLB 的结构参数，攻击就需要一个能持续发起 DMA
 请求并计时的抓手。论文做了两套，分别用 GPU 和 RNIC。</p>
 <p><strong>GPU 版（DEVIOus_GPU）</strong>用 <code>cudaMemcpy()</code>
-触发 GPU 到主存的 DMA。这里有个细节：CUDA
+触发 GPU 到主存的 DMA（CUDA 是 NVIDIA 的 GPU
+编程接口，<code>cudaMemcpy</code> 就是它用来在 CPU 与 GPU
+之间搬数据的函数）。这里有个细节：CUDA
 默认会用临时分配的内存做中转，地址每次都可能变，而攻击需要地址固定，所以必须用
 <code>cudaMallocHost()</code> 显式申请固定内存。</p>
 <p>而且 GPU 版<strong>只能用 Prime+Probe</strong>。原因是 GPU
@@ -571,8 +620,9 @@ LRU 的顺序，把信号本身放大</strong>。</p>
 <p><strong>案例一：跨 VM 的隐蔽信道（本地）</strong></p>
 <p>两台虚拟机各自直通一张 GPU，共享同一个 IOTLB。发送方用 GPU 的 DMA
 时序编码比特，接收方用另一张 GPU 做 Prime+Probe。论文报出的结果是：单个
-IOTLB 组、时间窗口 250 µs 时吞吐 <strong>2.54 Kbps</strong>、误码率
-2.18%；用上 16 个组以后吞吐升到 <strong>40.64 Kbps</strong>。</p>
+IOTLB 组、时间窗口 250 µs 时吞吐 <strong>2.54
+Kbps</strong>（千比特每秒）、误码率 2.18%；用上 16 个组以后吞吐升到
+<strong>40.64 Kbps</strong>。</p>
 <p><strong>案例二：SSH 击键时序（本地跨 VM）</strong></p>
 <p>这个场景值得一提，因为它把攻击角度选得很刁。虚拟机 A 里的攻击者用 GPU
 探测；虚拟机 B 里跑的是一台 SSH 服务器，网卡直通给它。攻击者不需要任何
@@ -580,9 +630,9 @@ SSH 账号，也不需要访问 B 的权限，只要共享 IOMMU 就够。</p>
 <p>原理是利用 Linux 网卡的 <strong>RX ring
 buffer</strong>——收包描述符排成的环形队列。网卡每收到一个包，就要按描述符里的地址往主存做一次
 DMA，写进接收缓冲区。这个 DMA 会查 IOTLB，于是攻击者能观测到。而且这个
-ring buffer 是固定的 4 KB
-页、用一致（coherent）方式映射，所以活动<strong>始终落在同一个 IOTLB
-组</strong>上——论文用 256 轮发包实验确认了这一点，活跃的永远是 0
+ring buffer 是固定的 4 KB 页、用一致（coherent）方式映射（CPU
+和设备看到的是同一份数据，硬件自动保持两边同步），所以活动<strong>始终落在同一个
+IOTLB 组</strong>上——论文用 256 轮发包实验确认了这一点，活跃的永远是 0
 号组。</p>
 <p>剩下的就顺理成章了：反复探测 0
 号组，每个包到达就在时间轴上留下一个峰值。论文的评估是：与抓包工具
@@ -603,7 +653,7 @@ ms——不到千分之四。论文据此认为，这种击键时序攻击已经
 <tbody>
 <tr>
 <td>PP</td>
-<td>即使收集 100 条 trace 也只有 62.66%</td>
+<td>即使收集 100 次探测记录（trace）也只有 62.66%</td>
 </tr>
 <tr>
 <td>PPA</td>
@@ -615,8 +665,8 @@ ms——不到千分之四。论文据此认为，这种击键时序攻击已经
 用五分之一的数据就接近满分——放大信号的价值就在这里。</p>
 <p><strong>案例四：远程网站指纹（RDMA 网络）</strong></p>
 <p>攻击者要推断远端用户在访问哪个网站。抓手是现代浏览器默认打开的 GPU
-加速：Chrome 会把光栅化和合成搬到 GPU 上，一旦有可用元素就立刻
-offload，<strong>这个过程产生的 DMA
+加速：把网页画成像素这一步（光栅化）和把各层画面拼到一起这一步（合成）现在都交给
+GPU，而且一有可用元素就立刻送过去，<strong>这个过程产生的 DMA
 访问模式与网页的内容和形状相关</strong>。</p>
 <p>时间上也来得及：加载一个网页平均要 600 ms，而用 PPA 扫一遍整个 IOTLB
 只要不到 2 ms，所以一次页面加载能采到 300 多条
@@ -625,8 +675,8 @@ Bi-LSTM（双向长短期记忆网络，一种专治时序数据的模型，论�
 Att-BLSTM），训练数据取自 Alexa 排名的前 300 个网站。</p>
 <p>结果是对 Chrome 和 Firefox、在 Windows 与 Linux
 上都做了测试，准确率最高 <strong>95.2%</strong>；即便换成 Tor
-浏览器，仍能到 <strong>90.6%</strong>。论文另外测了协方差较大的情况，用
-2 MB 大页时准确率降到 89.52%，作者归因于大页在 IOTLB
+浏览器，仍能到 <strong>90.6%</strong>。论文另外测了用大页的情况：换成 2
+MB 大页时准确率降到 89.52%，作者归因于大页在 IOTLB
 里承载的信息粒度更粗。</p>
 <h2 id="为什么它比-cpu-侧信道难防">🛡️ 为什么它比 CPU 侧信道难防</h2>
 <p>论文在防御部分给了一个很直接的判断：<strong>针对 CPU
@@ -660,7 +710,9 @@ IOTLB 的硬件事件，论文点名了四个：FIRST_LOOKUPS（umask
 <tr>
 <td><strong>前提条件</strong></td>
 <td>攻击者设备必须与受害者设备共享同一个 IOMMU。论文的原话是要求同一
-root port，比同期一些工作要求共享 PCIe switch 的假设更宽松</td>
+root port（PCIe 从 CPU 出来的根端口），比同期一些工作要求共享 PCIe
+switch（接在 root port
+下面、再分叉给多块设备的交换芯片）的假设更宽松</td>
 </tr>
 <tr>
 <td><strong>攻击者要有什么</strong></td>
@@ -771,7 +823,7 @@ TLB，设备侧的地址翻译缓存同样跨租户共享，而且它挡在每�
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:50</span>
+    <span title="Reading time total">15:51</span>
   </span>
 </div>
 <div class="busuanzi-count">
