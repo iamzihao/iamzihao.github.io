@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-13T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:47:36.383Z">
+<meta property="article:modified_time" content="2026-10-12T08:50:42.903Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -271,7 +271,7 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 16:47:36" itemprop="dateModified" datetime="2026-10-12T16:47:36+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-12 16:50:42" itemprop="dateModified" datetime="2026-10-12T16:50:42+08:00">2026-10-12</time>
     </span>
 
   
@@ -288,14 +288,14 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.3k</span>
+      <span>6.9k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>11 mins.</span>
+      <span>13 mins.</span>
     </span>
 </div>
 
@@ -340,8 +340,23 @@ IOTLB，它属于 IOMMU，而且被挂在同一个 IOMMU
 </thead>
 <tbody>
 <tr>
+<td><strong>虚拟地址 / 物理地址</strong></td>
+<td>程序里用的是虚拟地址，真正落到内存条上的位置叫物理地址</td>
+<td>两者之间的换算就是地址翻译</td>
+</tr>
+<tr>
+<td><strong>页（page）</strong></td>
+<td>内存被切成大小固定的块，翻译和分配都以块为单位</td>
+<td>常见 4 KB，大页 2 MB</td>
+</tr>
+<tr>
+<td><strong>MMU / TLB</strong></td>
+<td>CPU 侧的地址翻译单元，以及它缓存翻译结果的地方</td>
+<td>设备侧的对应物是 IOMMU / IOTLB</td>
+</tr>
+<tr>
 <td><strong>DMA</strong>（Direct Memory Access）</td>
-<td>设备不经 CPU 直接读写主存</td>
+<td>设备不经 CPU 直接读写主存（也就是内存条）</td>
 <td>现代网卡、GPU、SSD 都靠它</td>
 </tr>
 <tr>
@@ -371,7 +386,8 @@ IOTLB，它属于 IOMMU，而且被挂在同一个 IOMMU
 </tr>
 <tr>
 <td><strong>Flush+Reload</strong></td>
-<td>先清掉目标缓存行，等受害者执行，再读一次并计时</td>
+<td>先清掉目标缓存行（缓存与内存之间搬运数据的最小单位，通常 64
+字节），等受害者执行，再读一次并计时</td>
 <td>需要共享内存，但时间分辨率更高</td>
 </tr>
 <tr>
@@ -387,10 +403,14 @@ IOTLB，它属于 IOMMU，而且被挂在同一个 IOMMU
 </tbody>
 </table>
 <h2 id="起点一块没人盯过的缓存">🧭 起点：一块没人盯过的缓存</h2>
-<p>先分清两条地址翻译的路。CPU 访问内存时，由 MMU
-把虚拟地址翻译成物理地址，翻译结果缓存在 TLB
-里。设备访问内存时也有对应的一套：IOMMU 负责翻译，缓存就叫 IOTLB。</p>
-<p>两者的结构非常像，都按组（set）和路（way）组织，都有容量上限，也都需要一套替换策略来决定挤掉谁。但它们的暴露面完全不同：CPU
+<p>先分清两条地址翻译的路。程序里用的地址并不是内存条上的真实位置——操作系统给每个程序一套<strong>虚拟地址</strong>，真正落到硬件上的叫<strong>物理地址</strong>，两者之间的换算就是<strong>地址翻译</strong>。换算不是逐字节做的，而是<strong>按页</strong>来：内存被切成大小固定的块（常见
+4 KB），页表记的是这一页对应哪一页物理内存。</p>
+<p>CPU 访问内存时，这个换算由
+<strong>MMU</strong>（内存管理单元）完成，算好的结果攒在
+<strong>TLB</strong>
+里，下次遇到同一个页就不必重算。设备那边有一模一样的一套：IOMMU
+负责翻译，它的缓存叫 IOTLB。</p>
+<p>两者的结构非常像，而且都不是一个大池子随便塞：一个地址先决定它<strong>落在哪一组（set）</strong>，每组里只有固定的几个位置，这些位置叫<strong>路（way）</strong>。组被填满后还要放新条目进来，就得按替换策略挑一个旧的挤出去。但它们的暴露面完全不同：CPU
 的 TLB 是每个核私有的，而 IOTLB
 在硬件上就是<strong>一块被多个设备共用的表</strong>。</p>
 <p>论文给了一个很具体的层次图：</p>
@@ -399,7 +419,9 @@ IOTLB，它属于 IOMMU，而且被挂在同一个 IOMMU
 缓存也是共享的。新的是这块缓存的<strong>位置</strong>：IOTLB
 夹在设备与主存之间，任何走 DMA
 的设备都得经过它，而它在此之前几乎没有被当成攻击面研究过。</p>
-<p>论文还特别交代了它相对前人的假设更弱。此前有两项工作靠 PCIe
+<p>论文还特别交代了它相对前人的假设更弱。PCIe 的拓扑是一棵树：CPU
+这头先连到 <strong>root port</strong>（根端口），往下可以再接
+<strong>switch</strong> 分叉出更多设备。此前有两项工作靠 PCIe
 总线拥塞做侧信道，它们的前提是攻击者设备与受害者设备<strong>挂在同一个
 PCIe switch 上</strong>；这篇只要求两者<strong>共享一个 root
 port</strong>。后一个条件更松：共享 switch 的设备一定共享 root
@@ -409,8 +431,11 @@ port，反过来不成立。</p>
 做不到这件事——IOMMU 是给设备用的，CPU
 没法直接去探它的状态。所以论文的观测工具就是一块 FPGA。</p>
 <p>先要确认时延差真的存在。论文引了他人的测量：一次 IOTLB
-未命中会让访问延迟增加约 <strong>330 ns</strong>。他们的 FPGA 跑在 200
-MHz，换算下来期望看到 66 个时钟周期的差距。实测吻合：</p>
+未命中会让访问延迟增加约 <strong>330
+ns</strong>——未命中意味着缓存里没有现成的翻译结果，得真去内存里翻页表、一级一级查下来。他们的
+FPGA 跑在 200 MHz，换算下来期望看到 66
+个时钟周期的差距（时钟周期是芯片最小的计时单位，200 MHz 就是每秒 2
+亿个周期）。实测吻合：</p>
 <table>
 <thead>
 <tr>
@@ -453,7 +478,7 @@ set：不知道结构也能找</h2>
 <p>有了秒表，下一个问题是找到 eviction set——一组能可靠地把目标地址从
 IOTLB 里挤出去的地址。</p>
 <p>论文一开始的假设是 IOTLB 和传统 TLB
-一样：页地址的最低若干位决定它落在哪一组。结果这个假设<strong>被实验推翻</strong>了（细节放在附录
+一样：地址说到底是一串二进制数，拿它最低的几位当组号，就能决定它落在哪一组。结果这个假设<strong>被实验推翻</strong>了（细节放在附录
 A.1）。既然组织方式猜不出来，就只能用不依赖结构假设的办法。</p>
 <p>他们提出的是 grow-reduce 算法，两步循环：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">地址池（4096 个页）</span><br><span class="line">      ↓ 随机挑地址加进候选集合，直到能稳定挤掉目标</span><br><span class="line">  确定能挤掉（grow）</span><br><span class="line">      ↓ 逐个把地址拿出来试，拿掉之后还能挤掉，说明这个地址是多余的</span><br><span class="line">  只留必要的（reduce）</span><br><span class="line">      ↓</span><br><span class="line">  eviction set：118 个地址，成功率 100%</span><br></pre></td></tr></table></figure>
@@ -503,8 +528,9 @@ set；没有权限的人得接受更粗糙的集合</strong>。论文因此把�
 <ul>
 <li>结果从 GPU 传回 CPU 时，走的是 <strong>MMIO</strong>（memory-mapped
 I/O：把设备的寄存器映射进内存地址空间，由 CPU 逐次读写）而不是
-DMA。论文用 PCIe 性能计数器核实过：回传期间 IOTLB 一片安静，而 MMIO
-读请求的量正好对得上返回结果的大小。地址翻译在 CPU 的 MMU
+DMA。论文用 PCIe 性能计数器（CPU
+里统计各类硬件事件发生次数的计数器）核实过：回传期间 IOTLB 一片安静，而
+MMIO 读请求的量正好对得上返回结果的大小。地址翻译在 CPU 的 MMU
 里做了，压根没走 IOMMU；</li>
 <li>常规的 DMA
 是<strong>批量传输</strong>：把一大块数据搬进设备、算完再整块搬回去。整块搬运不产生与数据相关的访问模式，也就没什么可泄漏的。</li>
@@ -515,8 +541,9 @@ DMA。论文用 PCIe 性能计数器核实过：回传期间 IOTLB 一片安静�
 <ul>
 <li>PCIe 5.0
 的速率已经逼近主存访问，设备厂商可能会因此减小设备本地内存，转而<strong>更频繁地访问主存</strong>；</li>
-<li>CXL
-带来的一致性协议会鼓励设备与主存之间更细粒度的数据交换，开发者会<strong>从批量传输转向数据相关的细粒度
+<li>CXL（Compute Express Link，架在 PCIe 5.0
+物理层上的一套新互连协议，让 CPU
+和加速器能像共享内存一样协作）带来的缓存一致性协议，会鼓励设备与主存之间更细粒度的数据交换，开发者会<strong>从批量传输转向数据相关的细粒度
 DMA</strong>。</li>
 </ul>
 <p>一旦这两件事发生，与数据相关的访问模式就会出现，而它正好落在 IOTLB
@@ -570,7 +597,8 @@ CPU 发；接收方都是那块 FPGA。</p>
 <p>论文实际传的是 <code>Hello</code> 这个词，图 4
 里能看到这一串比特在时间轴上的形状。</p>
 <p>这条通道的速率有一个很好算的来源：<strong>每一个 1 都要花掉一次 SQL
-查询</strong>，而一次查询大约 0.3 秒。所以消息里 1 越多，传得越慢：</p>
+查询</strong>，而一次查询大约 0.3 秒。所以消息里 1
+越多，传得越慢（下面表里的 bps 是比特每秒，1 字节 = 8 比特）：</p>
 <table>
 <thead>
 <tr>
@@ -671,9 +699,10 @@ IOMMU，也就不在 IOTLB
 里留痕。但它只能开给可信设备——论文指出，恶意设备可以利用 ATS
 把任意物理地址标成已翻译，从而绕开全部限制。</li>
 </ul>
-<p><strong>硬件层面该做的</strong>：IOTLB
-按组或按路分区（论文提到可以借鉴 Intel CAT
-的思路）；或者干脆支持把某些页标记为不可缓存，让它永远不进
+<p><strong>硬件层面该做的</strong>：让 IOTLB
+也支持按组或按路分区——论文提到可以借鉴 Intel CAT（Cache Allocation
+Technology，CPU
+上把末级缓存按路分配给不同进程的一项技术）的思路；或者干脆支持把某些页标记为不可缓存，让它永远不进
 IOTLB。后一条的代价很直白——<strong>这些页的每一次访问都会像未命中一样慢</strong>。</p>
 <h2 id="这篇的边界">⚠️ 这篇的边界</h2>
 <p>这篇论文的贡献和它的限制一样清楚，引用时最好一起带上：</p>
@@ -727,7 +756,7 @@ FPGA，所以这个前提在云上是可达的</td>
 <h2 id="总结">✅ 总结</h2>
 <p><strong>IOMMU 里的地址翻译缓存（IOTLB）是一块被多个设备共用的表，同一
 IOMMU 下的另一块可编程 PCIe 设备能靠自己的 DMA
-时延读出它的活动；但就目前而言，读到的基本只有</strong>隔壁设备在不在用<strong>这一位信息。</strong></p>
+时延读出它的活动；但就目前而言，读到的基本只有隔壁设备在不在用这一位信息。</strong></p>
 <p>三个可以带走的要点：</p>
 <ol type="1">
 <li><strong>共享缓存的清单比想象的更长</strong>。CPU 缓存、TLB
@@ -807,7 +836,7 @@ DMA——而那正是这类侧信道真正需要的东西。<strong>先把话讲
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:48</span>
+    <span title="Reading time total">15:50</span>
   </span>
 </div>
 <div class="busuanzi-count">
