@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-12T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-11T08:25:23.274Z">
+<meta property="article:modified_time" content="2026-10-12T08:21:15.938Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -264,15 +264,9 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
+      
 
-      <time title="Created: 2026-10-12 11:00:00" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
-    </span>
-    <span class="post-meta-item">
-      <span class="post-meta-item-icon">
-        <i class="far fa-calendar-check"></i>
-      </span>
-      <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-11 16:25:23" itemprop="dateModified" datetime="2026-10-11T16:25:23+08:00">2026-10-11</time>
+      <time title="Created: 2026-10-12 11:00:00 / Modified: 16:21:15" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
     </span>
 
   
@@ -289,7 +283,7 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.3k</span>
+      <span>5.6k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -387,10 +381,15 @@ PCIe 侧信道有关的事——包头从来不加密。</p>
 <h2 id="起点为了一次能试一百万个密码">🎯
 起点：为了一次能试一百万个密码</h2>
 <p>这篇论文的出发点不是攻击，而是<strong>取证</strong>。作者里有两位来自法国宪兵刑事研究所（IRCGN），他们要打交道的是加密手机。</p>
+<p>手机的存储可以简化成两块芯片。一块是 <strong>SoC</strong>（System on
+Chip，片上系统），也就是那颗主控芯片，处理器、加密引擎、内存控制器都集成在里面；另一块是
+<strong>NAND
+闪存</strong>，用户数据、照片、聊天记录都写在它上面，可以把它理解成手机里的硬盘。两块芯片之间由一条
+PCIe 链路连着——这正是这套方案要找的插入点。</p>
 <p>iPhone 这类设备把两样东西看得很紧。一样是用户数据，由 SoC
-里的加密引擎加密；另一样是<strong>密码尝试计数器</strong>，通常存两份，一份在
-SoC 内部，一份在独立的 EEPROM
-里，两份对不上手机就自动锁死。按下几次错误密码之后，手机会把密钥材料一起抹掉，数据就再也取不出来了。</p>
+里的加密引擎加密之后才落到 NAND
+上；另一样是<strong>密码尝试计数器</strong>，通常存两份，一份在 SoC
+内部，一份在一块独立的小存储芯片（EEPROM，断电也不丢数据的那类）里，两份对不上手机就自动锁死。按下几次错误密码之后，手机会把密钥材料一起抹掉，数据就再也取不出来了。</p>
 <p>论文把正常情况和自己的方案摆在一起做了对比（§2.3）：</p>
 <table>
 <thead>
@@ -455,6 +454,9 @@ PCI
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">原来的连接</span><br><span class="line">   SoC / CPU ──────────────────── NAND / NVMe</span><br><span class="line">                 （一条 PCIe 链路）</span><br><span class="line"></span><br><span class="line">插了中间人之后</span><br><span class="line">   SoC / CPU ───── FPGA 板 ────── NAND / NVMe</span><br><span class="line">                 ↑              ↑</span><br><span class="line">             装作内存        装作主机</span><br></pre></td></tr></table></figure>
 <p>板子要同时装成两个样子：对主机一侧，它就是那块 NAND；对 NAND
 一侧，它就是主机。这样它才既能转发、又能顺手读写。</p>
+<p>图里的 NAND 是手机上的存储芯片；换到 PC 上，这个位置一般是 NVMe
+固态硬盘（NVMe 是跑在 PCIe
+上的硬盘协议）。两端挂的是什么设备不影响做法，因为中间人利用的是链路本身。</p>
 <p>论文给这套架构列了五条硬要求（§3.1）：</p>
 <ul>
 <li><strong>PCIe 3.0</strong>，传输率 8 GT/s，单 lane 0.985 GB/s；</li>
@@ -697,13 +699,13 @@ GT/s、响应不超过 1 ms、每个包只许增加极少量的时钟周期；</
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">520k</span>
+    <span title="Word count total">521k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:46</span>
+    <span title="Reading time total">15:47</span>
   </span>
 </div>
 <div class="busuanzi-count">

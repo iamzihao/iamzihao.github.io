@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存，得先经过 IOMMU 做地址翻译，翻译结果缓存在 IOTLB 里，而这块缓存被同一 IOMMU 下的所有设备共用。于是攻击者不需要跟受害者共享任何内存，只要让自己的 GPU 或网卡反复发起 DMA 请求并给时延计时，就能从 IOTLB 的状态变化里读出隔壁设备在做什么——这套手法同样适用于跨 VM，甚至能隔着 RDMA 网络从远端机器上读出对方在访问哪个键值、在浏览">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-14T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-11T08:29:25.500Z">
+<meta property="article:modified_time" content="2026-10-12T08:21:32.847Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -271,7 +271,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-11 16:29:25" itemprop="dateModified" datetime="2026-10-11T16:29:25+08:00">2026-10-11</time>
+      <time title="Modified: 2026-10-12 16:21:32" itemprop="dateModified" datetime="2026-10-12T16:21:32+08:00">2026-10-12</time>
     </span>
 
   
@@ -288,7 +288,7 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>5.5k</span>
+      <span>5.6k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -393,8 +393,8 @@ CPU 缓存与 TLB。后面那一点，恰好是它能绕开一大堆现成防御
 <p>先交代这篇和 CPU 侧侧信道的根本差别。</p>
 <p>CPU 缓存与 TLB 攻击里，挑起事端的是
 CPU：攻击者的进程去访问内存，制造缓存冲突。这类攻击有一个共同的前提——攻击者与受害者至少共享某一级存储。而现代云里这个前提常常不成立：每个租户分到独立的
-GPU、独立的网卡，走 PCI-passthrough
-直通，内存空间彼此隔离，操作系统层面看不到任何共享。</p>
+GPU、独立的网卡，通过
+PCI-passthrough（把整块物理设备直接划给一台虚拟机）直通进来，内存空间彼此隔离，操作系统层面看不到任何共享。</p>
 <p>这篇论文的观察是：<strong>即使内存完全隔离，设备之间的地址翻译仍然是共享的</strong>。一个
 IOMMU 管着一组设备，所有设备的翻译请求都落进同一个
 IOTLB。而翻译命中与不命中之间存在 1000 个 CPU
@@ -486,7 +486,8 @@ eviction
 set，一个用来填满目标组，另一个用来逐条挤；数一数目标条目是在第几次才被挤掉，就能推出它在
 LRU
 序列里的位置。实验给出的置换向量显示，每个条目的相对位置都被严格维持，<strong>IOTLB
-用的是完整的 LRU</strong>。</p>
+用的是完整的 LRU</strong>（Least Recently
+Used，最久没被访问的条目最先被挤出去）。</p>
 <h2 id="两个原语gpu-版与网卡版">🛠️ 两个原语：GPU 版与网卡版</h2>
 <p>有了 IOTLB 的结构参数，攻击就需要一个能持续发起 DMA
 请求并计时的抓手。论文做了两套，分别用 GPU 和 RNIC。</p>
@@ -619,7 +620,8 @@ offload，<strong>这个过程产生的 DMA
 访问模式与网页的内容和形状相关</strong>。</p>
 <p>时间上也来得及：加载一个网页平均要 600 ms，而用 PPA 扫一遍整个 IOTLB
 只要不到 2 ms，所以一次页面加载能采到 300 多条
-trace。分类用的是带注意力机制的 Bi-LSTM（论文叫
+trace。分类用的是带注意力机制的
+Bi-LSTM（双向长短期记忆网络，一种专治时序数据的模型，论文把它叫作
 Att-BLSTM），训练数据取自 Alexa 排名的前 300 个网站。</p>
 <p>结果是对 Chrome 和 Firefox、在 Windows 与 Linux
 上都做了测试，准确率最高 <strong>95.2%</strong>；即便换成 Tor
@@ -663,7 +665,8 @@ root port，比同期一些工作要求共享 PCIe switch 的假设更宽松</td
 <tr>
 <td><strong>攻击者要有什么</strong></td>
 <td>一台能持续发起 DMA 并计时的设备——GPU、RNIC 都可以，或者一块可编程
-FPGA。反过来，如果目标应用改用 MMIO 而不是 DMA
+FPGA。反过来，如果目标应用改用 MMIO（让 CPU
+逐次去读写设备寄存器，而不是让设备自己搬数据）而不是 DMA
 来驱动设备，这条信道就看不见它</td>
 </tr>
 <tr>
@@ -762,13 +765,13 @@ TLB，设备侧的地址翻译缓存同样跨租户共享，而且它挡在每�
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">520k</span>
+    <span title="Word count total">521k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:46</span>
+    <span title="Reading time total">15:47</span>
   </span>
 </div>
 <div class="busuanzi-count">
