@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-13T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:50:42.903Z">
+<meta property="article:modified_time" content="2026-10-12T09:09:40.196Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -271,7 +271,7 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 16:50:42" itemprop="dateModified" datetime="2026-10-12T16:50:42+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-12 17:09:40" itemprop="dateModified" datetime="2026-10-12T17:09:40+08:00">2026-10-12</time>
     </span>
 
   
@@ -288,7 +288,7 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.9k</span>
+      <span>7.3k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -584,6 +584,14 @@ DMA</strong>。</li>
 </tbody>
 </table>
 <p>隐蔽通道是一条<strong>合作</strong>的通道，它的价值不在偷数据，而在于证明这一位确实可控、可读、能稳定复现——这正是上一节停在<strong>只看到一位</strong>之后，需要补上的那一环。</p>
+<p>这里值得停下来问一句：既然这条通道慢得几乎没法用来搬数据，搭它到底图什么？</p>
+<p>因为侧信道的观测结果很容易被解释成巧合。攻击者探测到一次变慢，可能是隔壁设备干的，也可能是噪声、是别的设备、是测量抖动。要排除这些解释，最硬的证据就是<strong>反过来验证一遍</strong>：发送方按事先约定好的模式主动发信号，接收方解出来，看和发的是否一致。一致，就说明这条路径真实存在，而且闭环可控。</p>
+<p>所以隐蔽通道在侧信道论文里的角色不是攻击手段，而是<strong>证明手段</strong>：</p>
+<ul>
+<li><strong>侧信道</strong>：别人在发信号，我在读——读到的东西可能是巧合；</li>
+<li><strong>隐蔽通道</strong>：我自己发信号、自己读回来——用来确认这条路真的通。</li>
+</ul>
+<p>两者用的是同一套观测机制，只差谁在按键。能把自己选的一位传出去，就说明这一位是可控且可读的；那么反过来，受害者无意中产生的那一位，同样读得出来。</p>
 <p>论文搭了两条，区别在<strong>发送方是谁</strong>：一条由外设发，一条由
 CPU 发；接收方都是那块 FPGA。</p>
 <p><strong>第一条：外设当发送方，跑一次查询编一个 1</strong></p>
@@ -836,7 +844,7 @@ DMA——而那正是这类侧信道真正需要的东西。<strong>先把话讲
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:52</span>
+    <span title="Reading time total">15:53</span>
   </span>
 </div>
 <div class="busuanzi-count">
