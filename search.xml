@@ -307,44 +307,6 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p><img src="/assets/influxdb-01.png" /></p>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<p><img src="/assets/influxdb-02.png" /></p>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>TDX Note</title>
     <url>/posts/cbeff3a9/</url>
     <content><![CDATA[<h2 id="intel-tdx-demystified-a-top-down-approach">Intel TDX
@@ -1221,6 +1183,44 @@ TDX 的体系结构、内存保护机制、I/O
         <tag>TEE</tag>
         <tag>Intel</tag>
         <tag>安全</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p><img src="/assets/influxdb-01.png" /></p>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<p><img src="/assets/influxdb-02.png" /></p>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
       </tags>
   </entry>
   <entry>
@@ -14764,6 +14764,715 @@ Sanitizer。</p>
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：从编译环境到 HelloWorld</title>
+    <url>/posts/c4f8a2d1/</url>
+    <content><![CDATA[<p>最近想系统补一下计算机基础，从 c/c++ 开始吧。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>源码</td>
+<td>程序员写的文本代码，比如 <code>.c</code>、<code>.cpp</code>
+文件</td>
+<td>人能读</td>
+</tr>
+<tr>
+<td>机器码</td>
+<td>CPU 能直接执行的二进制指令</td>
+<td>机器能跑</td>
+</tr>
+<tr>
+<td>目标文件</td>
+<td>源码经过编译和汇编后得到的中间文件，比如
+<code>.o</code>、<code>.obj</code></td>
+<td>还不能独立运行</td>
+</tr>
+<tr>
+<td>可执行程序</td>
+<td>链接完成后的最终程序，比如 Linux 下的 <code>a.out</code>、Windows
+下的 <code>.exe</code></td>
+<td>可以运行</td>
+</tr>
+<tr>
+<td>编译器</td>
+<td>把高级语言翻译成更低层表示的工具</td>
+<td>负责翻译</td>
+</tr>
+<tr>
+<td>链接器</td>
+<td>把多个目标文件和库组合成可执行程序的工具</td>
+<td>负责拼装</td>
+</tr>
+<tr>
+<td>标准库</td>
+<td>语言自带的一组常用功能，比如输入输出、字符串、容器</td>
+<td>省掉重复造轮子</td>
+</tr>
+<tr>
+<td>头文件</td>
+<td>通常保存声明的文件，比如
+<code>iostream</code>、<code>.h</code>、<code>.hpp</code></td>
+<td>告诉编译器有什么</td>
+</tr>
+</tbody>
+</table>
+<h2 id="核心概念">🧩 核心概念</h2>
+<h3 id="源码机器码可执行程序">源码、机器码、可执行程序</h3>
+<p>源码是给人看的，机器码是给 CPU 执行的。C/C++ 程序不能直接把
+<code>.cpp</code> 文件丢给操作系统运行，中间必须经过编译工具链处理。</p>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[源码 hello.cpp] --&gt; B[目标文件 hello.o]
+    B --&gt; C[可执行程序 hello]
+</code>
+</pre>
+<p>操作系统真正启动的是可执行程序，不是源码文件。</p>
+<h3 id="编程语言分类">编程语言分类</h3>
+<p>常见分类不是绝对边界，但有助于理解 C/C++ 的位置。</p>
+<table>
+<thead>
+<tr>
+<th>分类</th>
+<th>代表语言</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>编译型语言</td>
+<td>C、C++、Rust、Go</td>
+<td>通常先生成可执行文件，再运行</td>
+</tr>
+<tr>
+<td>解释型语言</td>
+<td>Python、JavaScript</td>
+<td>通常由解释器边解释边执行</td>
+</tr>
+<tr>
+<td>字节码语言</td>
+<td>Java、C#</td>
+<td>先编译成字节码，再由虚拟机运行</td>
+</tr>
+<tr>
+<td>低级语言</td>
+<td>汇编语言</td>
+<td>接近 CPU 指令，可移植性较弱</td>
+</tr>
+<tr>
+<td>高级语言</td>
+<td>C++、Python、Java</td>
+<td>更接近人的思考方式</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>C 和 C++
+通常被归到编译型语言。它们离硬件更近，性能和控制力强，但也要求程序员理解更多底层细节。</p>
+</blockquote>
+<h2 id="编译环境">🛠️ 编译环境</h2>
+<h3 id="常见编译器">常见编译器</h3>
+<table>
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 29%" />
+<col style="width: 29%" />
+<col style="width: 17%" />
+</colgroup>
+<thead>
+<tr>
+<th>编译器</th>
+<th>常用命令</th>
+<th>常见平台</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GCC</td>
+<td><code>gcc</code>、<code>g++</code></td>
+<td>Linux、macOS、Windows MinGW</td>
+<td>GNU 编译器集合</td>
+</tr>
+<tr>
+<td>Clang</td>
+<td><code>clang</code>、<code>clang++</code></td>
+<td>Linux、macOS、Windows</td>
+<td>LLVM 项目的前端编译器</td>
+</tr>
+<tr>
+<td>MSVC</td>
+<td><code>cl</code></td>
+<td>Windows</td>
+<td>Visual Studio 自带编译器</td>
+</tr>
+</tbody>
+</table>
+<p>C++ 代码建议使用 <code>g++</code>、<code>clang++</code> 或
+<code>cl</code> 编译。虽然 <code>gcc</code> 也能参与 C++
+编译，但它默认更偏 C 语言入口，链接 C++ 标准库时容易让初学者困惑。</p>
+<p>简单理解三者：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 25%" />
+<col style="width: 41%" />
+</colgroup>
+<thead>
+<tr>
+<th>工具链</th>
+<th>特点</th>
+<th>适合场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GCC</td>
+<td>历史久、生态成熟、Linux 上非常常见</td>
+<td>Linux 开发、开源项目、竞赛和课程环境</td>
+</tr>
+<tr>
+<td>Clang</td>
+<td>错误提示清晰、模块化设计好、和 LLVM 生态绑定紧密</td>
+<td>macOS、现代 C++ 项目、静态分析和编译器相关工具</td>
+</tr>
+<tr>
+<td>MSVC</td>
+<td>和 Visual Studio、Windows SDK 集成紧密</td>
+<td>Windows 原生开发、Visual Studio 工程</td>
+</tr>
+</tbody>
+</table>
+<p>GNU 是一个自由软件项目，GCC 是 GNU
+生态里最重要的编译器工具链之一。Linux 发行版里常见的
+<code>gcc</code>、<code>g++</code>、<code>ld</code>、<code>make</code>
+等工具，很多都来自 GNU 生态。</p>
+<p>和 GCC 这种一个完整编译器不同，LLVM
+更像一套可复用的编译器基础设施：Clang 是它的前端，负责解析
+C/C++/Objective-C 源码；LLVM
+本体负责中间表示、优化和后端代码生成，前后端通过
+IR（中间表示）衔接。后文”编译器内部流程”图里的三段式结构，正是 LLVM
+的架构理念。很多现代工具都会复用
+LLVM，例如静态分析器、格式化工具、语言服务器和新的语言编译器。</p>
+<h3 id="最小编译命令">最小编译命令</h3>
+<p>假设文件名是 <code>hello.cpp</code>：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 使用 g++ 编译 C++ 源码，并生成名为 hello 的可执行程序</span></span><br><span class="line">g++ hello.cpp -o hello</span><br><span class="line"></span><br><span class="line"><span class="comment"># 运行程序</span></span><br><span class="line">./hello</span><br></pre></td></tr></table></figure>
+<h3 id="常见编译参数">常见编译参数</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>参数</th>
+<th>示例</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-o</code></td>
+<td><code>g++ hello.cpp -o hello</code></td>
+<td>指定输出文件名</td>
+</tr>
+<tr>
+<td><code>-Wall</code></td>
+<td><code>g++ hello.cpp -Wall -o hello</code></td>
+<td>打开常见警告</td>
+</tr>
+<tr>
+<td><code>-Wextra</code></td>
+<td><code>g++ hello.cpp -Wall -Wextra -o hello</code></td>
+<td>打开更多警告</td>
+</tr>
+<tr>
+<td><code>-std=c++17</code></td>
+<td><code>g++ hello.cpp -std=c++17 -o hello</code></td>
+<td>指定 C++ 标准版本</td>
+</tr>
+<tr>
+<td><code>-g</code></td>
+<td><code>g++ hello.cpp -g -o hello</code></td>
+<td>生成调试信息</td>
+</tr>
+<tr>
+<td><code>-O2</code></td>
+<td><code>g++ hello.cpp -O2 -o hello</code></td>
+<td>开启较常用的优化级别</td>
+</tr>
+<tr>
+<td><code>-E</code></td>
+<td><code>g++ -E hello.cpp -o hello.i</code></td>
+<td>只做预处理</td>
+</tr>
+<tr>
+<td><code>-S</code></td>
+<td><code>g++ -S hello.cpp -o hello.s</code></td>
+<td>生成汇编代码</td>
+</tr>
+<tr>
+<td><code>-c</code></td>
+<td><code>g++ -c hello.cpp -o hello.o</code></td>
+<td>只生成目标文件，不链接</td>
+</tr>
+</tbody>
+</table>
+<p><code>-std=c++17</code> 的意思是：让编译器按照 C++17
+标准理解这份代码。C++ 语言会不断演进，常见标准包括
+C++98、C++11、C++14、C++17、C++20、C++23。</p>
+<table>
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 38%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>标准</th>
+<th>简单印象</th>
+<th>选择建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C++11</td>
+<td>现代 C++ 的起点，引入 <code>auto</code>、lambda、智能指针等</td>
+<td>维护旧项目时常见</td>
+</tr>
+<tr>
+<td>C++14</td>
+<td>对 C++11 做了小幅增强</td>
+<td>老项目可能使用</td>
+</tr>
+<tr>
+<td>C++17</td>
+<td>稳定、普及度高，很多课程和工程仍在使用</td>
+<td>初学和普通项目的稳妥选择</td>
+</tr>
+<tr>
+<td>C++20</td>
+<td>引入 concepts、ranges、coroutines 等较大特性</td>
+<td>新项目可考虑，但要看编译器支持</td>
+</tr>
+<tr>
+<td>C++23</td>
+<td>更新，生态仍在跟进</td>
+<td>学习新特性或特定项目需要时使用</td>
+</tr>
+</tbody>
+</table>
+<p>初学阶段建议从 <code>-std=c++17</code>
+开始：资料多、编译器支持成熟，也不会一开始就被 C++20/23
+的新特性分散注意力。</p>
+<p><code>-O2</code>
+是优化选项，告诉编译器在不明显拉长编译时间的前提下，尽量生成运行更快的机器码。常见优化级别有：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>含义</th>
+<th>常见用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-O0</code></td>
+<td>不优化，默认通常接近这个级别</td>
+<td>调试最友好</td>
+</tr>
+<tr>
+<td><code>-O1</code></td>
+<td>开启基础优化</td>
+<td>较少手动使用</td>
+</tr>
+<tr>
+<td><code>-O2</code></td>
+<td>开启多数稳妥优化</td>
+<td>发布版本常用</td>
+</tr>
+<tr>
+<td><code>-O3</code></td>
+<td>更激进优化，可能增大代码体积</td>
+<td>计算密集型程序可测试</td>
+</tr>
+<tr>
+<td><code>-Os</code></td>
+<td>优化体积</td>
+<td>嵌入式或体积敏感场景</td>
+</tr>
+<tr>
+<td><code>-Og</code></td>
+<td>兼顾调试体验和部分优化</td>
+<td>调试优化相关问题</td>
+</tr>
+</tbody>
+</table>
+<p>优化可能做的事情包括：删除无用代码、减少重复计算、内联小函数、调整循环、改善寄存器使用。它不改变语言语义，但如果程序本身有未定义行为，比如数组越界、使用未初始化变量，优化后问题可能更明显。</p>
+<h2 id="程序完整运行流程">⚙️ 程序完整运行流程</h2>
+<p>从源码到运行，C/C++ 一般经历四个构建阶段：</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[源码 .cpp] --&gt; B[预处理 .i]
+    B --&gt; C[编译 .s]
+    C --&gt; D[汇编 .o]
+    D --&gt; E[链接 可执行程序]
+</code>
+</pre>
+<p>如果把“编译”这一步继续拆开，编译器内部大致会经历下面的流程：</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[源码 .cpp] --&gt; B[预处理]
+    B --&gt; C[词法&#x2F;语法分析]
+    C --&gt; D[语义分析]
+    D --&gt; E[生成 IR]
+    E --&gt; F[IR 优化]
+    F --&gt; G[指令选择]
+    G --&gt; H[寄存器分配]
+    H --&gt; I[生成汇编&#x2F;目标文件 .s&#x2F;.o]
+</code>
+</pre>
+<h3 id="预处理">预处理</h3>
+<p>预处理器处理
+<code>#include</code>、<code>#define</code>、条件编译等内容。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -E hello.cpp -o hello.i</span><br></pre></td></tr></table></figure>
+<p><code>#include &lt;iostream&gt;</code>
+会在这个阶段展开相关声明。可以粗略理解为：把编译所需的接口信息带进来，让后续阶段知道
+<code>cout</code>、<code>endl</code> 等名字是什么。</p>
+<p>常见头文件：</p>
+<table>
+<thead>
+<tr>
+<th>头文件</th>
+<th>作用</th>
+<th>常见内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;iostream&gt;</code></td>
+<td>标准输入输出</td>
+<td><code>cin</code>、<code>cout</code>、<code>cerr</code>、<code>endl</code></td>
+</tr>
+<tr>
+<td><code>&lt;string&gt;</code></td>
+<td>字符串</td>
+<td><code>std::string</code></td>
+</tr>
+<tr>
+<td><code>&lt;vector&gt;</code></td>
+<td>动态数组</td>
+<td><code>std::vector</code></td>
+</tr>
+<tr>
+<td><code>&lt;array&gt;</code></td>
+<td>固定长度数组封装</td>
+<td><code>std::array</code></td>
+</tr>
+<tr>
+<td><code>&lt;algorithm&gt;</code></td>
+<td>常用算法</td>
+<td><code>sort</code>、<code>find</code>、<code>max</code>、<code>min</code></td>
+</tr>
+<tr>
+<td><code>&lt;cmath&gt;</code></td>
+<td>数学函数</td>
+<td><code>sqrt</code>、<code>pow</code>、<code>sin</code>、<code>cos</code></td>
+</tr>
+<tr>
+<td><code>&lt;cstdlib&gt;</code></td>
+<td>通用工具</td>
+<td><code>exit</code>、<code>abs</code>、随机数相关旧接口</td>
+</tr>
+<tr>
+<td><code>&lt;cstdio&gt;</code></td>
+<td>C 风格输入输出</td>
+<td><code>printf</code>、<code>scanf</code></td>
+</tr>
+<tr>
+<td><code>&lt;fstream&gt;</code></td>
+<td>文件输入输出</td>
+<td><code>ifstream</code>、<code>ofstream</code></td>
+</tr>
+<tr>
+<td><code>&lt;unordered_map&gt;</code></td>
+<td>哈希表</td>
+<td><code>std::unordered_map</code></td>
+</tr>
+</tbody>
+</table>
+<p>C++ 标准库头文件通常写成
+<code>&lt;iostream&gt;</code>、<code>&lt;vector&gt;</code>
+这种形式；自己写的头文件通常写成 <code>"my_header.h"</code>。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span>      <span class="comment">// 标准库头文件</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;my_header.h&quot;</span>   <span class="comment">// 当前项目里的头文件</span></span></span><br></pre></td></tr></table></figure>
+<p>两种写法的主要区别是搜索路径不同：</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>常见用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#include &lt;...&gt;</code></td>
+<td>标准库或系统/第三方库头文件</td>
+</tr>
+<tr>
+<td><code>#include "..."</code></td>
+<td>当前项目自己的头文件</td>
+</tr>
+</tbody>
+</table>
+<p>头文件不等于库本体。头文件通常提供声明，让编译器知道“有什么函数、类、变量”；真正的实现可能在源码文件里，也可能在已经编译好的库文件里，最后由链接阶段接上。</p>
+<p>预处理阶段还会处理宏：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> PI 3.1415926</span></span><br></pre></td></tr></table></figure>
+<p>以及条件编译：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">ifdef</span> DEBUG</span></span><br><span class="line">cout &lt;&lt; <span class="string">&quot;debug mode&quot;</span> &lt;&lt; endl;</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>这些内容会在正式编译前先被展开、替换或裁剪。</p>
+<h4 id="define-的常见用法">#define 的常见用法</h4>
+<p>预处理阶段最常见的操作是展开宏。<code>#define</code>
+可以定义三种东西：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>写法</th>
+<th>作用</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>开关宏</td>
+<td>只定义名字不写值，配合 <code>#ifdef</code> 判断</td>
+<td><code>#define DEBUG</code></td>
+</tr>
+<tr>
+<td>常量宏</td>
+<td>出现处被替换成后面的文本</td>
+<td><code>#define PI 3.1415926</code></td>
+</tr>
+<tr>
+<td>宏函数</td>
+<td>带参数的宏，调用处做文本替换</td>
+<td><code>#define SQUARE(x) ((x) * (x))</code></td>
+</tr>
+</tbody>
+</table>
+<p>开关宏通常不带值，因为 <code>#ifdef</code> 只关心有没有定义过：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> DEBUG</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> DEBUG</span></span><br><span class="line">cout &lt;&lt; <span class="string">&quot;debug mode&quot;</span> &lt;&lt; endl;   <span class="comment">// 只有定义了 DEBUG 才保留</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>常量宏：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> PI 3.1415926</span></span><br><span class="line"><span class="type">double</span> area = PI * r * r;   <span class="comment">// 预处理后被替换成 3.1415926 * r * r</span></span><br></pre></td></tr></table></figure>
+<p>宏函数要特别注意括号。宏是纯文本替换，不是真正的函数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> SQUARE(x) x * x</span></span><br><span class="line"><span class="built_in">SQUARE</span>(<span class="number">1</span> + <span class="number">2</span>)   <span class="comment">// 替换成 1 + 2 * 1 + 2，结果是 5 而不是 9</span></span><br></pre></td></tr></table></figure>
+<p>参数加括号后才符合预期：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> SQUARE(x) ((x) * (x))</span></span><br><span class="line"><span class="built_in">SQUARE</span>(<span class="number">1</span> + <span class="number">2</span>)   <span class="comment">// 替换成 ((1 + 2) * (1 + 2))，结果是 9</span></span><br></pre></td></tr></table></figure>
+<p>宏也可以在命令行定义，效果和代码里 <code>#define</code> 一样：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ hello.cpp -DDEBUG -o hello</span><br></pre></td></tr></table></figure>
+<h3 id="编译">编译</h3>
+<p>编译器把预处理后的代码翻译成汇编代码，并做语法检查、类型检查和优化。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -S hello.cpp -o hello.s</span><br></pre></td></tr></table></figure>
+<p>如果少写分号、类型不匹配、函数调用不合法，通常会在这个阶段报错。</p>
+<h3 id="汇编">汇编</h3>
+<p>汇编器把汇编代码转换为目标文件。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -c hello.cpp -o hello.o</span><br></pre></td></tr></table></figure>
+<p>目标文件里已经有机器指令，但它通常还缺少一些外部符号，比如标准库函数的最终地址。</p>
+<h3 id="链接">链接</h3>
+<p>链接器把目标文件、启动代码、标准库和其他库拼起来，生成可执行程序。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ hello.o -o hello</span><br></pre></td></tr></table></figure>
+<p>常见的链接错误包括：</p>
+<table>
+<thead>
+<tr>
+<th>错误类型</th>
+<th>常见原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>undefined reference</code></td>
+<td>声明了函数，但没有提供实现，或链接时漏了库</td>
+</tr>
+<tr>
+<td><code>multiple definition</code></td>
+<td>同一个函数或全局变量被重复定义</td>
+</tr>
+<tr>
+<td>找不到库</td>
+<td><code>-l</code> 或 <code>-L</code> 参数不正确，或库没有安装</td>
+</tr>
+</tbody>
+</table>
+<h2 id="helloworldc-版本">🚀 HelloWorld：C++ 版本</h2>
+<p>完整示例代码：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 引入标准输入输出头文件</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 标准命名空间，简化 std::cin/std::cout 书写</span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 程序入口函数：所有 C/C++ 程序从 main 开始执行，唯一入口</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 控制台输出文字</span></span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;Hello World!&quot;</span> &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 返回 0，表示程序正常结束</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译运行：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ hello.cpp -std=c++17 -Wall -Wextra -o hello</span><br><span class="line">./hello</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Hello World!</span><br></pre></td></tr></table></figure>
+<h2 id="helloworld-逐行拆解">🔍 HelloWorld 逐行拆解</h2>
+<h3 id="include-iostream"><code>#include &lt;iostream&gt;</code></h3>
+<p><code>include</code> 是预处理指令，用来引入头文件。</p>
+<p><code>iostream</code> 是 C++ 标准库里的输入输出头文件，里面提供了
+<code>cin</code>、<code>cout</code>、<code>cerr</code>、<code>endl</code>
+等常用对象和工具。</p>
+<p>注意：<code>#include</code>
+不是在运行时加载模块，而是在编译前的预处理阶段让编译器看到相关声明。</p>
+<h3 id="using-namespace-std"><code>using namespace std;</code></h3>
+<p>命名空间（namespace）是给名字加的一层归属，用来避免不同库或代码里的同名函数、类互相冲突——就像不同班级都有叫”小明”的同学，需要带上班级才能分清。</p>
+<p>例如两个库都提供了同名函数
+<code>print</code>，放进不同命名空间后互不干扰：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">namespace</span> lib1 &#123;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">()</span> </span>&#123;&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">namespace</span> lib2 &#123;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">()</span> </span>&#123;&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">lib1::<span class="built_in">print</span>();    <span class="comment">// 调用 lib1 里的 print</span></span><br><span class="line">lib2::<span class="built_in">print</span>();    <span class="comment">// 调用 lib2 里的 print</span></span><br></pre></td></tr></table></figure>
+<p><code>std</code> 就是 C++ 标准库使用的命名空间。<code>cout</code>
+的完整名字其实是 <code>std::cout</code>，<code>endl</code> 的完整名字是
+<code>std::endl</code>。</p>
+<p>写了：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br></pre></td></tr></table></figure>
+<p>就可以简写：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="string">&quot;Hello World!&quot;</span> &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<p>如果不写 <code>using namespace std;</code>，推荐写成：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">std::cout &lt;&lt; <span class="string">&quot;Hello World!&quot;</span> &lt;&lt; std::endl;</span><br></pre></td></tr></table></figure>
+<p>初学时使用 <code>using namespace std;</code>
+可以减少干扰；项目代码里更推荐显式写
+<code>std::</code>，避免名字冲突。</p>
+<h3 id="int-main"><code>int main()</code></h3>
+<p><code>main</code> 是程序入口函数。操作系统启动程序后，C/C++
+运行时会调用 <code>main</code>，程序从这里开始执行。</p>
+<p><code>int</code>
+表示这个函数会返回一个整数。这个整数会作为进程退出码交给操作系统。</p>
+<h3 id="section"><code>&#123; &#125;</code></h3>
+<p>花括号表示函数体。<code>main</code> 里面的语句会按顺序执行。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 这里是函数体</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3
+id="cout-hello-world-endl"><code>cout &lt;&lt; "Hello World!" &lt;&lt; endl;</code></h3>
+<p><code>cout</code> 是标准输出对象，通常对应控制台。</p>
+<p><code>&lt;&lt;</code>
+是输出运算符，可以把右侧内容送到左侧输出流。</p>
+<p><code>"Hello World!"</code> 是字符串字面量。</p>
+<p><code>endl</code> 表示换行，并刷新输出缓冲区。日常输出换行也可以使用
+<code>'\n'</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="string">&quot;Hello World!\n&quot;</span>;</span><br></pre></td></tr></table></figure>
+<h3 id="return-0"><code>return 0;</code></h3>
+<p><code>return 0;</code> 表示 <code>main</code> 正常结束，并把退出码
+<code>0</code> 返回给操作系统。</p>
+<p>常见约定：</p>
+<table>
+<thead>
+<tr>
+<th>返回码</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>程序正常结束</td>
+</tr>
+<tr>
+<td>非 <code>0</code></td>
+<td>程序异常结束或表示某种错误状态</td>
+</tr>
+</tbody>
+</table>
+<p>在 Linux/macOS Shell 中，可以用下面的命令查看上一个程序的返回码：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">echo</span> $?</span><br></pre></td></tr></table></figure>
+<p>在 Windows PowerShell 中，可以查看：</p>
+<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line"><span class="variable">$LASTEXITCODE</span></span><br></pre></td></tr></table></figure>
+<h2 id="把四个阶段跑一遍">🧪 把四个阶段跑一遍</h2>
+<p>用同一个 <code>hello.cpp</code>，可以手动观察中间产物：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 预处理：生成 hello.i</span></span><br><span class="line">g++ -E hello.cpp -o hello.i</span><br><span class="line"></span><br><span class="line"><span class="comment"># 编译：生成 hello.s</span></span><br><span class="line">g++ -S hello.cpp -o hello.s</span><br><span class="line"></span><br><span class="line"><span class="comment"># 汇编：生成 hello.o</span></span><br><span class="line">g++ -c hello.cpp -o hello.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接：生成 hello</span></span><br><span class="line">g++ hello.o -o hello</span><br><span class="line"></span><br><span class="line"><span class="comment"># 运行</span></span><br><span class="line">./hello</span><br></pre></td></tr></table></figure>
+<p>这些文件的关系是：</p>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    A[hello.cpp 源码] --&gt; B[hello.i 预处理结果]
+    B --&gt; C[hello.s 汇编代码]
+    C --&gt; D[hello.o 目标文件]
+    D --&gt; E[hello 可执行程序]
+</code>
+</pre>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C 和 C++ 是同一种语言</td>
+<td>C++ 兼容大量 C 语法，但它们是两门语言</td>
+</tr>
+<tr>
+<td><code>.cpp</code> 文件可以直接运行</td>
+<td>源码必须先编译链接成可执行程序</td>
+</tr>
+<tr>
+<td><code>#include</code> 会把库代码全部复制进来</td>
+<td>更准确地说，它让编译器看到声明；真正库代码通常在链接阶段接入</td>
+</tr>
+<tr>
+<td><code>using namespace std;</code> 必须写</td>
+<td>不是必须，也可以写 <code>std::cout</code></td>
+</tr>
+<tr>
+<td><code>return 0;</code> 是给用户看的</td>
+<td>它主要是返回给操作系统或调用者看的退出码</td>
+</tr>
+<tr>
+<td>编译成功就一定没有问题</td>
+<td>编译通过只代表语法和链接基本通过，不代表逻辑正确</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>C/C++
+入门的主线是：人写源码，编译器生成目标文件，链接器生成可执行程序，操作系统加载后从
+<code>main</code> 开始运行。</p>
+</blockquote>
+<p>后续学习可以沿着三条线继续：语法基础、内存模型、工程构建工具。先把
+<code>g++ hello.cpp -o hello</code>
+背后的流程弄清楚，后面学指针、类、CMake 和调试器都会轻松很多。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编译器</tag>
+        <tag>HelloWorld</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：函数</title>
     <url>/posts/f3c9a8d6/</url>
     <content><![CDATA[<p>学完变量、运算符和控制流之后，函数就是把一段逻辑整理成“可重复使用的小模块”。</p>
@@ -15837,715 +16546,6 @@ int”这么简单，它不表示负数，混用有时会产生反直觉结果�
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：从编译环境到 HelloWorld</title>
-    <url>/posts/c4f8a2d1/</url>
-    <content><![CDATA[<p>最近想系统补一下计算机基础，从 c/c++ 开始吧。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>源码</td>
-<td>程序员写的文本代码，比如 <code>.c</code>、<code>.cpp</code>
-文件</td>
-<td>人能读</td>
-</tr>
-<tr>
-<td>机器码</td>
-<td>CPU 能直接执行的二进制指令</td>
-<td>机器能跑</td>
-</tr>
-<tr>
-<td>目标文件</td>
-<td>源码经过编译和汇编后得到的中间文件，比如
-<code>.o</code>、<code>.obj</code></td>
-<td>还不能独立运行</td>
-</tr>
-<tr>
-<td>可执行程序</td>
-<td>链接完成后的最终程序，比如 Linux 下的 <code>a.out</code>、Windows
-下的 <code>.exe</code></td>
-<td>可以运行</td>
-</tr>
-<tr>
-<td>编译器</td>
-<td>把高级语言翻译成更低层表示的工具</td>
-<td>负责翻译</td>
-</tr>
-<tr>
-<td>链接器</td>
-<td>把多个目标文件和库组合成可执行程序的工具</td>
-<td>负责拼装</td>
-</tr>
-<tr>
-<td>标准库</td>
-<td>语言自带的一组常用功能，比如输入输出、字符串、容器</td>
-<td>省掉重复造轮子</td>
-</tr>
-<tr>
-<td>头文件</td>
-<td>通常保存声明的文件，比如
-<code>iostream</code>、<code>.h</code>、<code>.hpp</code></td>
-<td>告诉编译器有什么</td>
-</tr>
-</tbody>
-</table>
-<h2 id="核心概念">🧩 核心概念</h2>
-<h3 id="源码机器码可执行程序">源码、机器码、可执行程序</h3>
-<p>源码是给人看的，机器码是给 CPU 执行的。C/C++ 程序不能直接把
-<code>.cpp</code> 文件丢给操作系统运行，中间必须经过编译工具链处理。</p>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[源码 hello.cpp] --&gt; B[目标文件 hello.o]
-    B --&gt; C[可执行程序 hello]
-</code>
-</pre>
-<p>操作系统真正启动的是可执行程序，不是源码文件。</p>
-<h3 id="编程语言分类">编程语言分类</h3>
-<p>常见分类不是绝对边界，但有助于理解 C/C++ 的位置。</p>
-<table>
-<thead>
-<tr>
-<th>分类</th>
-<th>代表语言</th>
-<th>特点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>编译型语言</td>
-<td>C、C++、Rust、Go</td>
-<td>通常先生成可执行文件，再运行</td>
-</tr>
-<tr>
-<td>解释型语言</td>
-<td>Python、JavaScript</td>
-<td>通常由解释器边解释边执行</td>
-</tr>
-<tr>
-<td>字节码语言</td>
-<td>Java、C#</td>
-<td>先编译成字节码，再由虚拟机运行</td>
-</tr>
-<tr>
-<td>低级语言</td>
-<td>汇编语言</td>
-<td>接近 CPU 指令，可移植性较弱</td>
-</tr>
-<tr>
-<td>高级语言</td>
-<td>C++、Python、Java</td>
-<td>更接近人的思考方式</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>C 和 C++
-通常被归到编译型语言。它们离硬件更近，性能和控制力强，但也要求程序员理解更多底层细节。</p>
-</blockquote>
-<h2 id="编译环境">🛠️ 编译环境</h2>
-<h3 id="常见编译器">常见编译器</h3>
-<table>
-<colgroup>
-<col style="width: 23%" />
-<col style="width: 29%" />
-<col style="width: 29%" />
-<col style="width: 17%" />
-</colgroup>
-<thead>
-<tr>
-<th>编译器</th>
-<th>常用命令</th>
-<th>常见平台</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>GCC</td>
-<td><code>gcc</code>、<code>g++</code></td>
-<td>Linux、macOS、Windows MinGW</td>
-<td>GNU 编译器集合</td>
-</tr>
-<tr>
-<td>Clang</td>
-<td><code>clang</code>、<code>clang++</code></td>
-<td>Linux、macOS、Windows</td>
-<td>LLVM 项目的前端编译器</td>
-</tr>
-<tr>
-<td>MSVC</td>
-<td><code>cl</code></td>
-<td>Windows</td>
-<td>Visual Studio 自带编译器</td>
-</tr>
-</tbody>
-</table>
-<p>C++ 代码建议使用 <code>g++</code>、<code>clang++</code> 或
-<code>cl</code> 编译。虽然 <code>gcc</code> 也能参与 C++
-编译，但它默认更偏 C 语言入口，链接 C++ 标准库时容易让初学者困惑。</p>
-<p>简单理解三者：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 25%" />
-<col style="width: 41%" />
-</colgroup>
-<thead>
-<tr>
-<th>工具链</th>
-<th>特点</th>
-<th>适合场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>GCC</td>
-<td>历史久、生态成熟、Linux 上非常常见</td>
-<td>Linux 开发、开源项目、竞赛和课程环境</td>
-</tr>
-<tr>
-<td>Clang</td>
-<td>错误提示清晰、模块化设计好、和 LLVM 生态绑定紧密</td>
-<td>macOS、现代 C++ 项目、静态分析和编译器相关工具</td>
-</tr>
-<tr>
-<td>MSVC</td>
-<td>和 Visual Studio、Windows SDK 集成紧密</td>
-<td>Windows 原生开发、Visual Studio 工程</td>
-</tr>
-</tbody>
-</table>
-<p>GNU 是一个自由软件项目，GCC 是 GNU
-生态里最重要的编译器工具链之一。Linux 发行版里常见的
-<code>gcc</code>、<code>g++</code>、<code>ld</code>、<code>make</code>
-等工具，很多都来自 GNU 生态。</p>
-<p>和 GCC 这种一个完整编译器不同，LLVM
-更像一套可复用的编译器基础设施：Clang 是它的前端，负责解析
-C/C++/Objective-C 源码；LLVM
-本体负责中间表示、优化和后端代码生成，前后端通过
-IR（中间表示）衔接。后文”编译器内部流程”图里的三段式结构，正是 LLVM
-的架构理念。很多现代工具都会复用
-LLVM，例如静态分析器、格式化工具、语言服务器和新的语言编译器。</p>
-<h3 id="最小编译命令">最小编译命令</h3>
-<p>假设文件名是 <code>hello.cpp</code>：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 使用 g++ 编译 C++ 源码，并生成名为 hello 的可执行程序</span></span><br><span class="line">g++ hello.cpp -o hello</span><br><span class="line"></span><br><span class="line"><span class="comment"># 运行程序</span></span><br><span class="line">./hello</span><br></pre></td></tr></table></figure>
-<h3 id="常见编译参数">常见编译参数</h3>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>参数</th>
-<th>示例</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>-o</code></td>
-<td><code>g++ hello.cpp -o hello</code></td>
-<td>指定输出文件名</td>
-</tr>
-<tr>
-<td><code>-Wall</code></td>
-<td><code>g++ hello.cpp -Wall -o hello</code></td>
-<td>打开常见警告</td>
-</tr>
-<tr>
-<td><code>-Wextra</code></td>
-<td><code>g++ hello.cpp -Wall -Wextra -o hello</code></td>
-<td>打开更多警告</td>
-</tr>
-<tr>
-<td><code>-std=c++17</code></td>
-<td><code>g++ hello.cpp -std=c++17 -o hello</code></td>
-<td>指定 C++ 标准版本</td>
-</tr>
-<tr>
-<td><code>-g</code></td>
-<td><code>g++ hello.cpp -g -o hello</code></td>
-<td>生成调试信息</td>
-</tr>
-<tr>
-<td><code>-O2</code></td>
-<td><code>g++ hello.cpp -O2 -o hello</code></td>
-<td>开启较常用的优化级别</td>
-</tr>
-<tr>
-<td><code>-E</code></td>
-<td><code>g++ -E hello.cpp -o hello.i</code></td>
-<td>只做预处理</td>
-</tr>
-<tr>
-<td><code>-S</code></td>
-<td><code>g++ -S hello.cpp -o hello.s</code></td>
-<td>生成汇编代码</td>
-</tr>
-<tr>
-<td><code>-c</code></td>
-<td><code>g++ -c hello.cpp -o hello.o</code></td>
-<td>只生成目标文件，不链接</td>
-</tr>
-</tbody>
-</table>
-<p><code>-std=c++17</code> 的意思是：让编译器按照 C++17
-标准理解这份代码。C++ 语言会不断演进，常见标准包括
-C++98、C++11、C++14、C++17、C++20、C++23。</p>
-<table>
-<colgroup>
-<col style="width: 23%" />
-<col style="width: 38%" />
-<col style="width: 38%" />
-</colgroup>
-<thead>
-<tr>
-<th>标准</th>
-<th>简单印象</th>
-<th>选择建议</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>C++11</td>
-<td>现代 C++ 的起点，引入 <code>auto</code>、lambda、智能指针等</td>
-<td>维护旧项目时常见</td>
-</tr>
-<tr>
-<td>C++14</td>
-<td>对 C++11 做了小幅增强</td>
-<td>老项目可能使用</td>
-</tr>
-<tr>
-<td>C++17</td>
-<td>稳定、普及度高，很多课程和工程仍在使用</td>
-<td>初学和普通项目的稳妥选择</td>
-</tr>
-<tr>
-<td>C++20</td>
-<td>引入 concepts、ranges、coroutines 等较大特性</td>
-<td>新项目可考虑，但要看编译器支持</td>
-</tr>
-<tr>
-<td>C++23</td>
-<td>更新，生态仍在跟进</td>
-<td>学习新特性或特定项目需要时使用</td>
-</tr>
-</tbody>
-</table>
-<p>初学阶段建议从 <code>-std=c++17</code>
-开始：资料多、编译器支持成熟，也不会一开始就被 C++20/23
-的新特性分散注意力。</p>
-<p><code>-O2</code>
-是优化选项，告诉编译器在不明显拉长编译时间的前提下，尽量生成运行更快的机器码。常见优化级别有：</p>
-<table>
-<thead>
-<tr>
-<th>参数</th>
-<th>含义</th>
-<th>常见用途</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>-O0</code></td>
-<td>不优化，默认通常接近这个级别</td>
-<td>调试最友好</td>
-</tr>
-<tr>
-<td><code>-O1</code></td>
-<td>开启基础优化</td>
-<td>较少手动使用</td>
-</tr>
-<tr>
-<td><code>-O2</code></td>
-<td>开启多数稳妥优化</td>
-<td>发布版本常用</td>
-</tr>
-<tr>
-<td><code>-O3</code></td>
-<td>更激进优化，可能增大代码体积</td>
-<td>计算密集型程序可测试</td>
-</tr>
-<tr>
-<td><code>-Os</code></td>
-<td>优化体积</td>
-<td>嵌入式或体积敏感场景</td>
-</tr>
-<tr>
-<td><code>-Og</code></td>
-<td>兼顾调试体验和部分优化</td>
-<td>调试优化相关问题</td>
-</tr>
-</tbody>
-</table>
-<p>优化可能做的事情包括：删除无用代码、减少重复计算、内联小函数、调整循环、改善寄存器使用。它不改变语言语义，但如果程序本身有未定义行为，比如数组越界、使用未初始化变量，优化后问题可能更明显。</p>
-<h2 id="程序完整运行流程">⚙️ 程序完整运行流程</h2>
-<p>从源码到运行，C/C++ 一般经历四个构建阶段：</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[源码 .cpp] --&gt; B[预处理 .i]
-    B --&gt; C[编译 .s]
-    C --&gt; D[汇编 .o]
-    D --&gt; E[链接 可执行程序]
-</code>
-</pre>
-<p>如果把“编译”这一步继续拆开，编译器内部大致会经历下面的流程：</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[源码 .cpp] --&gt; B[预处理]
-    B --&gt; C[词法&#x2F;语法分析]
-    C --&gt; D[语义分析]
-    D --&gt; E[生成 IR]
-    E --&gt; F[IR 优化]
-    F --&gt; G[指令选择]
-    G --&gt; H[寄存器分配]
-    H --&gt; I[生成汇编&#x2F;目标文件 .s&#x2F;.o]
-</code>
-</pre>
-<h3 id="预处理">预处理</h3>
-<p>预处理器处理
-<code>#include</code>、<code>#define</code>、条件编译等内容。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -E hello.cpp -o hello.i</span><br></pre></td></tr></table></figure>
-<p><code>#include &lt;iostream&gt;</code>
-会在这个阶段展开相关声明。可以粗略理解为：把编译所需的接口信息带进来，让后续阶段知道
-<code>cout</code>、<code>endl</code> 等名字是什么。</p>
-<p>常见头文件：</p>
-<table>
-<thead>
-<tr>
-<th>头文件</th>
-<th>作用</th>
-<th>常见内容</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&lt;iostream&gt;</code></td>
-<td>标准输入输出</td>
-<td><code>cin</code>、<code>cout</code>、<code>cerr</code>、<code>endl</code></td>
-</tr>
-<tr>
-<td><code>&lt;string&gt;</code></td>
-<td>字符串</td>
-<td><code>std::string</code></td>
-</tr>
-<tr>
-<td><code>&lt;vector&gt;</code></td>
-<td>动态数组</td>
-<td><code>std::vector</code></td>
-</tr>
-<tr>
-<td><code>&lt;array&gt;</code></td>
-<td>固定长度数组封装</td>
-<td><code>std::array</code></td>
-</tr>
-<tr>
-<td><code>&lt;algorithm&gt;</code></td>
-<td>常用算法</td>
-<td><code>sort</code>、<code>find</code>、<code>max</code>、<code>min</code></td>
-</tr>
-<tr>
-<td><code>&lt;cmath&gt;</code></td>
-<td>数学函数</td>
-<td><code>sqrt</code>、<code>pow</code>、<code>sin</code>、<code>cos</code></td>
-</tr>
-<tr>
-<td><code>&lt;cstdlib&gt;</code></td>
-<td>通用工具</td>
-<td><code>exit</code>、<code>abs</code>、随机数相关旧接口</td>
-</tr>
-<tr>
-<td><code>&lt;cstdio&gt;</code></td>
-<td>C 风格输入输出</td>
-<td><code>printf</code>、<code>scanf</code></td>
-</tr>
-<tr>
-<td><code>&lt;fstream&gt;</code></td>
-<td>文件输入输出</td>
-<td><code>ifstream</code>、<code>ofstream</code></td>
-</tr>
-<tr>
-<td><code>&lt;unordered_map&gt;</code></td>
-<td>哈希表</td>
-<td><code>std::unordered_map</code></td>
-</tr>
-</tbody>
-</table>
-<p>C++ 标准库头文件通常写成
-<code>&lt;iostream&gt;</code>、<code>&lt;vector&gt;</code>
-这种形式；自己写的头文件通常写成 <code>"my_header.h"</code>。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span>      <span class="comment">// 标准库头文件</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;my_header.h&quot;</span>   <span class="comment">// 当前项目里的头文件</span></span></span><br></pre></td></tr></table></figure>
-<p>两种写法的主要区别是搜索路径不同：</p>
-<table>
-<thead>
-<tr>
-<th>写法</th>
-<th>常见用途</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>#include &lt;...&gt;</code></td>
-<td>标准库或系统/第三方库头文件</td>
-</tr>
-<tr>
-<td><code>#include "..."</code></td>
-<td>当前项目自己的头文件</td>
-</tr>
-</tbody>
-</table>
-<p>头文件不等于库本体。头文件通常提供声明，让编译器知道“有什么函数、类、变量”；真正的实现可能在源码文件里，也可能在已经编译好的库文件里，最后由链接阶段接上。</p>
-<p>预处理阶段还会处理宏：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> PI 3.1415926</span></span><br></pre></td></tr></table></figure>
-<p>以及条件编译：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">ifdef</span> DEBUG</span></span><br><span class="line">cout &lt;&lt; <span class="string">&quot;debug mode&quot;</span> &lt;&lt; endl;</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<p>这些内容会在正式编译前先被展开、替换或裁剪。</p>
-<h4 id="define-的常见用法">#define 的常见用法</h4>
-<p>预处理阶段最常见的操作是展开宏。<code>#define</code>
-可以定义三种东西：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>写法</th>
-<th>作用</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>开关宏</td>
-<td>只定义名字不写值，配合 <code>#ifdef</code> 判断</td>
-<td><code>#define DEBUG</code></td>
-</tr>
-<tr>
-<td>常量宏</td>
-<td>出现处被替换成后面的文本</td>
-<td><code>#define PI 3.1415926</code></td>
-</tr>
-<tr>
-<td>宏函数</td>
-<td>带参数的宏，调用处做文本替换</td>
-<td><code>#define SQUARE(x) ((x) * (x))</code></td>
-</tr>
-</tbody>
-</table>
-<p>开关宏通常不带值，因为 <code>#ifdef</code> 只关心有没有定义过：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> DEBUG</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> DEBUG</span></span><br><span class="line">cout &lt;&lt; <span class="string">&quot;debug mode&quot;</span> &lt;&lt; endl;   <span class="comment">// 只有定义了 DEBUG 才保留</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
-<p>常量宏：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> PI 3.1415926</span></span><br><span class="line"><span class="type">double</span> area = PI * r * r;   <span class="comment">// 预处理后被替换成 3.1415926 * r * r</span></span><br></pre></td></tr></table></figure>
-<p>宏函数要特别注意括号。宏是纯文本替换，不是真正的函数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> SQUARE(x) x * x</span></span><br><span class="line"><span class="built_in">SQUARE</span>(<span class="number">1</span> + <span class="number">2</span>)   <span class="comment">// 替换成 1 + 2 * 1 + 2，结果是 5 而不是 9</span></span><br></pre></td></tr></table></figure>
-<p>参数加括号后才符合预期：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> SQUARE(x) ((x) * (x))</span></span><br><span class="line"><span class="built_in">SQUARE</span>(<span class="number">1</span> + <span class="number">2</span>)   <span class="comment">// 替换成 ((1 + 2) * (1 + 2))，结果是 9</span></span><br></pre></td></tr></table></figure>
-<p>宏也可以在命令行定义，效果和代码里 <code>#define</code> 一样：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ hello.cpp -DDEBUG -o hello</span><br></pre></td></tr></table></figure>
-<h3 id="编译">编译</h3>
-<p>编译器把预处理后的代码翻译成汇编代码，并做语法检查、类型检查和优化。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -S hello.cpp -o hello.s</span><br></pre></td></tr></table></figure>
-<p>如果少写分号、类型不匹配、函数调用不合法，通常会在这个阶段报错。</p>
-<h3 id="汇编">汇编</h3>
-<p>汇编器把汇编代码转换为目标文件。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ -c hello.cpp -o hello.o</span><br></pre></td></tr></table></figure>
-<p>目标文件里已经有机器指令，但它通常还缺少一些外部符号，比如标准库函数的最终地址。</p>
-<h3 id="链接">链接</h3>
-<p>链接器把目标文件、启动代码、标准库和其他库拼起来，生成可执行程序。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ hello.o -o hello</span><br></pre></td></tr></table></figure>
-<p>常见的链接错误包括：</p>
-<table>
-<thead>
-<tr>
-<th>错误类型</th>
-<th>常见原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>undefined reference</code></td>
-<td>声明了函数，但没有提供实现，或链接时漏了库</td>
-</tr>
-<tr>
-<td><code>multiple definition</code></td>
-<td>同一个函数或全局变量被重复定义</td>
-</tr>
-<tr>
-<td>找不到库</td>
-<td><code>-l</code> 或 <code>-L</code> 参数不正确，或库没有安装</td>
-</tr>
-</tbody>
-</table>
-<h2 id="helloworldc-版本">🚀 HelloWorld：C++ 版本</h2>
-<p>完整示例代码：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 引入标准输入输出头文件</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 标准命名空间，简化 std::cin/std::cout 书写</span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 程序入口函数：所有 C/C++ 程序从 main 开始执行，唯一入口</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 控制台输出文字</span></span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;Hello World!&quot;</span> &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 返回 0，表示程序正常结束</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译运行：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">g++ hello.cpp -std=c++17 -Wall -Wextra -o hello</span><br><span class="line">./hello</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Hello World!</span><br></pre></td></tr></table></figure>
-<h2 id="helloworld-逐行拆解">🔍 HelloWorld 逐行拆解</h2>
-<h3 id="include-iostream"><code>#include &lt;iostream&gt;</code></h3>
-<p><code>include</code> 是预处理指令，用来引入头文件。</p>
-<p><code>iostream</code> 是 C++ 标准库里的输入输出头文件，里面提供了
-<code>cin</code>、<code>cout</code>、<code>cerr</code>、<code>endl</code>
-等常用对象和工具。</p>
-<p>注意：<code>#include</code>
-不是在运行时加载模块，而是在编译前的预处理阶段让编译器看到相关声明。</p>
-<h3 id="using-namespace-std"><code>using namespace std;</code></h3>
-<p>命名空间（namespace）是给名字加的一层归属，用来避免不同库或代码里的同名函数、类互相冲突——就像不同班级都有叫”小明”的同学，需要带上班级才能分清。</p>
-<p>例如两个库都提供了同名函数
-<code>print</code>，放进不同命名空间后互不干扰：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">namespace</span> lib1 &#123;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">()</span> </span>&#123;&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">namespace</span> lib2 &#123;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">()</span> </span>&#123;&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">lib1::<span class="built_in">print</span>();    <span class="comment">// 调用 lib1 里的 print</span></span><br><span class="line">lib2::<span class="built_in">print</span>();    <span class="comment">// 调用 lib2 里的 print</span></span><br></pre></td></tr></table></figure>
-<p><code>std</code> 就是 C++ 标准库使用的命名空间。<code>cout</code>
-的完整名字其实是 <code>std::cout</code>，<code>endl</code> 的完整名字是
-<code>std::endl</code>。</p>
-<p>写了：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br></pre></td></tr></table></figure>
-<p>就可以简写：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="string">&quot;Hello World!&quot;</span> &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<p>如果不写 <code>using namespace std;</code>，推荐写成：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">std::cout &lt;&lt; <span class="string">&quot;Hello World!&quot;</span> &lt;&lt; std::endl;</span><br></pre></td></tr></table></figure>
-<p>初学时使用 <code>using namespace std;</code>
-可以减少干扰；项目代码里更推荐显式写
-<code>std::</code>，避免名字冲突。</p>
-<h3 id="int-main"><code>int main()</code></h3>
-<p><code>main</code> 是程序入口函数。操作系统启动程序后，C/C++
-运行时会调用 <code>main</code>，程序从这里开始执行。</p>
-<p><code>int</code>
-表示这个函数会返回一个整数。这个整数会作为进程退出码交给操作系统。</p>
-<h3 id="section"><code>&#123; &#125;</code></h3>
-<p>花括号表示函数体。<code>main</code> 里面的语句会按顺序执行。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 这里是函数体</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3
-id="cout-hello-world-endl"><code>cout &lt;&lt; "Hello World!" &lt;&lt; endl;</code></h3>
-<p><code>cout</code> 是标准输出对象，通常对应控制台。</p>
-<p><code>&lt;&lt;</code>
-是输出运算符，可以把右侧内容送到左侧输出流。</p>
-<p><code>"Hello World!"</code> 是字符串字面量。</p>
-<p><code>endl</code> 表示换行，并刷新输出缓冲区。日常输出换行也可以使用
-<code>'\n'</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="string">&quot;Hello World!\n&quot;</span>;</span><br></pre></td></tr></table></figure>
-<h3 id="return-0"><code>return 0;</code></h3>
-<p><code>return 0;</code> 表示 <code>main</code> 正常结束，并把退出码
-<code>0</code> 返回给操作系统。</p>
-<p>常见约定：</p>
-<table>
-<thead>
-<tr>
-<th>返回码</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>0</code></td>
-<td>程序正常结束</td>
-</tr>
-<tr>
-<td>非 <code>0</code></td>
-<td>程序异常结束或表示某种错误状态</td>
-</tr>
-</tbody>
-</table>
-<p>在 Linux/macOS Shell 中，可以用下面的命令查看上一个程序的返回码：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">echo</span> $?</span><br></pre></td></tr></table></figure>
-<p>在 Windows PowerShell 中，可以查看：</p>
-<figure class="highlight powershell"><table><tr><td class="code"><pre><span class="line"><span class="variable">$LASTEXITCODE</span></span><br></pre></td></tr></table></figure>
-<h2 id="把四个阶段跑一遍">🧪 把四个阶段跑一遍</h2>
-<p>用同一个 <code>hello.cpp</code>，可以手动观察中间产物：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 预处理：生成 hello.i</span></span><br><span class="line">g++ -E hello.cpp -o hello.i</span><br><span class="line"></span><br><span class="line"><span class="comment"># 编译：生成 hello.s</span></span><br><span class="line">g++ -S hello.cpp -o hello.s</span><br><span class="line"></span><br><span class="line"><span class="comment"># 汇编：生成 hello.o</span></span><br><span class="line">g++ -c hello.cpp -o hello.o</span><br><span class="line"></span><br><span class="line"><span class="comment"># 链接：生成 hello</span></span><br><span class="line">g++ hello.o -o hello</span><br><span class="line"></span><br><span class="line"><span class="comment"># 运行</span></span><br><span class="line">./hello</span><br></pre></td></tr></table></figure>
-<p>这些文件的关系是：</p>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    A[hello.cpp 源码] --&gt; B[hello.i 预处理结果]
-    B --&gt; C[hello.s 汇编代码]
-    C --&gt; D[hello.o 目标文件]
-    D --&gt; E[hello 可执行程序]
-</code>
-</pre>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>C 和 C++ 是同一种语言</td>
-<td>C++ 兼容大量 C 语法，但它们是两门语言</td>
-</tr>
-<tr>
-<td><code>.cpp</code> 文件可以直接运行</td>
-<td>源码必须先编译链接成可执行程序</td>
-</tr>
-<tr>
-<td><code>#include</code> 会把库代码全部复制进来</td>
-<td>更准确地说，它让编译器看到声明；真正库代码通常在链接阶段接入</td>
-</tr>
-<tr>
-<td><code>using namespace std;</code> 必须写</td>
-<td>不是必须，也可以写 <code>std::cout</code></td>
-</tr>
-<tr>
-<td><code>return 0;</code> 是给用户看的</td>
-<td>它主要是返回给操作系统或调用者看的退出码</td>
-</tr>
-<tr>
-<td>编译成功就一定没有问题</td>
-<td>编译通过只代表语法和链接基本通过，不代表逻辑正确</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>C/C++
-入门的主线是：人写源码，编译器生成目标文件，链接器生成可执行程序，操作系统加载后从
-<code>main</code> 开始运行。</p>
-</blockquote>
-<p>后续学习可以沿着三条线继续：语法基础、内存模型、工程构建工具。先把
-<code>g++ hello.cpp -o hello</code>
-背后的流程弄清楚，后面学指针、类、CMake 和调试器都会轻松很多。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编译器</tag>
-        <tag>HelloWorld</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：指针</title>
     <url>/posts/c8d4f2a9/</url>
     <content><![CDATA[<p>指针难，不是因为语法多，而是因为它要求你开始从“变量的值”进一步看到“变量在内存里的位置”。</p>
@@ -17180,438 +17180,6 @@ flowchart TD
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：STL 容器</title>
-    <url>/posts/e9f3b7c2/</url>
-    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
-提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>STL</td>
-<td>Standard Template Library，标准模板库</td>
-<td>C++ 标准库的容器 + 算法</td>
-</tr>
-<tr>
-<td>容器（container）</td>
-<td>存储和管理一组元素的数据结构</td>
-<td>装数据的东西</td>
-</tr>
-<tr>
-<td><code>vector</code></td>
-<td>动态数组，内存连续，自动扩容</td>
-<td>自动扩容的数组</td>
-</tr>
-<tr>
-<td><code>string</code></td>
-<td>字符串类型，自动管理字符内存</td>
-<td>好用的字符串</td>
-</tr>
-<tr>
-<td><code>map</code></td>
-<td>键值对映射，按键有序</td>
-<td>字典/映射</td>
-</tr>
-<tr>
-<td><code>set</code></td>
-<td>不重复元素的有序集合</td>
-<td>去重 + 有序</td>
-</tr>
-<tr>
-<td>迭代器（iterator）</td>
-<td>遍历容器的指针式对象</td>
-<td>容器的通用游标</td>
-</tr>
-<tr>
-<td>范围 for</td>
-<td><code>for (auto x : c)</code> 遍历语法</td>
-<td>简单遍历</td>
-</tr>
-</tbody>
-</table>
-<h2 id="stl-是什么">🧩 STL 是什么</h2>
-<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
-<table>
-<thead>
-<tr>
-<th>组成</th>
-<th>作用</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>容器</td>
-<td>存储数据</td>
-<td><code>vector</code>、<code>map</code>、<code>set</code></td>
-</tr>
-<tr>
-<td>算法</td>
-<td>操作数据</td>
-<td><code>sort</code>、<code>find</code></td>
-</tr>
-<tr>
-<td>迭代器</td>
-<td>连接容器和算法</td>
-<td><code>begin()</code>、<code>end()</code></td>
-</tr>
-</tbody>
-</table>
-<p>STL
-用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[容器] &lt;--&gt; B[迭代器]
-    B &lt;--&gt; C[算法]
-    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
-    C --&gt; E[sort&#x2F;find&#x2F;count]
-</code>
-</pre>
-<p>先记住一个总原则：<strong>能用 STL
-容器解决的，不要自己造轮子</strong>。</p>
-<h2 id="vector动态数组">🧮 vector：动态数组</h2>
-<h3 id="基本用法">基本用法</h3>
-<p><code>vector</code>
-是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以在创建时直接给初始值：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
-<h3 id="遍历">遍历</h3>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>size()</code> 返回的是
-<code>size_t</code>（无符号整数），所以循环变量建议也用
-<code>size_t</code>，避免有符号/无符号比较的警告。</p>
-</blockquote>
-<h3 id="常用接口">常用接口</h3>
-<table>
-<thead>
-<tr>
-<th>接口</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>push_back(x)</code></td>
-<td>尾部追加元素</td>
-</tr>
-<tr>
-<td><code>pop_back()</code></td>
-<td>删除尾部元素</td>
-</tr>
-<tr>
-<td><code>size()</code></td>
-<td>元素个数</td>
-</tr>
-<tr>
-<td><code>empty()</code></td>
-<td>是否为空</td>
-</tr>
-<tr>
-<td><code>front()</code> / <code>back()</code></td>
-<td>第一个 / 最后一个元素</td>
-</tr>
-<tr>
-<td><code>v[i]</code></td>
-<td>按下标访问，<strong>不检查越界</strong></td>
-</tr>
-<tr>
-<td><code>v.at(i)</code></td>
-<td>按下标访问，越界抛异常</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>v[i]</code>
-越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
-<code>v.at(i)</code> 更安全。</p>
-</blockquote>
-<h2 id="string常用接口与互转">📝 string：常用接口与互转</h2>
-<h3 id="常用接口-1">常用接口</h3>
-<p><code>string</code> 是 C++
-的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>find</code> 找不到时返回
-<code>string::npos</code>，判断要用它：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="与-c-字符串互转">与 C 字符串互转</h3>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
-<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
-省去了手动管理长度、手动拼接的麻烦：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>C 风格 <code>char[]</code></th>
-<th><code>string</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>拼接</td>
-<td><code>strcat</code>，要保证空间够</td>
-<td><code>s1 + s2</code></td>
-</tr>
-<tr>
-<td>比较</td>
-<td><code>strcmp</code></td>
-<td><code>==</code></td>
-</tr>
-<tr>
-<td>长度</td>
-<td><code>strlen</code></td>
-<td><code>.size()</code></td>
-</tr>
-<tr>
-<td>拷贝</td>
-<td><code>strcpy</code></td>
-<td><code>=</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="map键值对">🗺️ map：键值对</h2>
-<h3 id="基本用法-1">基本用法</h3>
-<p><code>map</code>
-保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出（按键排序）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
-<h3 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h3>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>键不存在时</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>scores["Bob"]</code></td>
-<td>自动插入一个默认值（0）</td>
-<td>需要写入时</td>
-</tr>
-<tr>
-<td><code>scores.find("Bob")</code></td>
-<td>返回 <code>end()</code>，不插入</td>
-<td>只查询时</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
-<code>count</code>，避免误插入脏数据：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h2 id="set去重与有序">🧹 set：去重与有序</h2>
-<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th><code>vector</code></th>
-<th><code>set</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>顺序</td>
-<td>保持插入顺序</td>
-<td>自动排序</td>
-</tr>
-<tr>
-<td>重复</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>按下标访问</td>
-<td>可以</td>
-<td>不可以，用迭代器</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>需要去重 + 有序时用
-<code>set</code>；需要保持插入顺序、按下标访问时用
-<code>vector</code>。</p>
-</blockquote>
-<h2 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h2>
-<h3 id="基本概念">基本概念</h3>
-<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
-指向第一个元素，<code>end()</code>
-指向最后一个元素的下一个位置（不指向有效元素）。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[begin 指向第一个元素] --&gt; B[元素...]
-    B --&gt; C[end 指向末尾之后]
-</code>
-</pre>
-<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
-的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
-<code>it-&gt;second</code> 访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="迭代器失效问题">迭代器失效问题</h3>
-<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
-<p>最典型的例子是 <code>vector</code> 扩容：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
-<p>什么时候要警惕：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>是否可能使旧迭代器失效</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
-<td>可能失效</td>
-</tr>
-<tr>
-<td><code>vector</code> 中间插入/删除</td>
-<td>受影响位置之后失效</td>
-</tr>
-<tr>
-<td><code>map</code>/<code>set</code> 插入</td>
-<td>通常不失效</td>
-</tr>
-<tr>
-<td>遍历中删除当前元素</td>
-<td>当前迭代器失效</td>
-</tr>
-</tbody>
-</table>
-<p>范围 for
-内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
-<h2 id="sort-算法">🔀 sort 算法</h2>
-<h3 id="默认排序">默认排序</h3>
-<p><code>sort</code> 属于 STL
-算法，对迭代器范围内的元素排序，默认升序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>降序可以用标准库提供的比较器：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
-<h3 id="自定义比较函数">自定义比较函数</h3>
-<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
-<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
-前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
-<code>&gt;=</code> 这种包含等号的条件。</p>
-<h3 id="小结">小结</h3>
-<table>
-<thead>
-<tr>
-<th>用法</th>
-<th>代码</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>升序</td>
-<td><code>sort(v.begin(), v.end())</code></td>
-</tr>
-<tr>
-<td>降序</td>
-<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
-</tr>
-<tr>
-<td>按自定义规则</td>
-<td><code>sort(v.begin(), v.end(), lambda)</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 下标越界会报错</td>
-<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
-会抛异常</td>
-</tr>
-<tr>
-<td><code>string</code> 就是 <code>char[]</code></td>
-<td><code>string</code> 自动管理内存，支持
-<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
-</tr>
-<tr>
-<td>用 <code>map[]</code> 查询很安全</td>
-<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
-<code>find</code>/<code>count</code></td>
-</tr>
-<tr>
-<td><code>set</code> 和 <code>vector</code> 都能去重</td>
-<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
-</tr>
-<tr>
-<td>范围 for 遍历时随便删元素</td>
-<td>删除元素可能导致迭代器失效，需小心处理</td>
-</tr>
-<tr>
-<td><code>sort</code> 只能排数字</td>
-<td>传自定义比较函数就能排任意类型</td>
-</tr>
-<tr>
-<td>STL 容器都要自己管理内存</td>
-<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>STL
-三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
-</blockquote>
-<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
-管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
-自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>STL</tag>
-        <tag>vector</tag>
-        <tag>string</tag>
-        <tag>map</tag>
-        <tag>set</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：动态内存管理</title>
     <url>/posts/d6a2e8f1/</url>
     <content><![CDATA[<p>栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。</p>
@@ -18045,6 +17613,816 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：STL 容器</title>
+    <url>/posts/e9f3b7c2/</url>
+    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
+提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STL</td>
+<td>Standard Template Library，标准模板库</td>
+<td>C++ 标准库的容器 + 算法</td>
+</tr>
+<tr>
+<td>容器（container）</td>
+<td>存储和管理一组元素的数据结构</td>
+<td>装数据的东西</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td>动态数组，内存连续，自动扩容</td>
+<td>自动扩容的数组</td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>字符串类型，自动管理字符内存</td>
+<td>好用的字符串</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>键值对映射，按键有序</td>
+<td>字典/映射</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>不重复元素的有序集合</td>
+<td>去重 + 有序</td>
+</tr>
+<tr>
+<td>迭代器（iterator）</td>
+<td>遍历容器的指针式对象</td>
+<td>容器的通用游标</td>
+</tr>
+<tr>
+<td>范围 for</td>
+<td><code>for (auto x : c)</code> 遍历语法</td>
+<td>简单遍历</td>
+</tr>
+</tbody>
+</table>
+<h2 id="stl-是什么">🧩 STL 是什么</h2>
+<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
+<table>
+<thead>
+<tr>
+<th>组成</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>容器</td>
+<td>存储数据</td>
+<td><code>vector</code>、<code>map</code>、<code>set</code></td>
+</tr>
+<tr>
+<td>算法</td>
+<td>操作数据</td>
+<td><code>sort</code>、<code>find</code></td>
+</tr>
+<tr>
+<td>迭代器</td>
+<td>连接容器和算法</td>
+<td><code>begin()</code>、<code>end()</code></td>
+</tr>
+</tbody>
+</table>
+<p>STL
+用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[容器] &lt;--&gt; B[迭代器]
+    B &lt;--&gt; C[算法]
+    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
+    C --&gt; E[sort&#x2F;find&#x2F;count]
+</code>
+</pre>
+<p>先记住一个总原则：<strong>能用 STL
+容器解决的，不要自己造轮子</strong>。</p>
+<h2 id="vector动态数组">🧮 vector：动态数组</h2>
+<h3 id="基本用法">基本用法</h3>
+<p><code>vector</code>
+是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以在创建时直接给初始值：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
+<h3 id="遍历">遍历</h3>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>size()</code> 返回的是
+<code>size_t</code>（无符号整数），所以循环变量建议也用
+<code>size_t</code>，避免有符号/无符号比较的警告。</p>
+</blockquote>
+<h3 id="常用接口">常用接口</h3>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_back(x)</code></td>
+<td>尾部追加元素</td>
+</tr>
+<tr>
+<td><code>pop_back()</code></td>
+<td>删除尾部元素</td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>empty()</code></td>
+<td>是否为空</td>
+</tr>
+<tr>
+<td><code>front()</code> / <code>back()</code></td>
+<td>第一个 / 最后一个元素</td>
+</tr>
+<tr>
+<td><code>v[i]</code></td>
+<td>按下标访问，<strong>不检查越界</strong></td>
+</tr>
+<tr>
+<td><code>v.at(i)</code></td>
+<td>按下标访问，越界抛异常</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>v[i]</code>
+越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
+<code>v.at(i)</code> 更安全。</p>
+</blockquote>
+<h2 id="string常用接口与互转">📝 string：常用接口与互转</h2>
+<h3 id="常用接口-1">常用接口</h3>
+<p><code>string</code> 是 C++
+的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>find</code> 找不到时返回
+<code>string::npos</code>，判断要用它：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="与-c-字符串互转">与 C 字符串互转</h3>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
+<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
+省去了手动管理长度、手动拼接的麻烦：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>C 风格 <code>char[]</code></th>
+<th><code>string</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拼接</td>
+<td><code>strcat</code>，要保证空间够</td>
+<td><code>s1 + s2</code></td>
+</tr>
+<tr>
+<td>比较</td>
+<td><code>strcmp</code></td>
+<td><code>==</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td><code>strlen</code></td>
+<td><code>.size()</code></td>
+</tr>
+<tr>
+<td>拷贝</td>
+<td><code>strcpy</code></td>
+<td><code>=</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="map键值对">🗺️ map：键值对</h2>
+<h3 id="基本用法-1">基本用法</h3>
+<p><code>map</code>
+保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出（按键排序）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
+<h3 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>键不存在时</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scores["Bob"]</code></td>
+<td>自动插入一个默认值（0）</td>
+<td>需要写入时</td>
+</tr>
+<tr>
+<td><code>scores.find("Bob")</code></td>
+<td>返回 <code>end()</code>，不插入</td>
+<td>只查询时</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
+<code>count</code>，避免误插入脏数据：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="set去重与有序">🧹 set：去重与有序</h2>
+<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th><code>vector</code></th>
+<th><code>set</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>顺序</td>
+<td>保持插入顺序</td>
+<td>自动排序</td>
+</tr>
+<tr>
+<td>重复</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>按下标访问</td>
+<td>可以</td>
+<td>不可以，用迭代器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>需要去重 + 有序时用
+<code>set</code>；需要保持插入顺序、按下标访问时用
+<code>vector</code>。</p>
+</blockquote>
+<h2 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h2>
+<h3 id="基本概念">基本概念</h3>
+<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
+指向第一个元素，<code>end()</code>
+指向最后一个元素的下一个位置（不指向有效元素）。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[begin 指向第一个元素] --&gt; B[元素...]
+    B --&gt; C[end 指向末尾之后]
+</code>
+</pre>
+<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
+的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
+<code>it-&gt;second</code> 访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="迭代器失效问题">迭代器失效问题</h3>
+<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
+<p>最典型的例子是 <code>vector</code> 扩容：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
+<p>什么时候要警惕：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>是否可能使旧迭代器失效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
+<td>可能失效</td>
+</tr>
+<tr>
+<td><code>vector</code> 中间插入/删除</td>
+<td>受影响位置之后失效</td>
+</tr>
+<tr>
+<td><code>map</code>/<code>set</code> 插入</td>
+<td>通常不失效</td>
+</tr>
+<tr>
+<td>遍历中删除当前元素</td>
+<td>当前迭代器失效</td>
+</tr>
+</tbody>
+</table>
+<p>范围 for
+内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
+<h2 id="sort-算法">🔀 sort 算法</h2>
+<h3 id="默认排序">默认排序</h3>
+<p><code>sort</code> 属于 STL
+算法，对迭代器范围内的元素排序，默认升序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>降序可以用标准库提供的比较器：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
+<h3 id="自定义比较函数">自定义比较函数</h3>
+<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
+<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
+前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
+<code>&gt;=</code> 这种包含等号的条件。</p>
+<h3 id="小结">小结</h3>
+<table>
+<thead>
+<tr>
+<th>用法</th>
+<th>代码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升序</td>
+<td><code>sort(v.begin(), v.end())</code></td>
+</tr>
+<tr>
+<td>降序</td>
+<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
+</tr>
+<tr>
+<td>按自定义规则</td>
+<td><code>sort(v.begin(), v.end(), lambda)</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 下标越界会报错</td>
+<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
+会抛异常</td>
+</tr>
+<tr>
+<td><code>string</code> 就是 <code>char[]</code></td>
+<td><code>string</code> 自动管理内存，支持
+<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+</tr>
+<tr>
+<td>用 <code>map[]</code> 查询很安全</td>
+<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
+<code>find</code>/<code>count</code></td>
+</tr>
+<tr>
+<td><code>set</code> 和 <code>vector</code> 都能去重</td>
+<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+</tr>
+<tr>
+<td>范围 for 遍历时随便删元素</td>
+<td>删除元素可能导致迭代器失效，需小心处理</td>
+</tr>
+<tr>
+<td><code>sort</code> 只能排数字</td>
+<td>传自定义比较函数就能排任意类型</td>
+</tr>
+<tr>
+<td>STL 容器都要自己管理内存</td>
+<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>STL
+三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+</blockquote>
+<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
+管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
+自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>STL</tag>
+        <tag>vector</tag>
+        <tag>string</tag>
+        <tag>map</tag>
+        <tag>set</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：引用</title>
+    <url>/posts/a1f6b3c4/</url>
+    <content><![CDATA[<p>学完指针之后，引用就是 C++
+给“给变量起别名”这件事提供的更直接写法。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>引用</td>
+<td>已有对象的别名</td>
+<td>同一个变量的另一个名字</td>
+</tr>
+<tr>
+<td>左值引用</td>
+<td>绑定到可定位对象的引用，写作 <code>T&amp;</code></td>
+<td>常见引用</td>
+</tr>
+<tr>
+<td>绑定</td>
+<td>让引用和某个对象关联起来</td>
+<td>起别名</td>
+</tr>
+<tr>
+<td>实参</td>
+<td>函数调用时传入的真实对象</td>
+<td>真正的数据</td>
+</tr>
+<tr>
+<td>形参</td>
+<td>函数定义里接收参数的名字</td>
+<td>函数里的入口</td>
+</tr>
+<tr>
+<td>const 引用</td>
+<td>只读引用，写作 <code>const T&amp;</code></td>
+<td>不改对象，还能少拷贝</td>
+</tr>
+<tr>
+<td>临时对象</td>
+<td>表达式产生的短生命周期对象</td>
+<td>临时值</td>
+</tr>
+</tbody>
+</table>
+<h2 id="引用的基本模型">🧩 引用的基本模型</h2>
+<p>引用不是新建一个独立变量，而是给已有对象再起一个名字。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; ref = x;</span><br><span class="line"></span><br><span class="line">ref = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; x &lt;&lt; endl;    <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; ref &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x   ----+</span><br><span class="line">       |  同一个 int 对象</span><br><span class="line">ref ----+</span><br></pre></td></tr></table></figure>
+<p><code>x</code> 和 <code>ref</code>
+是两个名字，但它们访问的是同一个对象。修改
+<code>ref</code>，本质上就是修改 <code>x</code>。</p>
+<p>引用最常见的用途是做函数参数：</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[实参对象] --&gt; B[引用形参]
+    B --&gt; C[函数内部直接操作原对象]
+</code>
+</pre>
+<h2 id="左值引用">🔗 左值引用</h2>
+<h3 id="定义">定义</h3>
+<p>左值引用的一般形式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">类型&amp; 引用名 = 已有变量;</span><br></pre></td></tr></table></figure>
+<p>示例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; alias = value;</span><br></pre></td></tr></table></figure>
+<p><code>alias</code> 是 <code>value</code> 的引用，也就是
+<code>value</code> 的别名。</p>
+<blockquote>
+<p><code>&amp;</code> 在这里不是取地址，而是引用声明的一部分。</p>
+</blockquote>
+<h3 id="绑定规则">绑定规则</h3>
+<p>普通左值引用只能绑定到可以长期存在、可以定位的对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;       <span class="comment">// 正确：x 是一个普通变量</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; a = 10;   // 错误：普通左值引用不能绑定到字面量</span></span><br><span class="line"><span class="comment">// int&amp; b = x + 1;// 错误：x + 1 是临时结果</span></span><br></pre></td></tr></table></figure>
+<p>初学阶段可以先把左值粗略理解成：<strong>有名字、能取地址、表达式结束后还存在的对象</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>表达式</th>
+<th>能否绑定到 <code>int&amp;</code></th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x</code></td>
+<td>可以</td>
+<td>普通变量，有稳定位置</td>
+</tr>
+<tr>
+<td><code>arr[0]</code></td>
+<td>可以</td>
+<td>数组元素，有稳定位置</td>
+</tr>
+<tr>
+<td><code>10</code></td>
+<td>不可以</td>
+<td>字面量不是可修改对象</td>
+</tr>
+<tr>
+<td><code>x + 1</code></td>
+<td>不可以</td>
+<td>表达式结果是临时值</td>
+</tr>
+</tbody>
+</table>
+<h3 id="必须初始化">必须初始化</h3>
+<p>引用定义时必须立刻绑定到一个对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;     <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; bad;    // 错误：引用必须初始化</span></span><br></pre></td></tr></table></figure>
+<p>原因很简单：引用的意义就是“某个对象的别名”。如果没有对象可以绑定，这个别名就没有意义。</p>
+<h3 id="不能重新绑定">不能重新绑定</h3>
+<p>引用一旦绑定到某个对象，就不能再改成另一个对象的别名。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p><code>r = b;</code> 不是让 <code>r</code> 改为引用
+<code>b</code>，而是把 <code>b</code> 的值赋给 <code>r</code>
+当前绑定的对象，也就是 <code>a</code>。</p>
+<h2 id="引用做函数参数">🛠️ 引用做函数参数</h2>
+<h3 id="值传递会拷贝">值传递会拷贝</h3>
+<p>先看普通值传递：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>addOne</code> 里的 <code>x</code> 是 <code>number</code>
+的副本。函数内部改的是副本，不会影响外面的 <code>number</code>。</p>
+<h3 id="引用参数可以修改实参">引用参数可以修改实参</h3>
+<p>如果希望函数直接修改外面的变量，可以使用引用参数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 11</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>x</code> 是 <code>number</code> 的引用。函数内部修改
+<code>x</code>，就是修改 <code>number</code>。</p>
+<p>调用过程可以理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">number = 10</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">addOne(int&amp; x)</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x 是 number 的别名</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x = x + 1  等价于  number = number + 1</span><br></pre></td></tr></table></figure>
+<h3 id="避免大对象拷贝">避免大对象拷贝</h3>
+<p>引用参数还可以避免拷贝大对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>上面这种写法会把传入的 <code>string</code>
+拷贝一份。对于很短的字符串影响不大，但如果对象很大，拷贝成本就会变高。</p>
+<p>如果函数只是读取，不需要修改，可以先写成引用：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>但这还不够好，因为 <code>string&amp;</code> 暗示函数可能会修改
+<code>name</code>。更好的写法是
+<code>const string&amp;</code>，下一节展开。</p>
+<h2 id="const-引用">🧊 const 引用</h2>
+<h3 id="只读传参">只读传参</h3>
+<p><code>const</code> 引用表示：通过这个引用不能修改绑定的对象。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(<span class="type">const</span> string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    <span class="comment">// name = &quot;new name&quot;;  // 错误：const 引用不能修改对象</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string userName = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line">    <span class="built_in">printName</span>(userName);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>const string&amp; name</code> 同时表达了两层意思：</p>
+<table>
+<thead>
+<tr>
+<th>目的</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>避免拷贝</td>
+<td>不复制整个 <code>string</code> 对象</td>
+</tr>
+<tr>
+<td>保持只读</td>
+<td>函数不会通过 <code>name</code> 修改实参</td>
+</tr>
+</tbody>
+</table>
+<p>这也是 C++ 里非常常见的参数写法。</p>
+<h3 id="绑定临时对象">绑定临时对象</h3>
+<p>普通左值引用不能绑定临时对象，但 <code>const</code> 引用可以。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; a = <span class="number">10</span>;      <span class="comment">// 正确</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; b = <span class="number">3</span> + <span class="number">4</span>;   <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;      <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;      <span class="comment">// 7</span></span><br></pre></td></tr></table></figure>
+<p>这条规则让下面这种调用变得自然：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printText</span><span class="params">(<span class="type">const</span> string&amp; text)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; text &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string name = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printText</span>(name);             <span class="comment">// 绑定已有 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(<span class="string">&quot;hello&quot;</span>);          <span class="comment">// 绑定临时 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(name + <span class="string">&quot; Smith&quot;</span>);  <span class="comment">// 绑定表达式产生的临时对象</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果参数写成 <code>string&amp;</code>，后两种调用就不适合；写成
+<code>const string&amp;</code>，既能接收已有对象，也能接收临时对象。</p>
+<h3 id="什么时候用-const-引用">什么时候用 const 引用</h3>
+<p>初学阶段可以按这个规则判断：</p>
+<table>
+<thead>
+<tr>
+<th>参数类型</th>
+<th>适合场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int x</code></td>
+<td>小的基础类型，直接拷贝即可</td>
+</tr>
+<tr>
+<td><code>double x</code></td>
+<td>小的基础类型，直接拷贝即可</td>
+</tr>
+<tr>
+<td><code>string x</code></td>
+<td>函数需要自己保留一份副本</td>
+</tr>
+<tr>
+<td><code>const string&amp; x</code></td>
+<td>只读取字符串，避免拷贝</td>
+</tr>
+<tr>
+<td><code>vector&lt;int&gt;&amp; x</code></td>
+<td>需要修改传入的容器</td>
+</tr>
+<tr>
+<td><code>const vector&lt;int&gt;&amp; x</code></td>
+<td>只读取容器，避免拷贝</td>
+</tr>
+</tbody>
+</table>
+<p>不是所有参数都要写引用。像
+<code>int</code>、<code>double</code>、<code>char</code>、<code>bool</code>
+这种小类型，值传递通常更简单。</p>
+<h2 id="引用与指针对比">🆚 引用与指针对比</h2>
+<p>引用和指针都可以间接访问对象，但它们的语义不同。</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>对比项</th>
+<th>引用</th>
+<th>指针</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>核心语义</td>
+<td>对象的别名</td>
+<td>保存地址的变量</td>
+</tr>
+<tr>
+<td>是否必须初始化</td>
+<td>必须初始化</td>
+<td>可以先不指向有效对象</td>
+</tr>
+<tr>
+<td>是否可空</td>
+<td>通常不能表示空</td>
+<td>可以是 <code>nullptr</code></td>
+</tr>
+<tr>
+<td>是否能重新绑定</td>
+<td>不能重新绑定</td>
+<td>可以改为指向别的对象</td>
+</tr>
+<tr>
+<td>使用方式</td>
+<td>像普通变量一样用</td>
+<td>常用 <code>*</code> 解引用、<code>-&gt;</code> 访问成员</td>
+</tr>
+<tr>
+<td>常见场景</td>
+<td>函数参数、返回已有对象别名</td>
+<td>可选对象、动态内存、底层地址操作</td>
+</tr>
+</tbody>
+</table>
+<h3 id="语义差异">语义差异</h3>
+<p>引用强调“这个参数就是那个对象本身”。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>指针强调“我手里有一个地址，需要沿着地址去访问对象”。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>* p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        *p = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>两者都能修改外部变量：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line"><span class="built_in">reset</span>(value);   <span class="comment">// 引用版本</span></span><br><span class="line"><span class="built_in">reset</span>(&amp;value);  <span class="comment">// 指针版本</span></span><br></pre></td></tr></table></figure>
+<p>引用版本调用更像普通函数；指针版本调用时显式写
+<code>&amp;value</code>，更能提醒读者“这里传的是地址”。</p>
+<h3 id="可空性">可空性</h3>
+<p>指针可以是空指针：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
+<p>所以使用指针前经常要检查：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>引用一般不表达“没有对象”这个状态：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">const</span> <span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果函数要求一定有一个有效对象，引用通常更合适；如果“可能没有对象”是合法状态，指针更直接。</p>
+<h3 id="重新绑定">重新绑定</h3>
+<p>指针可以改变指向：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* p = &amp;a;</span><br><span class="line">p = &amp;b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
+<p>引用不能重新绑定：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;              <span class="comment">// 赋值给 a，不是改绑到 b</span></span><br></pre></td></tr></table></figure>
+<p>这一点是引用和指针最重要的区别之一。</p>
+<h3 id="使用场景">使用场景</h3>
+<p>可以先按下面的方式选择：</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>推荐</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数需要修改实参</td>
+<td><code>T&amp;</code></td>
+</tr>
+<tr>
+<td>函数只读大对象</td>
+<td><code>const T&amp;</code></td>
+</tr>
+<tr>
+<td>参数可能为空</td>
+<td><code>T*</code></td>
+</tr>
+<tr>
+<td>需要动态申请和释放内存</td>
+<td>指针或智能指针</td>
+</tr>
+<tr>
+<td>需要换成指向另一个对象</td>
+<td>指针</td>
+</tr>
+<tr>
+<td>只是给已有对象起别名</td>
+<td>引用</td>
+</tr>
+</tbody>
+</table>
+<p>现代 C++ 里，普通业务代码会大量使用引用和 <code>const</code>
+引用；裸指针更多出现在底层接口、和 C
+交互、动态内存或“可空参数”语义里。</p>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>引用是对象的副本</td>
+<td>引用是别名，修改引用就是修改原对象</td>
+</tr>
+<tr>
+<td>引用可以先声明后绑定</td>
+<td>引用必须定义时初始化</td>
+</tr>
+<tr>
+<td><code>r = b</code> 会让引用改绑到 <code>b</code></td>
+<td>这是赋值，会修改 <code>r</code> 当前绑定的对象</td>
+</tr>
+<tr>
+<td>所有函数参数都应该用引用</td>
+<td>小的基础类型直接值传递更简单</td>
+</tr>
+<tr>
+<td><code>const T&amp;</code> 只能绑定普通变量</td>
+<td><code>const T&amp;</code> 也能绑定临时对象</td>
+</tr>
+<tr>
+<td>引用和指针只是语法不同</td>
+<td>两者在可空性、重新绑定和语义表达上不同</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>引用就是对象的别名，最常用在函数参数里：要修改实参用
+<code>T&amp;</code>，只读大对象用 <code>const T&amp;</code>。</p>
+</blockquote>
+<p>学到这里，可以把函数、指针和引用连起来看：值传递适合简单副本，引用适合直接操作已有对象，指针适合表达地址、可空和更底层的内存操作。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>引用</tag>
       </tags>
   </entry>
   <entry>
@@ -19396,384 +19774,6 @@ guard、保持最小包含，警惕重复定义和循环包含。</p>
         <tag>编译单元</tag>
         <tag>链接</tag>
         <tag>工程结构</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：引用</title>
-    <url>/posts/a1f6b3c4/</url>
-    <content><![CDATA[<p>学完指针之后，引用就是 C++
-给“给变量起别名”这件事提供的更直接写法。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>引用</td>
-<td>已有对象的别名</td>
-<td>同一个变量的另一个名字</td>
-</tr>
-<tr>
-<td>左值引用</td>
-<td>绑定到可定位对象的引用，写作 <code>T&amp;</code></td>
-<td>常见引用</td>
-</tr>
-<tr>
-<td>绑定</td>
-<td>让引用和某个对象关联起来</td>
-<td>起别名</td>
-</tr>
-<tr>
-<td>实参</td>
-<td>函数调用时传入的真实对象</td>
-<td>真正的数据</td>
-</tr>
-<tr>
-<td>形参</td>
-<td>函数定义里接收参数的名字</td>
-<td>函数里的入口</td>
-</tr>
-<tr>
-<td>const 引用</td>
-<td>只读引用，写作 <code>const T&amp;</code></td>
-<td>不改对象，还能少拷贝</td>
-</tr>
-<tr>
-<td>临时对象</td>
-<td>表达式产生的短生命周期对象</td>
-<td>临时值</td>
-</tr>
-</tbody>
-</table>
-<h2 id="引用的基本模型">🧩 引用的基本模型</h2>
-<p>引用不是新建一个独立变量，而是给已有对象再起一个名字。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; ref = x;</span><br><span class="line"></span><br><span class="line">ref = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; x &lt;&lt; endl;    <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; ref &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">x   ----+</span><br><span class="line">       |  同一个 int 对象</span><br><span class="line">ref ----+</span><br></pre></td></tr></table></figure>
-<p><code>x</code> 和 <code>ref</code>
-是两个名字，但它们访问的是同一个对象。修改
-<code>ref</code>，本质上就是修改 <code>x</code>。</p>
-<p>引用最常见的用途是做函数参数：</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[实参对象] --&gt; B[引用形参]
-    B --&gt; C[函数内部直接操作原对象]
-</code>
-</pre>
-<h2 id="左值引用">🔗 左值引用</h2>
-<h3 id="定义">定义</h3>
-<p>左值引用的一般形式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">类型&amp; 引用名 = 已有变量;</span><br></pre></td></tr></table></figure>
-<p>示例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; alias = value;</span><br></pre></td></tr></table></figure>
-<p><code>alias</code> 是 <code>value</code> 的引用，也就是
-<code>value</code> 的别名。</p>
-<blockquote>
-<p><code>&amp;</code> 在这里不是取地址，而是引用声明的一部分。</p>
-</blockquote>
-<h3 id="绑定规则">绑定规则</h3>
-<p>普通左值引用只能绑定到可以长期存在、可以定位的对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;       <span class="comment">// 正确：x 是一个普通变量</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; a = 10;   // 错误：普通左值引用不能绑定到字面量</span></span><br><span class="line"><span class="comment">// int&amp; b = x + 1;// 错误：x + 1 是临时结果</span></span><br></pre></td></tr></table></figure>
-<p>初学阶段可以先把左值粗略理解成：<strong>有名字、能取地址、表达式结束后还存在的对象</strong>。</p>
-<table>
-<thead>
-<tr>
-<th>表达式</th>
-<th>能否绑定到 <code>int&amp;</code></th>
-<th>原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>x</code></td>
-<td>可以</td>
-<td>普通变量，有稳定位置</td>
-</tr>
-<tr>
-<td><code>arr[0]</code></td>
-<td>可以</td>
-<td>数组元素，有稳定位置</td>
-</tr>
-<tr>
-<td><code>10</code></td>
-<td>不可以</td>
-<td>字面量不是可修改对象</td>
-</tr>
-<tr>
-<td><code>x + 1</code></td>
-<td>不可以</td>
-<td>表达式结果是临时值</td>
-</tr>
-</tbody>
-</table>
-<h3 id="必须初始化">必须初始化</h3>
-<p>引用定义时必须立刻绑定到一个对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span>&amp; r = x;     <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// int&amp; bad;    // 错误：引用必须初始化</span></span><br></pre></td></tr></table></figure>
-<p>原因很简单：引用的意义就是“某个对象的别名”。如果没有对象可以绑定，这个别名就没有意义。</p>
-<h3 id="不能重新绑定">不能重新绑定</h3>
-<p>引用一旦绑定到某个对象，就不能再改成另一个对象的别名。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 20</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p><code>r = b;</code> 不是让 <code>r</code> 改为引用
-<code>b</code>，而是把 <code>b</code> 的值赋给 <code>r</code>
-当前绑定的对象，也就是 <code>a</code>。</p>
-<h2 id="引用做函数参数">🛠️ 引用做函数参数</h2>
-<h3 id="值传递会拷贝">值传递会拷贝</h3>
-<p>先看普通值传递：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>addOne</code> 里的 <code>x</code> 是 <code>number</code>
-的副本。函数内部改的是副本，不会影响外面的 <code>number</code>。</p>
-<h3 id="引用参数可以修改实参">引用参数可以修改实参</h3>
-<p>如果希望函数直接修改外面的变量，可以使用引用参数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">addOne</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = x + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> number = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">addOne</span>(number);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; number &lt;&lt; endl;  <span class="comment">// 11</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>x</code> 是 <code>number</code> 的引用。函数内部修改
-<code>x</code>，就是修改 <code>number</code>。</p>
-<p>调用过程可以理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">number = 10</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">addOne(int&amp; x)</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x 是 number 的别名</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">x = x + 1  等价于  number = number + 1</span><br></pre></td></tr></table></figure>
-<h3 id="避免大对象拷贝">避免大对象拷贝</h3>
-<p>引用参数还可以避免拷贝大对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>上面这种写法会把传入的 <code>string</code>
-拷贝一份。对于很短的字符串影响不大，但如果对象很大，拷贝成本就会变高。</p>
-<p>如果函数只是读取，不需要修改，可以先写成引用：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>但这还不够好，因为 <code>string&amp;</code> 暗示函数可能会修改
-<code>name</code>。更好的写法是
-<code>const string&amp;</code>，下一节展开。</p>
-<h2 id="const-引用">🧊 const 引用</h2>
-<h3 id="只读传参">只读传参</h3>
-<p><code>const</code> 引用表示：通过这个引用不能修改绑定的对象。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printName</span><span class="params">(<span class="type">const</span> string&amp; name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; name &lt;&lt; endl;</span><br><span class="line">    <span class="comment">// name = &quot;new name&quot;;  // 错误：const 引用不能修改对象</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string userName = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line">    <span class="built_in">printName</span>(userName);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>const string&amp; name</code> 同时表达了两层意思：</p>
-<table>
-<thead>
-<tr>
-<th>目的</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>避免拷贝</td>
-<td>不复制整个 <code>string</code> 对象</td>
-</tr>
-<tr>
-<td>保持只读</td>
-<td>函数不会通过 <code>name</code> 修改实参</td>
-</tr>
-</tbody>
-</table>
-<p>这也是 C++ 里非常常见的参数写法。</p>
-<h3 id="绑定临时对象">绑定临时对象</h3>
-<p>普通左值引用不能绑定临时对象，但 <code>const</code> 引用可以。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; a = <span class="number">10</span>;      <span class="comment">// 正确</span></span><br><span class="line"><span class="type">const</span> <span class="type">int</span>&amp; b = <span class="number">3</span> + <span class="number">4</span>;   <span class="comment">// 正确</span></span><br><span class="line"></span><br><span class="line">cout &lt;&lt; a &lt;&lt; endl;      <span class="comment">// 10</span></span><br><span class="line">cout &lt;&lt; b &lt;&lt; endl;      <span class="comment">// 7</span></span><br></pre></td></tr></table></figure>
-<p>这条规则让下面这种调用变得自然：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">printText</span><span class="params">(<span class="type">const</span> string&amp; text)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; text &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string name = <span class="string">&quot;Alice&quot;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printText</span>(name);             <span class="comment">// 绑定已有 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(<span class="string">&quot;hello&quot;</span>);          <span class="comment">// 绑定临时 string 对象</span></span><br><span class="line">    <span class="built_in">printText</span>(name + <span class="string">&quot; Smith&quot;</span>);  <span class="comment">// 绑定表达式产生的临时对象</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>如果参数写成 <code>string&amp;</code>，后两种调用就不适合；写成
-<code>const string&amp;</code>，既能接收已有对象，也能接收临时对象。</p>
-<h3 id="什么时候用-const-引用">什么时候用 const 引用</h3>
-<p>初学阶段可以按这个规则判断：</p>
-<table>
-<thead>
-<tr>
-<th>参数类型</th>
-<th>适合场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>int x</code></td>
-<td>小的基础类型，直接拷贝即可</td>
-</tr>
-<tr>
-<td><code>double x</code></td>
-<td>小的基础类型，直接拷贝即可</td>
-</tr>
-<tr>
-<td><code>string x</code></td>
-<td>函数需要自己保留一份副本</td>
-</tr>
-<tr>
-<td><code>const string&amp; x</code></td>
-<td>只读取字符串，避免拷贝</td>
-</tr>
-<tr>
-<td><code>vector&lt;int&gt;&amp; x</code></td>
-<td>需要修改传入的容器</td>
-</tr>
-<tr>
-<td><code>const vector&lt;int&gt;&amp; x</code></td>
-<td>只读取容器，避免拷贝</td>
-</tr>
-</tbody>
-</table>
-<p>不是所有参数都要写引用。像
-<code>int</code>、<code>double</code>、<code>char</code>、<code>bool</code>
-这种小类型，值传递通常更简单。</p>
-<h2 id="引用与指针对比">🆚 引用与指针对比</h2>
-<p>引用和指针都可以间接访问对象，但它们的语义不同。</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>对比项</th>
-<th>引用</th>
-<th>指针</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>核心语义</td>
-<td>对象的别名</td>
-<td>保存地址的变量</td>
-</tr>
-<tr>
-<td>是否必须初始化</td>
-<td>必须初始化</td>
-<td>可以先不指向有效对象</td>
-</tr>
-<tr>
-<td>是否可空</td>
-<td>通常不能表示空</td>
-<td>可以是 <code>nullptr</code></td>
-</tr>
-<tr>
-<td>是否能重新绑定</td>
-<td>不能重新绑定</td>
-<td>可以改为指向别的对象</td>
-</tr>
-<tr>
-<td>使用方式</td>
-<td>像普通变量一样用</td>
-<td>常用 <code>*</code> 解引用、<code>-&gt;</code> 访问成员</td>
-</tr>
-<tr>
-<td>常见场景</td>
-<td>函数参数、返回已有对象别名</td>
-<td>可选对象、动态内存、底层地址操作</td>
-</tr>
-</tbody>
-</table>
-<h3 id="语义差异">语义差异</h3>
-<p>引用强调“这个参数就是那个对象本身”。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>指针强调“我手里有一个地址，需要沿着地址去访问对象”。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">reset</span><span class="params">(<span class="type">int</span>* p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        *p = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>两者都能修改外部变量：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line"><span class="built_in">reset</span>(value);   <span class="comment">// 引用版本</span></span><br><span class="line"><span class="built_in">reset</span>(&amp;value);  <span class="comment">// 指针版本</span></span><br></pre></td></tr></table></figure>
-<p>引用版本调用更像普通函数；指针版本调用时显式写
-<code>&amp;value</code>，更能提醒读者“这里传的是地址”。</p>
-<h3 id="可空性">可空性</h3>
-<p>指针可以是空指针：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span>* p = <span class="literal">nullptr</span>;</span><br></pre></td></tr></table></figure>
-<p>所以使用指针前经常要检查：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (p != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    cout &lt;&lt; *p &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>引用一般不表达“没有对象”这个状态：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">const</span> <span class="type">int</span>&amp; x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>如果函数要求一定有一个有效对象，引用通常更合适；如果“可能没有对象”是合法状态，指针更直接。</p>
-<h3 id="重新绑定">重新绑定</h3>
-<p>指针可以改变指向：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* p = &amp;a;</span><br><span class="line">p = &amp;b;</span><br><span class="line"></span><br><span class="line">cout &lt;&lt; *p &lt;&lt; endl;  <span class="comment">// 20</span></span><br></pre></td></tr></table></figure>
-<p>引用不能重新绑定：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line"><span class="type">int</span> b = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>&amp; r = a;</span><br><span class="line">r = b;              <span class="comment">// 赋值给 a，不是改绑到 b</span></span><br></pre></td></tr></table></figure>
-<p>这一点是引用和指针最重要的区别之一。</p>
-<h3 id="使用场景">使用场景</h3>
-<p>可以先按下面的方式选择：</p>
-<table>
-<thead>
-<tr>
-<th>需求</th>
-<th>推荐</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数需要修改实参</td>
-<td><code>T&amp;</code></td>
-</tr>
-<tr>
-<td>函数只读大对象</td>
-<td><code>const T&amp;</code></td>
-</tr>
-<tr>
-<td>参数可能为空</td>
-<td><code>T*</code></td>
-</tr>
-<tr>
-<td>需要动态申请和释放内存</td>
-<td>指针或智能指针</td>
-</tr>
-<tr>
-<td>需要换成指向另一个对象</td>
-<td>指针</td>
-</tr>
-<tr>
-<td>只是给已有对象起别名</td>
-<td>引用</td>
-</tr>
-</tbody>
-</table>
-<p>现代 C++ 里，普通业务代码会大量使用引用和 <code>const</code>
-引用；裸指针更多出现在底层接口、和 C
-交互、动态内存或“可空参数”语义里。</p>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>引用是对象的副本</td>
-<td>引用是别名，修改引用就是修改原对象</td>
-</tr>
-<tr>
-<td>引用可以先声明后绑定</td>
-<td>引用必须定义时初始化</td>
-</tr>
-<tr>
-<td><code>r = b</code> 会让引用改绑到 <code>b</code></td>
-<td>这是赋值，会修改 <code>r</code> 当前绑定的对象</td>
-</tr>
-<tr>
-<td>所有函数参数都应该用引用</td>
-<td>小的基础类型直接值传递更简单</td>
-</tr>
-<tr>
-<td><code>const T&amp;</code> 只能绑定普通变量</td>
-<td><code>const T&amp;</code> 也能绑定临时对象</td>
-</tr>
-<tr>
-<td>引用和指针只是语法不同</td>
-<td>两者在可空性、重新绑定和语义表达上不同</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>引用就是对象的别名，最常用在函数参数里：要修改实参用
-<code>T&amp;</code>，只读大对象用 <code>const T&amp;</code>。</p>
-</blockquote>
-<p>学到这里，可以把函数、指针和引用连起来看：值传递适合简单副本，引用适合直接操作已有对象，指针适合表达地址、可空和更底层的内存操作。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>引用</tag>
       </tags>
   </entry>
   <entry>
@@ -31470,6 +31470,14 @@ DMA</strong>。</li>
 <li><strong>隐蔽通道</strong>：我自己发信号、自己读回来——用来确认这条路真的通。</li>
 </ul>
 <p>两者用的是同一套观测机制，只差谁在按键。能把自己选的一位传出去，就说明这一位是可控且可读的；那么反过来，受害者无意中产生的那一位，同样读得出来。</p>
+<p>这里有个很容易冒出来的疑问：既然都能控制那台 GPU
+了，直接动手不就行了，还测什么信道？关键在于，<strong>发送方扮演的是受害者，而不是攻击者</strong>。真实场景里，攻击者手里只有自己那块
+FPGA，隔壁的 GPU
+和数据库是别人的租户，他碰不到——他能做的只有读，而读到的信号对不对，他心里没有底，因为没人告诉他标准答案。所以论文先安排一个自己人假扮受害者：让那台
+GPU 按已知的规律发信号，看接收端能不能一字不差地读懂。</p>
+<p>这一步检验的是<strong>接收端的读能力</strong>，不是发送端的破坏力。读能力被确凿地验证之后，把同一个接收端对准真正的受害者，读到的就是真东西了。</p>
+<p>那为什么不干脆用网络把消息传过去？因为那样测的就不是 IOTLB
+了。这条通道的全部意义在于：<strong>整条消息只经过这一个共享硬件</strong>，中间没有别的路径——它证明的是<strong>这块硬件本身能不能承载信息</strong>。顺带说，在隔离很严、租户之间网络被切断的环境里，一条只走共享硬件的通路本身就有价值，所以它不只是实验手法。</p>
 <p>论文搭了两条，区别在<strong>发送方是谁</strong>：一条由外设发，一条由
 CPU 发；接收方都是那块 FPGA。</p>
 <p><strong>第一条：外设当发送方，跑一次查询编一个 1</strong></p>

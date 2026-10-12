@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-13T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T09:09:40.196Z">
+<meta property="article:modified_time" content="2026-10-12T09:14:59.820Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -271,7 +271,7 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 17:09:40" itemprop="dateModified" datetime="2026-10-12T17:09:40+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-12 17:14:59" itemprop="dateModified" datetime="2026-10-12T17:14:59+08:00">2026-10-12</time>
     </span>
 
   
@@ -288,14 +288,14 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>7.3k</span>
+      <span>7.7k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>13 mins.</span>
+      <span>14 mins.</span>
     </span>
 </div>
 
@@ -592,6 +592,14 @@ DMA</strong>。</li>
 <li><strong>隐蔽通道</strong>：我自己发信号、自己读回来——用来确认这条路真的通。</li>
 </ul>
 <p>两者用的是同一套观测机制，只差谁在按键。能把自己选的一位传出去，就说明这一位是可控且可读的；那么反过来，受害者无意中产生的那一位，同样读得出来。</p>
+<p>这里有个很容易冒出来的疑问：既然都能控制那台 GPU
+了，直接动手不就行了，还测什么信道？关键在于，<strong>发送方扮演的是受害者，而不是攻击者</strong>。真实场景里，攻击者手里只有自己那块
+FPGA，隔壁的 GPU
+和数据库是别人的租户，他碰不到——他能做的只有读，而读到的信号对不对，他心里没有底，因为没人告诉他标准答案。所以论文先安排一个自己人假扮受害者：让那台
+GPU 按已知的规律发信号，看接收端能不能一字不差地读懂。</p>
+<p>这一步检验的是<strong>接收端的读能力</strong>，不是发送端的破坏力。读能力被确凿地验证之后，把同一个接收端对准真正的受害者，读到的就是真东西了。</p>
+<p>那为什么不干脆用网络把消息传过去？因为那样测的就不是 IOTLB
+了。这条通道的全部意义在于：<strong>整条消息只经过这一个共享硬件</strong>，中间没有别的路径——它证明的是<strong>这块硬件本身能不能承载信息</strong>。顺带说，在隔离很严、租户之间网络被切断的环境里，一条只走共享硬件的通路本身就有价值，所以它不只是实验手法。</p>
 <p>论文搭了两条，区别在<strong>发送方是谁</strong>：一条由外设发，一条由
 CPU 发；接收方都是那块 FPGA。</p>
 <p><strong>第一条：外设当发送方，跑一次查询编一个 1</strong></p>
@@ -844,7 +852,7 @@ DMA——而那正是这类侧信道真正需要的东西。<strong>先把话讲
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:53</span>
+    <span title="Reading time total">15:54</span>
   </span>
 </div>
 <div class="busuanzi-count">
