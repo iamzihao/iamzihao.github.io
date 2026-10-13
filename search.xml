@@ -262,6 +262,44 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       </tags>
   </entry>
   <entry>
+    <title>influxdb Connection Problem</title>
+    <url>/posts/dbeb2432/</url>
+    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
+<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
+<span id="more"></span></p>
+<h3 id="token401问题">token401问题</h3>
+<h4 id="登录401">登录401</h4>
+<p>一开始拿到公司的token测试连接</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p><img src="/assets/influxdb-01.png" /></p>
+<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
+<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
+<p><img src="/assets/influxdb-02.png" /></p>
+<p>于是把ini文件改为</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
+<p>发现可以正常读取了</p>
+<h4 id="过期401">过期401</h4>
+<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
+<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据读取问题">数据读取问题</h3>
+<p>原本的数据库为mysql，查询语句如下</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
+<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
+<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
+<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
+<h3 id="其他问题">其他问题</h3>
+<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
+<p>此外influxdb不支持int索引。</p>
+]]></content>
+      <tags>
+        <tag>InfluxDB</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>CSS Note</title>
     <url>/posts/752f9918/</url>
     <content><![CDATA[<h2 id="css心得">CSS心得</h2>
@@ -304,6 +342,110 @@ style="text-align: left;"><code>conda remove -n myenv --all</code></td>
       <tags>
         <tag>CSS</tag>
         <tag>前端</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>前端浏览器缓存机制</title>
+    <url>/posts/50ac740b/</url>
+    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
+<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
+<span id="more"></span>
+<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
+<h3 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h3>
+<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
+<ul>
+<li><p><strong>Expires</strong>:
+一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
+<li><p><strong>Cache-Control</strong>:
+这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
+<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
+<ul>
+<li><code>public</code>:
+资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
+<li><code>private</code>:
+资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
+<li><code>no-cache</code>:
+资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
+<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
+<code>200 (from cache)</code>。</p>
+<h3 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
+Caching）</h3>
+<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
+<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
+<ul>
+<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
+<ul>
+<li><strong>Last-Modified</strong>:
+服务器在响应头中返回资源的最后修改时间。</li>
+<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
+<code>Last-Modified</code>
+时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+<li><strong>ETag &amp; If-None-Match</strong>:
+<ul>
+<li><strong>ETag</strong>:
+服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
+<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
+值。服务器比较该值与当前资源的 ETag，如果匹配则返回
+<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
+<code>200</code> 和新资源。</li>
+</ul></li>
+</ul>
+<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
+<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
+<h3 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h3>
+<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
+JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
+<p><strong>典型用法</strong>：</p>
+<ul>
+<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
+<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
+标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
+</ul>
+<p><strong>总结</strong>：</p>
+<ul>
+<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
+<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
+<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
+</ul>
+<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
+<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
+<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
+是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
+文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
+<h4 id="cdn的工作原理">CDN的工作原理</h4>
+<ol type="1">
+<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
+<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
+<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
+<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
+</ol>
+<h4 id="cdn的主要优势">CDN的主要优势</h4>
+<ol type="1">
+<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
+<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
+<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
+<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
+<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
+</ol>
+<h4 id="cdn的使用场景">CDN的使用场景</h4>
+<ul>
+<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
+<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
+<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
+文件等，通过CDN可以提升资源加载速度。</li>
+</ul>
+<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
+]]></content>
+      <tags>
+        <tag>前端</tag>
+        <tag>浏览器</tag>
+        <tag>缓存</tag>
       </tags>
   </entry>
   <entry>
@@ -1186,148 +1328,6 @@ TDX 的体系结构、内存保护机制、I/O
       </tags>
   </entry>
   <entry>
-    <title>influxdb Connection Problem</title>
-    <url>/posts/dbeb2432/</url>
-    <content><![CDATA[<h2 id="influxdb连接问题">influxdb连接问题</h2>
-<p>最近之前实习的嵌入式公司修改了他们产品原有的数据库结构，从mysql转移到了influxdb，在接触influxdb的过程中也遇到了一些问题，现在汇总如下：
-<span id="more"></span></p>
-<h3 id="token401问题">token401问题</h3>
-<h4 id="登录401">登录401</h4>
-<p>一开始拿到公司的token测试连接</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Token</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p><img src="/assets/influxdb-01.png" /></p>
-<p>发现可以正常连接，这意味着token本身没有问题，但是想要执行查询时，会报错401</p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">2024-09-13 18:14:47,261 - ERROR - Error querying InfluxDB: (401)</span><br><span class="line">Reason: Unauthorized</span><br><span class="line">HTTP response headers: HTTPHeaderDict(&#123;&#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;X-Influxdb-Build&#x27;: &#x27;OSS&#x27;, &#x27;X-Influxdb-Version&#x27;: &#x27;v2.7.8&#x27;, &#x27;X-Platform-Error-Code&#x27;: &#x27;unauthorized&#x27;, &#x27;Date&#x27;: &#x27;Fri, 13 Sep 2024 09:44:47 GMT&#x27;, &#x27;Content-Length&#x27;: &#x27;55&#x27;&#125;)</span><br><span class="line">HTTP response body: b&#x27;&#123;&quot;code&quot;:&quot;unauthorized&quot;,&quot;message&quot;:&quot;unauthorized access&quot;&#125;&#x27;</span><br></pre></td></tr></table></figure>
-<p>上网搜索发现许多人遇到过这个问题，最终在一个评论区找到思路</p>
-<p><img src="/assets/influxdb-02.png" /></p>
-<p>于是把ini文件改为</p>
-<figure class="highlight ini"><table><tr><td class="code"><pre><span class="line"><span class="section">[InfluxDB]</span></span><br><span class="line"><span class="attr">Username</span> = ***</span><br><span class="line"><span class="attr">Password</span> = ***</span><br><span class="line"><span class="attr">Org</span> = ***</span><br><span class="line"><span class="attr">ServerUrl</span> = http://localhost:<span class="number">8086</span></span><br><span class="line"><span class="attr">Bucket</span> = ***</span><br></pre></td></tr></table></figure>
-<p>发现可以正常读取了</p>
-<h4 id="过期401">过期401</h4>
-<p>后面在公司测试时又发现了401问题，还是同样的报错，重启程序发现又可以查询了，猜测可能是连接有时间限制</p>
-<p>于是修改建立连接的方式，改为每次要查询前建立连接，问题得到解决</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 动态建立 InfluxDB 连接的函数</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">get_influxdb_client</span>():</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        client = InfluxDBClient(url=influxdb_url, username=influxdb_username, password=influxdb_password, org=influxdb_org)</span><br><span class="line">        logger.info(<span class="string">&quot;Successfully connected to InfluxDB.&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> client</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Failed to connect to InfluxDB: <span class="subst">&#123;<span class="built_in">str</span>(e)&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据读取问题">数据读取问题</h3>
-<p>原本的数据库为mysql，查询语句如下</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">cursor, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    获取设备事件数据</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    query = <span class="string">f&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    SELECT</span></span><br><span class="line"><span class="string">        f_dtc_index, f_notify, f_create_time, f_report_time, f_channel, f_desc</span></span><br><span class="line"><span class="string">    FROM</span></span><br><span class="line"><span class="string">        t_mqtt_event </span></span><br><span class="line"><span class="string">    WHERE</span></span><br><span class="line"><span class="string">        f_device_id = &#x27;<span class="subst">&#123;f_device_id&#125;</span>&#x27; AND f_report_time BETWEEN &#x27;<span class="subst">&#123;start_date&#125;</span>&#x27; AND &#x27;<span class="subst">&#123;end_date&#125;</span>&#x27;</span></span><br><span class="line"><span class="string">    ORDER BY f_id DESC</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">    cursor.execute(query)</span><br><span class="line">    <span class="keyword">return</span> cursor.fetchall()</span><br></pre></td></tr></table></figure>
-<p>现在要修改为influxdb的查询语句，influxdb有自己的查询语法，这里的难点在于理解influxdb的数据是如何存取的。</p>
-<p>我个人的理解为，这里的field是一列，每个field是一个表，这里的查询返回的是所有field的行，但是每行只有一个field以及对应的值。</p>
-<p>这样会产生一个问题，就是我们要合并数据。原有的mysql查询语句是每行有多列的内容，这里我们要根据时间戳去合并所有field来达到同样的效果</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">fetch_device_events</span>(<span class="params">influxdb_client, f_device_id, start_date, end_date</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">    从 InfluxDB 获取设备事件数据并以元组形式输出</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    <span class="comment"># 定义中国时区</span></span><br><span class="line">    cst_tz = pytz.timezone(<span class="string">&#x27;Asia/Shanghai&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 确保传入的 start_date 和 end_date 是 datetime 对象</span></span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(start_date, <span class="built_in">str</span>):</span><br><span class="line">        start_date = datetime.fromisoformat(start_date)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(end_date, <span class="built_in">str</span>):</span><br><span class="line">        end_date = datetime.fromisoformat(end_date)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将时间从中国时区转换为 UTC</span></span><br><span class="line">    start_date = cst_tz.localize(start_date).astimezone(pytz.utc)</span><br><span class="line">    end_date = cst_tz.localize(end_date).astimezone(pytz.utc)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 将 datetime 转换为符合 RFC 3339 格式的字符串 (UTC 时间)</span></span><br><span class="line">    start_date_rfc3339 = start_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line">    end_date_rfc3339 = end_date.strftime(<span class="string">&quot;%Y-%m-%dT%H:%M:%SZ&quot;</span>)</span><br><span class="line"></span><br><span class="line">    query = <span class="string">f&#x27;&#x27;&#x27;</span></span><br><span class="line"><span class="string">    from(bucket: &quot;***&quot;)</span></span><br><span class="line"><span class="string">      |&gt; range(start: <span class="subst">&#123;start_date_rfc3339&#125;</span>, stop: <span class="subst">&#123;end_date_rfc3339&#125;</span>)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;guid&quot;] == &quot;<span class="subst">&#123;f_device_id&#125;</span>&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r._measurement == &quot;device_history&quot;)</span></span><br><span class="line"><span class="string">      |&gt; filter(fn: (r) =&gt; r[&quot;_field&quot;] == &quot;fqIndex&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;code&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;reportTime&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;channel&quot; or </span></span><br><span class="line"><span class="string">                           r[&quot;_field&quot;] == &quot;desc&quot;)</span></span><br><span class="line"><span class="string">      |&gt; sort(columns: [&quot;_time&quot;], desc: true)</span></span><br><span class="line"><span class="string">    &#x27;&#x27;&#x27;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        result = influxdb_client.query_api().query(query, org=<span class="string">&quot;shike&quot;</span>)</span><br><span class="line">        events = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> table <span class="keyword">in</span> result:</span><br><span class="line">            <span class="keyword">for</span> record <span class="keyword">in</span> table.records:</span><br><span class="line">                <span class="comment"># 获取当前记录的时间戳</span></span><br><span class="line">                timestamp = record.get_time()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 如果当前时间戳还没有对应的事件，创建一个新的事件</span></span><br><span class="line">                <span class="keyword">if</span> timestamp <span class="keyword">not</span> <span class="keyword">in</span> events:</span><br><span class="line">                    events[timestamp] = &#123;</span><br><span class="line">                        <span class="string">&quot;fqIndex&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;code&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;reportTime&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;channel&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;desc&quot;</span>: <span class="literal">None</span>,</span><br><span class="line">                        <span class="string">&quot;f_create_time&quot;</span>: timestamp  <span class="comment"># 入库时间</span></span><br><span class="line">                    &#125;</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 根据 _field 来提取 _value 的值</span></span><br><span class="line">                field_name = record.get_field()</span><br><span class="line">                field_value = record.get_value()</span><br><span class="line"></span><br><span class="line">                <span class="comment"># 更新事件的相应字段</span></span><br><span class="line">                <span class="keyword">if</span> field_name == <span class="string">&quot;fqIndex&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;fqIndex&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;code&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;code&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;reportTime&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;reportTime&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;channel&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;channel&quot;</span>] = field_value</span><br><span class="line">                <span class="keyword">elif</span> field_name == <span class="string">&quot;desc&quot;</span>:</span><br><span class="line">                    events[timestamp][<span class="string">&quot;desc&quot;</span>] = field_value</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 将事件转换为所需的元组格式</span></span><br><span class="line">        event_list = []</span><br><span class="line">        <span class="keyword">for</span> timestamp, event <span class="keyword">in</span> events.items():</span><br><span class="line">            event_list.append((</span><br><span class="line">                event[<span class="string">&quot;fqIndex&quot;</span>],  <span class="comment"># f_dtc_index</span></span><br><span class="line">                event[<span class="string">&quot;code&quot;</span>],  <span class="comment"># f_notify</span></span><br><span class="line">                event[<span class="string">&quot;f_create_time&quot;</span>],  <span class="comment"># f_create_time (入库时间)</span></span><br><span class="line">                datetime.fromtimestamp(event[<span class="string">&quot;reportTime&quot;</span>] / <span class="number">1000</span>) <span class="keyword">if</span> event[<span class="string">&quot;reportTime&quot;</span>] <span class="keyword">else</span> <span class="literal">None</span>,  <span class="comment"># f_report_time (上报时间)</span></span><br><span class="line">                event[<span class="string">&quot;channel&quot;</span>],  <span class="comment"># f_channel</span></span><br><span class="line">                event[<span class="string">&quot;desc&quot;</span>]  <span class="comment"># f_desc</span></span><br><span class="line">            ))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> event_list</span><br><span class="line">    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">        logger.error(<span class="string">f&quot;Error querying InfluxDB: <span class="subst">&#123;e&#125;</span>&quot;</span>)</span><br><span class="line">        <span class="keyword">return</span> []</span><br></pre></td></tr></table></figure>
-<h3 id="其他问题">其他问题</h3>
-<p>上面的代码衍生出了一个问题就是influxdb的时间戳时区设置，听公司的前辈说时间戳要设为UTC，否则会出现一些很多问题，于是在查询语句前新增了时区转换。</p>
-<p>此外influxdb不支持int索引。</p>
-]]></content>
-      <tags>
-        <tag>InfluxDB</tag>
-        <tag>数据库</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>前端浏览器缓存机制</title>
-    <url>/posts/50ac740b/</url>
-    <content><![CDATA[<h2 id="前端浏览器缓存机制">前端浏览器缓存机制</h2>
-<p>浏览器缓存机制通过强缓存和协商缓存两种方式，有效提升网页加载性能和用户体验。</p>
-<span id="more"></span>
-<p>浏览器的缓存机制是前端优化的重要手段之一，它通过减少对服务器的请求次数和数据传输量，提升网页加载速度和用户体验。浏览器的缓存机制主要包括两种类型：<strong>强缓存</strong>和<strong>协商缓存</strong>。此外，哈希（hash）也是一种与缓存相关的优化手段。</p>
-<h3 id="强缓存strong-caching">1. 强缓存（Strong Caching）</h3>
-<p><strong>强缓存</strong>是指在不向服务器发送请求的情况下，<strong>直接从浏览器缓存中读取资源</strong>。这种方式的优点是可以极大地减少请求数，提高页面加载速度。强缓存主要通过以下两种HTTP头来实现：</p>
-<ul>
-<li><p><strong>Expires</strong>:
-一个绝对时间的GMT格式字符串，表示资源的到期时间。浏览器在这个时间之前都会直接使用缓存，不会发送请求。但由于客户端的时间可能不准，这种方式现在较少使用。</p></li>
-<li><p><strong>Cache-Control</strong>:
-这是一个相对时间的设置方式，使用更广泛。<code>Cache-Control</code>通过指定一个时间长度（例如
-<code>max-age=3600</code>，表示3600秒后过期）来控制资源的缓存时间。它可以使用多个指令组合，如：</p>
-<ul>
-<li><code>public</code>:
-资源可以被任何缓存（包括浏览器、CDN等）缓存。</li>
-<li><code>private</code>:
-资源仅能被浏览器缓存，不能被共享缓存（如CDN）缓存。</li>
-<li><code>no-cache</code>:
-资源会被缓存，但每次使用前必须先向服务器验证缓存是否有效（实际上会走协商缓存）。</li>
-<li><code>no-store</code>: 完全不缓存，资源每次都需要重新请求。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中强缓存</strong>：如果命中了强缓存，浏览器不会与服务器通信，状态码为
-<code>200 (from cache)</code>。</p>
-<h3 id="协商缓存negotiation-caching">2. 协商缓存（Negotiation
-Caching）</h3>
-<p><strong>协商缓存</strong>是指当强缓存失效或未命中时，浏览器会向服务器发送请求，询问资源是否有更新。如果资源未更新，则可以继续使用缓存的副本，若资源已更新，则下载新的资源并替换缓存。</p>
-<p>协商缓存的实现主要依赖以下两种HTTP头：</p>
-<ul>
-<li><strong>Last-Modified &amp; If-Modified-Since</strong>:
-<ul>
-<li><strong>Last-Modified</strong>:
-服务器在响应头中返回资源的最后修改时间。</li>
-<li><strong>If-Modified-Since</strong>: 浏览器在请求头中带上上次缓存的
-<code>Last-Modified</code>
-时间。服务器比较这个时间和资源的最后修改时间，如果没有变化则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果资源已更新，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-<li><strong>ETag &amp; If-None-Match</strong>:
-<ul>
-<li><strong>ETag</strong>:
-服务器为资源生成的唯一标识符（哈希值），资源改变时，ETag 也会改变。</li>
-<li><strong>If-None-Match</strong>: 浏览器在请求头中带上上次缓存的 ETag
-值。服务器比较该值与当前资源的 ETag，如果匹配则返回
-<code>304 Not Modified</code>，浏览器继续使用缓存；如果不匹配，则返回
-<code>200</code> 和新资源。</li>
-</ul></li>
-</ul>
-<p><strong>判断是否命中协商缓存</strong>：如果命中协商缓存，浏览器会收到
-<code>304 Not Modified</code> 状态码，表示可以继续使用缓存。</p>
-<h3 id="哈希与缓存hash">3. 哈希与缓存（Hash）</h3>
-<p><strong>哈希（Hash）</strong>与缓存机制紧密相关，尤其在前端资源文件（如
-JavaScript、CSS、图片等）的缓存管理中非常有用。通过在文件名或路径中添加哈希值（通常是文件内容的哈希值），可以确保当文件内容发生变化时，浏览器会请求新资源而不是使用旧缓存。</p>
-<p><strong>典型用法</strong>：</p>
-<ul>
-<li>文件名中添加哈希值：<code>main.abc123.js</code>。每次文件内容变化时，哈希值都会改变，这样浏览器就会识别为一个新文件，避免使用旧缓存。</li>
-<li>结合 <code>Cache-Control</code> 的 <code>immutable</code>
-标识符，确保不会重新验证文件（因为文件名唯一标识了内容，不会改变）。</li>
-</ul>
-<p><strong>总结</strong>：</p>
-<ul>
-<li><strong>强缓存</strong>可以直接避免请求，提升性能；</li>
-<li><strong>协商缓存</strong>在资源更新时能保证用户获取最新内容，同时避免不必要的下载；</li>
-<li><strong>哈希</strong>通过文件名标识内容变化，结合缓存机制有效管理前端资源的更新与缓存。</li>
-</ul>
-<p>通过合理配置这三者，前端开发可以显著优化网页加载速度和用户体验。</p>
-<h3 id="什么是cdn内容分发网络">什么是CDN（内容分发网络）</h3>
-<p><strong>CDN（Content Delivery Network，内容分发网络）</strong>
-是一种通过地理位置分散的服务器集群来加速用户访问网站内容的技术。它的核心目的是将网站的静态资源（如图片、CSS、JavaScript
-文件、视频等）分布到靠近用户的节点上，以提高访问速度和减少服务器的负载。</p>
-<h4 id="cdn的工作原理">CDN的工作原理</h4>
-<ol type="1">
-<li><p><strong>内容缓存</strong>：网站的静态资源会被缓存到CDN的多个节点服务器上。这些节点分布在全球各地，每个节点都称为一个“边缘服务器”。</p></li>
-<li><p><strong>用户请求</strong>：当用户访问一个使用CDN的网站时，用户的请求会被自动路由到离他们最近的CDN节点，而不是直接请求网站的源服务器。</p></li>
-<li><p><strong>缓存命中</strong>：如果该节点缓存中已有用户请求的资源，则直接返回给用户，从而减少延迟和负载。</p></li>
-<li><p><strong>缓存未命中</strong>：如果缓存中没有该资源，CDN节点会向源服务器请求该资源，之后将资源传递给用户，并缓存到本地以备后续用户请求。</p></li>
-</ol>
-<h4 id="cdn的主要优势">CDN的主要优势</h4>
-<ol type="1">
-<li><p><strong>加速内容传递</strong>：通过将内容放在离用户更近的服务器上，CDN能显著减少数据传输的时间，提升网页加载速度。</p></li>
-<li><p><strong>减轻服务器负载</strong>：由于大量的静态内容被分发到CDN节点，源服务器的负载减轻，能够更高效地处理动态请求。</p></li>
-<li><p><strong>高可用性和冗余</strong>：CDN通过多个节点提供内容，即使某个节点宕机，用户请求也能被路由到其他节点，提高了内容的可用性和网站的容错性。</p></li>
-<li><p><strong>带宽优化</strong>：通过分散用户请求，CDN可以有效减少单个服务器的带宽压力，降低带宽成本。</p></li>
-<li><p><strong>安全性增强</strong>：许多CDN服务提供安全功能，如DDoS防护、SSL加速和Web应用防火墙（WAF），从而增强网站的整体安全性。</p></li>
-</ol>
-<h4 id="cdn的使用场景">CDN的使用场景</h4>
-<ul>
-<li><strong>大型网站</strong>：如电商网站、视频流媒体服务、社交媒体平台等，需要为全球用户提供快速、稳定的访问体验。</li>
-<li><strong>高流量事件</strong>：如体育赛事直播、大型促销活动等，CDN能有效分散流量，避免服务器崩溃。</li>
-<li><strong>静态资源分发</strong>：如网站的图片、CSS、JavaScript
-文件等，通过CDN可以提升资源加载速度。</li>
-</ul>
-<p>总之，CDN通过将内容分布到全球各地的边缘服务器上，加快了用户访问的速度，提升了网站的性能和可用性，是现代网络架构中不可或缺的一部分。</p>
-]]></content>
-      <tags>
-        <tag>前端</tag>
-        <tag>浏览器</tag>
-        <tag>缓存</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>编码</title>
     <url>/posts/6f8a188e/</url>
     <content><![CDATA[<h2 id="编码">编码</h2>
@@ -2094,6 +2094,41 @@ Layer），由网景公司于1994年提出，主要用于解决HTTP协议在传�
       </tags>
   </entry>
   <entry>
+    <title>DeepSeek本地部署</title>
+    <url>/posts/4f6ed32b/</url>
+    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
+<span id="more"></span>
+<h2 id="下载ollama">下载Ollama</h2>
+<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
+<p>下载地址：https://ollama.com/download/windows</p>
+<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
+<p>如下图所示</p>
+<p><img src="/assets/deepseek-01.png" /></p>
+<blockquote>
+<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
+</blockquote>
+<p>上述步骤完成后，我们可以打开CMD，输入ollama
+-v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
+<p><img src="/assets/deepseek-02.png" /></p>
+<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
+<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
+<h2 id="下载deepseek">下载DeepSeek</h2>
+<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
+<p><img src="/assets/deepseek-03.png" /></p>
+<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
+<p>如下图所示：</p>
+<p><img src="/assets/deepseek-04.png" /></p>
+<p>最终效果如下图所示：</p>
+<p><img src="/assets/deepseek-05.png" /></p>
+]]></content>
+      <tags>
+        <tag>大语言模型</tag>
+        <tag>人工智能</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Understanding the Linux Kernel Lecture 1 Note</title>
     <url>/posts/b1b647fa/</url>
     <content><![CDATA[<h2 id="引言">引言</h2>
@@ -2835,41 +2870,6 @@ ID)，及sticky用来定义文件的模式。当这些标记位应用到可执�
         <tag>Linux</tag>
         <tag>操作系统</tag>
         <tag>内核</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>DeepSeek本地部署</title>
-    <url>/posts/4f6ed32b/</url>
-    <content><![CDATA[<p>今天来尝试本地部署一下DeepSeek，看看效果如何。</p>
-<span id="more"></span>
-<h2 id="下载ollama">下载Ollama</h2>
-<p>Ollama是一个轻量级的AI模型运行平台，支持多种AI模型，包括LLM、Embedding、Chatbot等。</p>
-<p>下载地址：https://ollama.com/download/windows</p>
-<p>以管理员身份运行CMD，并定位到OllamaSetup.exe所在的目录，执行安装命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">OllamaSetup.exe /DIR=<span class="string">&quot;E:\tools\Ollama&quot;</span></span><br></pre></td></tr></table></figure>
-<p>如下图所示</p>
-<p><img src="/assets/deepseek-01.png" /></p>
-<blockquote>
-<p>注意：安装完成后，Ollama默认为打开状态，此时我们先退出Ollama（鼠标右键点击任务栏的Ollama图标然后选择退出即可）。</p>
-</blockquote>
-<p>上述步骤完成后，我们可以打开CMD，输入ollama
--v命令，如果出现如下图所示的内容就代表Ollama安装成功了：</p>
-<p><img src="/assets/deepseek-02.png" /></p>
-<h2 id="修改大模型存储位置">修改大模型存储位置</h2>
-<p>打开环境变量，然后在用户变量中点击新建按钮，变量名为OLLAMA_MODELS，变量值为D:_Program_Ollama，其中的变量值就是大模型下载存储的目录位置，最后点击确定即可</p>
-<h2 id="下载deepseek">下载DeepSeek</h2>
-<p>打开Ollama官网，点击顶部的Models链接，找到deepseek-r1模型，点击deepseek-r1链接进去，此时我们会看到下拉框中有各个版本的大模型</p>
-<p><img src="/assets/deepseek-03.png" /></p>
-<p>这里选择了7b，复制下载命令<code>ollama run deepseek-r1:7b</code>，然后打开CMD，执行下载命令：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ollama run deepseek-r1:7b</span><br></pre></td></tr></table></figure>
-<p>如下图所示：</p>
-<p><img src="/assets/deepseek-04.png" /></p>
-<p>最终效果如下图所示：</p>
-<p><img src="/assets/deepseek-05.png" /></p>
-]]></content>
-      <tags>
-        <tag>大语言模型</tag>
-        <tag>人工智能</tag>
       </tags>
   </entry>
   <entry>
@@ -8744,214 +8744,6 @@ href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.swi
       </tags>
   </entry>
   <entry>
-    <title>大模型百词</title>
-    <url>/posts/8c9ab17b/</url>
-    <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
-的惊艳亮相到各类 AIGC
-应用的层出不穷，我们每天都会接触到海量的新名词和新概念。为了帮助大家更好地理解这个日新月异的领域，本文梳理了一系列核心术语，希望能为你构建一个清晰的知识地图。</p>
-<span id="more"></span>
-<h2 id="基本概念">基本概念</h2>
-<ol type="1">
-<li><strong>函数
-(Function)</strong>：通过一个或多个输入得到对应输出的关系，万物皆函数</li>
-<li><strong>符号主义
-(Symbolism)</strong>：找出精确函数以试图解释一切原理，但存在瓶颈</li>
-<li><strong>联结主义
-(Connectionism)</strong>：不进行预设，通过复杂函数计算出的预测值与真实值的误差，对函数中的未知参数进行不断调整</li>
-<li><strong>模型 (Model)</strong>：联结主义思想所使用的复杂函数</li>
-<li><strong>权重 (Weights)</strong>：模型中需要调整的参数</li>
-<li><strong>大模型 (Large Model)</strong>：需要调整参数较多的模型</li>
-<li><strong>大语言模型 (Large Language Model,
-LLM)</strong>：用于自然语言处理的模型</li>
-<li><strong>生成式AI (Generative
-AI)</strong>：根据输入内容持续计算并自动生成新内容的人工智能系统</li>
-<li><strong>通用人工智能 (Artificial General Intelligence,
-AGI)</strong>：是指能够在各种领域执行复杂认知任务的人工智能系统</li>
-<li><strong>Token</strong>：将文字、图像、声音、视频分割成的最小粒度</li>
-<li><strong>上下文 (Context)</strong>：对话时给到大模型的所有信息</li>
-<li><strong>提示词
-(Prompt)</strong>：用于指导模型的回答流程与风格，与上下文含义类似</li>
-<li><strong>提示词工程师 (Prompt
-Engineer)</strong>：研究如何与大模型对话以达到更优反馈的职位</li>
-</ol>
-<h2 id="训练与推理">训练与推理</h2>
-<ol type="1">
-<li><strong>训练 (Training)</strong>：对模型中的参数进行调整</li>
-<li><strong>预训练
-(Pre-training)</strong>：在大量数据上训练基础模型以学习通用特征</li>
-<li><strong>微调
-(Fine-tuning)</strong>：在预训练模型基础上对特定方向任务进行训练</li>
-<li><strong>推理
-(Inference)</strong>：参数调整完成后，根据函数的输入计算输出结果的过程</li>
-<li><strong>涌现
-(Emergence)</strong>：模型参数量显著增长后，推理能力得到大幅提升的现象</li>
-<li><strong>随机性
-(Randomness)</strong>：对大模型固定输出的内容进行调整，使其并不是总取概率最高</li>
-<li><strong>温度 (Temperature)</strong>：控制随机性的参数</li>
-<li><strong>Top-K</strong>：控制输出中选择出前K个最大或最小的元素的操作</li>
-<li><strong>幻觉
-(Hallucination)</strong>：随机性过高或过低导致输出结果存在事实性错误或虚假信息的情况</li>
-<li><strong>联网 (Web
-Browsing)</strong>：通过互联网获取相关信息，结合相关信息进行输出，以减少幻觉的方法</li>
-</ol>
-<h2 id="模型与产品">模型与产品</h2>
-<ol type="1">
-<li><strong>ChatGPT</strong>：2023年爆火的用于聊天的产品</li>
-<li><strong>GPT (Generative Pre-trained Transformer,
-生成式预训练变换器)</strong>：为大语言模型的一种系列</li>
-<li><strong>OpenAI</strong>：开发ChatGPT的公司，产品为闭源</li>
-<li><strong>Claude</strong>：Anthropic发布的大语言模型</li>
-<li><strong>Gemini</strong>：Google DeepMind发布的AI</li>
-<li><strong>DeepSeek</strong>：深度求索公司发布的AI</li>
-<li><strong>豆包
-(Doubao)</strong>：字节跳动公司基于云雀模型开发的AI</li>
-<li><strong>通义千问 (Qwen)</strong>：阿里云发布的AI</li>
-<li><strong>腾讯元宝 (Tencent
-Yuanbao)</strong>：腾讯发布的基于自研混元大模型开发的C端AI</li>
-<li><strong>Midjourney</strong>：闭源的AI图像生成器（中国实验室版名为悠船）</li>
-<li><strong>Stable Diffusion</strong>：Stability
-AI推出的开源AI图像生成器</li>
-<li><strong>Sora</strong>：OpenAI发布的人工智能文生视频大模型</li>
-<li><strong>可灵 (Kling)</strong>：快手AI团队发布的视频生成大模型</li>
-<li><strong>即梦
-(Jmeng)</strong>：字节跳动旗下剪映团队研发的AI创作平台</li>
-</ol>
-<h2 id="模型分类与部署">模型分类与部署</h2>
-<ol type="1">
-<li><strong>闭源模型 (Closed-source
-Model)</strong>：不开放源代码与权重，只提供最终服务的模型（如ChatGPT、Claude、Gemini）</li>
-<li><strong>开放权重模型 (Open-weight
-Model)</strong>：可本地部署的，开放权重以供调整的模型（不开放训练代码与数据，如DeepSeek、LLaMA）</li>
-<li><strong>完全开源模型 (Fully Open-source
-Model)</strong>：开放训练代码、数据、权重的模型（如‌Mistral）</li>
-<li><strong>私有化部署 (Private
-Deployment)</strong>：不依托其他服务，将模型下载到本地进行使用的过程</li>
-<li><strong>云桌面 (Cloud
-Desktop)</strong>：搭载好了所需环境的，高性能的，可远程网络控制的一种服务</li>
-<li><strong>镜像
-(Image)</strong>：用于特定开发所需的打包好的环境和软件</li>
-</ol>
-<h2 id="技术与应用">技术与应用</h2>
-<ol type="1">
-<li><strong>多模态
-(Multimodality)</strong>：能处理图像、声音、视频多种内容的能力</li>
-<li><strong>检索增强生成 (Retrieval-Augmented Generation,
-RAG)</strong>：在私有数据库中进行搜索以获取信息的方法</li>
-<li><strong>知识库 (Knowledge
-Base)</strong>：用于大模型查询所用的私有数据库</li>
-<li><strong>向量数据库 (Vector
-Database)</strong>：特化模型与知识库语义匹配，以向量形式存储的数据库</li>
-<li><strong>词嵌入 (Word
-Embedding)</strong>：把文字转换为词向量的方式，用于捕捉词间语义关系</li>
-<li><strong>向量检索 (Vector
-Retrieval)</strong>：对比词向量相似度，以在知识库中找到相关问题答案的方式</li>
-<li><strong>数字人 (Digital
-Human)</strong>：运用数字技术创造出来的、与人类形象接近的数字化人物形象</li>
-<li><strong>工作流
-(Workflow)</strong>：多次使用大模型能力，将工作内容分为多个步骤分别处理并整合为一个流程的能力</li>
-<li><strong>智能体
-(Agent)</strong>：按工作流封装大模型与工具集以实现自动完成复杂任务的程序</li>
-<li><strong>多智能体
-(Multi-Agent)</strong>：多个智能体协作完成更复杂任务的程序</li>
-<li><strong>插件 (Plugins)</strong>：ChatGPT
-的附加组件系统（智能体）</li>
-<li><strong>AutoGPT</strong>：GPT模型驱动的智能体系统</li>
-<li><strong>Manus</strong>：具备从规划到执行全流程自主完成任务能力的智能体</li>
-<li><strong>MCP (Model-graded Controllable
-Preference)</strong>：Anthropic提出的，用于AI操作外部世界的协议</li>
-<li><strong>A2A
-(Agent-to-Agent)</strong>：Google提出的用于智能体与智能体间通信的协议</li>
-</ol>
-<h2 id="优化与进阶">优化与进阶</h2>
-<ol type="1">
-<li><strong>模型压缩 (Model
-Compression)</strong>：由于模型大小与能力出现边际收益递减，以减少成本与方便个人的减小模型大小的方法</li>
-<li><strong>量化
-(Quantization)</strong>：把模型中的浮点数用更低精度表示以减少显存与计算的方法</li>
-<li><strong>蒸馏
-(Distillation)</strong>：用参数量较大的大模型指导参数量较小的小模型的方法</li>
-<li><strong>剪枝
-(Pruning)</strong>：删除模型中不重要神经元，让模型更稀疏以提升速度的方法</li>
-<li><strong>低秩适应 (Low-Rank Adaptation,
-LoRA)</strong>：用更低成本改善微调方式的方法</li>
-<li><strong>思维链 (Chain-of-Thought,
-CoT)</strong>：从推理能力方向增强模型能力的方法</li>
-<li><strong>人类反馈强化学习 (Reinforcement Learning from Human
-Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
-</ol>
-<h2 id="生态与行业">生态与行业</h2>
-<ol type="1">
-<li><strong>专业生产内容 (Professional Generated Content,
-PGC)</strong></li>
-<li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
-<li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
-<li><strong>炸裂体 (Explosive
-Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
-<li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
-<li><strong>卖铲子 (Selling
-Shovels)</strong>：提供工具或服务、教程等帮助他人在AI中淘金的赚钱方式</li>
-<li><strong>Hugging Face</strong>：AI开源平台及社区</li>
-</ol>
-<h2 id="硬件与框架">硬件与框架</h2>
-<ol type="1">
-<li><strong>GPU (Graphics Processing Unit,
-图形处理单元)</strong>:NVIDIA公司的产品</li>
-<li><strong>CUDA (Compute Unified Device
-Architecture)</strong>：NVIDIA推出的AI开发框架</li>
-<li><strong>TPU (Tensor Processing Unit,
-张量处理单元)</strong>：专用与大规模神经网络训练与推理的处理器</li>
-<li><strong>NPU (Neural Processing Unit,
-神经网络处理单元)</strong>：专用于终端设备加速推理的处理器</li>
-<li><strong>Python</strong>：适合AI开发的编程语言</li>
-<li><strong>PyTorch</strong>：Python提供的针对AI编程的库</li>
-<li><strong>TensorFlow</strong>：由 Google Brain
-团队开发的深度学习框架</li>
-<li><strong>Ollama</strong>：大模型本地运行工具</li>
-<li><strong>vLLM</strong>：提升大语言模型推理速度的推理引擎</li>
-<li><strong>ComfyUI</strong>：构建在 Stable Diffusion
-之上的基于节点的绘画工作流软件（B站:秋葉aaaki
-大佬制作了很多相关整合包）</li>
-<li><strong>扣子 (Coze)</strong>：在网页端编排工作流的一款工具</li>
-<li><strong>LangChain</strong>：以代码方式编排工具流的方式</li>
-<li><strong>Cursor</strong>：Anysphere开发的人工智能编程助手</li>
-<li><strong>GitHub
-Copilot</strong>：微软与OpenAI共同推出的AI编程工具</li>
-</ol>
-<h2 id="神经网络基础">神经网络基础</h2>
-<ol type="1">
-<li><strong>数学
-(Mathematics)</strong>：AI基石，包括线性代数、微积分、概率论等</li>
-<li><strong>自然语言处理 (Natural Language Processing,
-NLP)</strong>：人工智能的一大分支领域，其主要目的是让机器理解人类的语言文字，从而执行一系列任务</li>
-<li><strong>计算机视觉 (Computer Vision,
-CV)</strong>：与图片高度相关</li>
-<li><strong>神经网络 (Neural
-Network)</strong>：模仿生物神经系统结构和功能的计算模型</li>
-<li><strong>损失函数 (Loss
-Function)</strong>：估量模型的预测值f(x)与真实值Y的不一致程度的函数</li>
-<li><strong>反向传播
-(Backpropagation)</strong>：计算损失函数关于网络参数的梯度来更新参数</li>
-<li><strong>多层感知机 (Multilayer Perceptron,
-MLP)</strong>：将输入的多个数据集映射到单一的输出的数据集，是一种人工神经网络模型</li>
-<li><strong>卷积神经网络 (Convolutional Neural Network,
-CNN)</strong>：包含卷积计算且具有深度结构的神经网络</li>
-<li><strong>循环神经网络 (Recurrent Neural Network,
-RNN)</strong>：适合于处理序列数据的神经网络</li>
-<li><strong>注意力机制 (Attention
-Mechanism)</strong>：模拟人类选择性注意机制，提升信息处理效率</li>
-<li><strong>Transformer</strong>：一种基于注意力机制的神经网络结构</li>
-<li><strong>文本转语音 (Text To Speech, TTS)</strong></li>
-<li><strong>语音转文字 (Automatic Speech Recognition, ASR)</strong></li>
-</ol>
-]]></content>
-      <tags>
-        <tag>AI</tag>
-        <tag>LLM</tag>
-        <tag>术语</tag>
-        <tag>大模型</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>内网穿透与远程桌面：用 Tailscale 随时随地访问你的 Windows</title>
     <url>/posts/8a7b3c2d/</url>
     <content><![CDATA[<p>在咖啡馆、酒店等有网络的地方操作家里的电脑，是远程办公的常见需求。传统做法（公网
@@ -9199,68 +8991,211 @@ IP 地址，然后点击连接，按提示输入主机的用户名和密码。</
       </tags>
   </entry>
   <entry>
-    <title>了解Diffusion Language Model</title>
-    <url>/posts/a1d79e4c/</url>
-    <content><![CDATA[<p>我们熟悉的 Transformer
-等模型采用“自回归”方式逐词生成文本，这限制了生成速度且不易保证长文本连贯。受图像生成领域成功的
-<strong>扩散模型 (Diffusion Model)</strong>
-启发，研究者将其引入文本生成，<strong>扩散语言模型 (Diffusion Language
-Model)</strong> 应运而生。</p>
+    <title>大模型百词</title>
+    <url>/posts/8c9ab17b/</url>
+    <content><![CDATA[<p>当下，大模型（Large Model）无疑是科技领域最炙手可热的话题。从 ChatGPT
+的惊艳亮相到各类 AIGC
+应用的层出不穷，我们每天都会接触到海量的新名词和新概念。为了帮助大家更好地理解这个日新月异的领域，本文梳理了一系列核心术语，希望能为你构建一个清晰的知识地图。</p>
 <span id="more"></span>
-<h2 id="什么是扩散模型">什么是扩散模型？</h2>
-<p><img src="/assets/diffusion-lm-01.png" /></p>
-<p>在深入了解其如何应用于语言之前，我们先通过一个直观的例子——图像生成——来理解扩散模型的核心思想。它主要包含两个过程：</p>
+<h2 id="基本概念">基本概念</h2>
 <ol type="1">
-<li><p><strong>前向过程（Forward
-Process）</strong>：也叫“扩散”过程。想象一下，我们从一张清晰的图片开始，一步步地、逐渐地向图片中添加微小的“噪声”，直到这张图片完全变成一个毫无规律的噪声图。这个过程是固定的、可控的。</p></li>
-<li><p><strong>反向过程（Reverse
-Process）</strong>：也叫“去噪”过程。这是真正的“生成”环节。我们训练一个神经网络，让它学会上述过程的“逆操作”——即从一张纯噪声的图片开始，一步步地、逐渐地去除噪声，最终还原出一张清晰、有意义的图片。</p></li>
+<li><strong>函数
+(Function)</strong>：通过一个或多个输入得到对应输出的关系，万物皆函数</li>
+<li><strong>符号主义
+(Symbolism)</strong>：找出精确函数以试图解释一切原理，但存在瓶颈</li>
+<li><strong>联结主义
+(Connectionism)</strong>：不进行预设，通过复杂函数计算出的预测值与真实值的误差，对函数中的未知参数进行不断调整</li>
+<li><strong>模型 (Model)</strong>：联结主义思想所使用的复杂函数</li>
+<li><strong>权重 (Weights)</strong>：模型中需要调整的参数</li>
+<li><strong>大模型 (Large Model)</strong>：需要调整参数较多的模型</li>
+<li><strong>大语言模型 (Large Language Model,
+LLM)</strong>：用于自然语言处理的模型</li>
+<li><strong>生成式AI (Generative
+AI)</strong>：根据输入内容持续计算并自动生成新内容的人工智能系统</li>
+<li><strong>通用人工智能 (Artificial General Intelligence,
+AGI)</strong>：是指能够在各种领域执行复杂认知任务的人工智能系统</li>
+<li><strong>Token</strong>：将文字、图像、声音、视频分割成的最小粒度</li>
+<li><strong>上下文 (Context)</strong>：对话时给到大模型的所有信息</li>
+<li><strong>提示词
+(Prompt)</strong>：用于指导模型的回答流程与风格，与上下文含义类似</li>
+<li><strong>提示词工程师 (Prompt
+Engineer)</strong>：研究如何与大模型对话以达到更优反馈的职位</li>
 </ol>
-<p>一旦模型学会了如何“去噪”，我们就可以给它任何随机噪声，让它“创造”出全新的、从未见过的图片。</p>
-<h2 id="如何将扩散模型用于文本">如何将扩散模型用于文本？</h2>
-<p>直接将扩散模型应用于文本面临一个核心挑战：<strong>文本是离散的，而扩散过程处理的是连续的数据</strong>。我们无法像给图片像素值加噪声那样，给一个“词”加上一点“噪声”变成另一个“半词”。</p>
-<p>解决方案是：<strong>在连续空间中操作</strong>。</p>
-<p>我们不直接处理文字，而是先将文字通过 <strong>词嵌入（Word
-Embedding）</strong>
-技术转换为高维度的连续向量。这样，文本序列就变成了一组向量，我们可以在这个连续的向量空间中执行扩散和去噪过程。</p>
-<h2 id="diffusion-语言模型的工作原理">Diffusion 语言模型的工作原理</h2>
-<p>理解了以上概念后，扩散语言模型的工作流程就清晰了：</p>
+<h2 id="训练与推理">训练与推理</h2>
 <ol type="1">
-<li><strong>前向过程</strong>：取一个句子，将其转换为词向量序列。然后，逐步向这些向量中添加噪声，直到它们变成一组随机向量。</li>
-<li><strong>反向过程</strong>：训练一个模型（通常是基于 Transformer
-架构）来学习逆转这个过程。模型的任务是接收一串加了噪声的向量，并预测出“更干净”的向量应该是什么样子。</li>
-<li><strong>文本生成</strong>：当需要生成新文本时，我们从一组完全随机的向量开始，然后反复利用训练好的去噪模型进行迭代处理。每一步，向量都会变得“更清晰”一点，逐渐从无序的噪声收敛为有意义的词向量。最后，将这些“去噪”完成的词向量转换回人类可读的文字，就完成了一次文本生成。</li>
+<li><strong>训练 (Training)</strong>：对模型中的参数进行调整</li>
+<li><strong>预训练
+(Pre-training)</strong>：在大量数据上训练基础模型以学习通用特征</li>
+<li><strong>微调
+(Fine-tuning)</strong>：在预训练模型基础上对特定方向任务进行训练</li>
+<li><strong>推理
+(Inference)</strong>：参数调整完成后，根据函数的输入计算输出结果的过程</li>
+<li><strong>涌现
+(Emergence)</strong>：模型参数量显著增长后，推理能力得到大幅提升的现象</li>
+<li><strong>随机性
+(Randomness)</strong>：对大模型固定输出的内容进行调整，使其并不是总取概率最高</li>
+<li><strong>温度 (Temperature)</strong>：控制随机性的参数</li>
+<li><strong>Top-K</strong>：控制输出中选择出前K个最大或最小的元素的操作</li>
+<li><strong>幻觉
+(Hallucination)</strong>：随机性过高或过低导致输出结果存在事实性错误或虚假信息的情况</li>
+<li><strong>联网 (Web
+Browsing)</strong>：通过互联网获取相关信息，结合相关信息进行输出，以减少幻觉的方法</li>
 </ol>
-<h2 id="diffusion-语言模型的优势">Diffusion 语言模型的优势</h2>
-<p>与传统的自回归模型相比，扩散语言模型展现出一些独特的优势：</p>
-<ul>
-<li><strong>并行生成</strong>：扩散模型在生成时是迭代式地对整个序列进行优化的，而不是像自回归模型那样必须逐词生成。这为并行计算和更快的生成速度提供了可能。</li>
-<li><strong>全局一致性</strong>：由于模型的每一步去噪都是基于对整个序列的观察，它能更好地捕捉全局依赖关系，生成的文本在长距离连贯性和结构完整性上可能更具优势。</li>
-<li><strong>可控性更强</strong>：扩散模型的迭代特性使其在生成过程中更容易被引导和控制。我们可以通过修改去噪过程来控制生成文本的风格、主题或结构，使其更适用于文本编辑、修复和改写等任务。</li>
-</ul>
-<h2 id="前沿研究进展">前沿研究进展</h2>
-<p>尽管扩散语言模型是一个较新的研究方向，但它已经展现出惊人的潜力，涌现了许多前沿工作：</p>
-<ul>
-<li><strong>大规模模型的成功</strong>：以 <strong>LLaDA</strong>
-为代表的研究表明，当参数规模扩大到数十亿级别时，精心设计的扩散语言模型在性能上足以媲美甚至在某些复杂任务上超越顶尖的自回归模型（如
-LLaMA3、GPT-4o），这证明了该技术路线的可行性与潜力。</li>
-<li><strong>效率与质量的权衡</strong>：一些研究也指出，当前扩散语言模型在推理时为了达到高质量的生成效果，可能需要较多的“去噪”迭代步骤，这导致其计算成本相对较高。如何平衡生成质量与推理效率，是目前该领域的研究热点之一。</li>
-<li><strong>多模态统一框架</strong>：部分工作（如
-<strong>Transfusion</strong> 架构）尝试将扩散模型与 Transformer
-深度融合，在一个统一的框架内同时处理文本和图像的生成任务，为多模态内容创作提供了新的思路。</li>
-<li><strong>行业巨头的投入</strong>：以 Google 推出的 <strong>Gemini
-Diffusion</strong>
-为例，科技巨头们也开始在该领域发力，进一步验证了文本扩散模型作为下一代生成技术核心的潜力。</li>
-</ul>
-<h2 id="总结">总结</h2>
-<p>扩散语言模型通过借鉴图像生成领域的成功经验，为自然语言生成任务提供了一种全新的、非自回归的解决方案。它通过在连续的词向量空间中进行“加噪”和“去噪”，克服了文本数据的离散性难题。尽管这一领域仍处于快速发展阶段，但其在并行生成、全局连贯性和可控性方面展现出的巨大潜力，预示着它将成为未来自然语言处理领域一个重要的研究方向。</p>
+<h2 id="模型与产品">模型与产品</h2>
+<ol type="1">
+<li><strong>ChatGPT</strong>：2023年爆火的用于聊天的产品</li>
+<li><strong>GPT (Generative Pre-trained Transformer,
+生成式预训练变换器)</strong>：为大语言模型的一种系列</li>
+<li><strong>OpenAI</strong>：开发ChatGPT的公司，产品为闭源</li>
+<li><strong>Claude</strong>：Anthropic发布的大语言模型</li>
+<li><strong>Gemini</strong>：Google DeepMind发布的AI</li>
+<li><strong>DeepSeek</strong>：深度求索公司发布的AI</li>
+<li><strong>豆包
+(Doubao)</strong>：字节跳动公司基于云雀模型开发的AI</li>
+<li><strong>通义千问 (Qwen)</strong>：阿里云发布的AI</li>
+<li><strong>腾讯元宝 (Tencent
+Yuanbao)</strong>：腾讯发布的基于自研混元大模型开发的C端AI</li>
+<li><strong>Midjourney</strong>：闭源的AI图像生成器（中国实验室版名为悠船）</li>
+<li><strong>Stable Diffusion</strong>：Stability
+AI推出的开源AI图像生成器</li>
+<li><strong>Sora</strong>：OpenAI发布的人工智能文生视频大模型</li>
+<li><strong>可灵 (Kling)</strong>：快手AI团队发布的视频生成大模型</li>
+<li><strong>即梦
+(Jmeng)</strong>：字节跳动旗下剪映团队研发的AI创作平台</li>
+</ol>
+<h2 id="模型分类与部署">模型分类与部署</h2>
+<ol type="1">
+<li><strong>闭源模型 (Closed-source
+Model)</strong>：不开放源代码与权重，只提供最终服务的模型（如ChatGPT、Claude、Gemini）</li>
+<li><strong>开放权重模型 (Open-weight
+Model)</strong>：可本地部署的，开放权重以供调整的模型（不开放训练代码与数据，如DeepSeek、LLaMA）</li>
+<li><strong>完全开源模型 (Fully Open-source
+Model)</strong>：开放训练代码、数据、权重的模型（如‌Mistral）</li>
+<li><strong>私有化部署 (Private
+Deployment)</strong>：不依托其他服务，将模型下载到本地进行使用的过程</li>
+<li><strong>云桌面 (Cloud
+Desktop)</strong>：搭载好了所需环境的，高性能的，可远程网络控制的一种服务</li>
+<li><strong>镜像
+(Image)</strong>：用于特定开发所需的打包好的环境和软件</li>
+</ol>
+<h2 id="技术与应用">技术与应用</h2>
+<ol type="1">
+<li><strong>多模态
+(Multimodality)</strong>：能处理图像、声音、视频多种内容的能力</li>
+<li><strong>检索增强生成 (Retrieval-Augmented Generation,
+RAG)</strong>：在私有数据库中进行搜索以获取信息的方法</li>
+<li><strong>知识库 (Knowledge
+Base)</strong>：用于大模型查询所用的私有数据库</li>
+<li><strong>向量数据库 (Vector
+Database)</strong>：特化模型与知识库语义匹配，以向量形式存储的数据库</li>
+<li><strong>词嵌入 (Word
+Embedding)</strong>：把文字转换为词向量的方式，用于捕捉词间语义关系</li>
+<li><strong>向量检索 (Vector
+Retrieval)</strong>：对比词向量相似度，以在知识库中找到相关问题答案的方式</li>
+<li><strong>数字人 (Digital
+Human)</strong>：运用数字技术创造出来的、与人类形象接近的数字化人物形象</li>
+<li><strong>工作流
+(Workflow)</strong>：多次使用大模型能力，将工作内容分为多个步骤分别处理并整合为一个流程的能力</li>
+<li><strong>智能体
+(Agent)</strong>：按工作流封装大模型与工具集以实现自动完成复杂任务的程序</li>
+<li><strong>多智能体
+(Multi-Agent)</strong>：多个智能体协作完成更复杂任务的程序</li>
+<li><strong>插件 (Plugins)</strong>：ChatGPT
+的附加组件系统（智能体）</li>
+<li><strong>AutoGPT</strong>：GPT模型驱动的智能体系统</li>
+<li><strong>Manus</strong>：具备从规划到执行全流程自主完成任务能力的智能体</li>
+<li><strong>MCP (Model-graded Controllable
+Preference)</strong>：Anthropic提出的，用于AI操作外部世界的协议</li>
+<li><strong>A2A
+(Agent-to-Agent)</strong>：Google提出的用于智能体与智能体间通信的协议</li>
+</ol>
+<h2 id="优化与进阶">优化与进阶</h2>
+<ol type="1">
+<li><strong>模型压缩 (Model
+Compression)</strong>：由于模型大小与能力出现边际收益递减，以减少成本与方便个人的减小模型大小的方法</li>
+<li><strong>量化
+(Quantization)</strong>：把模型中的浮点数用更低精度表示以减少显存与计算的方法</li>
+<li><strong>蒸馏
+(Distillation)</strong>：用参数量较大的大模型指导参数量较小的小模型的方法</li>
+<li><strong>剪枝
+(Pruning)</strong>：删除模型中不重要神经元，让模型更稀疏以提升速度的方法</li>
+<li><strong>低秩适应 (Low-Rank Adaptation,
+LoRA)</strong>：用更低成本改善微调方式的方法</li>
+<li><strong>思维链 (Chain-of-Thought,
+CoT)</strong>：从推理能力方向增强模型能力的方法</li>
+<li><strong>人类反馈强化学习 (Reinforcement Learning from Human
+Feedback, RLHF)</strong>：让模型输出更符合人类心意的方法</li>
+</ol>
+<h2 id="生态与行业">生态与行业</h2>
+<ol type="1">
+<li><strong>专业生产内容 (Professional Generated Content,
+PGC)</strong></li>
+<li><strong>用户生产内容 (User Generated Content, UGC)</strong></li>
+<li><strong>人工智能生成内容 (AI Generated Content, AIGC)</strong></li>
+<li><strong>炸裂体 (Explosive
+Style)</strong>：媒体与互联网对AI类产品进行描述与介绍时使用的一种强调或夸大性语气</li>
+<li><strong>套壳 (Wrapping)</strong>：封装大模型对应接口提供服务</li>
+<li><strong>卖铲子 (Selling
+Shovels)</strong>：提供工具或服务、教程等帮助他人在AI中淘金的赚钱方式</li>
+<li><strong>Hugging Face</strong>：AI开源平台及社区</li>
+</ol>
+<h2 id="硬件与框架">硬件与框架</h2>
+<ol type="1">
+<li><strong>GPU (Graphics Processing Unit,
+图形处理单元)</strong>:NVIDIA公司的产品</li>
+<li><strong>CUDA (Compute Unified Device
+Architecture)</strong>：NVIDIA推出的AI开发框架</li>
+<li><strong>TPU (Tensor Processing Unit,
+张量处理单元)</strong>：专用与大规模神经网络训练与推理的处理器</li>
+<li><strong>NPU (Neural Processing Unit,
+神经网络处理单元)</strong>：专用于终端设备加速推理的处理器</li>
+<li><strong>Python</strong>：适合AI开发的编程语言</li>
+<li><strong>PyTorch</strong>：Python提供的针对AI编程的库</li>
+<li><strong>TensorFlow</strong>：由 Google Brain
+团队开发的深度学习框架</li>
+<li><strong>Ollama</strong>：大模型本地运行工具</li>
+<li><strong>vLLM</strong>：提升大语言模型推理速度的推理引擎</li>
+<li><strong>ComfyUI</strong>：构建在 Stable Diffusion
+之上的基于节点的绘画工作流软件（B站:秋葉aaaki
+大佬制作了很多相关整合包）</li>
+<li><strong>扣子 (Coze)</strong>：在网页端编排工作流的一款工具</li>
+<li><strong>LangChain</strong>：以代码方式编排工具流的方式</li>
+<li><strong>Cursor</strong>：Anysphere开发的人工智能编程助手</li>
+<li><strong>GitHub
+Copilot</strong>：微软与OpenAI共同推出的AI编程工具</li>
+</ol>
+<h2 id="神经网络基础">神经网络基础</h2>
+<ol type="1">
+<li><strong>数学
+(Mathematics)</strong>：AI基石，包括线性代数、微积分、概率论等</li>
+<li><strong>自然语言处理 (Natural Language Processing,
+NLP)</strong>：人工智能的一大分支领域，其主要目的是让机器理解人类的语言文字，从而执行一系列任务</li>
+<li><strong>计算机视觉 (Computer Vision,
+CV)</strong>：与图片高度相关</li>
+<li><strong>神经网络 (Neural
+Network)</strong>：模仿生物神经系统结构和功能的计算模型</li>
+<li><strong>损失函数 (Loss
+Function)</strong>：估量模型的预测值f(x)与真实值Y的不一致程度的函数</li>
+<li><strong>反向传播
+(Backpropagation)</strong>：计算损失函数关于网络参数的梯度来更新参数</li>
+<li><strong>多层感知机 (Multilayer Perceptron,
+MLP)</strong>：将输入的多个数据集映射到单一的输出的数据集，是一种人工神经网络模型</li>
+<li><strong>卷积神经网络 (Convolutional Neural Network,
+CNN)</strong>：包含卷积计算且具有深度结构的神经网络</li>
+<li><strong>循环神经网络 (Recurrent Neural Network,
+RNN)</strong>：适合于处理序列数据的神经网络</li>
+<li><strong>注意力机制 (Attention
+Mechanism)</strong>：模拟人类选择性注意机制，提升信息处理效率</li>
+<li><strong>Transformer</strong>：一种基于注意力机制的神经网络结构</li>
+<li><strong>文本转语音 (Text To Speech, TTS)</strong></li>
+<li><strong>语音转文字 (Automatic Speech Recognition, ASR)</strong></li>
+</ol>
 ]]></content>
       <tags>
         <tag>AI</tag>
         <tag>LLM</tag>
-        <tag>Diffusion</tag>
-        <tag>生成模型</tag>
-        <tag>扩散模型</tag>
+        <tag>术语</tag>
+        <tag>大模型</tag>
       </tags>
   </entry>
   <entry>
@@ -9338,6 +9273,71 @@ True。</li>
         <tag>复杂度理论</tag>
         <tag>P与NP</tag>
         <tag>计算机科学</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>了解Diffusion Language Model</title>
+    <url>/posts/a1d79e4c/</url>
+    <content><![CDATA[<p>我们熟悉的 Transformer
+等模型采用“自回归”方式逐词生成文本，这限制了生成速度且不易保证长文本连贯。受图像生成领域成功的
+<strong>扩散模型 (Diffusion Model)</strong>
+启发，研究者将其引入文本生成，<strong>扩散语言模型 (Diffusion Language
+Model)</strong> 应运而生。</p>
+<span id="more"></span>
+<h2 id="什么是扩散模型">什么是扩散模型？</h2>
+<p><img src="/assets/diffusion-lm-01.png" /></p>
+<p>在深入了解其如何应用于语言之前，我们先通过一个直观的例子——图像生成——来理解扩散模型的核心思想。它主要包含两个过程：</p>
+<ol type="1">
+<li><p><strong>前向过程（Forward
+Process）</strong>：也叫“扩散”过程。想象一下，我们从一张清晰的图片开始，一步步地、逐渐地向图片中添加微小的“噪声”，直到这张图片完全变成一个毫无规律的噪声图。这个过程是固定的、可控的。</p></li>
+<li><p><strong>反向过程（Reverse
+Process）</strong>：也叫“去噪”过程。这是真正的“生成”环节。我们训练一个神经网络，让它学会上述过程的“逆操作”——即从一张纯噪声的图片开始，一步步地、逐渐地去除噪声，最终还原出一张清晰、有意义的图片。</p></li>
+</ol>
+<p>一旦模型学会了如何“去噪”，我们就可以给它任何随机噪声，让它“创造”出全新的、从未见过的图片。</p>
+<h2 id="如何将扩散模型用于文本">如何将扩散模型用于文本？</h2>
+<p>直接将扩散模型应用于文本面临一个核心挑战：<strong>文本是离散的，而扩散过程处理的是连续的数据</strong>。我们无法像给图片像素值加噪声那样，给一个“词”加上一点“噪声”变成另一个“半词”。</p>
+<p>解决方案是：<strong>在连续空间中操作</strong>。</p>
+<p>我们不直接处理文字，而是先将文字通过 <strong>词嵌入（Word
+Embedding）</strong>
+技术转换为高维度的连续向量。这样，文本序列就变成了一组向量，我们可以在这个连续的向量空间中执行扩散和去噪过程。</p>
+<h2 id="diffusion-语言模型的工作原理">Diffusion 语言模型的工作原理</h2>
+<p>理解了以上概念后，扩散语言模型的工作流程就清晰了：</p>
+<ol type="1">
+<li><strong>前向过程</strong>：取一个句子，将其转换为词向量序列。然后，逐步向这些向量中添加噪声，直到它们变成一组随机向量。</li>
+<li><strong>反向过程</strong>：训练一个模型（通常是基于 Transformer
+架构）来学习逆转这个过程。模型的任务是接收一串加了噪声的向量，并预测出“更干净”的向量应该是什么样子。</li>
+<li><strong>文本生成</strong>：当需要生成新文本时，我们从一组完全随机的向量开始，然后反复利用训练好的去噪模型进行迭代处理。每一步，向量都会变得“更清晰”一点，逐渐从无序的噪声收敛为有意义的词向量。最后，将这些“去噪”完成的词向量转换回人类可读的文字，就完成了一次文本生成。</li>
+</ol>
+<h2 id="diffusion-语言模型的优势">Diffusion 语言模型的优势</h2>
+<p>与传统的自回归模型相比，扩散语言模型展现出一些独特的优势：</p>
+<ul>
+<li><strong>并行生成</strong>：扩散模型在生成时是迭代式地对整个序列进行优化的，而不是像自回归模型那样必须逐词生成。这为并行计算和更快的生成速度提供了可能。</li>
+<li><strong>全局一致性</strong>：由于模型的每一步去噪都是基于对整个序列的观察，它能更好地捕捉全局依赖关系，生成的文本在长距离连贯性和结构完整性上可能更具优势。</li>
+<li><strong>可控性更强</strong>：扩散模型的迭代特性使其在生成过程中更容易被引导和控制。我们可以通过修改去噪过程来控制生成文本的风格、主题或结构，使其更适用于文本编辑、修复和改写等任务。</li>
+</ul>
+<h2 id="前沿研究进展">前沿研究进展</h2>
+<p>尽管扩散语言模型是一个较新的研究方向，但它已经展现出惊人的潜力，涌现了许多前沿工作：</p>
+<ul>
+<li><strong>大规模模型的成功</strong>：以 <strong>LLaDA</strong>
+为代表的研究表明，当参数规模扩大到数十亿级别时，精心设计的扩散语言模型在性能上足以媲美甚至在某些复杂任务上超越顶尖的自回归模型（如
+LLaMA3、GPT-4o），这证明了该技术路线的可行性与潜力。</li>
+<li><strong>效率与质量的权衡</strong>：一些研究也指出，当前扩散语言模型在推理时为了达到高质量的生成效果，可能需要较多的“去噪”迭代步骤，这导致其计算成本相对较高。如何平衡生成质量与推理效率，是目前该领域的研究热点之一。</li>
+<li><strong>多模态统一框架</strong>：部分工作（如
+<strong>Transfusion</strong> 架构）尝试将扩散模型与 Transformer
+深度融合，在一个统一的框架内同时处理文本和图像的生成任务，为多模态内容创作提供了新的思路。</li>
+<li><strong>行业巨头的投入</strong>：以 Google 推出的 <strong>Gemini
+Diffusion</strong>
+为例，科技巨头们也开始在该领域发力，进一步验证了文本扩散模型作为下一代生成技术核心的潜力。</li>
+</ul>
+<h2 id="总结">总结</h2>
+<p>扩散语言模型通过借鉴图像生成领域的成功经验，为自然语言生成任务提供了一种全新的、非自回归的解决方案。它通过在连续的词向量空间中进行“加噪”和“去噪”，克服了文本数据的离散性难题。尽管这一领域仍处于快速发展阶段，但其在并行生成、全局连贯性和可控性方面展现出的巨大潜力，预示着它将成为未来自然语言处理领域一个重要的研究方向。</p>
+]]></content>
+      <tags>
+        <tag>AI</tag>
+        <tag>LLM</tag>
+        <tag>Diffusion</tag>
+        <tag>生成模型</tag>
+        <tag>扩散模型</tag>
       </tags>
   </entry>
   <entry>
@@ -17180,6 +17180,438 @@ flowchart TD
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：STL 容器</title>
+    <url>/posts/e9f3b7c2/</url>
+    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
+提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STL</td>
+<td>Standard Template Library，标准模板库</td>
+<td>C++ 标准库的容器 + 算法</td>
+</tr>
+<tr>
+<td>容器（container）</td>
+<td>存储和管理一组元素的数据结构</td>
+<td>装数据的东西</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td>动态数组，内存连续，自动扩容</td>
+<td>自动扩容的数组</td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>字符串类型，自动管理字符内存</td>
+<td>好用的字符串</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>键值对映射，按键有序</td>
+<td>字典/映射</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>不重复元素的有序集合</td>
+<td>去重 + 有序</td>
+</tr>
+<tr>
+<td>迭代器（iterator）</td>
+<td>遍历容器的指针式对象</td>
+<td>容器的通用游标</td>
+</tr>
+<tr>
+<td>范围 for</td>
+<td><code>for (auto x : c)</code> 遍历语法</td>
+<td>简单遍历</td>
+</tr>
+</tbody>
+</table>
+<h2 id="stl-是什么">🧩 STL 是什么</h2>
+<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
+<table>
+<thead>
+<tr>
+<th>组成</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>容器</td>
+<td>存储数据</td>
+<td><code>vector</code>、<code>map</code>、<code>set</code></td>
+</tr>
+<tr>
+<td>算法</td>
+<td>操作数据</td>
+<td><code>sort</code>、<code>find</code></td>
+</tr>
+<tr>
+<td>迭代器</td>
+<td>连接容器和算法</td>
+<td><code>begin()</code>、<code>end()</code></td>
+</tr>
+</tbody>
+</table>
+<p>STL
+用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[容器] &lt;--&gt; B[迭代器]
+    B &lt;--&gt; C[算法]
+    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
+    C --&gt; E[sort&#x2F;find&#x2F;count]
+</code>
+</pre>
+<p>先记住一个总原则：<strong>能用 STL
+容器解决的，不要自己造轮子</strong>。</p>
+<h2 id="vector动态数组">🧮 vector：动态数组</h2>
+<h3 id="基本用法">基本用法</h3>
+<p><code>vector</code>
+是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以在创建时直接给初始值：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
+<h3 id="遍历">遍历</h3>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>size()</code> 返回的是
+<code>size_t</code>（无符号整数），所以循环变量建议也用
+<code>size_t</code>，避免有符号/无符号比较的警告。</p>
+</blockquote>
+<h3 id="常用接口">常用接口</h3>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_back(x)</code></td>
+<td>尾部追加元素</td>
+</tr>
+<tr>
+<td><code>pop_back()</code></td>
+<td>删除尾部元素</td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>empty()</code></td>
+<td>是否为空</td>
+</tr>
+<tr>
+<td><code>front()</code> / <code>back()</code></td>
+<td>第一个 / 最后一个元素</td>
+</tr>
+<tr>
+<td><code>v[i]</code></td>
+<td>按下标访问，<strong>不检查越界</strong></td>
+</tr>
+<tr>
+<td><code>v.at(i)</code></td>
+<td>按下标访问，越界抛异常</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>v[i]</code>
+越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
+<code>v.at(i)</code> 更安全。</p>
+</blockquote>
+<h2 id="string常用接口与互转">📝 string：常用接口与互转</h2>
+<h3 id="常用接口-1">常用接口</h3>
+<p><code>string</code> 是 C++
+的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>find</code> 找不到时返回
+<code>string::npos</code>，判断要用它：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="与-c-字符串互转">与 C 字符串互转</h3>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
+<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
+省去了手动管理长度、手动拼接的麻烦：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>C 风格 <code>char[]</code></th>
+<th><code>string</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拼接</td>
+<td><code>strcat</code>，要保证空间够</td>
+<td><code>s1 + s2</code></td>
+</tr>
+<tr>
+<td>比较</td>
+<td><code>strcmp</code></td>
+<td><code>==</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td><code>strlen</code></td>
+<td><code>.size()</code></td>
+</tr>
+<tr>
+<td>拷贝</td>
+<td><code>strcpy</code></td>
+<td><code>=</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="map键值对">🗺️ map：键值对</h2>
+<h3 id="基本用法-1">基本用法</h3>
+<p><code>map</code>
+保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出（按键排序）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
+<h3 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>键不存在时</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scores["Bob"]</code></td>
+<td>自动插入一个默认值（0）</td>
+<td>需要写入时</td>
+</tr>
+<tr>
+<td><code>scores.find("Bob")</code></td>
+<td>返回 <code>end()</code>，不插入</td>
+<td>只查询时</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
+<code>count</code>，避免误插入脏数据：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="set去重与有序">🧹 set：去重与有序</h2>
+<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th><code>vector</code></th>
+<th><code>set</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>顺序</td>
+<td>保持插入顺序</td>
+<td>自动排序</td>
+</tr>
+<tr>
+<td>重复</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>按下标访问</td>
+<td>可以</td>
+<td>不可以，用迭代器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>需要去重 + 有序时用
+<code>set</code>；需要保持插入顺序、按下标访问时用
+<code>vector</code>。</p>
+</blockquote>
+<h2 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h2>
+<h3 id="基本概念">基本概念</h3>
+<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
+指向第一个元素，<code>end()</code>
+指向最后一个元素的下一个位置（不指向有效元素）。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[begin 指向第一个元素] --&gt; B[元素...]
+    B --&gt; C[end 指向末尾之后]
+</code>
+</pre>
+<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
+的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
+<code>it-&gt;second</code> 访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="迭代器失效问题">迭代器失效问题</h3>
+<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
+<p>最典型的例子是 <code>vector</code> 扩容：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
+<p>什么时候要警惕：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>是否可能使旧迭代器失效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
+<td>可能失效</td>
+</tr>
+<tr>
+<td><code>vector</code> 中间插入/删除</td>
+<td>受影响位置之后失效</td>
+</tr>
+<tr>
+<td><code>map</code>/<code>set</code> 插入</td>
+<td>通常不失效</td>
+</tr>
+<tr>
+<td>遍历中删除当前元素</td>
+<td>当前迭代器失效</td>
+</tr>
+</tbody>
+</table>
+<p>范围 for
+内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
+<h2 id="sort-算法">🔀 sort 算法</h2>
+<h3 id="默认排序">默认排序</h3>
+<p><code>sort</code> 属于 STL
+算法，对迭代器范围内的元素排序，默认升序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>降序可以用标准库提供的比较器：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
+<h3 id="自定义比较函数">自定义比较函数</h3>
+<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
+<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
+前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
+<code>&gt;=</code> 这种包含等号的条件。</p>
+<h3 id="小结">小结</h3>
+<table>
+<thead>
+<tr>
+<th>用法</th>
+<th>代码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升序</td>
+<td><code>sort(v.begin(), v.end())</code></td>
+</tr>
+<tr>
+<td>降序</td>
+<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
+</tr>
+<tr>
+<td>按自定义规则</td>
+<td><code>sort(v.begin(), v.end(), lambda)</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 下标越界会报错</td>
+<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
+会抛异常</td>
+</tr>
+<tr>
+<td><code>string</code> 就是 <code>char[]</code></td>
+<td><code>string</code> 自动管理内存，支持
+<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+</tr>
+<tr>
+<td>用 <code>map[]</code> 查询很安全</td>
+<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
+<code>find</code>/<code>count</code></td>
+</tr>
+<tr>
+<td><code>set</code> 和 <code>vector</code> 都能去重</td>
+<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+</tr>
+<tr>
+<td>范围 for 遍历时随便删元素</td>
+<td>删除元素可能导致迭代器失效，需小心处理</td>
+</tr>
+<tr>
+<td><code>sort</code> 只能排数字</td>
+<td>传自定义比较函数就能排任意类型</td>
+</tr>
+<tr>
+<td>STL 容器都要自己管理内存</td>
+<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>STL
+三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+</blockquote>
+<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
+管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
+自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>STL</tag>
+        <tag>vector</tag>
+        <tag>string</tag>
+        <tag>map</tag>
+        <tag>set</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：动态内存管理</title>
     <url>/posts/d6a2e8f1/</url>
     <content><![CDATA[<p>栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。</p>
@@ -17613,438 +18045,6 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：STL 容器</title>
-    <url>/posts/e9f3b7c2/</url>
-    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
-提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>STL</td>
-<td>Standard Template Library，标准模板库</td>
-<td>C++ 标准库的容器 + 算法</td>
-</tr>
-<tr>
-<td>容器（container）</td>
-<td>存储和管理一组元素的数据结构</td>
-<td>装数据的东西</td>
-</tr>
-<tr>
-<td><code>vector</code></td>
-<td>动态数组，内存连续，自动扩容</td>
-<td>自动扩容的数组</td>
-</tr>
-<tr>
-<td><code>string</code></td>
-<td>字符串类型，自动管理字符内存</td>
-<td>好用的字符串</td>
-</tr>
-<tr>
-<td><code>map</code></td>
-<td>键值对映射，按键有序</td>
-<td>字典/映射</td>
-</tr>
-<tr>
-<td><code>set</code></td>
-<td>不重复元素的有序集合</td>
-<td>去重 + 有序</td>
-</tr>
-<tr>
-<td>迭代器（iterator）</td>
-<td>遍历容器的指针式对象</td>
-<td>容器的通用游标</td>
-</tr>
-<tr>
-<td>范围 for</td>
-<td><code>for (auto x : c)</code> 遍历语法</td>
-<td>简单遍历</td>
-</tr>
-</tbody>
-</table>
-<h2 id="stl-是什么">🧩 STL 是什么</h2>
-<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
-<table>
-<thead>
-<tr>
-<th>组成</th>
-<th>作用</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>容器</td>
-<td>存储数据</td>
-<td><code>vector</code>、<code>map</code>、<code>set</code></td>
-</tr>
-<tr>
-<td>算法</td>
-<td>操作数据</td>
-<td><code>sort</code>、<code>find</code></td>
-</tr>
-<tr>
-<td>迭代器</td>
-<td>连接容器和算法</td>
-<td><code>begin()</code>、<code>end()</code></td>
-</tr>
-</tbody>
-</table>
-<p>STL
-用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[容器] &lt;--&gt; B[迭代器]
-    B &lt;--&gt; C[算法]
-    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
-    C --&gt; E[sort&#x2F;find&#x2F;count]
-</code>
-</pre>
-<p>先记住一个总原则：<strong>能用 STL
-容器解决的，不要自己造轮子</strong>。</p>
-<h2 id="vector动态数组">🧮 vector：动态数组</h2>
-<h3 id="基本用法">基本用法</h3>
-<p><code>vector</code>
-是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以在创建时直接给初始值：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
-<h3 id="遍历">遍历</h3>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>size()</code> 返回的是
-<code>size_t</code>（无符号整数），所以循环变量建议也用
-<code>size_t</code>，避免有符号/无符号比较的警告。</p>
-</blockquote>
-<h3 id="常用接口">常用接口</h3>
-<table>
-<thead>
-<tr>
-<th>接口</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>push_back(x)</code></td>
-<td>尾部追加元素</td>
-</tr>
-<tr>
-<td><code>pop_back()</code></td>
-<td>删除尾部元素</td>
-</tr>
-<tr>
-<td><code>size()</code></td>
-<td>元素个数</td>
-</tr>
-<tr>
-<td><code>empty()</code></td>
-<td>是否为空</td>
-</tr>
-<tr>
-<td><code>front()</code> / <code>back()</code></td>
-<td>第一个 / 最后一个元素</td>
-</tr>
-<tr>
-<td><code>v[i]</code></td>
-<td>按下标访问，<strong>不检查越界</strong></td>
-</tr>
-<tr>
-<td><code>v.at(i)</code></td>
-<td>按下标访问，越界抛异常</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>v[i]</code>
-越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
-<code>v.at(i)</code> 更安全。</p>
-</blockquote>
-<h2 id="string常用接口与互转">📝 string：常用接口与互转</h2>
-<h3 id="常用接口-1">常用接口</h3>
-<p><code>string</code> 是 C++
-的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>find</code> 找不到时返回
-<code>string::npos</code>，判断要用它：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="与-c-字符串互转">与 C 字符串互转</h3>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
-<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
-省去了手动管理长度、手动拼接的麻烦：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>C 风格 <code>char[]</code></th>
-<th><code>string</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>拼接</td>
-<td><code>strcat</code>，要保证空间够</td>
-<td><code>s1 + s2</code></td>
-</tr>
-<tr>
-<td>比较</td>
-<td><code>strcmp</code></td>
-<td><code>==</code></td>
-</tr>
-<tr>
-<td>长度</td>
-<td><code>strlen</code></td>
-<td><code>.size()</code></td>
-</tr>
-<tr>
-<td>拷贝</td>
-<td><code>strcpy</code></td>
-<td><code>=</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="map键值对">🗺️ map：键值对</h2>
-<h3 id="基本用法-1">基本用法</h3>
-<p><code>map</code>
-保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出（按键排序）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
-<h3 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h3>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>键不存在时</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>scores["Bob"]</code></td>
-<td>自动插入一个默认值（0）</td>
-<td>需要写入时</td>
-</tr>
-<tr>
-<td><code>scores.find("Bob")</code></td>
-<td>返回 <code>end()</code>，不插入</td>
-<td>只查询时</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
-<code>count</code>，避免误插入脏数据：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h2 id="set去重与有序">🧹 set：去重与有序</h2>
-<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th><code>vector</code></th>
-<th><code>set</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>顺序</td>
-<td>保持插入顺序</td>
-<td>自动排序</td>
-</tr>
-<tr>
-<td>重复</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>按下标访问</td>
-<td>可以</td>
-<td>不可以，用迭代器</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>需要去重 + 有序时用
-<code>set</code>；需要保持插入顺序、按下标访问时用
-<code>vector</code>。</p>
-</blockquote>
-<h2 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h2>
-<h3 id="基本概念">基本概念</h3>
-<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
-指向第一个元素，<code>end()</code>
-指向最后一个元素的下一个位置（不指向有效元素）。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[begin 指向第一个元素] --&gt; B[元素...]
-    B --&gt; C[end 指向末尾之后]
-</code>
-</pre>
-<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
-的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
-<code>it-&gt;second</code> 访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="迭代器失效问题">迭代器失效问题</h3>
-<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
-<p>最典型的例子是 <code>vector</code> 扩容：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
-<p>什么时候要警惕：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>是否可能使旧迭代器失效</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
-<td>可能失效</td>
-</tr>
-<tr>
-<td><code>vector</code> 中间插入/删除</td>
-<td>受影响位置之后失效</td>
-</tr>
-<tr>
-<td><code>map</code>/<code>set</code> 插入</td>
-<td>通常不失效</td>
-</tr>
-<tr>
-<td>遍历中删除当前元素</td>
-<td>当前迭代器失效</td>
-</tr>
-</tbody>
-</table>
-<p>范围 for
-内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
-<h2 id="sort-算法">🔀 sort 算法</h2>
-<h3 id="默认排序">默认排序</h3>
-<p><code>sort</code> 属于 STL
-算法，对迭代器范围内的元素排序，默认升序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>降序可以用标准库提供的比较器：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
-<h3 id="自定义比较函数">自定义比较函数</h3>
-<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
-<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
-前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
-<code>&gt;=</code> 这种包含等号的条件。</p>
-<h3 id="小结">小结</h3>
-<table>
-<thead>
-<tr>
-<th>用法</th>
-<th>代码</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>升序</td>
-<td><code>sort(v.begin(), v.end())</code></td>
-</tr>
-<tr>
-<td>降序</td>
-<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
-</tr>
-<tr>
-<td>按自定义规则</td>
-<td><code>sort(v.begin(), v.end(), lambda)</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 下标越界会报错</td>
-<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
-会抛异常</td>
-</tr>
-<tr>
-<td><code>string</code> 就是 <code>char[]</code></td>
-<td><code>string</code> 自动管理内存，支持
-<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
-</tr>
-<tr>
-<td>用 <code>map[]</code> 查询很安全</td>
-<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
-<code>find</code>/<code>count</code></td>
-</tr>
-<tr>
-<td><code>set</code> 和 <code>vector</code> 都能去重</td>
-<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
-</tr>
-<tr>
-<td>范围 for 遍历时随便删元素</td>
-<td>删除元素可能导致迭代器失效，需小心处理</td>
-</tr>
-<tr>
-<td><code>sort</code> 只能排数字</td>
-<td>传自定义比较函数就能排任意类型</td>
-</tr>
-<tr>
-<td>STL 容器都要自己管理内存</td>
-<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>STL
-三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
-</blockquote>
-<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
-管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
-自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>STL</tag>
-        <tag>vector</tag>
-        <tag>string</tag>
-        <tag>map</tag>
-        <tag>set</tag>
       </tags>
   </entry>
   <entry>
@@ -31908,6 +31908,84 @@ LRU
 序列里的位置。实验给出的置换向量显示，每个条目的相对位置都被严格维持，<strong>IOTLB
 用的是完整的 LRU</strong>（Least Recently
 Used，最久没被访问的条目最先被挤出去）。</p>
+<h2 id="先补一课探测缓存的三种套路">🎓 先补一课：探测缓存的三种套路</h2>
+<p>前面说清了 IOTLB
+是一块共享缓存，也确认了它的命中与未命中之间有时延差。但<strong>有差</strong>和<strong>能用</strong>之间还隔着一步：<strong>具体怎么探</strong>。这篇论文用的正是业界三种经典套路里的两种，先把它们一次讲明白，后面读到
+PP、ER、PPA 这些缩写才不会绊住。</p>
+<p>先交代缓存扮演的角色，用图书馆打比方：</p>
+<ul>
+<li><strong>主存</strong>：图书馆的大书库，书最全，但取一次要走很远；</li>
+<li><strong>缓存</strong>：你桌子边的小书架，只能放几本，但伸手就能拿到；</li>
+<li><strong>命中 /
+未命中</strong>：要的书在桌上就是命中（快），不在就得去书库翻（慢）。</li>
+</ul>
+<p>三种套路建立在同一个前提上：<strong>命中快、未命中慢，而这个快慢攻击者能靠计时测出来</strong>。区别只在动手前先做什么、最后量什么：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">1. Prime+Probe：先把自己的东西塞满书架，过一会儿再看还在不在</span><br><span class="line">2. Flush+Reload：先把某本书从书架上拿走，过一会儿再看它回没回来</span><br><span class="line">3. Evict+Reload：也看书回没回来，但拿走的方式换成用别的书把它挤掉</span><br></pre></td></tr></table></figure>
+<p><strong>① Prime+Probe：查自己的地盘有没有被抢</strong></p>
+<p>三步：先用自己的数据把目标那一组缓存填满（Prime），隔一段时间让别人干活（Wait），再回来访问自己那批数据并计时（Probe）。如果变慢了，说明自己填进去的条目被挤出去了——而能挤掉它的，只有这期间用过同一组缓存的程序。</p>
+<p>它最大的好处是<strong>不需要双方共享任何数据</strong>：攻击者不用碰到受害者的内存，只要两者的访问会落进同一个缓存组就够。</p>
+<p><strong>② Flush+Reload：查某一本书回没回来</strong></p>
+<p>三步：先把目标数据对应的缓存行清掉（Flush），等别人干活（Wait），再读一次同一份数据并计时（Reload）。读得快，说明这期间有人把它重新放回了缓存。</p>
+<p>它比 Prime+Probe
+更精准——盯的是<strong>指定的那份数据</strong>，而不是笼统的某一组被用过；代价是要求双方<strong>共享同一份数据</strong>，最常见的情形是共享库里的代码。</p>
+<p><strong>③ Evict+Reload：同上，只是不用专门的清除指令</strong></p>
+<p>三步和前一种一样，唯一区别在第一步：不用 CPU
+提供的清除指令，而是访问一批会争抢同一组缓存的地址，<strong>把目标挤出去</strong>。好处是不依赖那条特殊指令（有些平台用不了），代价是要自己找出一批能挤掉目标的地址。</p>
+<p><strong>三种放在一起</strong></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>Prime+Probe</th>
+<th>Flush+Reload</th>
+<th>Evict+Reload</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步</td>
+<td>填满目标缓存组</td>
+<td>清除指定缓存行</td>
+<td>靠竞争把目标挤出去</td>
+</tr>
+<tr>
+<td>最后量什么</td>
+<td>自己那批数据的访问速度</td>
+<td>目标数据的访问速度</td>
+<td>目标数据的访问速度</td>
+</tr>
+<tr>
+<td>需要共享目标数据吗</td>
+<td>不需要</td>
+<td>通常需要</td>
+<td>通常需要</td>
+</tr>
+<tr>
+<td>主要看出什么</td>
+<td>哪一组缓存被人用过</td>
+<td>指定数据有没有被访问</td>
+<td>指定数据有没有被访问</td>
+</tr>
+<tr>
+<td>特点</td>
+<td>适用面广</td>
+<td>精度高</td>
+<td>不依赖专门的清除指令</td>
+</tr>
+</tbody>
+</table>
+<p>回到本文：IOTLB
+是设备侧的缓存，上面这三件事照样能做，只是发起访问的从 CPU 换成了 GPU
+或网卡。至于这篇具体挑了哪几种、为什么挑它们，下一节说。</p>
+<p>如果只记一句：<strong>Prime+Probe
+看的是自己那批资源有没有被抢走，Flush+Reload 和 Evict+Reload
+看的是指定的那份数据有没有被别人放回来。</strong></p>
 <h2 id="两个原语gpu-版与网卡版">🛠️ 两个原语：GPU 版与网卡版</h2>
 <p>有了 IOTLB 的结构参数，攻击就需要一个能持续发起 DMA
 请求并计时的抓手。论文做了两套，分别用 GPU 和 RNIC。</p>

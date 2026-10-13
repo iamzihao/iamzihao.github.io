@@ -30,7 +30,7 @@
 <meta property="og:description" content="概括成一段话：设备要访问内存，得先经过 IOMMU 做地址翻译，翻译结果缓存在 IOTLB 里，而这块缓存被同一 IOMMU 下的所有设备共用。于是攻击者不需要跟受害者共享任何内存，只要让自己的 GPU 或网卡反复发起 DMA 请求并给时延计时，就能从 IOTLB 的状态变化里读出隔壁设备在做什么——这套手法同样适用于跨 VM，甚至能隔着 RDMA 网络从远端机器上读出对方在访问哪个键值、在浏览">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-14T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:54:11.059Z">
+<meta property="article:modified_time" content="2026-10-13T02:50:23.372Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -178,8 +178,8 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E8%AE%A9%E8%AE%BE%E5%A4%87%E6%9D%A5%E5%8F%91%E8%AF%B7%E6%B1%82"><span class="nav-number">2.</span> <span class="nav-text">🧭 起点：让设备来发请求</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E6%8A%8A-iotlb-%E6%8B%86%E5%BC%80%E7%9C%8B"><span class="nav-number">3.</span> <span class="nav-text">🔬 先把 IOTLB 拆开看</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E4%B8%AA%E5%8E%9F%E8%AF%ADgpu-%E7%89%88%E4%B8%8E%E7%BD%91%E5%8D%A1%E7%89%88"><span class="nav-number">4.</span> <span class="nav-text">🛠️ 两个原语：GPU 版与网卡版</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA%E6%8A%80%E5%B7%A7%E6%8A%8A-1-%E6%AC%A1%E6%9C%AA%E5%91%BD%E4%B8%AD%E6%94%BE%E5%A4%A7%E6%88%90-8-%E6%AC%A1"><span class="nav-number">5.</span> <span class="nav-text">🔊 一个技巧：把 1
-次未命中放大成 8 次</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E4%B8%AA%E6%A1%88%E4%BE%8B"><span class="nav-number">6.</span> <span class="nav-text">🎯 四个案例</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%AE%83%E6%AF%94-cpu-%E4%BE%A7%E4%BF%A1%E9%81%93%E9%9A%BE%E9%98%B2"><span class="nav-number">7.</span> <span class="nav-text">🛡️ 为什么它比 CPU 侧信道难防</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E7%AF%87%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">8.</span> <span class="nav-text">⚠️ 这篇的边界</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E8%AE%A9%E8%AE%BE%E5%A4%87%E6%9D%A5%E5%8F%91%E8%AF%B7%E6%B1%82"><span class="nav-number">2.</span> <span class="nav-text">🧭 起点：让设备来发请求</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E6%8A%8A-iotlb-%E6%8B%86%E5%BC%80%E7%9C%8B"><span class="nav-number">3.</span> <span class="nav-text">🔬 先把 IOTLB 拆开看</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E8%A1%A5%E4%B8%80%E8%AF%BE%E6%8E%A2%E6%B5%8B%E7%BC%93%E5%AD%98%E7%9A%84%E4%B8%89%E7%A7%8D%E5%A5%97%E8%B7%AF"><span class="nav-number">4.</span> <span class="nav-text">🎓 先补一课：探测缓存的三种套路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E4%B8%AA%E5%8E%9F%E8%AF%ADgpu-%E7%89%88%E4%B8%8E%E7%BD%91%E5%8D%A1%E7%89%88"><span class="nav-number">5.</span> <span class="nav-text">🛠️ 两个原语：GPU 版与网卡版</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E4%B8%AA%E6%8A%80%E5%B7%A7%E6%8A%8A-1-%E6%AC%A1%E6%9C%AA%E5%91%BD%E4%B8%AD%E6%94%BE%E5%A4%A7%E6%88%90-8-%E6%AC%A1"><span class="nav-number">6.</span> <span class="nav-text">🔊 一个技巧：把 1
+次未命中放大成 8 次</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E4%B8%AA%E6%A1%88%E4%BE%8B"><span class="nav-number">7.</span> <span class="nav-text">🎯 四个案例</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%AE%83%E6%AF%94-cpu-%E4%BE%A7%E4%BF%A1%E9%81%93%E9%9A%BE%E9%98%B2"><span class="nav-number">8.</span> <span class="nav-text">🛡️ 为什么它比 CPU 侧信道难防</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E7%AF%87%E7%9A%84%E8%BE%B9%E7%95%8C"><span class="nav-number">9.</span> <span class="nav-text">⚠️ 这篇的边界</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">✅ 总结</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -271,7 +271,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 16:54:11" itemprop="dateModified" datetime="2026-10-12T16:54:11+08:00">2026-10-12</time>
+      <time title="Modified: 2026-10-13 10:50:23" itemprop="dateModified" datetime="2026-10-13T10:50:23+08:00">2026-10-13</time>
     </span>
 
   
@@ -288,14 +288,14 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>6.3k</span>
+      <span>7.5k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>11 mins.</span>
+      <span>14 mins.</span>
     </span>
 </div>
 
@@ -535,6 +535,84 @@ LRU
 序列里的位置。实验给出的置换向量显示，每个条目的相对位置都被严格维持，<strong>IOTLB
 用的是完整的 LRU</strong>（Least Recently
 Used，最久没被访问的条目最先被挤出去）。</p>
+<h2 id="先补一课探测缓存的三种套路">🎓 先补一课：探测缓存的三种套路</h2>
+<p>前面说清了 IOTLB
+是一块共享缓存，也确认了它的命中与未命中之间有时延差。但<strong>有差</strong>和<strong>能用</strong>之间还隔着一步：<strong>具体怎么探</strong>。这篇论文用的正是业界三种经典套路里的两种，先把它们一次讲明白，后面读到
+PP、ER、PPA 这些缩写才不会绊住。</p>
+<p>先交代缓存扮演的角色，用图书馆打比方：</p>
+<ul>
+<li><strong>主存</strong>：图书馆的大书库，书最全，但取一次要走很远；</li>
+<li><strong>缓存</strong>：你桌子边的小书架，只能放几本，但伸手就能拿到；</li>
+<li><strong>命中 /
+未命中</strong>：要的书在桌上就是命中（快），不在就得去书库翻（慢）。</li>
+</ul>
+<p>三种套路建立在同一个前提上：<strong>命中快、未命中慢，而这个快慢攻击者能靠计时测出来</strong>。区别只在动手前先做什么、最后量什么：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1. Prime+Probe：先把自己的东西塞满书架，过一会儿再看还在不在</span><br><span class="line">2. Flush+Reload：先把某本书从书架上拿走，过一会儿再看它回没回来</span><br><span class="line">3. Evict+Reload：也看书回没回来，但拿走的方式换成用别的书把它挤掉</span><br></pre></td></tr></table></figure>
+<p><strong>① Prime+Probe：查自己的地盘有没有被抢</strong></p>
+<p>三步：先用自己的数据把目标那一组缓存填满（Prime），隔一段时间让别人干活（Wait），再回来访问自己那批数据并计时（Probe）。如果变慢了，说明自己填进去的条目被挤出去了——而能挤掉它的，只有这期间用过同一组缓存的程序。</p>
+<p>它最大的好处是<strong>不需要双方共享任何数据</strong>：攻击者不用碰到受害者的内存，只要两者的访问会落进同一个缓存组就够。</p>
+<p><strong>② Flush+Reload：查某一本书回没回来</strong></p>
+<p>三步：先把目标数据对应的缓存行清掉（Flush），等别人干活（Wait），再读一次同一份数据并计时（Reload）。读得快，说明这期间有人把它重新放回了缓存。</p>
+<p>它比 Prime+Probe
+更精准——盯的是<strong>指定的那份数据</strong>，而不是笼统的某一组被用过；代价是要求双方<strong>共享同一份数据</strong>，最常见的情形是共享库里的代码。</p>
+<p><strong>③ Evict+Reload：同上，只是不用专门的清除指令</strong></p>
+<p>三步和前一种一样，唯一区别在第一步：不用 CPU
+提供的清除指令，而是访问一批会争抢同一组缓存的地址，<strong>把目标挤出去</strong>。好处是不依赖那条特殊指令（有些平台用不了），代价是要自己找出一批能挤掉目标的地址。</p>
+<p><strong>三种放在一起</strong></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>Prime+Probe</th>
+<th>Flush+Reload</th>
+<th>Evict+Reload</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步</td>
+<td>填满目标缓存组</td>
+<td>清除指定缓存行</td>
+<td>靠竞争把目标挤出去</td>
+</tr>
+<tr>
+<td>最后量什么</td>
+<td>自己那批数据的访问速度</td>
+<td>目标数据的访问速度</td>
+<td>目标数据的访问速度</td>
+</tr>
+<tr>
+<td>需要共享目标数据吗</td>
+<td>不需要</td>
+<td>通常需要</td>
+<td>通常需要</td>
+</tr>
+<tr>
+<td>主要看出什么</td>
+<td>哪一组缓存被人用过</td>
+<td>指定数据有没有被访问</td>
+<td>指定数据有没有被访问</td>
+</tr>
+<tr>
+<td>特点</td>
+<td>适用面广</td>
+<td>精度高</td>
+<td>不依赖专门的清除指令</td>
+</tr>
+</tbody>
+</table>
+<p>回到本文：IOTLB
+是设备侧的缓存，上面这三件事照样能做，只是发起访问的从 CPU 换成了 GPU
+或网卡。至于这篇具体挑了哪几种、为什么挑它们，下一节说。</p>
+<p>如果只记一句：<strong>Prime+Probe
+看的是自己那批资源有没有被抢走，Flush+Reload 和 Evict+Reload
+看的是指定的那份数据有没有被别人放回来。</strong></p>
 <h2 id="两个原语gpu-版与网卡版">🛠️ 两个原语：GPU 版与网卡版</h2>
 <p>有了 IOTLB 的结构参数，攻击就需要一个能持续发起 DMA
 请求并计时的抓手。论文做了两套，分别用 GPU 和 RNIC。</p>
@@ -817,13 +895,13 @@ TLB，设备侧的地址翻译缓存同样跨租户共享，而且它挡在每�
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">524k</span>
+    <span title="Word count total">526k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">15:54</span>
+    <span title="Reading time total">15:56</span>
   </span>
 </div>
 <div class="busuanzi-count">
