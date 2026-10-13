@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 7.3.0">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/video-game.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/video-game.ico">
+  <link rel="mask-icon" href="/images/video-game.ico" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha256-dABdfBfUoC8vJUBOwGVdm8L9qlMWaHTIfXt+7GnZCIo=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/themes/blue/pace-theme-minimal.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pace/1.2.4/pace.min.js" integrity="sha256-gqd7YTjg/BtfqWSwsJOvndl0Bxc8gFImLEkXQT8+qj0=" crossorigin="anonymous" defer></script>
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="概括成一段话：把沙箱从 CPU 核里挪出来，挪到一块与主机物理隔离的 DPU 上——主机唯一的网线插在这块 DPU 上，沙箱里所有出网的流量都必须先经过它。它做的事很朴素：加密、阻断、把流量整形成恒定节拍（固定大小的包、固定时间间隔，没真数据就发假包）。这样沙箱里的恶意代码即使想靠”占用多少内存带宽”给外面递消息，也找不到可用的信道了。代价是 LLM 微调耗时增加 2.1%～4.1%，批量推理吞">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IOValve 精读：把沙箱边界推到网线上">
+<meta property="og:url" content="https://iamzihao.github.io/posts/db5332c8/index.html">
+<meta property="og:site_name" content="Zihao Li">
+<meta property="og:description" content="概括成一段话：把沙箱从 CPU 核里挪出来，挪到一块与主机物理隔离的 DPU 上——主机唯一的网线插在这块 DPU 上，沙箱里所有出网的流量都必须先经过它。它做的事很朴素：加密、阻断、把流量整形成恒定节拍（固定大小的包、固定时间间隔，没真数据就发假包）。这样沙箱里的恶意代码即使想靠”占用多少内存带宽”给外面递消息，也找不到可用的信道了。代价是 LLM 微调耗时增加 2.1%～4.1%，批量推理吞">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-10-16T03:00:00.000Z">
+<meta property="article:modified_time" content="2026-10-13T07:56:35.402Z">
+<meta property="article:author" content="Zihao Li">
+<meta property="article:tag" content="安全">
+<meta property="article:tag" content="LLM">
+<meta property="article:tag" content="机密计算">
+<meta property="article:tag" content="论文精读">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="DPU">
+<meta property="article:tag" content="隐蔽信道">
+<meta property="article:tag" content="沙箱">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://iamzihao.github.io/posts/db5332c8/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://iamzihao.github.io/posts/db5332c8/","path":"posts/db5332c8/","title":"IOValve 精读：把沙箱边界推到网线上"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>IOValve 精读：把沙箱边界推到网线上 | Zihao Li</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hexo-generator-searchdb/1.5.0/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"default","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.7.0/mermaid.min.js","integrity":"sha256-4+IKDqhZ/sXjc8Wtl2/MsxI4e0s1KpEVdbEP7V/Lz8U="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+  <script src="/js/third-party/pace.js" defer></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","mhchem":false,"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="Zihao Li" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Zihao Li</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">好记性不如烂笔头</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-blog"><a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>Blog</a></li><li class="menu-item menu-item-timeline"><a href="/timeline/" rel="section"><i class="fa fa-clock fa-fw"></i>Timeline</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>Search
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="Searching..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E6%B2%99%E7%AE%B1%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BF%9D%E4%B8%8D%E4%BD%8F%E5%AF%86"><span class="nav-number">2.</span> <span class="nav-text">🧭 起点：沙箱为什么保不住密？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E4%B8%80%E6%8B%9B%E6%8A%8A%E6%B2%99%E7%AE%B1%E8%BE%B9%E7%95%8C%E7%94%BB%E5%9C%A8%E7%BD%91%E7%BA%BF%E4%B8%8A"><span class="nav-number">3.</span> <span class="nav-text">🏗️
+核心一招：把沙箱边界画在网线上</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B9%B3%E5%8F%B0%E8%AE%A9-dpu-%E5%BD%93%E4%B8%BB%E6%9C%BA%E5%94%AF%E4%B8%80%E7%9A%84%E7%BD%91%E5%8D%A1"><span class="nav-number">4.</span> <span class="nav-text">🧱 平台：让 DPU
+当主机唯一的网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E9%81%93%E5%85%B3%E5%8F%A3%E5%86%85%E5%AD%98%E4%B8%8D%E8%83%BD%E6%8B%A5%E5%A1%9E%E6%B5%81%E9%87%8F%E5%BF%85%E9%A1%BB%E5%8C%80%E9%80%9F"><span class="nav-number">5.</span> <span class="nav-text">🌊
+两道关口：内存不能拥塞，流量必须匀速</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E9%81%93pcie-%E8%BF%99%E5%A4%B4%E8%AE%A9%E6%8B%A5%E5%A1%9E%E4%BC%A0%E4%B8%8D%E8%BF%87%E5%8E%BB"><span class="nav-number">5.1.</span> <span class="nav-text">第一道：PCIe
+这头，让拥塞传不过去</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E9%81%93%E7%BD%91%E7%BA%BF%E8%BF%99%E5%A4%B4%E6%8A%8A%E6%B5%81%E9%87%8F%E5%8F%98%E6%88%90%E8%8A%82%E6%8B%8D%E5%99%A8"><span class="nav-number">5.2.</span> <span class="nav-text">第二道：网线这头，把流量变成节拍器</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E6%B5%8B%E4%B8%80%E4%B8%AA%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C-%E4%B8%89%E4%B8%AA%E5%BA%94%E7%94%A8"><span class="nav-number">6.</span> <span class="nav-text">📊 实测：一个对照实验 + 三个应用</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%82%A3%E4%B8%AA%E6%97%A0%E6%B3%84%E6%BC%8F%E6%98%AF%E8%BF%99%E4%B9%88%E8%AF%81%E6%98%8E%E7%9A%84"><span class="nav-number">6.1.</span> <span class="nav-text">那个”无泄漏”是这么证明的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BD%91%E7%BB%9C%E5%BE%AE%E5%9F%BA%E5%87%86%E5%85%88%E6%91%8A%E5%BC%80%E4%BB%A3%E4%BB%B7"><span class="nav-number">6.2.</span> <span class="nav-text">网络微基准：先摊开代价</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E7%9C%9F%E5%AE%9E%E5%BA%94%E7%94%A8%E5%BC%80%E9%94%80%E8%A2%AB%E8%AE%A1%E7%AE%97%E6%8E%A9%E7%9B%96%E4%BA%86%E5%A4%A7%E5%8D%8A"><span class="nav-number">6.3.</span> <span class="nav-text">三个真实应用：开销被计算掩盖了大半</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%B9%E7%95%8C%E5%AE%83%E6%98%8E%E7%A1%AE%E6%8C%A1%E4%B8%8D%E4%BD%8F%E4%BB%80%E4%B9%88"><span class="nav-number">7.</span> <span class="nav-text">⚠️ 边界：它明确挡不住什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8D%A2%E4%B8%AA%E4%BD%8D%E7%BD%AE%E8%AF%BB%E5%AE%83%E5%9C%A8%E7%8B%AC%E7%AB%8B%E5%8F%AF%E7%BC%96%E7%A8%8B%E8%AE%BE%E5%A4%87%E8%BF%99%E6%9D%A1%E7%BA%BF%E4%B8%8A%E7%9A%84%E4%BD%8D%E7%BD%AE"><span class="nav-number">8.</span> <span class="nav-text">🔭
+换个位置读：它在”独立可编程设备”这条线上的位置</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E6%9D%A1%E8%B7%AF%E7%BA%BF%E4%B8%8A%E8%BF%98%E6%9C%89%E5%93%AA%E4%BA%9B%E5%B7%A5%E4%BD%9C"><span class="nav-number">10.</span> <span class="nav-text">🔗 这条路线上还有哪些工作</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zihao Li"
+      src="/images/zihao.jpg">
+  <p class="site-author-name" itemprop="name">Zihao Li</p>
+  <div class="site-description" itemprop="description">一些乱七八糟的笔记</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">94</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">227</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/iamzihao" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;iamzihao" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:lizh2025@mail.sustech.edu.cn" title="E-Mail → mailto:lizh2025@mail.sustech.edu.cn" rel="noopener me" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://iamzihao.github.io/posts/db5332c8/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/zihao.jpg">
+      <meta itemprop="name" content="Zihao Li">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zihao Li">
+      <meta itemprop="description" content="一些乱七八糟的笔记">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="IOValve 精读：把沙箱边界推到网线上 | Zihao Li">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          IOValve 精读：把沙箱边界推到网线上
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-16 11:00:00" itemprop="dateCreated datePublished" datetime="2026-10-16T11:00:00+08:00">2026-10-16</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-13 15:56:35" itemprop="dateModified" datetime="2026-10-13T15:56:35+08:00">2026-10-13</time>
+    </span>
+
+  
+    <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">Views: </span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="Word count in article">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">Word count in article: </span>
+      <span>8.7k</span>
+    </span>
+    <span class="post-meta-item" title="Reading time">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">Reading time &asymp;</span>
+      <span>16 mins.</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p>概括成一段话：<strong>把沙箱从 CPU
+核里挪出来，挪到一块与主机物理隔离的 DPU 上——主机唯一的网线插在这块 DPU
+上，沙箱里所有出网的流量都必须先经过它。它做的事很朴素：加密、阻断、把流量整形成恒定节拍（固定大小的包、固定时间间隔，没真数据就发假包）。这样沙箱里的恶意代码即使想靠”占用多少内存带宽”给外面递消息，也找不到可用的信道了。代价是
+LLM 微调耗时增加 2.1%～4.1%，批量推理吞吐下降 1.4%。</strong></p>
+</blockquote>
+<span id="more"></span>
+<blockquote>
+<p>论文：<strong>IOValve: Leakage-Free I/O Sandbox for Large-Scale
+Untrusted Data Processing</strong>（CCS ’25，2025 年 10 月，台北）</p>
+<p>作者：Sangho Lee、Jules Drean、Yue Tan、Marcus Peinado（Microsoft
+Research / MIT / Princeton）</p>
+<p>代码量：约 2500 行
+C（adapter、puller/pusher、regularizer、兼容层、NCCL
+网络插件）；无开源产物</p>
+</blockquote>
+<p>前面几篇读的都是同一条链路上的「拿」：Hermes（USENIX Security
+2021）用商用协议分析仪从明文 PCIe 流量里 lossless 重建整个
+DNN；PCIeHardwareMitM（Microprocessors &amp; Microsystems 2020）把一块
+FPGA 插进主机与外设之间，读包、改包、复制包。</p>
+<p>这一篇换了个立场，而且是<strong>反过来</strong>的立场：它不偷东西，它修墙。修墙的位置很特别——不在
+CPU 核里，不在 hypervisor
+里，而是<strong>在一根网线前面</strong>，由一块独立的、和主机物理隔离的可编程网卡执行。它给这套设计的卖点只有四个字：<strong>leakage-free</strong>（无泄漏）。</p>
+<p>这篇要盯住的就是这四个字：它凭什么敢这么说，这个「无」的边界画在哪里，以及代价是多少。</p>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>记忆点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TCB</strong>（Trusted Computing Base，可信计算基）</td>
+<td>一个系统里”必须被信任、一旦它坏了整个安全性就没了”的那部分</td>
+<td>这篇的目标就是<strong>缩小
+TCB</strong>，把云厂商和训练软件都踢出去</td>
+</tr>
+<tr>
+<td><strong>机密计算</strong>（Confidential Computing）</td>
+<td>用处理器硬件把数据和使用它的软件隔离开，让云厂商也看不到</td>
+<td>常见形态是 enclave（如 Intel SGX）或机密虚拟机（CVM）</td>
+</tr>
+<tr>
+<td><strong>CVM</strong>（Confidential Virtual Machine）</td>
+<td>由处理器硬件保护的整台虚拟机，hypervisor 也看不进去</td>
+<td>比 enclave 粗一档，但仍然是<strong>同一颗 CPU
+内</strong>的细粒度共享</td>
+</tr>
+<tr>
+<td><strong>沙箱</strong>（Sandbox）</td>
+<td>把所有会碰到机密数据的代码关进一个框里，只留一条受控的信息出口</td>
+<td>本文的框是<strong>一整台物理主机</strong>，出口是<strong>一根网线</strong></td>
+</tr>
+<tr>
+<td><strong>隐蔽信道</strong>（Covert channel）</td>
+<td>恶意代码<strong>主动</strong>往外传消息的通道，不依赖本来有没有设计出口</td>
+<td>与侧信道（被动观测）相对；本文的对手是它</td>
+</tr>
+<tr>
+<td><strong>DPU</strong>（Data Processing Unit，也叫 IPU）</td>
+<td>一块独立的、自带 CPU 和网卡的”小电脑”，通过 PCIe
+挂在主机上，替主机做网络与存储</td>
+<td>云厂商本来就用它卸载网络加密、健康监控；本文把沙箱监控器放上去</td>
+</tr>
+<tr>
+<td><strong>BlueField-3</strong></td>
+<td>NVIDIA 的一款 DPU：内含一颗 RDMA 网卡（RNIC）、一颗 Arm CPU、一个
+PCIe switch、内存与存储</td>
+<td>本文的原型平台</td>
+</tr>
+<tr>
+<td><strong>RNIC</strong>（RDMA-capable NIC）</td>
+<td>能在不打扰对端 CPU 的前提下直接读写对端内存的网卡</td>
+<td>“one-sided”远程读写就靠它</td>
+</tr>
+<tr>
+<td><strong>RDMA</strong>（Remote Direct Memory Access）</td>
+<td>一台机器不经对方 CPU 直接读写对方内存</td>
+<td>比常规收发（Send/Recv）少一次 CPU 参与</td>
+</tr>
+<tr>
+<td><strong>RoCEv2</strong></td>
+<td>把 RDMA 报文装进 UDP 包、跑在以太网上的协议</td>
+<td>本文用它，因为以太网加密方案现成</td>
+</tr>
+<tr>
+<td><strong>IPSec</strong></td>
+<td>一套给 IP 包做认证与加密的协议</td>
+<td>本文拿它的<strong>硬件加速</strong>来加密 RDMA 报文</td>
+</tr>
+<tr>
+<td><strong>traffic regularization</strong>（流量整形）</td>
+<td>不管上层有没有数据要发，都按固定节奏往网上发固定大小的包</td>
+<td>本文的核心武器；不够就发假包</td>
+</tr>
+<tr>
+<td><strong>BuFLO</strong></td>
+<td>一种经典的”恒定速率”抗流量分析方案</td>
+<td>本文的整形思路源于它，区别是把”安全但慢”做成了实用</td>
+</tr>
+<tr>
+<td><strong>流量分析</strong>（traffic analysis）</td>
+<td>不解密、只看包的大小与时间间隔，就能推断内容或行为</td>
+<td>整形要防的就是它</td>
+</tr>
+<tr>
+<td><strong>AllReduce / AllGather</strong></td>
+<td>多机训练里的”集合通信”操作：所有节点把各自的梯度汇总或分发</td>
+<td>这类通信的流量天然接近匀速，是本文整形能便宜做的前提</td>
+</tr>
+<tr>
+<td><strong>NCCL</strong></td>
+<td>NVIDIA 的多卡多机通信库，PyTorch 的分布式训练底层就是它</td>
+<td>本文要插的就是它的网络插件</td>
+</tr>
+</tbody>
+</table>
+<h2 id="起点沙箱为什么保不住密">🧭 起点：沙箱为什么保不住密？</h2>
+<p>先把问题的链条摆出来，因为它决定了后面每个设计选择。</p>
+<p><strong>第一环：数据必须出门。</strong>
+训练和微调大模型需要巨量算力——Meta 训 Llama 3 用了两个各含 24,576 张
+NVIDIA H100 的集群；全量微调 Llama 3.1 405B 需要 3.25 TB 显存，折合 40
+多张
+H100。政府、航空、金融、军工这类客户很在意数据机密，但自建这个规模的算力不现实，只能外包。</p>
+<p><strong>第二环：外包之后，软件栈不可信。</strong>
+机密计算解决的是”云厂商不可信”：把数据放进 enclave 或 CVM，连 hypervisor
+都看不进去。但它没解决另一半——<strong>处理数据的代码本身不可信</strong>。现代大模型训练栈除了操作系统、GPU
+驱动、CUDA，还有 NCCL（通信）、Alpa（模型并行）、PyTorch /
+TensorFlow（训练框架）、Ray /
+Horovod（分布式调度）、数据管道、日志监控……横跨几十上百个开源与闭源组件，而供应链攻击
+2022 年同比增长 633%、报告了 8.8
+万起。指望”这一堆代码都没问题”是不现实的。</p>
+<p><strong>第三环：沙箱是对第二环的回答。</strong>
+沙箱的思路是：把所有会碰机密数据的代码<strong>全都关进一个框</strong>，然后只留受控的信息出口。这相当于一种粗粒度的强制访问控制，好处是那堆训练代码不再需要被信任。</p>
+<p><strong>第四环：但沙箱的保密性被隐蔽信道击穿。</strong>
+框里的恶意代码不会乖乖只走设计好的出口，它会<strong>主动</strong>找信子往外递——这就是隐蔽信道。论文对现状的判断很直接：</p>
+<blockquote>
+<p>存储型隐蔽信道（把秘密藏在某个共享状态里）有人处理，<strong>时间型隐蔽信道几乎被普遍排除在威胁模型之外</strong>。</p>
+</blockquote>
+<p>原因也不难理解：几十年来，<strong>在细粒度共享硬件的条件下消除时间信道被认为是不可能的</strong>——两个进程共享同一颗
+CPU
+的缓存、同一条内存总线、同一个分支预测器，恶意方只要调节自己对共享资源的占用，就能让良性的传输快一点或慢一点，这本身就是一个比特。</p>
+<p><strong>于是就有了这篇的转向。</strong>
+既然”细粒度共享下堵不住”，那就换一个<strong>粗得多</strong>的边界：不要围着进程画框，<strong>围着一整台物理主机画框</strong>。这台主机与外界的唯一连接是一根网线，网线那头的云网络运营商能看到的，只有这根线上的包。论文的原话是：</p>
+<blockquote>
+<p>大规模计算恰好适合这么做——它本来就需要一整批机器，而机器之间的通信模式通常很规则。</p>
+</blockquote>
+<h2 id="核心一招把沙箱边界画在网线上">🏗️
+核心一招：把沙箱边界画在网线上</h2>
+<p>设计原则只有两句：<strong>让沙箱的接口尽可能简单</strong>，<strong>让框里的代码和执法代码之间有强物理隔离</strong>。</p>
+<p>具体落在三个位置上：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">┌──────────── untrusted host ────────────────┐</span><br><span class="line">│  Linux / CUDA / NCCL / PyTorch / LLM        │</span><br><span class="line">└───────────────────┬────────────────────────┘</span><br><span class="line">                    │  PCIe    ← 只用来取数据；不允许 host 拥塞这条链路</span><br><span class="line">┌───────────────────┴────────────────────────┐</span><br><span class="line">│  IOValve DPU (BlueField-3)                 │</span><br><span class="line">│  sandbox monitor:  encrypt / block / shape │  ← 沙箱边界画在这里</span><br><span class="line">└───────────────────┬────────────────────────┘</span><br><span class="line">                    │  Ethernet (RoCEv2 + IPSec)</span><br><span class="line">════════════════ the only wire ═══════════════</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong>接口只有两个</strong>：send 和
+receive。除这两个之外，框内框外没有其它接口，而且这两个接口的行为<strong>不取决于框内做了什么</strong>（这一点后面看整形时会更清楚）。</li>
+<li><strong>执法者和被执法者物理隔离</strong>：沙箱监控器跑在 DPU
+上，主机跑在 CPU 上，两者是两个独立的计算机，只通过 PCIe 相连。</li>
+<li><strong>上界被压到一根网线</strong>：恶意代码想往外传，能用的信道只剩”调制这根网线上的流量”。剩下的任务，就变成”如何让这根线上的流量不可被调制”。</li>
+</ul>
+<p>这一步是整个设计里最漂亮的地方——它把”不可能的任务”（在共享缓存的核里堵住时间信道）换成了”难但可做的任务”（把一根网线上的流量整形到匀速）。</p>
+<h2 id="平台让-dpu-当主机唯一的网卡">🧱 平台：让 DPU
+当主机唯一的网卡</h2>
+<p>把监控器放到 DPU 上之后，新的问题立刻出现：<strong>DPU
+和主机之间还连着一条 PCIe</strong>，主机完全可以去挤这条链路、用时序往
+DPU 递消息。所以论文给 DPU
+立了四条硬件要求，每条都是为了堵一个具体的口子：</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>要求</th>
+<th>要堵的口子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DPU 必须是该节点<strong>唯一</strong>的网络设备</td>
+<td>框里再插一块网卡，就等于多了一条出口。（主板集成网卡、USB
+网卡也算，论文把这类情况归入”物理攻击”，不在威胁模型内）</td>
+</tr>
+<tr>
+<td>DPU
+必须能<strong>忽略主机发来的管理命令</strong>（刷固件、暴露硬件组件、改网络配置）</td>
+<td>否则被攻陷的主机直接把 DPU 刷掉就行了</td>
+</tr>
+<tr>
+<td>DPU 必须能<strong>重新部署主机</strong>（PXE 网络启动、控制 BMC
+重置节点）</td>
+<td>需要一个干净的起点；主机上的任何状态都不能被继承</td>
+</tr>
+<tr>
+<td>DPU 必须由<strong>单租户</strong>独占</td>
+<td>避免同租户之间的侧信道</td>
+</tr>
+</tbody>
+</table>
+<p>这四条里，前三条 BlueField 这类 DPU
+已经具备（论文引了它的安全启动特性）。再加上远程证明和远程启动，就得到了一个完整的开局：<strong>用户把自己的镜像交给
+DPU，DPU 证明自己跑的是用户指定的监控器，然后再由 DPU
+从网络启动主机。</strong>
+从这一刻起，主机里的一切都是不可信的，包括那块负责搬数据的
+adapter，而监控器本身是可信的。</p>
+<h2 id="两道关口内存不能拥塞流量必须匀速">🌊
+两道关口：内存不能拥塞，流量必须匀速</h2>
+<p>剩下的工作分成两段：<strong>主机 ↔︎ DPU 这一段</strong>（PCIe），和
+<strong>DPU ↔︎ DPU
+这一段</strong>（网络线）。两段都要堵时序信道，但堵法不同。</p>
+<h3 id="第一道pcie-这头让拥塞传不过去">第一道：PCIe
+这头，让拥塞传不过去</h3>
+<p>先看清楚威胁长什么样。假设一个良性进程正把 DRAM
+里的通信缓冲发给远端，网卡通过 DMA 去读 DRAM——那么一个同样能访问 DRAM
+的恶意进程，就可以<strong>通过挤压内存带宽来改变网卡的 DMA
+速度</strong>，从而在良性的传输上调制出信息。这条信道根本不需要恶意代码有网络权限，也不需要它碰到那份数据。</p>
+<p>IOValve
+的解法是<strong>空间上的隔离</strong>：把通信缓冲从主机内存挪到 DPU
+内存里，恶意代码在物理上就够不着它。要做到这一点，需要同时满足三件事：</p>
+<ul>
+<li>主机 CPU（也就是它的 DMA 引擎）<strong>不能</strong>访问 DPU
+内存；</li>
+<li>网卡（RNIC）<strong>不能</strong>访问主机内存；</li>
+<li>主机 CPU <strong>不能</strong>访问或拥塞”网卡 ↔︎ DPU
+内存”这条链路。</li>
+</ul>
+<p>但这三件事做到之后，主机和 DPU
+就没法共享数据了。于是有了第二层设计：<strong>把”什么时候搬”的主动权交给
+DPU</strong>。</p>
+<ul>
+<li><strong>周期性地拉与推</strong>：DPU 侧有 puller 和 pusher
+两个线程，它们定期通过 DMA
+去查看主机侧环形缓冲的元数据（写指针和读指针）。有数据就搬走，有空间就送回来——<strong>节奏由
+DPU 定，不由主机定</strong>。</li>
+<li><strong>惰性同步</strong>：主机是 x86、DPU 是
+Arm，两者内存模型不同，又隔着 PCIe 和 DMA
+共享环形缓冲，一致性问题很棘手。论文没有用 DPU
+自带的同步原语（嫌它慢、也不想绑死具体厂商），而是用一对序号计数器做惰性同步——思路借自
+seqlock 和
+FaRM：<strong>改元数据之前先抬计数器，改完之后再抬一次，对方看到两次读数不一致就丢弃这次拷来的元数据</strong>。用一对计数器而不是一个（也没有用”奇偶判断”那套）+
+避免用 CPU 拷贝，是为了少发几条昂贵的 DMA 命令。</li>
+<li><strong>缓冲之间直接搬</strong>：数据项从主机的发送缓冲直接 DMA 到
+DPU 的发送缓冲，中间不经过 DPU 的 CPU 内存拷贝。</li>
+<li><strong>节点级的缓冲管理</strong>：一对节点、每个方向只有<strong>一个</strong>环形缓冲、<strong>一条</strong>连接，不管上层软件开了多少条连接。这是个安全决定而不是性能决定——如果允许上层动态改变连接数，主机就能靠”改连接数”影响传输节奏，信道又回来了。</li>
+</ul>
+<h3
+id="第二道网线这头把流量变成节拍器">第二道：网线这头，把流量变成节拍器</h3>
+<p>这一段才是真正的正面战场：<strong>云网络运营商能直接看到这根线上的每一个包</strong>。</p>
+<p>思路仍然朴素，但执行起来很讲究。DPU 上的 regularizer
+按固定时间间隔往对端 DPU
+发固定大小的数据：<strong>有真数据就发数据，没有就发假数据（对端收到后直接丢弃）</strong>。对端收到的要么是真数据项，要么是假数据项，而网络上的观察者<strong>分不出哪个是哪个</strong>——因为两者同样大小、同样加密。</p>
+<p>支撑这套整形的还有几个实现上的取舍：</p>
+<ul>
+<li><strong>用 RDMA 单向操作</strong>：发送方用 RDMA Read
+读对端接收缓冲的元数据（为了惰性同步），用 RDMA Write
+写数据，并把元数据搭车捎过去（<code>WRITE_WITH_IMM</code>），省掉一次独立的
+RDMA 操作。整个对 DPU 之间的传输模式因此变成”小的 Read + 大的
+Write”，两种都是固定尺寸。</li>
+<li><strong>连接要持久</strong>：节点之间的连接在部署时就建好，一直用到系统结束。<strong>不按应用的需求建连接</strong>，因为按需建连接本身就构成一个信道（连接数会随上层行为变化）。</li>
+<li><strong>加密在 DPU
+上做</strong>：主机不可信，所以加密不能交给它。IOValve
+假设网络是几十到上百 Gbit/s，加密必须硬件加速，于是选了 RoCEv2（RDMA 走
+UDP），用 IPSec 的硬件加速来保护这些 UDP 包——因为它比 InfiniBand
+自带的加密方案更容易拿到。</li>
+</ul>
+<h2 id="实测一个对照实验-三个应用">📊 实测：一个对照实验 + 三个应用</h2>
+<h3 id="那个无泄漏是这么证明的">那个”无泄漏”是这么证明的</h3>
+<p>论文把”leakage-free”这个断言，落成了<strong>一个对照实验</strong>。逻辑是：主机与
+DPU 之间共享的硬件只有两处，主机内存和 DPU 的 PCIe
+switch，那么在单租户加流量过滤的前提下，恶意代码只剩”调制合法流量”这一条路。于是他们直接去量这条路上的延迟。</p>
+<p>做法是拿 <code>qperf</code> 测 64 字节（一个缓存行）的 RDMA Write
+往返延迟，一边跑压满 DRAM 带宽的基准程序制造拥塞，看延迟变不变：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>数据放在哪</th>
+<th>无拥塞</th>
+<th>有拥塞</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>主机内存</strong>（常规做法）</td>
+<td>6.06 µs</td>
+<td>8.75 µs</td>
+<td><strong>变慢 44%</strong>——包间延迟差异清晰可辨，信道成立</td>
+</tr>
+<tr>
+<td><strong>DPU 内存</strong>（IOValve）</td>
+<td>7.04 µs</td>
+<td>7.09 µs</td>
+<td><strong>变慢 0.7%</strong>——拥塞传不过来</td>
+</tr>
+</tbody>
+</table>
+<p>这张表就是全文最核心的证据：<strong>不是”我们加密得好”，而是”恶意方根本没有可调节的那个变量”</strong>。注意第二行的绝对值本来就更慢（7.04
+对 6.06 µs），这是把缓冲搬到 DPU
+的固定代价；关键在于它对拥塞<strong>不敏感</strong>。</p>
+<h3 id="网络微基准先摊开代价">网络微基准：先摊开代价</h3>
+<p>在应用之前，先看纯网络层面的开销（这部分是 IOValve
+最难看的地方）：</p>
+<ul>
+<li>延迟比 stock NCCL 高 <strong>77.4% ～ 2.8 倍</strong>；</li>
+<li>吞吐比 stock NCCL 低 <strong>16.8% ～ 39.1%</strong>。</li>
+</ul>
+<h3
+id="三个真实应用开销被计算掩盖了大半">三个真实应用：开销被计算掩盖了大半</h3>
+<p>到了真实负载，因为节点内计算本身很重，网络开销被摊薄了：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>应用</th>
+<th>配置</th>
+<th>IOValve 的代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LLM 微调</strong></td>
+<td>Llama 3 8B / 70B，QLoRA（4-bit NF4）+ PyTorch FSDP，FP16，No Robots
+数据集</td>
+<td>训练时间<strong>增加 2.1%～4.1%</strong></td>
+</tr>
+<tr>
+<td><strong>LLM 批量推理</strong></td>
+<td>Llama 3 8B，两张 GPU 张量并行，不用采样、不用 KV cache，每题生成 50
+token</td>
+<td>token 生成吞吐<strong>下降 0.2%～8.5%</strong>（摘要口径 1.4%）</td>
+</tr>
+<tr>
+<td><strong>分子动力学模拟</strong></td>
+<td>深度学习模型训练</td>
+<td>时间<strong>增加 3.4%～5.1%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>一个值得注意的规律：<strong>模型越大、训练指令越多，IOValve
+的相对开销越小</strong>——因为计算占比更高，网络被进一步摊薄。另外，这三个应用<strong>一行代码都没改</strong>，IOValve
+是在 NCCL 的网络插件层接进去的。</p>
+<h2 id="边界它明确挡不住什么">⚠️ 边界：它明确挡不住什么</h2>
+<p>这类”我做到了 X”的论文，最该读的是它自己在哪让步。IOValve
+的边界相当清楚，而且<strong>第一条正好和 LLM 对话场景冲突</strong>：</p>
+<p><strong>① 对 chatbot 这类动态、延迟敏感的场景不合适。</strong> 论文在
+Limitations 里主动交代了这一点，而且点得很准：</p>
+<blockquote>
+<p>技术上我们可以在用户本地机器和 DPU 之间也做整形（就像 DPU
+之间那样），来安全地交换 prompt 与 response，从而缓解
+<strong>token-length side-channel attack</strong>。但由于 prompt 与
+response
+的长度基本不可预测，我们就得把传输单元放大很多，网络开销变得不可忽略。<strong>我们把它留给未来工作。</strong></p>
+</blockquote>
+<p>这段话的分量比它看起来重：它等于承认了<strong>“长度本身就是一条信道”</strong>，而且<strong>恒定整形这套办法在”长度高度可变”的场景下会被开销压垮</strong>。这也解释了为什么
+IOValve 挑的战场是多机训练——集合通信（AllReduce /
+AllGather）的流量本来就接近匀速，整形几乎不额外花钱。</p>
+<p><strong>② PCIe 只被当作”要防拥塞”的地方。</strong> 它对主机和 DPU
+之间的 PCIe
+链路做的所有限制，目的都是”不让主机制造拥塞”。至于这条链路上<strong>传的内容</strong>按什么粒度区分对待、哪些包加密哪些不加密——这个问题它不碰，因为它的机密性论证根本不落在
+PCIe 上，而是落在”主机里的数据由用户自己的代码处理”这个前提上。</p>
+<p><strong>③ 威胁模型把物理攻击排除在外。</strong>
+论文的假设是：数据所有者信任云厂商的<strong>硬件与物理安全</strong>，信任
+IOValve
+自己的固件，只把云厂商的软件、员工和外部黑客当作对手。所以主板配置被改、机箱被打开、在链路上插探针，这些都不在它的防御范围内。</p>
+<p><strong>④ 只保机密性，不保可用性与完整性。</strong>
+论文说得很直接：被攻陷的 adapter
+故意破坏元数据同步，只会造成完整性和可用性问题，<strong>那是本文范围之外的</strong>。</p>
+<p><strong>⑤ 部署门槛</strong>：需要带 DPU
+的裸金属实例，不适用于虚拟机（CVM 上跑不了）；需要主机上有 NCCL
+支持和一个类似用户态网卡驱动的网络插件。</p>
+<h2 id="换个位置读它在独立可编程设备这条线上的位置">🔭
+换个位置读：它在”独立可编程设备”这条线上的位置</h2>
+<p>把这篇放回更大的图里，它其实在回答一个比”怎么防隐蔽信道”更一般的问题：<strong>当你想在主机之外设一个可信的执法点时，那个执法点应该放在哪、按什么粒度做判断？</strong></p>
+<p>IOValve 给的答案是把执法点放在<strong>一块独立的 PCIe
+设备</strong>上（DPU），按<strong>数据流身份</strong>做判断——加密用的是”哪些流量属于这个用户”（密钥绑定），整形用的是”按固定节拍发”，都不看包的内容与地址。它要的保证是”外面什么都看不出来”，代价是网络层面的延迟与吞吐明显变差、对可变长度的场景不适用。</p>
+<p>这构成了一个很值得对照的坐标：<strong>同样是”把策略执行点放在一块独立可编程硬件上”，也同样是”用
+PCIe 把这块硬件挂在主机旁边”，但策略粒度可以完全不同。</strong>
+有的系统按<strong>数据流的身份</strong>切（IOValve
+的密钥与连接），有的按<strong>包的地址区间</strong>静态标注（例如 ccAI
+那类机密 I/O 把这些 PCIe 包划进 A1～A4
+四档、只有其中一档做加解密）。这两种粒度面对的困难也不一样：流派身份在生命周期内是稳定的，而<strong>地址区间会被复用</strong>——同一段缓冲区这一刻装公开数据、下一刻装敏感权重，按区间标注就只能一刀切。</p>
+<p>对做链路观测的人来说，这篇还有两个可以直接带走的东西：</p>
+<ul>
+<li><strong>“独立设备上的执法点”这个构造已经是主流了。</strong> 一篇
+CCS’25 论文把它的整个保密性论证押在这上面，说明”主机不可信 +
+旁边挂一块可信可编程设备”不再是奇思妙想，而是设计空间里的一等公民。</li>
+<li><strong>它给”看不到”立了一个可量化的判据。</strong> 那 44% 对 0.7%
+的对照，是一个可以直接照抄的实验范式：要论证某条信道不通，就找到那个”可以被恶意方调节的变量”,量出它在有对抗和无对抗下的差异。</li>
+</ul>
+<h2 id="总结">✅ 总结</h2>
+<p><strong>把沙箱边界从处理器核挪到网线上，换来的不是更强的加密，而是”没有可调节的变量”。</strong>
+IOValve 让 DPU 成为主机唯一的网卡、让通信缓冲住在 DPU
+内存里、让出网流量按固定节拍走固定大小的包——于是沙箱里恶意代码唯一可能的出口（调制网络流量）被掐掉了，而它自己量出来的证据是：数据放主机内存时，拥塞会把
+RDMA 延迟推高 44%；数据放 DPU 内存时只动 0.7%。</p>
+<p>三个可以带走的要点：</p>
+<ol type="1">
+<li><strong>它的核心不是密码学，是”把恶意方能拨动的那个旋钮拆掉”。</strong>
+加密只保证”看不懂”，加密加得再好也拦不住”传得快一点还是慢一点”，整形拦的才是这个。</li>
+<li><strong>它的强项和软肋是同一件事：恒定整形。</strong>
+流量本来就匀速（多机训练的集合通信）时几乎免费；流量高度可变（LLM 对话的
+prompt 与 response
+长度）时，要么开销爆炸要么放弃——论文自己承认这条，并把它列为未来工作，顺带点出了
+token 长度本身就是一条侧信道。</li>
+<li><strong>它的威胁模型有一道清晰的门：“物理接触者被排除在外”。</strong>
+而这条线上其他工作的结论恰恰相反——PCIeHardwareMitM 与 Hermes
+都要求物理接触，它们证明的正是”能碰到硬件就什么都拿得到”。<strong>这两类工作的结论放在一起看才有意思：一个说”我堵住了一切”，另一个说”只要让我碰一下线就够了”。</strong></li>
+</ol>
+<h2 id="这条路线上还有哪些工作">🔗 这条路线上还有哪些工作</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>工作</th>
+<th>来源</th>
+<th>站在哪一侧</th>
+<th>入手点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/posts/c41f8e02/">Hermes Attack</a></td>
+<td>USENIX Security 2021</td>
+<td>攻击</td>
+<td>明文 PCIe 流量，lossless 重建 DNN</td>
+</tr>
+<tr>
+<td><a href="/posts/ac6804a/">PCIeHardwareMitM</a></td>
+<td>Microprocessors &amp; Microsystems 2020</td>
+<td>攻击</td>
+<td>把 FPGA 插进链路中间，读包改包</td>
+</tr>
+<tr>
+<td><a href="/posts/1fab22f4/">PCIeMonitor</a></td>
+<td>CSR 2025</td>
+<td>防御</td>
+<td>在 PCIe 端点里做硬件旁路，匹配指令模式查挖矿</td>
+</tr>
+<tr>
+<td><a href="/posts/dab7c292/">IOTLB-SC</a></td>
+<td>AsiaCCS 2023</td>
+<td>攻击</td>
+<td>共享 IOMMU 的设备测 DMA 时延</td>
+</tr>
+<tr>
+<td><a href="/posts/f1021bb5/">DevIOus</a></td>
+<td>S&amp;P 2023</td>
+<td>攻击</td>
+<td>两个 DMA 设备争用 IOTLB</td>
+</tr>
+<tr>
+<td><strong>IOValve</strong>（本文）</td>
+<td>CCS 2025</td>
+<td>防御</td>
+<td>在 DPU 上做 I/O 沙箱，把流量整形成恒定节拍</td>
+</tr>
+</tbody>
+</table>
+<p>（本文为 CCS ’25 论文 <em>IOValve: Leakage-Free I/O Sandbox for
+Large-Scale Untrusted Data Processing</em>
+的精读笔记，正文表格内的数据取自论文原文。）</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%AE%89%E5%85%A8/" rel="tag"># 安全</a>
+              <a href="/tags/LLM/" rel="tag"># LLM</a>
+              <a href="/tags/%E6%9C%BA%E5%AF%86%E8%AE%A1%E7%AE%97/" rel="tag"># 机密计算</a>
+              <a href="/tags/%E8%AE%BA%E6%96%87%E7%B2%BE%E8%AF%BB/" rel="tag"># 论文精读</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/DPU/" rel="tag"># DPU</a>
+              <a href="/tags/%E9%9A%90%E8%94%BD%E4%BF%A1%E9%81%93/" rel="tag"># 隐蔽信道</a>
+              <a href="/tags/%E6%B2%99%E7%AE%B1/" rel="tag"># 沙箱</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/1fab22f4/" rel="prev" title="PCIeMonitor 精读：把规则匹配搬进 PCIe 链路，在硬件上查挖矿">
+                  <i class="fa fa-angle-left"></i> PCIeMonitor 精读：把规则匹配搬进 PCIe 链路，在硬件上查挖矿
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa-solid fa-headphones"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Zihao Li</span>
+  </div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+    <span title="Word count total">539k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">16:20</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
