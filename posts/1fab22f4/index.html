@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="在双 FPGA 搭出的 CPU-GPU 仿真平台上，把监测器做成 PCIe 端点里的一个旁听者——主机发往 GPU 的指令流被硬件复制一份，送进两个流水线化的 Aho-Corasick 匹配引擎逐条扫过，命中挖矿程序的指令序列就报警。规则不是手写的，而是用数据挖掘从真实矿工的 GPU 汇编里挖出来的操作码序列；整套监测不占被监测程序的执行时间，代价是 2.3 瓦，而这 2.3 瓦里有 55% 花在">
+    <meta name="description" content="把监测器做成 PCIe 端点里的一个旁听者：主机发往 GPU 的指令流被硬件复制一份，交给流水线化的多模式匹配引擎逐条扫过，命中挖矿程序的指令序列就报警。规则是数据挖掘从真实矿工的 GPU 汇编里挖出来的操作码序列，整套监测不占被监测程序的执行时间，代价是 2.3 瓦。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="PCIeMonitor 精读：把规则匹配搬进 PCIe 链路，在硬件上查挖矿">
 <meta property="og:url" content="https://iamzihao.github.io/posts/1fab22f4/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="在双 FPGA 搭出的 CPU-GPU 仿真平台上，把监测器做成 PCIe 端点里的一个旁听者——主机发往 GPU 的指令流被硬件复制一份，送进两个流水线化的 Aho-Corasick 匹配引擎逐条扫过，命中挖矿程序的指令序列就报警。规则不是手写的，而是用数据挖掘从真实矿工的 GPU 汇编里挖出来的操作码序列；整套监测不占被监测程序的执行时间，代价是 2.3 瓦，而这 2.3 瓦里有 55% 花在">
+<meta property="og:description" content="把监测器做成 PCIe 端点里的一个旁听者：主机发往 GPU 的指令流被硬件复制一份，交给流水线化的多模式匹配引擎逐条扫过，命中挖矿程序的指令序列就报警。规则是数据挖掘从真实矿工的 GPU 汇编里挖出来的操作码序列，整套监测不占被监测程序的执行时间，代价是 2.3 瓦。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-15T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-13T08:06:17.242Z">
+<meta property="article:modified_time" content="2026-10-13T08:09:06.735Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="GPU">
@@ -276,7 +276,7 @@ CPU-GPU 机器</span></a></li><li class="nav-item nav-level-2"><a class="nav-lin
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-13 16:06:17" itemprop="dateModified" datetime="2026-10-13T16:06:17+08:00">2026-10-13</time>
+      <time title="Modified: 2026-10-13 16:09:06" itemprop="dateModified" datetime="2026-10-13T16:09:06+08:00">2026-10-13</time>
     </span>
 
   
@@ -293,7 +293,7 @@ CPU-GPU 机器</span></a></li><li class="nav-item nav-level-2"><a class="nav-lin
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>8.9k</span>
+      <span>8.8k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -310,12 +310,10 @@ CPU-GPU 机器</span></a></li><li class="nav-item nav-level-2"><a class="nav-lin
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>在双 FPGA 搭出的 CPU-GPU 仿真平台上，把监测器做成 PCIe
-端点里的一个旁听者——主机发往 GPU
-的指令流被硬件复制一份，送进两个流水线化的 Aho-Corasick
-匹配引擎逐条扫过，命中挖矿程序的指令序列就报警。规则不是手写的，而是用数据挖掘从真实矿工的
-GPU 汇编里挖出来的操作码序列；整套监测不占被监测程序的执行时间，代价是
-2.3 瓦，而这 2.3 瓦里有 55% 花在 PCIe 物理层本身。</p>
+    <div class="post-body" itemprop="articleBody"><p>把监测器做成 PCIe 端点里的一个旁听者：主机发往 GPU
+的指令流被硬件复制一份，交给流水线化的多模式匹配引擎逐条扫过，命中挖矿程序的指令序列就报警。规则是数据挖掘从真实矿工的
+GPU 汇编里挖出来的操作码序列，整套监测不占被监测程序的执行时间，代价是
+2.3 瓦。</p>
 <span id="more"></span>
 <blockquote>
 <p>论文：<strong>PCIe Monitoring for Secure Code Execution in
