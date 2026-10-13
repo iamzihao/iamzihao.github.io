@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="概括成一段话：把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
+    <meta name="description" content="把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="PCIeHardwareMitM 精读：在 PCIe 链路上插一块 FPGA，读包、改包、复制包">
 <meta property="og:url" content="https://iamzihao.github.io/posts/ac6804a/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="概括成一段话：把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
+<meta property="og:description" content="把一块 FPGA 板插进 PCIe 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到 FPGA 资源的 1%，跑在 250 MHz、16 Gb&#x2F;s 上。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-12T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T08:52:56.709Z">
+<meta property="article:modified_time" content="2026-10-13T08:06:17.238Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -264,9 +264,15 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-10-12 11:00:00 / Modified: 16:52:56" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
+      <time title="Created: 2026-10-12 11:00:00" itemprop="dateCreated datePublished" datetime="2026-10-12T11:00:00+08:00">2026-10-12</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-13 16:06:17" itemprop="dateModified" datetime="2026-10-13T16:06:17+08:00">2026-10-13</time>
     </span>
 
   
@@ -300,11 +306,9 @@
     
     
     
-    <div class="post-body" itemprop="articleBody"><blockquote>
-<p>概括成一段话：<strong>把一块 FPGA 板插进 PCIe
+    <div class="post-body" itemprop="articleBody"><p>把一块 FPGA 板插进 PCIe
 链路中间、分别扮演链路两端的角色，它就能在不打断通信、不被两端察觉的前提下，把经过的每个包的类型、地址、长度记下来，还能在一个时钟周期里改写包的内容，或者把某个地址上的读请求替换成自己提前存好的副本——整套硬件逻辑占用不到
-FPGA 资源的 1%，跑在 250 MHz、16 Gb/s 上。</strong></p>
-</blockquote>
+FPGA 资源的 1%，跑在 250 MHz、16 Gb/s 上。</p>
 <span id="more"></span>
 <blockquote>
 <p>论文：<strong>Toward a hardware man-in-the-middle attack on PCIe

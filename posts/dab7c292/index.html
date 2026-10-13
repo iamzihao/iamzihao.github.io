@@ -22,15 +22,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"iamzihao.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.23.2","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"agate","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":true,"show_result":true,"style":"default"},"fold":{"enable":false,"height":500}},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"},"path":"/search.xml","localsearch":{"enable":true,"top_n_per_article":5,"unescape":false,"preload":false}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
+    <meta name="description" content="设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="IOTLB-SC 精读：IOMMU 的地址翻译缓存，也在向隔壁设备泄漏">
 <meta property="og:url" content="https://iamzihao.github.io/posts/dab7c292/index.html">
 <meta property="og:site_name" content="Zihao Li">
-<meta property="og:description" content="概括成一段话：设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
+<meta property="og:description" content="设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程 PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的 GPU——有没有在干活，全程不需要任何内核权限。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-13T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-12T09:14:59.820Z">
+<meta property="article:modified_time" content="2026-10-13T08:06:17.238Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="论文精读">
@@ -263,15 +263,9 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
+      
 
-      <time title="Created: 2026-10-13 11:00:00" itemprop="dateCreated datePublished" datetime="2026-10-13T11:00:00+08:00">2026-10-13</time>
-    </span>
-    <span class="post-meta-item">
-      <span class="post-meta-item-icon">
-        <i class="far fa-calendar-check"></i>
-      </span>
-      <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-12 17:14:59" itemprop="dateModified" datetime="2026-10-12T17:14:59+08:00">2026-10-12</time>
+      <time title="Created: 2026-10-13 11:00:00 / Modified: 16:06:17" itemprop="dateCreated datePublished" datetime="2026-10-13T11:00:00+08:00">2026-10-13</time>
     </span>
 
   
@@ -305,14 +299,11 @@ set：不知道结构也能找</span></a></li><li class="nav-item nav-level-2"><
     
     
     
-    <div class="post-body" itemprop="articleBody"><blockquote>
-<p>概括成一段话：<strong>设备要访问内存得先做地址翻译，翻译结果被 IOMMU
-缓存进一块叫 IOTLB 的表里，而这表被挂在同一个 IOMMU
-下的所有设备共用。于是控制一块可编程 PCIe 卡（比如
-FPGA）的一方，只要盯着自己 DMA
+    <div class="post-body" itemprop="articleBody"><p>设备要访问内存得先做地址翻译，翻译结果被 IOMMU 缓存进一块叫 IOTLB
+的表里，而这表被挂在同一个 IOMMU 下的所有设备共用。于是控制一块可编程
+PCIe 卡（比如 FPGA）的一方，只要盯着自己 DMA
 访问的时延变化，就能知道隔壁那块设备——比如跑着 SQL 数据库的
-GPU——有没有在干活，全程不需要任何内核权限。</strong></p>
-</blockquote>
+GPU——有没有在干活，全程不需要任何内核权限。</p>
 <span id="more"></span>
 <blockquote>
 <p>论文：<strong>IOTLB-SC: An Accelerator-Independent Leakage Source in
