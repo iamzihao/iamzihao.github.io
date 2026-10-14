@@ -30,7 +30,7 @@
 <meta property="og:description" content="把 I&#x2F;O 沙箱的执法点从 CPU 核挪到一块与主机物理隔离的 DPU 上，出网流量全都要经过它——加密、阻断，再整形成恒定节拍（固定大小的包、固定间隔，没真数据就发假包）。于是沙箱里的恶意代码没有可调的信道。代价是 LLM 微调耗时增加 2.1%～4.1%，批量推理吞吐下降 1.4%。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-16T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-14T08:03:59.419Z">
+<meta property="article:modified_time" content="2026-10-14T08:07:33.442Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -277,7 +277,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-14 16:03:59" itemprop="dateModified" datetime="2026-10-14T16:03:59+08:00">2026-10-14</time>
+      <time title="Modified: 2026-10-14 16:07:33" itemprop="dateModified" datetime="2026-10-14T16:07:33+08:00">2026-10-14</time>
     </span>
 
   
@@ -294,7 +294,7 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>11k</span>
+      <span>10k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
@@ -798,15 +798,9 @@ IOValve
 支持和一个类似用户态网卡驱动的网络插件。</p>
 <h2 id="换个位置读它在独立可编程设备这条线上的位置">🔭
 换个位置读：它在”独立可编程设备”这条线上的位置</h2>
-<p>把这篇放回更大的图里，它其实在回答一个比”怎么防隐蔽信道”更一般的问题：<strong>当你想在主机之外设一个可信的执法点时，那个执法点应该放在哪、按什么粒度做判断？</strong></p>
+<p>把这篇放回更大的图里，它其实在回答一个比”怎么防隐蔽信道”更一般的问题：<strong>当你想在主机之外设一个可信的执法点时，那个执法点应该放在哪、拿什么当判断依据？</strong></p>
 <p>IOValve 给的答案是把执法点放在<strong>一块独立的 PCIe
 设备</strong>上（DPU），按<strong>数据流身份</strong>做判断——加密用的是”哪些流量属于这个用户”（密钥绑定），整形用的是”按固定节拍发”，都不看包的内容与地址。它要的保证是”外面什么都看不出来”，代价是网络层面的延迟与吞吐明显变差、对可变长度的场景不适用。</p>
-<p>这构成了一个很值得对照的坐标：<strong>同样是”把策略执行点放在一块独立可编程硬件上”，也同样是”用
-PCIe 把这块硬件挂在主机旁边”，但策略粒度可以完全不同。</strong>
-有的系统按<strong>数据流的身份</strong>切（IOValve
-的密钥与连接），有的按<strong>包的地址区间</strong>静态标注（例如 ccAI
-那类机密 I/O 把这些 PCIe 包划进 A1～A4
-四档、只有其中一档做加解密）。这两种粒度面对的困难也不一样：流派身份在生命周期内是稳定的，而<strong>地址区间会被复用</strong>——同一段缓冲区这一刻装公开数据、下一刻装敏感权重，按区间标注就只能一刀切。</p>
 <p>对做链路观测的人来说，这篇还有两个可以直接带走的东西：</p>
 <ul>
 <li><strong>“独立设备上的执法点”这个构造已经是主流了。</strong> 一篇
