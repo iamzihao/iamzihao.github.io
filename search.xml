@@ -7165,6 +7165,279 @@ NVBit“在哪些指令前，插入哪些函数调用”。</p>
       </tags>
   </entry>
   <entry>
+    <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
+    <url>/posts/f1a2b3c4/</url>
+    <content><![CDATA[<p>本文介绍
+FaaS（函数即服务）的诞生背景、核心概念与应用场景，并演示如何部署第一个云函数。</p>
+<span id="more"></span>
+<h2 id="一faas-的诞生我们为何需要它">一、FaaS
+的诞生：我们为何需要它？</h2>
+<p>要理解 FaaS
+为何会横空出世，我们得先坐上时光机，回顾一下应用部署方式的“进化史”。</p>
+<p><strong>第一站：物理服务器时代</strong></p>
+<p>在遥远的“刀耕火种”年代，我们要部署一个网站，得先去机房买一台（或几台）物理服务器。这意味着漫长的采购周期、高昂的硬件成本，以及复杂的机器运维。最头疼的是，为了应对业务高峰，我们必须按最高标准购买硬件，导致服务器在大部分时间里都处于“摸鱼”状态，造成了巨大的资源浪费。</p>
+<p><strong>第二站：虚拟机 (IaaS) 时代</strong></p>
+<p>云计算的出现带来了转机。以 AWS EC2
+为代表的虚拟机服务，让我们告别了实体硬件，可以在云端“租”服务器。这极大地提高了灵活性，几分钟内就能创建一台虚拟机。但问题并没有完全解决：我们依然要为整台虚拟机买单，哪怕上面的应用空闲着。同时，操作系统的维护、安全补丁的更新，这些运维工作一样也没少。</p>
+<p><strong>第三站：容器 (PaaS/CaaS) 时代</strong></p>
+<p>Docker 和 Kubernetes
+的风靡，让部署进入了容器化时代。我们将应用和它的依赖打包成一个轻量的“集装箱”，实现了环境的标准化和交付的敏捷性。但新的“烦恼”也随之而来：为了运行这些容器，我们得维护一个庞大而复杂的
+Kubernetes 集群。容量规划、节点扩容、网络配置…
+我们似乎从“应用运维”的坑，跳进了“集群运维”的坑。</p>
+<p>兜兜转转，开发者们始终有一个终极梦想：<strong>我们能只关心业务代码，而彻底不用管服务器吗？</strong></p>
+<p>FaaS 响亮地回答了：“能！”</p>
+<p>它的核心思想简单而彻底：<strong>让开发者回归最纯粹的编程，将服务器及相关的一切运维工作，都交给云平台</strong>。无论是操作系统、运行时环境，还是弹性伸缩、高可用，你通通不用管。你的世界里，只剩下你的“函数”——那段实现核心业务逻辑的代码。</p>
+<p>简单来说，FaaS
+将付费模式从“为服务器资源付费”，进化到了“<strong>为代码的实际执行付费</strong>”。这不只是一次技术升级，更是一场开发思想的革命。</p>
+<h2 id="二拨开云雾faas-核心概念详解">二、拨开云雾：FaaS
+核心概念详解</h2>
+<p>理解了 FaaS 的“初心”，我们再来拆解几个围绕着它的核心概念。</p>
+<ul>
+<li><p><strong>FaaS (Function-as-a-Service, 函数即服务)</strong>
+这是我们要掌握的核心。我喜欢用一个比喻：<strong>租厨房，而不是租公寓</strong>。
+在传统模式下，为了做顿饭，你得先租下一整套公寓（服务器），自己装修（配环境）、打扫（运维）。而
+FaaS
+就像一个共享厨房，你只需带着菜谱（代码）进去，锅碗瓢盆（运行环境）一应俱全。你只为炒菜的几分钟付费，完事就走，绝不为厨房的闲置时间买单。</p></li>
+<li><p><strong>Serverless (无服务器架构)</strong>
+这是一个更宏大的理念，FaaS 只是它最广为人知的“代言人”。Serverless
+并非真的没有服务器，而是强调一种<strong>开发者无需关心服务器</strong>的架构思想。
+如果说 FaaS 是共享厨房，那 Serverless
+就是整个美食广场。这个广场里除了厨房（FaaS），还有现成的食材超市（BaaS -
+数据库服务）、统一的安保系统（BaaS - 身份验证服务）等等。Serverless
+的目标，就是让你作为大厨，能心无旁骛地专注于“炒菜”这一件事上。</p></li>
+<li><p><strong>事件驱动 (Event-Driven)</strong> 这是 FaaS
+的灵魂。你的函数并非 24
+小时待命，而是像个“懒汉”，<strong>“有事才干，没事歇着”</strong>。
+你可以把函数想象成一个装了门铃的房间。只有当“事件”发生时——比如有人按门铃（HTTP
+请求）、信箱里有新信件（文件上传）、手机闹钟响了（定时任务）——它才会被唤醒去开门（执行函数）。这种模式确保了资源不会被空耗。</p></li>
+<li><p><strong>冷启动 (Cold Start)</strong> 这是 FaaS
+的一个独特挑战。如果你的函数长时间没被调用（没人按门铃），平台为了节约资源，会把它“请回家休息”（回收实例）。当下一个请求突然到来时，平台需要重新给它分配资源、加载代码、初始化环境…
+这个过程就像大冬天里发动一台冷了很久的汽车，会有一个明显的延迟，这就是“冷启动”。
+一旦启动完毕，后续的连续请求就会非常快（这叫“热启动”），直到它再次因为“没人理”而进入休眠。</p></li>
+<li><p><strong>BaaS (Backend-as-a-Service, 后端即服务)</strong>
+前面提到，这是 Serverless
+美食广场的另一半。它提供了各种开箱即用的后端能力，比如数据库
+(<code>Firebase</code>)、对象存储 (<code>AWS S3</code>)、用户认证
+(<code>Auth0</code>) 等。FaaS 函数通常和 BaaS
+服务配合，一个主内（负责无状态的计算逻辑），一个主外（负责有状态的数据存储），共同构建出一个完整的
+Serverless 应用。</p></li>
+</ul>
+<h2 id="三身手初试faas-的真实应用场景">三、身手初试：FaaS
+的真实应用场景</h2>
+<p>理论听起来很棒，那 FaaS 在实际工作中到底能用来做什么呢？</p>
+<h3 id="场景一网站或小程序的后端-api">场景一：网站或小程序的后端
+API</h3>
+<p>这是 FaaS
+最经典的用法。假设你要为个人博客或小程序开发一个后端，但又不想为了偶尔的访问量，而去维护一台
+24 小时开机的服务器。</p>
+<ul>
+<li><strong>实例</strong>：一个“用户注册”接口。当用户在前端页面提交注册信息后，会调用一个
+API 网关，这个网关会触发我们的 FaaS
+函数。函数接收到用户信息，执行数据校验、写入数据库等操作，然后返回结果。整个过程可能只花费几百毫秒，你就只需要为这短暂的计算付费，经济又省心。</li>
+</ul>
+<h3 id="场景二自动化的数据处理">场景二：自动化的数据处理</h3>
+<p>FaaS 的事件驱动特性，让它成为自动化工作流的“神器”，尤其适合“当 A
+发生时，自动执行 B”这类任务。</p>
+<ul>
+<li><strong>实例</strong>：图片自动生成缩略图。在社交或电商网站，用户上传一张高清原图后，我们往往需要大、中、小等不同尺寸的缩略图。通过
+FaaS，我们可以设定一个规则：每当有图片上传到指定的存储桶（如 AWS
+S3），就自动触发一个函数。这个函数会读取原图，批量生成所需的缩略图，再存回存储桶。整个流程全自动，无需人工干预。</li>
+</ul>
+<h3 id="场景三轻量级的定时任务-cron-job">场景三：轻量级的定时任务 (Cron
+Job)</h3>
+<p>几乎每个系统都需要一些定期执行的任务，比如每日数据备份、定时发送报表等。</p>
+<ul>
+<li><strong>实例</strong>：生成每日运营报表。你可以设置一个定时触发器，比如每天凌晨
+2 点，准时调用一个 FaaS
+函数。这个函数会自动连接数据库，抓取前一天的用户增长、订单量等数据，生成一份精美的报表，并通过邮件发送给相关同事。</li>
+</ul>
+<h3 id="场景四物联网-iot-数据处理">场景四：物联网 (IoT) 数据处理</h3>
+<p>在物联网场景中，成千上万的设备可能会在瞬间产生海量数据，对后端的弹性伸缩能力是极大的考验。</p>
+<ul>
+<li><strong>实例</strong>：共享单车位置上报。每辆单车上的 GPS
+设备会定时将位置信息发送到一个消息队列中。FaaS
+函数可以订阅这个队列，每当有新消息进入，就触发一次执行，将最新的单车位置解析并更新到地图数据库中。FaaS
+的自动伸缩能力，能完美应对早晚高峰期的并发洪流。</li>
+</ul>
+<p>通过这些场景，不难发现 FaaS
+特别适合那些<strong>无状态、短执行、事件触发</strong>类型的任务。</p>
+<h2 id="四庖丁解牛faas-架构与上线实战">四、庖丁解牛：FaaS
+架构与上线实战</h2>
+<p>理论和场景都清楚了，是时候深入 FaaS
+平台的内部，看看它究竟是如何工作的，并亲手上线一个函数了。</p>
+<h3 id="架构解剖以-aws-lambda-为例">架构解剖（以 AWS Lambda 为例）</h3>
+<p>我们以目前最流行的 FaaS 平台 AWS Lambda 为例，看看一个典型的 FaaS
+调用流程包含哪些组件。 <pre>
+<code class="mermaid">
+
+graph LR
+EVT[&quot;事件源&lt;br&#x2F;&gt;S3 &#x2F; API Gateway &#x2F; MQ&quot;] --&gt; TRG(&quot;触发器&quot;)
+TRG --&gt; LBD[&quot;Lambda 托管 Runtime&quot;]
+LBD --&gt; ENI[(&quot;弹性网络&quot;)]
+LBD --&gt; LOG[&quot;CloudWatch Logs&quot;]
+LBD --&gt; DLQ[&quot;死信队列&lt;br&#x2F;&gt;(可选)&quot;]
+</code>
+</pre></p>
+<ul>
+<li><strong>事件源</strong>：触发函数执行的“扳机”，可以是 S3
+的文件上传、API Gateway 的 HTTP 请求，或是消息队列里的新消息。</li>
+<li><strong>触发器</strong>：连接事件源和函数的“遥控器”，负责监听事件并调用目标函数。</li>
+<li><strong>Runtime</strong>：函数的运行环境，平台内置了 Node.js,
+Python, Go 等多种语言环境，也支持通过自定义镜像（Custom
+Runtime）运行任何语言。</li>
+<li><strong>弹性网络
+(ENI)</strong>：如果函数需要访问你私有网络（VPC）里的数据库等资源，平台会为其挂载一个弹性网络接口。</li>
+<li><strong>监控与日志 (CloudWatch
+Logs)</strong>：函数运行期间产生的日志（比如
+<code>console.log</code>）和各项指标（调用次数、执行时长等）会被自动收集起来，方便排查问题。</li>
+</ul>
+<blockquote>
+<p><strong>解密冷启动</strong>：从上面的流程可以看出，一次冷启动的耗时主要来自：拉取代码镜像
+→ 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
+</blockquote>
+<h3 id="开发到上线五步法">开发到上线：五步法</h3>
+<p>接下来，我们用一个经典的 Hello World
+示例，走完从开发到上线的完整流程。</p>
+<ol type="1">
+<li><p><strong>初始化工程</strong>
+首先，在本地创建一个项目目录，并编写一个简单的 Node.js 函数。
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> hello-faas &amp;&amp; <span class="built_in">cd</span> <span class="variable">$_</span></span><br><span class="line"><span class="comment"># 创建一个 index.js 文件，内容如下</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;exports.handler = async (event) =&gt; &quot;Hello from FaaS!&quot;;&#x27;</span> &gt; index.js</span><br><span class="line"><span class="comment"># 将项目打包成 zip 文件</span></span><br><span class="line">zip -r function.zip .</span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>创建函数</strong>
+登录云厂商控制台（或使用命令行工具），创建一个新函数。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS CLI 为例</span></span><br><span class="line">aws lambda create-function \</span><br><span class="line">    --function-name hello-world \</span><br><span class="line">    --runtime nodejs20.x \</span><br><span class="line">    --handler index.handler \</span><br><span class="line">    --zip-file fileb://function.zip \</span><br><span class="line">    --role &lt;your-lambda-execution-role-arn&gt;</span><br></pre></td></tr></table></figure>
+这里需要指定函数名、运行时、入口文件
+(<code>index.js</code>里的<code>handler</code>方法)，并上传代码包。</p></li>
+<li><p><strong>配置触发器</strong>
+函数创建好了，但还不知道“听谁的号令”。我们需要为它配置一个触发器，比如一个公开的
+HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS API Gateway v2 为例，此步骤在控制台操作更直观</span></span><br><span class="line">aws apigatewayv2 create-api --name hello-api --protocol-type HTTP</span><br><span class="line"><span class="comment"># ... 此处省略若干步骤，建议在控制台界面完成 API Gateway 与 Lambda 的集成</span></span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>版本与灰度</strong>
+在生产环境中，直接更新线上代码是危险的。FaaS
+平台通常支持版本管理和别名（Alias）功能，你可以先发布一个新版本，然后让
+10% 的流量指向新版本，90%
+的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
+<li><p><strong>监控与告警</strong>
+函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
+5 分钟超过 1% 时，立即发短信通知我。</p></li>
+</ol>
+<h2
+id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h2>
+<p>FaaS
+的一大魅力在于其极致的成本效益，让我们来看看它是如何计费的，以及在使用中会遇到哪些“坑”。</p>
+<h3 id="计费模型对比">计费模型对比</h3>
+<p>各大云厂商的 FaaS 计费方式大同小异，通常都包含两个维度：</p>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 20%" />
+<col style="width: 24%" />
+<col style="width: 13%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr>
+<th>厂商</th>
+<th>最小计量（时长/内存）</th>
+<th>每月免费额度（调用/资源）</th>
+<th>计费维度</th>
+<th>关键备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWS Lambda</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 GB-秒</td>
+<td>调用次数 + GB-秒</td>
+<td>ARM 架构单价更低</td>
+</tr>
+<tr>
+<td>Azure Functions</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 GB-秒</td>
+<td>同上</td>
+<td>分为多种计划 (Plan)</td>
+</tr>
+<tr>
+<td>GCP Cloud Functions</td>
+<td>100 ms / 256 MB</td>
+<td>200 万次 / 40 万 GB-秒</td>
+<td>同上</td>
+<td>Gen2 冷启动优化明显</td>
+</tr>
+<tr>
+<td>阿里云函数计算</td>
+<td>1 ms / 128 MB</td>
+<td>100 万次 / 40 万 CU-秒</td>
+<td>调用次数 + CU-秒</td>
+<td>CU 是资源的综合单位</td>
+</tr>
+</tbody>
+</table>
+<p><strong>通用计费公式</strong>：<code>总费用 = 调用次数 × 次数单价 + (函数执行总时长 × 内存配置) × 资源单价</code></p>
+<p>可以看出，厂商们都在用慷慨的免费额度吸引开发者，对于个人项目或小型应用来说，很可能一个月都花不了几块钱。</p>
+<h3 id="常见坑与对策">常见“坑”与对策</h3>
+<p>在享受 FaaS 带来的便利时，也要小心避开下面这些常见的“坑”。</p>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 29%" />
+<col style="width: 54%" />
+</colgroup>
+<thead>
+<tr>
+<th>症状</th>
+<th>可能根因</th>
+<th>应对策略</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>冷启动太慢</strong> (1-3s)</td>
+<td>代码包过大、依赖库复杂、VPC 网络挂载</td>
+<td>1. <strong>瘦身</strong>：精简代码和依赖。 <br> 2.
+<strong>选型</strong>：选择 Go, Rust 等编译型语言。<br> 3.
+<strong>预热</strong>：开启预置并发（Provisioned Concurrency）。</td>
+</tr>
+<tr>
+<td><strong>并发被限流</strong></td>
+<td>达到账户并发上限或突发流量过大</td>
+<td>1. <strong>提额</strong>：联系云厂商提高并发额度。<br> 2.
+<strong>预留</strong>：为核心函数配置“预留并发”（Reserved
+Concurrency）。</td>
+</tr>
+<tr>
+<td><strong>本地调试困难</strong></td>
+<td>依赖云端服务，难以模拟触发事件</td>
+<td>使用官方模拟工具，如 AWS SAM, LocalStack, Midway FaaS 等。</td>
+</tr>
+<tr>
+<td><strong>配置管理混乱</strong></td>
+<td>多函数间配置散落，难以维护</td>
+<td>1. <strong>IaC</strong>：使用 Terraform, CDK
+等工具进行“基础设施即代码”管理。<br> 2.
+<strong>环境变量</strong>：将配置统一存储在环境变量或配置中心。</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>友情提示</strong>：FaaS
+虽好，但非万能。它特别适合短平快、无状态的计算任务。对于需要长连接（如
+WebSocket）、或对延迟极其敏感（如实时对战游戏）的应用，传统的容器或虚拟机方案可能依然是更好的选择。</p>
+</blockquote>
+<h2 id="小结">✨ 小结</h2>
+<p>让我们回到最初的问题：FaaS 究竟是什么？</p>
+<p>现在，我们可以更自信地回答：它是一种<strong>将应用拆解为微小、独立的函数，并由云平台全权负责其运行、伸缩和计费的现代化架构模式</strong>。</p>
+<p>它继承了 Serverless
+的核心思想，让开发者从繁重的服务器运维中彻底解放出来，将宝贵的精力聚焦于业务创新本身。</p>
+<p>当然，它也有冷启动这样的挑战，但通过合理的架构设计和优化手段，我们完全可以扬长避短。如果你正准备开启一个新项目，或希望重构一个老旧的单体应用，不妨给
+FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
+]]></content>
+      <tags>
+        <tag>Serverless</tag>
+        <tag>FaaS</tag>
+        <tag>云原生</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>CMake 入门</title>
     <url>/posts/233853f2/</url>
     <content><![CDATA[<p>不论你是写 C/C++、CUDA，还是要同时照顾
@@ -7886,279 +8159,6 @@ API。</p>
         <tag>CUDA</tag>
         <tag>NVIDIA</tag>
         <tag>驱动</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>FaaS（函数即服务）上手指南：从 0 到上云</title>
-    <url>/posts/f1a2b3c4/</url>
-    <content><![CDATA[<p>本文介绍
-FaaS（函数即服务）的诞生背景、核心概念与应用场景，并演示如何部署第一个云函数。</p>
-<span id="more"></span>
-<h2 id="一faas-的诞生我们为何需要它">一、FaaS
-的诞生：我们为何需要它？</h2>
-<p>要理解 FaaS
-为何会横空出世，我们得先坐上时光机，回顾一下应用部署方式的“进化史”。</p>
-<p><strong>第一站：物理服务器时代</strong></p>
-<p>在遥远的“刀耕火种”年代，我们要部署一个网站，得先去机房买一台（或几台）物理服务器。这意味着漫长的采购周期、高昂的硬件成本，以及复杂的机器运维。最头疼的是，为了应对业务高峰，我们必须按最高标准购买硬件，导致服务器在大部分时间里都处于“摸鱼”状态，造成了巨大的资源浪费。</p>
-<p><strong>第二站：虚拟机 (IaaS) 时代</strong></p>
-<p>云计算的出现带来了转机。以 AWS EC2
-为代表的虚拟机服务，让我们告别了实体硬件，可以在云端“租”服务器。这极大地提高了灵活性，几分钟内就能创建一台虚拟机。但问题并没有完全解决：我们依然要为整台虚拟机买单，哪怕上面的应用空闲着。同时，操作系统的维护、安全补丁的更新，这些运维工作一样也没少。</p>
-<p><strong>第三站：容器 (PaaS/CaaS) 时代</strong></p>
-<p>Docker 和 Kubernetes
-的风靡，让部署进入了容器化时代。我们将应用和它的依赖打包成一个轻量的“集装箱”，实现了环境的标准化和交付的敏捷性。但新的“烦恼”也随之而来：为了运行这些容器，我们得维护一个庞大而复杂的
-Kubernetes 集群。容量规划、节点扩容、网络配置…
-我们似乎从“应用运维”的坑，跳进了“集群运维”的坑。</p>
-<p>兜兜转转，开发者们始终有一个终极梦想：<strong>我们能只关心业务代码，而彻底不用管服务器吗？</strong></p>
-<p>FaaS 响亮地回答了：“能！”</p>
-<p>它的核心思想简单而彻底：<strong>让开发者回归最纯粹的编程，将服务器及相关的一切运维工作，都交给云平台</strong>。无论是操作系统、运行时环境，还是弹性伸缩、高可用，你通通不用管。你的世界里，只剩下你的“函数”——那段实现核心业务逻辑的代码。</p>
-<p>简单来说，FaaS
-将付费模式从“为服务器资源付费”，进化到了“<strong>为代码的实际执行付费</strong>”。这不只是一次技术升级，更是一场开发思想的革命。</p>
-<h2 id="二拨开云雾faas-核心概念详解">二、拨开云雾：FaaS
-核心概念详解</h2>
-<p>理解了 FaaS 的“初心”，我们再来拆解几个围绕着它的核心概念。</p>
-<ul>
-<li><p><strong>FaaS (Function-as-a-Service, 函数即服务)</strong>
-这是我们要掌握的核心。我喜欢用一个比喻：<strong>租厨房，而不是租公寓</strong>。
-在传统模式下，为了做顿饭，你得先租下一整套公寓（服务器），自己装修（配环境）、打扫（运维）。而
-FaaS
-就像一个共享厨房，你只需带着菜谱（代码）进去，锅碗瓢盆（运行环境）一应俱全。你只为炒菜的几分钟付费，完事就走，绝不为厨房的闲置时间买单。</p></li>
-<li><p><strong>Serverless (无服务器架构)</strong>
-这是一个更宏大的理念，FaaS 只是它最广为人知的“代言人”。Serverless
-并非真的没有服务器，而是强调一种<strong>开发者无需关心服务器</strong>的架构思想。
-如果说 FaaS 是共享厨房，那 Serverless
-就是整个美食广场。这个广场里除了厨房（FaaS），还有现成的食材超市（BaaS -
-数据库服务）、统一的安保系统（BaaS - 身份验证服务）等等。Serverless
-的目标，就是让你作为大厨，能心无旁骛地专注于“炒菜”这一件事上。</p></li>
-<li><p><strong>事件驱动 (Event-Driven)</strong> 这是 FaaS
-的灵魂。你的函数并非 24
-小时待命，而是像个“懒汉”，<strong>“有事才干，没事歇着”</strong>。
-你可以把函数想象成一个装了门铃的房间。只有当“事件”发生时——比如有人按门铃（HTTP
-请求）、信箱里有新信件（文件上传）、手机闹钟响了（定时任务）——它才会被唤醒去开门（执行函数）。这种模式确保了资源不会被空耗。</p></li>
-<li><p><strong>冷启动 (Cold Start)</strong> 这是 FaaS
-的一个独特挑战。如果你的函数长时间没被调用（没人按门铃），平台为了节约资源，会把它“请回家休息”（回收实例）。当下一个请求突然到来时，平台需要重新给它分配资源、加载代码、初始化环境…
-这个过程就像大冬天里发动一台冷了很久的汽车，会有一个明显的延迟，这就是“冷启动”。
-一旦启动完毕，后续的连续请求就会非常快（这叫“热启动”），直到它再次因为“没人理”而进入休眠。</p></li>
-<li><p><strong>BaaS (Backend-as-a-Service, 后端即服务)</strong>
-前面提到，这是 Serverless
-美食广场的另一半。它提供了各种开箱即用的后端能力，比如数据库
-(<code>Firebase</code>)、对象存储 (<code>AWS S3</code>)、用户认证
-(<code>Auth0</code>) 等。FaaS 函数通常和 BaaS
-服务配合，一个主内（负责无状态的计算逻辑），一个主外（负责有状态的数据存储），共同构建出一个完整的
-Serverless 应用。</p></li>
-</ul>
-<h2 id="三身手初试faas-的真实应用场景">三、身手初试：FaaS
-的真实应用场景</h2>
-<p>理论听起来很棒，那 FaaS 在实际工作中到底能用来做什么呢？</p>
-<h3 id="场景一网站或小程序的后端-api">场景一：网站或小程序的后端
-API</h3>
-<p>这是 FaaS
-最经典的用法。假设你要为个人博客或小程序开发一个后端，但又不想为了偶尔的访问量，而去维护一台
-24 小时开机的服务器。</p>
-<ul>
-<li><strong>实例</strong>：一个“用户注册”接口。当用户在前端页面提交注册信息后，会调用一个
-API 网关，这个网关会触发我们的 FaaS
-函数。函数接收到用户信息，执行数据校验、写入数据库等操作，然后返回结果。整个过程可能只花费几百毫秒，你就只需要为这短暂的计算付费，经济又省心。</li>
-</ul>
-<h3 id="场景二自动化的数据处理">场景二：自动化的数据处理</h3>
-<p>FaaS 的事件驱动特性，让它成为自动化工作流的“神器”，尤其适合“当 A
-发生时，自动执行 B”这类任务。</p>
-<ul>
-<li><strong>实例</strong>：图片自动生成缩略图。在社交或电商网站，用户上传一张高清原图后，我们往往需要大、中、小等不同尺寸的缩略图。通过
-FaaS，我们可以设定一个规则：每当有图片上传到指定的存储桶（如 AWS
-S3），就自动触发一个函数。这个函数会读取原图，批量生成所需的缩略图，再存回存储桶。整个流程全自动，无需人工干预。</li>
-</ul>
-<h3 id="场景三轻量级的定时任务-cron-job">场景三：轻量级的定时任务 (Cron
-Job)</h3>
-<p>几乎每个系统都需要一些定期执行的任务，比如每日数据备份、定时发送报表等。</p>
-<ul>
-<li><strong>实例</strong>：生成每日运营报表。你可以设置一个定时触发器，比如每天凌晨
-2 点，准时调用一个 FaaS
-函数。这个函数会自动连接数据库，抓取前一天的用户增长、订单量等数据，生成一份精美的报表，并通过邮件发送给相关同事。</li>
-</ul>
-<h3 id="场景四物联网-iot-数据处理">场景四：物联网 (IoT) 数据处理</h3>
-<p>在物联网场景中，成千上万的设备可能会在瞬间产生海量数据，对后端的弹性伸缩能力是极大的考验。</p>
-<ul>
-<li><strong>实例</strong>：共享单车位置上报。每辆单车上的 GPS
-设备会定时将位置信息发送到一个消息队列中。FaaS
-函数可以订阅这个队列，每当有新消息进入，就触发一次执行，将最新的单车位置解析并更新到地图数据库中。FaaS
-的自动伸缩能力，能完美应对早晚高峰期的并发洪流。</li>
-</ul>
-<p>通过这些场景，不难发现 FaaS
-特别适合那些<strong>无状态、短执行、事件触发</strong>类型的任务。</p>
-<h2 id="四庖丁解牛faas-架构与上线实战">四、庖丁解牛：FaaS
-架构与上线实战</h2>
-<p>理论和场景都清楚了，是时候深入 FaaS
-平台的内部，看看它究竟是如何工作的，并亲手上线一个函数了。</p>
-<h3 id="架构解剖以-aws-lambda-为例">架构解剖（以 AWS Lambda 为例）</h3>
-<p>我们以目前最流行的 FaaS 平台 AWS Lambda 为例，看看一个典型的 FaaS
-调用流程包含哪些组件。 <pre>
-<code class="mermaid">
-
-graph LR
-EVT[&quot;事件源&lt;br&#x2F;&gt;S3 &#x2F; API Gateway &#x2F; MQ&quot;] --&gt; TRG(&quot;触发器&quot;)
-TRG --&gt; LBD[&quot;Lambda 托管 Runtime&quot;]
-LBD --&gt; ENI[(&quot;弹性网络&quot;)]
-LBD --&gt; LOG[&quot;CloudWatch Logs&quot;]
-LBD --&gt; DLQ[&quot;死信队列&lt;br&#x2F;&gt;(可选)&quot;]
-</code>
-</pre></p>
-<ul>
-<li><strong>事件源</strong>：触发函数执行的“扳机”，可以是 S3
-的文件上传、API Gateway 的 HTTP 请求，或是消息队列里的新消息。</li>
-<li><strong>触发器</strong>：连接事件源和函数的“遥控器”，负责监听事件并调用目标函数。</li>
-<li><strong>Runtime</strong>：函数的运行环境，平台内置了 Node.js,
-Python, Go 等多种语言环境，也支持通过自定义镜像（Custom
-Runtime）运行任何语言。</li>
-<li><strong>弹性网络
-(ENI)</strong>：如果函数需要访问你私有网络（VPC）里的数据库等资源，平台会为其挂载一个弹性网络接口。</li>
-<li><strong>监控与日志 (CloudWatch
-Logs)</strong>：函数运行期间产生的日志（比如
-<code>console.log</code>）和各项指标（调用次数、执行时长等）会被自动收集起来，方便排查问题。</li>
-</ul>
-<blockquote>
-<p><strong>解密冷启动</strong>：从上面的流程可以看出，一次冷启动的耗时主要来自：拉取代码镜像
-→ 启动 Runtime 容器 → 初始化你的代码 → (如果需要)挂载网络。</p>
-</blockquote>
-<h3 id="开发到上线五步法">开发到上线：五步法</h3>
-<p>接下来，我们用一个经典的 Hello World
-示例，走完从开发到上线的完整流程。</p>
-<ol type="1">
-<li><p><strong>初始化工程</strong>
-首先，在本地创建一个项目目录，并编写一个简单的 Node.js 函数。
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> hello-faas &amp;&amp; <span class="built_in">cd</span> <span class="variable">$_</span></span><br><span class="line"><span class="comment"># 创建一个 index.js 文件，内容如下</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&#x27;exports.handler = async (event) =&gt; &quot;Hello from FaaS!&quot;;&#x27;</span> &gt; index.js</span><br><span class="line"><span class="comment"># 将项目打包成 zip 文件</span></span><br><span class="line">zip -r function.zip .</span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>创建函数</strong>
-登录云厂商控制台（或使用命令行工具），创建一个新函数。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS CLI 为例</span></span><br><span class="line">aws lambda create-function \</span><br><span class="line">    --function-name hello-world \</span><br><span class="line">    --runtime nodejs20.x \</span><br><span class="line">    --handler index.handler \</span><br><span class="line">    --zip-file fileb://function.zip \</span><br><span class="line">    --role &lt;your-lambda-execution-role-arn&gt;</span><br></pre></td></tr></table></figure>
-这里需要指定函数名、运行时、入口文件
-(<code>index.js</code>里的<code>handler</code>方法)，并上传代码包。</p></li>
-<li><p><strong>配置触发器</strong>
-函数创建好了，但还不知道“听谁的号令”。我们需要为它配置一个触发器，比如一个公开的
-HTTP 访问地址。 <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 以 AWS API Gateway v2 为例，此步骤在控制台操作更直观</span></span><br><span class="line">aws apigatewayv2 create-api --name hello-api --protocol-type HTTP</span><br><span class="line"><span class="comment"># ... 此处省略若干步骤，建议在控制台界面完成 API Gateway 与 Lambda 的集成</span></span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>版本与灰度</strong>
-在生产环境中，直接更新线上代码是危险的。FaaS
-平台通常支持版本管理和别名（Alias）功能，你可以先发布一个新版本，然后让
-10% 的流量指向新版本，90%
-的流量留在稳定版，以此实现平滑的灰度发布。</p></li>
-<li><p><strong>监控与告警</strong>
-函数上线后，我们需要时刻关注它的健康状况。平台会自动监控调用次数、执行时长、错误率等核心指标。你可以基于这些指标设置告警，例如当错误率连续
-5 分钟超过 1% 时，立即发短信通知我。</p></li>
-</ol>
-<h2
-id="五精打细算计费模型与常见问题">五、精打细算：计费模型与常见问题</h2>
-<p>FaaS
-的一大魅力在于其极致的成本效益，让我们来看看它是如何计费的，以及在使用中会遇到哪些“坑”。</p>
-<h3 id="计费模型对比">计费模型对比</h3>
-<p>各大云厂商的 FaaS 计费方式大同小异，通常都包含两个维度：</p>
-<table>
-<colgroup>
-<col style="width: 18%" />
-<col style="width: 20%" />
-<col style="width: 24%" />
-<col style="width: 13%" />
-<col style="width: 21%" />
-</colgroup>
-<thead>
-<tr>
-<th>厂商</th>
-<th>最小计量（时长/内存）</th>
-<th>每月免费额度（调用/资源）</th>
-<th>计费维度</th>
-<th>关键备注</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AWS Lambda</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 GB-秒</td>
-<td>调用次数 + GB-秒</td>
-<td>ARM 架构单价更低</td>
-</tr>
-<tr>
-<td>Azure Functions</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 GB-秒</td>
-<td>同上</td>
-<td>分为多种计划 (Plan)</td>
-</tr>
-<tr>
-<td>GCP Cloud Functions</td>
-<td>100 ms / 256 MB</td>
-<td>200 万次 / 40 万 GB-秒</td>
-<td>同上</td>
-<td>Gen2 冷启动优化明显</td>
-</tr>
-<tr>
-<td>阿里云函数计算</td>
-<td>1 ms / 128 MB</td>
-<td>100 万次 / 40 万 CU-秒</td>
-<td>调用次数 + CU-秒</td>
-<td>CU 是资源的综合单位</td>
-</tr>
-</tbody>
-</table>
-<p><strong>通用计费公式</strong>：<code>总费用 = 调用次数 × 次数单价 + (函数执行总时长 × 内存配置) × 资源单价</code></p>
-<p>可以看出，厂商们都在用慷慨的免费额度吸引开发者，对于个人项目或小型应用来说，很可能一个月都花不了几块钱。</p>
-<h3 id="常见坑与对策">常见“坑”与对策</h3>
-<p>在享受 FaaS 带来的便利时，也要小心避开下面这些常见的“坑”。</p>
-<table>
-<colgroup>
-<col style="width: 16%" />
-<col style="width: 29%" />
-<col style="width: 54%" />
-</colgroup>
-<thead>
-<tr>
-<th>症状</th>
-<th>可能根因</th>
-<th>应对策略</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>冷启动太慢</strong> (1-3s)</td>
-<td>代码包过大、依赖库复杂、VPC 网络挂载</td>
-<td>1. <strong>瘦身</strong>：精简代码和依赖。 <br> 2.
-<strong>选型</strong>：选择 Go, Rust 等编译型语言。<br> 3.
-<strong>预热</strong>：开启预置并发（Provisioned Concurrency）。</td>
-</tr>
-<tr>
-<td><strong>并发被限流</strong></td>
-<td>达到账户并发上限或突发流量过大</td>
-<td>1. <strong>提额</strong>：联系云厂商提高并发额度。<br> 2.
-<strong>预留</strong>：为核心函数配置“预留并发”（Reserved
-Concurrency）。</td>
-</tr>
-<tr>
-<td><strong>本地调试困难</strong></td>
-<td>依赖云端服务，难以模拟触发事件</td>
-<td>使用官方模拟工具，如 AWS SAM, LocalStack, Midway FaaS 等。</td>
-</tr>
-<tr>
-<td><strong>配置管理混乱</strong></td>
-<td>多函数间配置散落，难以维护</td>
-<td>1. <strong>IaC</strong>：使用 Terraform, CDK
-等工具进行“基础设施即代码”管理。<br> 2.
-<strong>环境变量</strong>：将配置统一存储在环境变量或配置中心。</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>友情提示</strong>：FaaS
-虽好，但非万能。它特别适合短平快、无状态的计算任务。对于需要长连接（如
-WebSocket）、或对延迟极其敏感（如实时对战游戏）的应用，传统的容器或虚拟机方案可能依然是更好的选择。</p>
-</blockquote>
-<h2 id="小结">✨ 小结</h2>
-<p>让我们回到最初的问题：FaaS 究竟是什么？</p>
-<p>现在，我们可以更自信地回答：它是一种<strong>将应用拆解为微小、独立的函数，并由云平台全权负责其运行、伸缩和计费的现代化架构模式</strong>。</p>
-<p>它继承了 Serverless
-的核心思想，让开发者从繁重的服务器运维中彻底解放出来，将宝贵的精力聚焦于业务创新本身。</p>
-<p>当然，它也有冷启动这样的挑战，但通过合理的架构设计和优化手段，我们完全可以扬长避短。如果你正准备开启一个新项目，或希望重构一个老旧的单体应用，不妨给
-FaaS 一个机会，它很可能会给你带来意想不到的惊喜。</p>
-]]></content>
-      <tags>
-        <tag>Serverless</tag>
-        <tag>FaaS</tag>
-        <tag>云原生</tag>
       </tags>
   </entry>
   <entry>
@@ -12915,6 +12915,281 @@ scope（避免读旧值/重排导致的逻辑错误）。</li>
       </tags>
   </entry>
   <entry>
+    <title>VibeCoding 与 Claude Code</title>
+    <url>/posts/c1audecode/</url>
+    <content><![CDATA[<p>最近一直在用 Cursor，后来也体验了
+Copilot（因为有免费额度），但一直还没真正体验过 Claude Code。听说最近
+GLM 4.7 非常火，就打算来体验一下 CC + GLM 4.7 的效果。</p>
+<span id="more"></span>
+<h2 id="什么是-vibecoding">🌊 什么是 VibeCoding</h2>
+<p><strong>VibeCoding</strong> = <strong>Vibe</strong>（氛围/直觉）+
+<strong>Coding</strong>（编程）</p>
+<p>一种新的编程范式：你用自然语言描述<strong>意图</strong>，AI Agent
+执行<strong>操作</strong>。你不再是逐行敲代码，而是与 AI
+<strong>对话式协作</strong>——你负责想做什么，AI 负责怎么做。</p>
+<blockquote>
+<p>传统编程：IDE + 手写代码 → VibeCoding：AI Agent + 自然语言指令</p>
+</blockquote>
+<h3 id="主流-vibecoding-工具对比">🛠️ 主流 VibeCoding 工具对比</h3>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 18%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>工具</th>
+<th>定位</th>
+<th>核心优势</th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Claude Code</strong></td>
+<td>CLI 工具</td>
+<td>终端原生、Agent 任务、MCP 生态</td>
+<td>自动化脚本、代码重构、项目操作</td>
+</tr>
+<tr>
+<td><strong>Cursor</strong></td>
+<td>IDE</td>
+<td>VSCode 体验、代码库理解、多模型切换</td>
+<td>日常开发、新项目上手、代码补全</td>
+</tr>
+<tr>
+<td><strong>Copilot</strong></td>
+<td>编辑器插件</td>
+<td>GitHub 深度集成、代码补全</td>
+<td>快速补全、样板代码生成</td>
+</tr>
+<tr>
+<td><strong>Cline</strong></td>
+<td>VSCode 插件</td>
+<td>自动任务执行、多步骤操作</td>
+<td>复杂任务自动化</td>
+</tr>
+</tbody>
+</table>
+<h2 id="claude-code-的安装与配置">Claude Code 的安装与配置</h2>
+<p>我是先在 WSL 里安装的 Claude Code，中间遇到代理的问题，WSL 不支持 WIN
+本地的代理，于是用的虚拟网卡设置代理，要打开 clash
+的局域网选项才可以。</p>
+<p>在zshrc中添加了一下配置就ok了</p>
+<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> ALL_PROXY=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br></pre></td></tr></table></figure>
+<h3 id="什么是-mcp">什么是 MCP</h3>
+<p><strong>MCP</strong> = <strong>Model Context
+Protocol</strong>（模型上下文协议）</p>
+<p>一个开放标准协议，让 AI
+模型能够<strong>安全、统一地访问外部数据源和工具</strong>。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐   MCP   ┌─────────────┐</span><br><span class="line">│  AI Model   │ ←─────→ │ MCP Server  │  ← Claude 等（客户端）</span><br><span class="line">│  (Client)   │         │  (Provider) │  ← 工具/能力提供方</span><br><span class="line">└─────────────┘         └─────────────┘</span><br><span class="line">                               │</span><br><span class="line">                     ┌─────────┼─────────┐</span><br></pre></td></tr></table></figure>
+<p><strong>核心价值</strong>：AI
+不再是孤立的大脑，而是能连接真实世界的智能体。</p>
+<h3 id="什么是-agent">什么是 Agent</h3>
+<p><strong>Agent</strong> =
+<strong>智能体</strong>，能自主执行复杂任务的 AI 系统。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐          ┌──────────────────────────────┐</span><br><span class="line">│  Q -&gt; A     │          │ Goal -&gt; Plan -&gt; Act -&gt; Verify│  ← 多步自主执行</span><br><span class="line">│  Single-turn│          │  Multi-step agentic          │</span><br><span class="line">└─────────────┘          └──────────────────────────────┘</span><br><span class="line">    单轮对话                    多步自主执行</span><br></pre></td></tr></table></figure>
+<p><strong>Agent 的能力</strong>：</p>
+<ul>
+<li><strong>规划</strong>：把复杂任务拆解成步骤</li>
+<li><strong>工具调用</strong>：读写文件、执行命令、搜索网页</li>
+<li><strong>自我修正</strong>：遇到错误自动重试</li>
+</ul>
+<h3 id="mcp-生态">MCP 生态</h3>
+<p>这是 Claude Code 最强大的地方。MCP 允许你扩展 Claude 的能力：</p>
+<table>
+<thead>
+<tr>
+<th>MCP 类型</th>
+<th>作用</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>文件系统</strong></td>
+<td>读写文件</td>
+<td><span class="citation"
+data-cites="filesystem">@filesystem</span></td>
+</tr>
+<tr>
+<td><strong>Git 操作</strong></td>
+<td>commit/rebase/branch</td>
+<td><span class="citation" data-cites="git">@git</span></td>
+</tr>
+<tr>
+<td><strong>网页搜索</strong></td>
+<td>查询最新资料</td>
+<td><span class="citation"
+data-cites="web-search">@web-search</span></td>
+</tr>
+<tr>
+<td><strong>数据库</strong></td>
+<td>查询/修改数据</td>
+<td><span class="citation" data-cites="postgres">@postgres</span>/<span
+class="citation" data-cites="sqlite">@sqlite</span></td>
+</tr>
+<tr>
+<td><strong>浏览器</strong></td>
+<td>自动化操作</td>
+<td><span class="citation" data-cites="puppeteer">@puppeteer</span></td>
+</tr>
+</tbody>
+</table>
+<h3 id="如何安装-mcp">如何安装 MCP</h3>
+<p><strong>是的，MCP 服务器需要自己安装</strong>。MCP
+采用客户端-服务器架构：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────────┐   config    ┌─────────────────┐</span><br><span class="line">│  Claude Code    │ ←────────→  │  MCP Servers    │  ← 客户端（你自己装）</span><br><span class="line">│  (Client)       │             │  (Servers)      │</span><br><span class="line">└─────────────────┘             └─────────────────┘</span><br></pre></td></tr></table></figure>
+<p><strong>安装步骤</strong>（以 npx 方式为例）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 方法1：使用 claude mcp 命令</span></span><br><span class="line">claude mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /home/algernon</span><br><span class="line"></span><br><span class="line"><span class="comment"># 方法2：手动编辑 ~/.claude.json 或项目下的 .claude.json</span></span><br><span class="line"><span class="comment"># 添加 MCP 服务器配置：</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="string">&quot;mcpServers&quot;</span>: &#123;</span><br><span class="line">    <span class="string">&quot;filesystem&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-filesystem&quot;</span>, <span class="string">&quot;/allowed/path&quot;</span>]</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;git&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-git&quot;</span>, <span class="string">&quot;--repository&quot;</span>, <span class="string">&quot;/path/to/repo&quot;</span>]</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="已配置的-mcp-服务器">已配置的 MCP 服务器</h3>
+<table>
+<colgroup>
+<col style="width: 42%" />
+<col style="width: 23%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>MCP 服务器</th>
+<th>包名</th>
+<th>功能说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>zai-mcp-server</strong></td>
+<td><code>@z_ai/mcp-server</code></td>
+<td>UI 分析、OCR 文字提取、错误诊断、数据可视化分析、视频内容理解</td>
+</tr>
+<tr>
+<td><strong>memory</strong></td>
+<td><code>@modelcontextprotocol/server-memory</code></td>
+<td>持久化记忆存储，可创建实体和关系，跨会话保存信息</td>
+</tr>
+<tr>
+<td><strong>filesystem</strong></td>
+<td><code>@modelcontextprotocol/server-filesystem</code></td>
+<td>安全的文件系统访问，支持读写、搜索、目录树等操作</td>
+</tr>
+<tr>
+<td><strong>fetch</strong></td>
+<td><code>@kazuph/mcp-fetch</code></td>
+<td>HTTP 请求工具，可获取网页内容、调用 API</td>
+</tr>
+</tbody>
+</table>
+<h2 id="使用-glm-模型">使用 GLM 模型</h2>
+<p>Claude Code 支持自定义 API，可以接入 GLM 等国产大模型。</p>
+<p><strong>配置方式</strong>：在 <code>~/.claude/settings.json</code>
+中添加环境变量：</p>
+<figure class="highlight json"><table><tr><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;env&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_AUTH_TOKEN&quot;</span><span class="punctuation">:</span> <span class="string">&quot;your-api-key&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_BASE_URL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;https://open.bigmodel.cn/api/anthropic&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_SONNET_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_OPUS_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_HAIKU_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.5-air&quot;</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+<table>
+<thead>
+<tr>
+<th>环境变量</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANTHROPIC_AUTH_TOKEN</code></td>
+<td>API Key</td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_BASE_URL</code></td>
+<td>API 地址</td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_DEFAULT_*_MODEL</code></td>
+<td>默认模型映射</td>
+</tr>
+</tbody>
+</table>
+<h3 id="claude.md">CLAUDE.md</h3>
+<p><strong><code>CLAUDE.md</code></strong>
+是项目根目录的特殊文件，用于向 Claude
+提供项目上下文。每次新会话开始时，Claude 会自动读取它。</p>
+<p><strong>典型用途</strong>： <figure class="highlight markdown"><table><tr><td class="code"><pre><span class="line"><span class="section"># 项目说明</span></span><br><span class="line"></span><br><span class="line">这是一个基于 Next.js 的博客系统。</span><br><span class="line"></span><br><span class="line"><span class="section">## 项目结构</span></span><br><span class="line"><span class="bullet">-</span> <span class="code">`/source`</span> - 博客文章源码</span><br><span class="line"><span class="bullet">-</span> <span class="code">`/themes`</span> - 主题文件</span><br><span class="line"><span class="bullet">-</span> <span class="code">`package.json`</span> 中的 <span class="code">`build`</span> 命令用于生成静态站点</span><br><span class="line"></span><br><span class="line"><span class="section">## 开发规范</span></span><br><span class="line"><span class="bullet">-</span> 使用 TypeScript</span><br><span class="line"><span class="bullet">-</span> 组件放在 <span class="code">`/components`</span> 目录</span><br><span class="line"><span class="bullet">-</span> 样式使用 CSS Modules</span><br><span class="line"></span><br><span class="line"><span class="section">## 注意事项</span></span><br><span class="line"><span class="bullet">-</span> 构建前先运行 <span class="code">`npm run lint`</span></span><br><span class="line"><span class="bullet">-</span> 部署使用 <span class="code">`npm run deploy`</span></span><br></pre></td></tr></table></figure></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>技巧</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>文件引用</strong></td>
+<td>用 <code>[filename.js](src/filename.js)</code>
+格式引用文件，生成可点击链接</td>
+<td>代码定位更快</td>
+</tr>
+<tr>
+<td><strong>明确意图</strong></td>
+<td>一次性说完整需求，避免来回确认</td>
+<td>“添加一个深色切换按钮，点击时切换主题，状态存 localStorage”</td>
+</tr>
+<tr>
+<td><strong>分步任务</strong></td>
+<td>复杂任务直接说”帮我规划”</td>
+<td>“帮我规划一下如何重构登录流程”</td>
+</tr>
+<tr>
+<td><strong>选中代码</strong></td>
+<td>IDE 中选中代码后提问，Claude 知道上下文</td>
+<td>选中函数后问”优化这段代码”</td>
+</tr>
+<tr>
+<td><strong>/commit</strong></td>
+<td>自动生成 commit message</td>
+<td><code>/commit</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="适用场景">适用场景</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐工具</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>日常开发、代码补全</td>
+<td>Cursor</td>
+</tr>
+<tr>
+<td>项目重构、脚本自动化</td>
+<td>Claude Code</td>
+</tr>
+<tr>
+<td>快速补全、GitHub 深度集成</td>
+<td>Copilot</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">总结</h2>
+<p>如果你已经在用 Cursor 或 Copilot，不妨试试 Claude
+Code，它可能会给你带来不一样的体验。</p>
+]]></content>
+      <tags>
+        <tag>人工智能</tag>
+        <tag>AI</tag>
+        <tag>Coding</tag>
+        <tag>Claude</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>LLVM 入门：从编译流程到 IR 结构</title>
     <url>/posts/18482fd9/</url>
     <content><![CDATA[<p>编译器的职责是把高级语言翻译成机器指令，LLVM
@@ -13380,281 +13655,6 @@ with LLVM</a></li>
         <tag>LLVM</tag>
         <tag>编译器</tag>
         <tag>IR</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>VibeCoding 与 Claude Code</title>
-    <url>/posts/c1audecode/</url>
-    <content><![CDATA[<p>最近一直在用 Cursor，后来也体验了
-Copilot（因为有免费额度），但一直还没真正体验过 Claude Code。听说最近
-GLM 4.7 非常火，就打算来体验一下 CC + GLM 4.7 的效果。</p>
-<span id="more"></span>
-<h2 id="什么是-vibecoding">🌊 什么是 VibeCoding</h2>
-<p><strong>VibeCoding</strong> = <strong>Vibe</strong>（氛围/直觉）+
-<strong>Coding</strong>（编程）</p>
-<p>一种新的编程范式：你用自然语言描述<strong>意图</strong>，AI Agent
-执行<strong>操作</strong>。你不再是逐行敲代码，而是与 AI
-<strong>对话式协作</strong>——你负责想做什么，AI 负责怎么做。</p>
-<blockquote>
-<p>传统编程：IDE + 手写代码 → VibeCoding：AI Agent + 自然语言指令</p>
-</blockquote>
-<h3 id="主流-vibecoding-工具对比">🛠️ 主流 VibeCoding 工具对比</h3>
-<table>
-<colgroup>
-<col style="width: 18%" />
-<col style="width: 18%" />
-<col style="width: 31%" />
-<col style="width: 31%" />
-</colgroup>
-<thead>
-<tr>
-<th>工具</th>
-<th>定位</th>
-<th>核心优势</th>
-<th>典型场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Claude Code</strong></td>
-<td>CLI 工具</td>
-<td>终端原生、Agent 任务、MCP 生态</td>
-<td>自动化脚本、代码重构、项目操作</td>
-</tr>
-<tr>
-<td><strong>Cursor</strong></td>
-<td>IDE</td>
-<td>VSCode 体验、代码库理解、多模型切换</td>
-<td>日常开发、新项目上手、代码补全</td>
-</tr>
-<tr>
-<td><strong>Copilot</strong></td>
-<td>编辑器插件</td>
-<td>GitHub 深度集成、代码补全</td>
-<td>快速补全、样板代码生成</td>
-</tr>
-<tr>
-<td><strong>Cline</strong></td>
-<td>VSCode 插件</td>
-<td>自动任务执行、多步骤操作</td>
-<td>复杂任务自动化</td>
-</tr>
-</tbody>
-</table>
-<h2 id="claude-code-的安装与配置">Claude Code 的安装与配置</h2>
-<p>我是先在 WSL 里安装的 Claude Code，中间遇到代理的问题，WSL 不支持 WIN
-本地的代理，于是用的虚拟网卡设置代理，要打开 clash
-的局域网选项才可以。</p>
-<p>在zshrc中添加了一下配置就ok了</p>
-<figure class="highlight sh"><table><tr><td class="code"><pre><span class="line"><span class="built_in">export</span> ALL_PROXY=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> http_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br><span class="line"><span class="built_in">export</span> https_proxy=<span class="string">&quot;http://host.docker.internal:7897&quot;</span></span><br></pre></td></tr></table></figure>
-<h3 id="什么是-mcp">什么是 MCP</h3>
-<p><strong>MCP</strong> = <strong>Model Context
-Protocol</strong>（模型上下文协议）</p>
-<p>一个开放标准协议，让 AI
-模型能够<strong>安全、统一地访问外部数据源和工具</strong>。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐   MCP   ┌─────────────┐</span><br><span class="line">│  AI Model   │ ←─────→ │ MCP Server  │  ← Claude 等（客户端）</span><br><span class="line">│  (Client)   │         │  (Provider) │  ← 工具/能力提供方</span><br><span class="line">└─────────────┘         └─────────────┘</span><br><span class="line">                               │</span><br><span class="line">                     ┌─────────┼─────────┐</span><br></pre></td></tr></table></figure>
-<p><strong>核心价值</strong>：AI
-不再是孤立的大脑，而是能连接真实世界的智能体。</p>
-<h3 id="什么是-agent">什么是 Agent</h3>
-<p><strong>Agent</strong> =
-<strong>智能体</strong>，能自主执行复杂任务的 AI 系统。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────┐          ┌──────────────────────────────┐</span><br><span class="line">│  Q -&gt; A     │          │ Goal -&gt; Plan -&gt; Act -&gt; Verify│  ← 多步自主执行</span><br><span class="line">│  Single-turn│          │  Multi-step agentic          │</span><br><span class="line">└─────────────┘          └──────────────────────────────┘</span><br><span class="line">    单轮对话                    多步自主执行</span><br></pre></td></tr></table></figure>
-<p><strong>Agent 的能力</strong>：</p>
-<ul>
-<li><strong>规划</strong>：把复杂任务拆解成步骤</li>
-<li><strong>工具调用</strong>：读写文件、执行命令、搜索网页</li>
-<li><strong>自我修正</strong>：遇到错误自动重试</li>
-</ul>
-<h3 id="mcp-生态">MCP 生态</h3>
-<p>这是 Claude Code 最强大的地方。MCP 允许你扩展 Claude 的能力：</p>
-<table>
-<thead>
-<tr>
-<th>MCP 类型</th>
-<th>作用</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>文件系统</strong></td>
-<td>读写文件</td>
-<td><span class="citation"
-data-cites="filesystem">@filesystem</span></td>
-</tr>
-<tr>
-<td><strong>Git 操作</strong></td>
-<td>commit/rebase/branch</td>
-<td><span class="citation" data-cites="git">@git</span></td>
-</tr>
-<tr>
-<td><strong>网页搜索</strong></td>
-<td>查询最新资料</td>
-<td><span class="citation"
-data-cites="web-search">@web-search</span></td>
-</tr>
-<tr>
-<td><strong>数据库</strong></td>
-<td>查询/修改数据</td>
-<td><span class="citation" data-cites="postgres">@postgres</span>/<span
-class="citation" data-cites="sqlite">@sqlite</span></td>
-</tr>
-<tr>
-<td><strong>浏览器</strong></td>
-<td>自动化操作</td>
-<td><span class="citation" data-cites="puppeteer">@puppeteer</span></td>
-</tr>
-</tbody>
-</table>
-<h3 id="如何安装-mcp">如何安装 MCP</h3>
-<p><strong>是的，MCP 服务器需要自己安装</strong>。MCP
-采用客户端-服务器架构：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌─────────────────┐   config    ┌─────────────────┐</span><br><span class="line">│  Claude Code    │ ←────────→  │  MCP Servers    │  ← 客户端（你自己装）</span><br><span class="line">│  (Client)       │             │  (Servers)      │</span><br><span class="line">└─────────────────┘             └─────────────────┘</span><br></pre></td></tr></table></figure>
-<p><strong>安装步骤</strong>（以 npx 方式为例）：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 方法1：使用 claude mcp 命令</span></span><br><span class="line">claude mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /home/algernon</span><br><span class="line"></span><br><span class="line"><span class="comment"># 方法2：手动编辑 ~/.claude.json 或项目下的 .claude.json</span></span><br><span class="line"><span class="comment"># 添加 MCP 服务器配置：</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="string">&quot;mcpServers&quot;</span>: &#123;</span><br><span class="line">    <span class="string">&quot;filesystem&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-filesystem&quot;</span>, <span class="string">&quot;/allowed/path&quot;</span>]</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;git&quot;</span>: &#123;</span><br><span class="line">      <span class="string">&quot;command&quot;</span>: <span class="string">&quot;npx&quot;</span>,</span><br><span class="line">      <span class="string">&quot;args&quot;</span>: [<span class="string">&quot;-y&quot;</span>, <span class="string">&quot;@modelcontextprotocol/server-git&quot;</span>, <span class="string">&quot;--repository&quot;</span>, <span class="string">&quot;/path/to/repo&quot;</span>]</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="已配置的-mcp-服务器">已配置的 MCP 服务器</h3>
-<table>
-<colgroup>
-<col style="width: 42%" />
-<col style="width: 23%" />
-<col style="width: 34%" />
-</colgroup>
-<thead>
-<tr>
-<th>MCP 服务器</th>
-<th>包名</th>
-<th>功能说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>zai-mcp-server</strong></td>
-<td><code>@z_ai/mcp-server</code></td>
-<td>UI 分析、OCR 文字提取、错误诊断、数据可视化分析、视频内容理解</td>
-</tr>
-<tr>
-<td><strong>memory</strong></td>
-<td><code>@modelcontextprotocol/server-memory</code></td>
-<td>持久化记忆存储，可创建实体和关系，跨会话保存信息</td>
-</tr>
-<tr>
-<td><strong>filesystem</strong></td>
-<td><code>@modelcontextprotocol/server-filesystem</code></td>
-<td>安全的文件系统访问，支持读写、搜索、目录树等操作</td>
-</tr>
-<tr>
-<td><strong>fetch</strong></td>
-<td><code>@kazuph/mcp-fetch</code></td>
-<td>HTTP 请求工具，可获取网页内容、调用 API</td>
-</tr>
-</tbody>
-</table>
-<h2 id="使用-glm-模型">使用 GLM 模型</h2>
-<p>Claude Code 支持自定义 API，可以接入 GLM 等国产大模型。</p>
-<p><strong>配置方式</strong>：在 <code>~/.claude/settings.json</code>
-中添加环境变量：</p>
-<figure class="highlight json"><table><tr><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;env&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_AUTH_TOKEN&quot;</span><span class="punctuation">:</span> <span class="string">&quot;your-api-key&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_BASE_URL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;https://open.bigmodel.cn/api/anthropic&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_SONNET_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_OPUS_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.6&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;ANTHROPIC_DEFAULT_HAIKU_MODEL&quot;</span><span class="punctuation">:</span> <span class="string">&quot;glm-4.5-air&quot;</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
-<table>
-<thead>
-<tr>
-<th>环境变量</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ANTHROPIC_AUTH_TOKEN</code></td>
-<td>API Key</td>
-</tr>
-<tr>
-<td><code>ANTHROPIC_BASE_URL</code></td>
-<td>API 地址</td>
-</tr>
-<tr>
-<td><code>ANTHROPIC_DEFAULT_*_MODEL</code></td>
-<td>默认模型映射</td>
-</tr>
-</tbody>
-</table>
-<h3 id="claude.md">CLAUDE.md</h3>
-<p><strong><code>CLAUDE.md</code></strong>
-是项目根目录的特殊文件，用于向 Claude
-提供项目上下文。每次新会话开始时，Claude 会自动读取它。</p>
-<p><strong>典型用途</strong>： <figure class="highlight markdown"><table><tr><td class="code"><pre><span class="line"><span class="section"># 项目说明</span></span><br><span class="line"></span><br><span class="line">这是一个基于 Next.js 的博客系统。</span><br><span class="line"></span><br><span class="line"><span class="section">## 项目结构</span></span><br><span class="line"><span class="bullet">-</span> <span class="code">`/source`</span> - 博客文章源码</span><br><span class="line"><span class="bullet">-</span> <span class="code">`/themes`</span> - 主题文件</span><br><span class="line"><span class="bullet">-</span> <span class="code">`package.json`</span> 中的 <span class="code">`build`</span> 命令用于生成静态站点</span><br><span class="line"></span><br><span class="line"><span class="section">## 开发规范</span></span><br><span class="line"><span class="bullet">-</span> 使用 TypeScript</span><br><span class="line"><span class="bullet">-</span> 组件放在 <span class="code">`/components`</span> 目录</span><br><span class="line"><span class="bullet">-</span> 样式使用 CSS Modules</span><br><span class="line"></span><br><span class="line"><span class="section">## 注意事项</span></span><br><span class="line"><span class="bullet">-</span> 构建前先运行 <span class="code">`npm run lint`</span></span><br><span class="line"><span class="bullet">-</span> 部署使用 <span class="code">`npm run deploy`</span></span><br></pre></td></tr></table></figure></p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>技巧</th>
-<th>说明</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>文件引用</strong></td>
-<td>用 <code>[filename.js](src/filename.js)</code>
-格式引用文件，生成可点击链接</td>
-<td>代码定位更快</td>
-</tr>
-<tr>
-<td><strong>明确意图</strong></td>
-<td>一次性说完整需求，避免来回确认</td>
-<td>“添加一个深色切换按钮，点击时切换主题，状态存 localStorage”</td>
-</tr>
-<tr>
-<td><strong>分步任务</strong></td>
-<td>复杂任务直接说”帮我规划”</td>
-<td>“帮我规划一下如何重构登录流程”</td>
-</tr>
-<tr>
-<td><strong>选中代码</strong></td>
-<td>IDE 中选中代码后提问，Claude 知道上下文</td>
-<td>选中函数后问”优化这段代码”</td>
-</tr>
-<tr>
-<td><strong>/commit</strong></td>
-<td>自动生成 commit message</td>
-<td><code>/commit</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="适用场景">适用场景</h2>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>推荐工具</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>日常开发、代码补全</td>
-<td>Cursor</td>
-</tr>
-<tr>
-<td>项目重构、脚本自动化</td>
-<td>Claude Code</td>
-</tr>
-<tr>
-<td>快速补全、GitHub 深度集成</td>
-<td>Copilot</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">总结</h2>
-<p>如果你已经在用 Cursor 或 Copilot，不妨试试 Claude
-Code，它可能会给你带来不一样的体验。</p>
-]]></content>
-      <tags>
-        <tag>人工智能</tag>
-        <tag>AI</tag>
-        <tag>Coding</tag>
-        <tag>Claude</tag>
       </tags>
   </entry>
   <entry>
@@ -14764,417 +14764,6 @@ Sanitizer。</p>
       </tags>
   </entry>
   <entry>
-    <title>C/C++ 入门：函数</title>
-    <url>/posts/f3c9a8d6/</url>
-    <content><![CDATA[<p>学完变量、运算符和控制流之后，函数就是把一段逻辑整理成“可重复使用的小模块”。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数</td>
-<td>一段有名字、可以被调用的代码</td>
-<td>可复用逻辑</td>
-</tr>
-<tr>
-<td>参数</td>
-<td>调用函数时传进去的数据</td>
-<td>输入</td>
-</tr>
-<tr>
-<td>返回值</td>
-<td>函数执行完交回来的结果</td>
-<td>输出</td>
-</tr>
-<tr>
-<td>函数声明</td>
-<td>提前告诉编译器函数长什么样</td>
-<td>先打招呼</td>
-</tr>
-<tr>
-<td>函数定义</td>
-<td>真正写出函数体</td>
-<td>真正干活</td>
-</tr>
-<tr>
-<td>值传递</td>
-<td>把实参的值复制一份传给函数</td>
-<td>传副本</td>
-</tr>
-<tr>
-<td>函数重载</td>
-<td>多个函数同名，但参数列表不同</td>
-<td>同名不同参</td>
-</tr>
-<tr>
-<td>递归</td>
-<td>函数自己调用自己</td>
-<td>自己拆问题</td>
-</tr>
-</tbody>
-</table>
-<h2 id="函数的基本模型">🧩 函数的基本模型</h2>
-<p>函数可以先粗略理解成一个加工盒子：给它输入，它执行一段逻辑，然后返回结果。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[参数] --&gt; B[函数体]
-    B --&gt; C[返回值]
-</code>
-</pre>
-<p>最小例子：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> result = <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这段代码里：</p>
-<table>
-<thead>
-<tr>
-<th>部分</th>
-<th>示例</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>返回类型</td>
-<td><code>int</code></td>
-<td>函数最后会返回一个整数</td>
-</tr>
-<tr>
-<td>函数名</td>
-<td><code>add</code></td>
-<td>调用函数时使用的名字</td>
-</tr>
-<tr>
-<td>参数列表</td>
-<td><code>int a, int b</code></td>
-<td>函数需要两个整数输入</td>
-</tr>
-<tr>
-<td>函数体</td>
-<td><code>&#123; return a + b; &#125;</code></td>
-<td>函数真正执行的逻辑</td>
-</tr>
-<tr>
-<td>函数调用</td>
-<td><code>add(3, 5)</code></td>
-<td>让函数运行一次</td>
-</tr>
-</tbody>
-</table>
-<h2 id="函数定义与调用">🛠️ 函数定义与调用</h2>
-<h3 id="函数定义">函数定义</h3>
-<p>函数定义的一般形式：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">返回类型 函数名(参数列表)</span><br><span class="line">&#123;</span><br><span class="line">    函数体</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>示例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>square</code> 接收一个整数 <code>x</code>，返回
-<code>x * x</code> 的结果。</p>
-<h3 id="函数调用">函数调用</h3>
-<p>调用函数时，要写函数名，并在括号里放入实际参数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="built_in">square</span>(<span class="number">4</span>);</span><br><span class="line">cout &lt;&lt; value &lt;&lt; endl;  <span class="comment">// 16</span></span><br></pre></td></tr></table></figure>
-<p>调用过程可以理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">square(4)</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">x = 4</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">return x * x</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">返回 16</span><br></pre></td></tr></table></figure>
-<h3 id="没有返回值的函数">没有返回值的函数</h3>
-<p>如果函数只做一件事，不需要返回结果，可以使用 <code>void</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printLine</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">printLine</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>void</code>
-表示“没有返回值”。这种函数可以直接调用，不需要接收结果。</p>
-<h2 id="函数声明与头文件前置认识">🧾 函数声明与头文件前置认识</h2>
-<h3 id="为什么需要函数声明">为什么需要函数声明</h3>
-<p>C/C++ 编译器通常<strong>从上到下</strong>读取代码。如果在
-<code>main</code>
-里调用一个后面才定义的函数，编译器可能还不知道这个函数存在。</p>
-<p>例如：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这时可以在前面加一个<strong>函数声明</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>int add(int a, int b);</code>
-这一行就是声明。它告诉编译器：</p>
-<blockquote>
-<p>后面会有一个叫 <code>add</code> 的函数，它接收两个
-<code>int</code>，并返回一个 <code>int</code>。</p>
-</blockquote>
-<h3 id="声明和定义的区别">声明和定义的区别</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>是否有函数体</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数声明</td>
-<td>没有</td>
-<td>告诉编译器函数接口</td>
-</tr>
-<tr>
-<td>函数定义</td>
-<td>有</td>
-<td>写出函数实际逻辑</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;       <span class="comment">// 声明</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span>        <span class="comment">// 定义</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="头文件前置认识">头文件前置认识</h3>
-<p>实际项目里，函数声明常放在头文件里，比如
-<code>math_utils.h</code>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.h</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
-<p>函数定义放在 <code>.cpp</code> 文件里：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.cpp</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>使用函数的地方包含头文件：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>初学阶段先记住：<strong>头文件通常放声明，源文件通常放定义</strong>。</p>
-<h2 id="参数传递">📦 参数传递</h2>
-<h3 id="值传递">值传递</h3>
-<p>最常见的是<strong>值传递</strong>。函数拿到的是实参的一份<strong>副本</strong>，函数内部修改参数，不会影响外面的变量。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">change</span>(a);</span><br><span class="line">    cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>change(a)</code> 调用时，<code>a</code> 的值被复制给
-<code>x</code>。修改 <code>x</code> 不等于修改 <code>a</code>。</p>
-<p>可以这样理解：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">a = 10</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">复制一份给 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">x = 100</span><br><span class="line"></span><br><span class="line">a 仍然是 10</span><br></pre></td></tr></table></figure>
-<h3 id="指针参数预告">指针参数预告</h3>
-<p>如果希望函数能修改外部变量，C
-语言里常用<strong>指针参数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    *p = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里的 <code>p</code>
-保存的是<strong>变量地址</strong>，<code>*p</code>
-表示通过地址找到原来的变量。指针涉及地址和内存，后面会单独展开。</p>
-<h3 id="引用参数预告">引用参数预告</h3>
-<p>C++ 里还常用<strong>引用参数</strong>：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> &amp;x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>引用可以先理解为“给原变量起了一个别名”。函数里改
-<code>x</code>，外面的变量也会被改。引用也会在后续文章里详细讲。</p>
-<h3 id="三种传参方式先对比">三种传参方式先对比</h3>
-<table>
-<thead>
-<tr>
-<th>方式</th>
-<th>示例</th>
-<th>是否能修改外部变量</th>
-<th>初学阶段理解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>值传递</td>
-<td><code>int x</code></td>
-<td>否</td>
-<td>传副本</td>
-</tr>
-<tr>
-<td>指针参数</td>
-<td><code>int *p</code></td>
-<td>可以</td>
-<td>传地址</td>
-</tr>
-<tr>
-<td>引用参数</td>
-<td><code>int &amp;x</code></td>
-<td>可以</td>
-<td>传别名</td>
-</tr>
-</tbody>
-</table>
-<h2 id="返回值">🔁 返回值</h2>
-<h3 id="返回普通值">返回普通值</h3>
-<p>最常见的返回值就是返回计算结果：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">maxValue</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (a &gt; b) &#123;</span><br><span class="line">        <span class="keyword">return</span> a;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>return</code> 会结束当前函数，并把后面的值交回调用者。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> m = <span class="built_in">maxValue</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">cout &lt;&lt; m &lt;&lt; endl;  <span class="comment">// 5</span></span><br></pre></td></tr></table></figure>
-<h3 id="返回状态码">返回状态码</h3>
-<p>有些函数不只关心“结果是什么”，还关心“是否成功”。这时可以返回状态码。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">divide</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b, <span class="type">int</span> &amp;result)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (b == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    result = a / b;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>调用时：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> result = <span class="number">0</span>;</span><br><span class="line"><span class="type">int</span> code = <span class="built_in">divide</span>(<span class="number">10</span>, <span class="number">2</span>, result);</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (code == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;divide failed&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这里约定：</p>
-<table>
-<thead>
-<tr>
-<th>返回码</th>
-<th>含义</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>0</code></td>
-<td>成功</td>
-</tr>
-<tr>
-<td>非 <code>0</code></td>
-<td>失败或不同错误类型</td>
-</tr>
-</tbody>
-</table>
-<p>这种风格在 C 语言和系统编程里很常见。</p>
-<h3 id="避免返回局部对象地址">避免返回局部对象地址</h3>
-<p>不要返回局部变量的地址：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;  <span class="comment">// 错误示例：不要这样写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>原因是：<code>x</code>
-是函数里的局部变量，函数结束后它的生命周期也结束了。返回
-<code>&amp;x</code> 等于把一个已经失效的位置交给外面使用。</p>
-<p>可以粗略理解为：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">进入 bad()</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">创建局部变量 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">返回 x 的地址</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">函数结束，x 失效</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">外面拿到的是危险地址</span><br></pre></td></tr></table></figure>
-<p>初学阶段先记住：<strong>不要返回局部变量的指针或引用</strong>。</p>
-<h2 id="函数重载">🧬 函数重载</h2>
-<h3 id="同名函数">同名函数</h3>
-<p>C++
-允许多个函数使用同一个名字，只要它们的参数列表不同。这叫<strong>函数重载</strong>。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">double</span> <span class="title">add</span><span class="params">(<span class="type">double</span> a, <span class="type">double</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>调用时，编译器会根据参数类型选择合适的版本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;       <span class="comment">// 调用 int 版本</span></span><br><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">1.2</span>, <span class="number">3.4</span>) &lt;&lt; endl;   <span class="comment">// 调用 double 版本</span></span><br></pre></td></tr></table></figure>
-<h3 id="参数匹配">参数匹配</h3>
-<p>重载主要看<strong>参数列表</strong>，包括参数个数和参数类型。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x, <span class="type">int</span> y)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; y &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>下面三种调用会匹配不同函数：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="number">10</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">3.14</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">10</span>, <span class="number">20</span>);</span><br></pre></td></tr></table></figure>
-<h3 id="返回类型不能单独构成重载">返回类型不能单独构成重载</h3>
-<p>只改返回类型，不改参数列表，不算合法重载：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">getValue</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">10</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// double getValue()</span></span><br><span class="line"><span class="comment">// &#123;</span></span><br><span class="line"><span class="comment">//     return 10.0;</span></span><br><span class="line"><span class="comment">// &#125;</span></span><br></pre></td></tr></table></figure>
-<p>原因是调用 <code>getValue()</code>
-时，编译器只看调用形式，无法仅靠返回类型稳定判断应该选哪个函数。</p>
-<h3 id="二义性">二义性</h3>
-<p>如果多个重载版本都像是“差不多能匹配”，编译器可能报二义性错误。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">long</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">show</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>10</code> 是 <code>int</code>，它既可以转换成
-<code>long</code>，也可以转换成
-<code>double</code>。类似场景可能让编译器难以选择。</p>
-<p>避免二义性的简单办法：</p>
-<table>
-<thead>
-<tr>
-<th>做法</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>让参数类型更明确</td>
-<td><code>show(10L);</code></td>
-</tr>
-<tr>
-<td>手动类型转换</td>
-<td><code>show(static_cast&lt;double&gt;(10));</code></td>
-</tr>
-<tr>
-<td>不写过于接近的重载</td>
-<td>避免 <code>long</code> 和 <code>double</code> 混在一起</td>
-</tr>
-</tbody>
-</table>
-<h2 id="递归基础">🧠 递归基础</h2>
-<h3 id="什么是递归">什么是递归</h3>
-<p>递归就是函数自己调用自己。它适合处理“一个大问题可以拆成更小的同类问题”的场景。</p>
-<p>典型例子是阶乘：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">5! = 5 * 4!</span><br><span class="line">4! = 4 * 3!</span><br><span class="line">3! = 3 * 2!</span><br><span class="line">2! = 2 * 1!</span><br><span class="line">1! = 1</span><br></pre></td></tr></table></figure>
-<p>代码：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">factorial</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n * <span class="built_in">factorial</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="递归出口">递归出口</h3>
-<p>递归必须有出口，也就是停止继续调用自己的条件。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这就是阶乘函数的递归出口。如果没有出口，函数会一直调用自己，直到程序崩溃。</p>
-<h3 id="调用栈">调用栈</h3>
-<p>每次函数调用，程序都会在<strong>调用栈</strong>里保存这次调用的现场。递归调用多次，就会一层一层压栈。</p>
-<p>以 <code>factorial(4)</code> 为例：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(4)</span><br><span class="line">  -&gt; factorial(3)</span><br><span class="line">      -&gt; factorial(2)</span><br><span class="line">          -&gt; factorial(1)</span><br></pre></td></tr></table></figure>
-<p>到达出口后，再一层一层返回：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(1) 返回 1</span><br><span class="line">factorial(2) 返回 2 * 1</span><br><span class="line">factorial(3) 返回 3 * 2</span><br><span class="line">factorial(4) 返回 4 * 6</span><br></pre></td></tr></table></figure>
-<p>所以 <code>factorial(4)</code> 的结果是 <code>24</code>。</p>
-<h3 id="典型错误">典型错误</h3>
-<table>
-<thead>
-<tr>
-<th>错误</th>
-<th>问题</th>
-<th>修正</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>没有递归出口</td>
-<td>无限递归</td>
-<td>写清楚停止条件</td>
-</tr>
-<tr>
-<td>递归没有逼近出口</td>
-<td>参数不变或方向错</td>
-<td>每次调用都让问题变小</td>
-</tr>
-<tr>
-<td>递归层数太深</td>
-<td>调用栈耗尽</td>
-<td>改用循环或优化算法</td>
-</tr>
-<tr>
-<td>忘记处理边界值</td>
-<td><code>0</code>、负数等输入异常</td>
-<td>先判断边界</td>
-</tr>
-</tbody>
-</table>
-<p>错误示例：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">bad</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bad</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>这个函数永远不会停止。</p>
-<p>一个更合理的版本：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">sumTo</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n + <span class="built_in">sumTo</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>函数声明和函数定义是一回事</td>
-<td>声明只告诉接口，定义才有函数体</td>
-</tr>
-<tr>
-<td>参数传进去后一定会修改原变量</td>
-<td>值传递只修改副本</td>
-</tr>
-<tr>
-<td><code>return</code> 之后函数还会继续执行</td>
-<td><code>return</code> 会立刻结束当前函数</td>
-</tr>
-<tr>
-<td>返回局部变量地址也能用</td>
-<td>局部变量函数结束后失效，不能这样返回</td>
-</tr>
-<tr>
-<td>函数重载只看函数名</td>
-<td>还要看参数个数和参数类型</td>
-</tr>
-<tr>
-<td>递归就是循环的高级写法</td>
-<td>递归依赖问题拆分和调用栈，不是无脑替代循环</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>函数的核心价值，是把一段逻辑封装成清晰、可复用、可组合的模块。</p>
-</blockquote>
-<p>初学阶段先抓住四件事：函数怎么定义、怎么调用、参数怎么传、结果怎么返回。至于指针、引用、头文件拆分和递归优化，后面可以继续一层层展开。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>函数</tag>
-        <tag>编程入门</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>C/C++ 入门：从编译环境到 HelloWorld</title>
     <url>/posts/c4f8a2d1/</url>
     <content><![CDATA[<p>最近想系统补一下计算机基础，从 c/c++ 开始吧。</p>
@@ -15881,6 +15470,417 @@ flowchart TD
         <tag>C/C++</tag>
         <tag>编译器</tag>
         <tag>HelloWorld</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C/C++ 入门：函数</title>
+    <url>/posts/f3c9a8d6/</url>
+    <content><![CDATA[<p>学完变量、运算符和控制流之后，函数就是把一段逻辑整理成“可重复使用的小模块”。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数</td>
+<td>一段有名字、可以被调用的代码</td>
+<td>可复用逻辑</td>
+</tr>
+<tr>
+<td>参数</td>
+<td>调用函数时传进去的数据</td>
+<td>输入</td>
+</tr>
+<tr>
+<td>返回值</td>
+<td>函数执行完交回来的结果</td>
+<td>输出</td>
+</tr>
+<tr>
+<td>函数声明</td>
+<td>提前告诉编译器函数长什么样</td>
+<td>先打招呼</td>
+</tr>
+<tr>
+<td>函数定义</td>
+<td>真正写出函数体</td>
+<td>真正干活</td>
+</tr>
+<tr>
+<td>值传递</td>
+<td>把实参的值复制一份传给函数</td>
+<td>传副本</td>
+</tr>
+<tr>
+<td>函数重载</td>
+<td>多个函数同名，但参数列表不同</td>
+<td>同名不同参</td>
+</tr>
+<tr>
+<td>递归</td>
+<td>函数自己调用自己</td>
+<td>自己拆问题</td>
+</tr>
+</tbody>
+</table>
+<h2 id="函数的基本模型">🧩 函数的基本模型</h2>
+<p>函数可以先粗略理解成一个加工盒子：给它输入，它执行一段逻辑，然后返回结果。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[参数] --&gt; B[函数体]
+    B --&gt; C[返回值]
+</code>
+</pre>
+<p>最小例子：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> result = <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这段代码里：</p>
+<table>
+<thead>
+<tr>
+<th>部分</th>
+<th>示例</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>返回类型</td>
+<td><code>int</code></td>
+<td>函数最后会返回一个整数</td>
+</tr>
+<tr>
+<td>函数名</td>
+<td><code>add</code></td>
+<td>调用函数时使用的名字</td>
+</tr>
+<tr>
+<td>参数列表</td>
+<td><code>int a, int b</code></td>
+<td>函数需要两个整数输入</td>
+</tr>
+<tr>
+<td>函数体</td>
+<td><code>&#123; return a + b; &#125;</code></td>
+<td>函数真正执行的逻辑</td>
+</tr>
+<tr>
+<td>函数调用</td>
+<td><code>add(3, 5)</code></td>
+<td>让函数运行一次</td>
+</tr>
+</tbody>
+</table>
+<h2 id="函数定义与调用">🛠️ 函数定义与调用</h2>
+<h3 id="函数定义">函数定义</h3>
+<p>函数定义的一般形式：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">返回类型 函数名(参数列表)</span><br><span class="line">&#123;</span><br><span class="line">    函数体</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>示例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">square</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>square</code> 接收一个整数 <code>x</code>，返回
+<code>x * x</code> 的结果。</p>
+<h3 id="函数调用">函数调用</h3>
+<p>调用函数时，要写函数名，并在括号里放入实际参数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> value = <span class="built_in">square</span>(<span class="number">4</span>);</span><br><span class="line">cout &lt;&lt; value &lt;&lt; endl;  <span class="comment">// 16</span></span><br></pre></td></tr></table></figure>
+<p>调用过程可以理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">square(4)</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">x = 4</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">return x * x</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">返回 16</span><br></pre></td></tr></table></figure>
+<h3 id="没有返回值的函数">没有返回值的函数</h3>
+<p>如果函数只做一件事，不需要返回结果，可以使用 <code>void</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">printLine</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;hello&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">printLine</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>void</code>
+表示“没有返回值”。这种函数可以直接调用，不需要接收结果。</p>
+<h2 id="函数声明与头文件前置认识">🧾 函数声明与头文件前置认识</h2>
+<h3 id="为什么需要函数声明">为什么需要函数声明</h3>
+<p>C/C++ 编译器通常<strong>从上到下</strong>读取代码。如果在
+<code>main</code>
+里调用一个后面才定义的函数，编译器可能还不知道这个函数存在。</p>
+<p>例如：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这时可以在前面加一个<strong>函数声明</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>int add(int a, int b);</code>
+这一行就是声明。它告诉编译器：</p>
+<blockquote>
+<p>后面会有一个叫 <code>add</code> 的函数，它接收两个
+<code>int</code>，并返回一个 <code>int</code>。</p>
+</blockquote>
+<h3 id="声明和定义的区别">声明和定义的区别</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>是否有函数体</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数声明</td>
+<td>没有</td>
+<td>告诉编译器函数接口</td>
+</tr>
+<tr>
+<td>函数定义</td>
+<td>有</td>
+<td>写出函数实际逻辑</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;       <span class="comment">// 声明</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span>        <span class="comment">// 定义</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="头文件前置认识">头文件前置认识</h3>
+<p>实际项目里，函数声明常放在头文件里，比如
+<code>math_utils.h</code>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.h</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span>;</span><br></pre></td></tr></table></figure>
+<p>函数定义放在 <code>.cpp</code> 文件里：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// math_utils.cpp</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>使用函数的地方包含头文件：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;math_utils.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>初学阶段先记住：<strong>头文件通常放声明，源文件通常放定义</strong>。</p>
+<h2 id="参数传递">📦 参数传递</h2>
+<h3 id="值传递">值传递</h3>
+<p>最常见的是<strong>值传递</strong>。函数拿到的是实参的一份<strong>副本</strong>，函数内部修改参数，不会影响外面的变量。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line">    <span class="built_in">change</span>(a);</span><br><span class="line">    cout &lt;&lt; a &lt;&lt; endl;  <span class="comment">// 10</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>change(a)</code> 调用时，<code>a</code> 的值被复制给
+<code>x</code>。修改 <code>x</code> 不等于修改 <code>a</code>。</p>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">a = 10</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">复制一份给 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">x = 100</span><br><span class="line"></span><br><span class="line">a 仍然是 10</span><br></pre></td></tr></table></figure>
+<h3 id="指针参数预告">指针参数预告</h3>
+<p>如果希望函数能修改外部变量，C
+语言里常用<strong>指针参数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    *p = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的 <code>p</code>
+保存的是<strong>变量地址</strong>，<code>*p</code>
+表示通过地址找到原来的变量。指针涉及地址和内存，后面会单独展开。</p>
+<h3 id="引用参数预告">引用参数预告</h3>
+<p>C++ 里还常用<strong>引用参数</strong>：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">change</span><span class="params">(<span class="type">int</span> &amp;x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    x = <span class="number">100</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>引用可以先理解为“给原变量起了一个别名”。函数里改
+<code>x</code>，外面的变量也会被改。引用也会在后续文章里详细讲。</p>
+<h3 id="三种传参方式先对比">三种传参方式先对比</h3>
+<table>
+<thead>
+<tr>
+<th>方式</th>
+<th>示例</th>
+<th>是否能修改外部变量</th>
+<th>初学阶段理解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>值传递</td>
+<td><code>int x</code></td>
+<td>否</td>
+<td>传副本</td>
+</tr>
+<tr>
+<td>指针参数</td>
+<td><code>int *p</code></td>
+<td>可以</td>
+<td>传地址</td>
+</tr>
+<tr>
+<td>引用参数</td>
+<td><code>int &amp;x</code></td>
+<td>可以</td>
+<td>传别名</td>
+</tr>
+</tbody>
+</table>
+<h2 id="返回值">🔁 返回值</h2>
+<h3 id="返回普通值">返回普通值</h3>
+<p>最常见的返回值就是返回计算结果：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">maxValue</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (a &gt; b) &#123;</span><br><span class="line">        <span class="keyword">return</span> a;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>return</code> 会结束当前函数，并把后面的值交回调用者。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> m = <span class="built_in">maxValue</span>(<span class="number">3</span>, <span class="number">5</span>);</span><br><span class="line">cout &lt;&lt; m &lt;&lt; endl;  <span class="comment">// 5</span></span><br></pre></td></tr></table></figure>
+<h3 id="返回状态码">返回状态码</h3>
+<p>有些函数不只关心“结果是什么”，还关心“是否成功”。这时可以返回状态码。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">divide</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b, <span class="type">int</span> &amp;result)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (b == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    result = a / b;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用时：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> result = <span class="number">0</span>;</span><br><span class="line"><span class="type">int</span> code = <span class="built_in">divide</span>(<span class="number">10</span>, <span class="number">2</span>, result);</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (code == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; result &lt;&lt; endl;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;divide failed&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里约定：</p>
+<table>
+<thead>
+<tr>
+<th>返回码</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>成功</td>
+</tr>
+<tr>
+<td>非 <code>0</code></td>
+<td>失败或不同错误类型</td>
+</tr>
+</tbody>
+</table>
+<p>这种风格在 C 语言和系统编程里很常见。</p>
+<h3 id="避免返回局部对象地址">避免返回局部对象地址</h3>
+<p>不要返回局部变量的地址：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span>* <span class="title">bad</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">int</span> x = <span class="number">10</span>;</span><br><span class="line">    <span class="keyword">return</span> &amp;x;  <span class="comment">// 错误示例：不要这样写</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>原因是：<code>x</code>
+是函数里的局部变量，函数结束后它的生命周期也结束了。返回
+<code>&amp;x</code> 等于把一个已经失效的位置交给外面使用。</p>
+<p>可以粗略理解为：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">进入 bad()</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">创建局部变量 x</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">返回 x 的地址</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">函数结束，x 失效</span><br><span class="line">  |</span><br><span class="line">  v</span><br><span class="line">外面拿到的是危险地址</span><br></pre></td></tr></table></figure>
+<p>初学阶段先记住：<strong>不要返回局部变量的指针或引用</strong>。</p>
+<h2 id="函数重载">🧬 函数重载</h2>
+<h3 id="同名函数">同名函数</h3>
+<p>C++
+允许多个函数使用同一个名字，只要它们的参数列表不同。这叫<strong>函数重载</strong>。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">add</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">double</span> <span class="title">add</span><span class="params">(<span class="type">double</span> a, <span class="type">double</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用时，编译器会根据参数类型选择合适的版本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">3</span>, <span class="number">5</span>) &lt;&lt; endl;       <span class="comment">// 调用 int 版本</span></span><br><span class="line">cout &lt;&lt; <span class="built_in">add</span>(<span class="number">1.2</span>, <span class="number">3.4</span>) &lt;&lt; endl;   <span class="comment">// 调用 double 版本</span></span><br></pre></td></tr></table></figure>
+<h3 id="参数匹配">参数匹配</h3>
+<p>重载主要看<strong>参数列表</strong>，包括参数个数和参数类型。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">print</span><span class="params">(<span class="type">int</span> x, <span class="type">int</span> y)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot;, &quot;</span> &lt;&lt; y &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面三种调用会匹配不同函数：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">print</span>(<span class="number">10</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">3.14</span>);</span><br><span class="line"><span class="built_in">print</span>(<span class="number">10</span>, <span class="number">20</span>);</span><br></pre></td></tr></table></figure>
+<h3 id="返回类型不能单独构成重载">返回类型不能单独构成重载</h3>
+<p>只改返回类型，不改参数列表，不算合法重载：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">getValue</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">10</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// double getValue()</span></span><br><span class="line"><span class="comment">// &#123;</span></span><br><span class="line"><span class="comment">//     return 10.0;</span></span><br><span class="line"><span class="comment">// &#125;</span></span><br></pre></td></tr></table></figure>
+<p>原因是调用 <code>getValue()</code>
+时，编译器只看调用形式，无法仅靠返回类型稳定判断应该选哪个函数。</p>
+<h3 id="二义性">二义性</h3>
+<p>如果多个重载版本都像是“差不多能匹配”，编译器可能报二义性错误。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">long</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">show</span><span class="params">(<span class="type">double</span> x)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">show</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>10</code> 是 <code>int</code>，它既可以转换成
+<code>long</code>，也可以转换成
+<code>double</code>。类似场景可能让编译器难以选择。</p>
+<p>避免二义性的简单办法：</p>
+<table>
+<thead>
+<tr>
+<th>做法</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>让参数类型更明确</td>
+<td><code>show(10L);</code></td>
+</tr>
+<tr>
+<td>手动类型转换</td>
+<td><code>show(static_cast&lt;double&gt;(10));</code></td>
+</tr>
+<tr>
+<td>不写过于接近的重载</td>
+<td>避免 <code>long</code> 和 <code>double</code> 混在一起</td>
+</tr>
+</tbody>
+</table>
+<h2 id="递归基础">🧠 递归基础</h2>
+<h3 id="什么是递归">什么是递归</h3>
+<p>递归就是函数自己调用自己。它适合处理“一个大问题可以拆成更小的同类问题”的场景。</p>
+<p>典型例子是阶乘：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">5! = 5 * 4!</span><br><span class="line">4! = 4 * 3!</span><br><span class="line">3! = 3 * 2!</span><br><span class="line">2! = 2 * 1!</span><br><span class="line">1! = 1</span><br></pre></td></tr></table></figure>
+<p>代码：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">factorial</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n * <span class="built_in">factorial</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="递归出口">递归出口</h3>
+<p>递归必须有出口，也就是停止继续调用自己的条件。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (n == <span class="number">1</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这就是阶乘函数的递归出口。如果没有出口，函数会一直调用自己，直到程序崩溃。</p>
+<h3 id="调用栈">调用栈</h3>
+<p>每次函数调用，程序都会在<strong>调用栈</strong>里保存这次调用的现场。递归调用多次，就会一层一层压栈。</p>
+<p>以 <code>factorial(4)</code> 为例：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(4)</span><br><span class="line">  -&gt; factorial(3)</span><br><span class="line">      -&gt; factorial(2)</span><br><span class="line">          -&gt; factorial(1)</span><br></pre></td></tr></table></figure>
+<p>到达出口后，再一层一层返回：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">factorial(1) 返回 1</span><br><span class="line">factorial(2) 返回 2 * 1</span><br><span class="line">factorial(3) 返回 3 * 2</span><br><span class="line">factorial(4) 返回 4 * 6</span><br></pre></td></tr></table></figure>
+<p>所以 <code>factorial(4)</code> 的结果是 <code>24</code>。</p>
+<h3 id="典型错误">典型错误</h3>
+<table>
+<thead>
+<tr>
+<th>错误</th>
+<th>问题</th>
+<th>修正</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>没有递归出口</td>
+<td>无限递归</td>
+<td>写清楚停止条件</td>
+</tr>
+<tr>
+<td>递归没有逼近出口</td>
+<td>参数不变或方向错</td>
+<td>每次调用都让问题变小</td>
+</tr>
+<tr>
+<td>递归层数太深</td>
+<td>调用栈耗尽</td>
+<td>改用循环或优化算法</td>
+</tr>
+<tr>
+<td>忘记处理边界值</td>
+<td><code>0</code>、负数等输入异常</td>
+<td>先判断边界</td>
+</tr>
+</tbody>
+</table>
+<p>错误示例：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">bad</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bad</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这个函数永远不会停止。</p>
+<p>一个更合理的版本：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">sumTo</span><span class="params">(<span class="type">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> n + <span class="built_in">sumTo</span>(n - <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>函数声明和函数定义是一回事</td>
+<td>声明只告诉接口，定义才有函数体</td>
+</tr>
+<tr>
+<td>参数传进去后一定会修改原变量</td>
+<td>值传递只修改副本</td>
+</tr>
+<tr>
+<td><code>return</code> 之后函数还会继续执行</td>
+<td><code>return</code> 会立刻结束当前函数</td>
+</tr>
+<tr>
+<td>返回局部变量地址也能用</td>
+<td>局部变量函数结束后失效，不能这样返回</td>
+</tr>
+<tr>
+<td>函数重载只看函数名</td>
+<td>还要看参数个数和参数类型</td>
+</tr>
+<tr>
+<td>递归就是循环的高级写法</td>
+<td>递归依赖问题拆分和调用栈，不是无脑替代循环</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>函数的核心价值，是把一段逻辑封装成清晰、可复用、可组合的模块。</p>
+</blockquote>
+<p>初学阶段先抓住四件事：函数怎么定义、怎么调用、参数怎么传、结果怎么返回。至于指针、引用、头文件拆分和递归优化，后面可以继续一层层展开。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>函数</tag>
+        <tag>编程入门</tag>
       </tags>
   </entry>
   <entry>
@@ -21109,376 +21109,6 @@ VMRUN/VMEXIT 自动维护的 ASID 状态，谁都无法伪造——NPT 管地址
       </tags>
   </entry>
   <entry>
-    <title>信任根三件套：RTM、RTR、RTS与TEE+TPM协作</title>
-    <url>/posts/2affc801/</url>
-    <content><![CDATA[<p>TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了 CCxTrust
-协作信任的核心。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RTM</td>
-<td>Root of Trust for Measurement，度量信任根</td>
-<td>记账员：负责测量</td>
-</tr>
-<tr>
-<td>RTR</td>
-<td>Root of Trust for Report，报告信任根</td>
-<td>公证员：负责汇报</td>
-</tr>
-<tr>
-<td>RTS</td>
-<td>Root of Trust for Storage，存储信任根</td>
-<td>保险库：负责藏钥匙</td>
-</tr>
-<tr>
-<td>黑盒信任根</td>
-<td>black-box RoT</td>
-<td>TEE 的信任根，用户够不着</td>
-</tr>
-<tr>
-<td>白盒信任根</td>
-<td>white-box RoT</td>
-<td>TPM 的信任根，用户可访问可配置</td>
-</tr>
-<tr>
-<td>TCB</td>
-<td>Trusted Computing Base，受信计算基</td>
-<td>安全所依赖的最小可信组件集合</td>
-</tr>
-<tr>
-<td>信任链</td>
-<td>chain of trust</td>
-<td>从物理锚点逐级验证的链条</td>
-</tr>
-<tr>
-<td>信任锚</td>
-<td>trust anchor</td>
-<td>信任链的起点，物理上不可篡改</td>
-</tr>
-<tr>
-<td>PSP</td>
-<td>Platform Security Processor，平台安全处理器</td>
-<td>AMD CPU 里的独立安全协处理器</td>
-</tr>
-<tr>
-<td>复合认证</td>
-<td>composite attestation</td>
-<td>TEE 和 TPM 合并出认证报告</td>
-</tr>
-</tbody>
-</table>
-<h2 id="信任根三件套rtm-rtr-rts">🧩 信任根三件套：RTM / RTR / RTS</h2>
-<p>TCG 把可信平台拆成三个信任根。<strong>整个 CCxTrust
-架构就是围绕这三个根怎么分配展开的</strong>：</p>
-<table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 18%" />
-<col style="width: 25%" />
-<col style="width: 31%" />
-</colgroup>
-<thead>
-<tr>
-<th>信任根</th>
-<th>全称</th>
-<th>干什么</th>
-<th>通俗类比</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>RTM</strong></td>
-<td>Root of Trust for <strong>Measurement</strong>，度量信任根</td>
-<td>负责测量系统状态，保证测了、记了、改不了</td>
-<td>记账员</td>
-</tr>
-<tr>
-<td><strong>RTR</strong></td>
-<td>Root of Trust for <strong>Report</strong>，报告信任根</td>
-<td>负责把测量结果<strong>可信地报出去</strong>（签名）</td>
-<td>公证员</td>
-</tr>
-<tr>
-<td><strong>RTS</strong></td>
-<td>Root of Trust for <strong>Storage</strong>，存储信任根</td>
-<td>负责保护密钥等秘密</td>
-<td>保险库</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>概括：<strong>RTM 管测量，RTR 管汇报，RTS
-管存储</strong>。一台机器可不可信，就是测得好、报得真、藏得牢三件事。</p>
-</blockquote>
-<h2 id="黑盒-tee-白盒-tpm各有所长">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</h2>
-<p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>：</p>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>TEE（SEV-SNP）</th>
-<th>TPM</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>信任模式</td>
-<td>black-box：信任根归厂商</td>
-<td>white-box：用户可直接访问</td>
-</tr>
-<tr>
-<td>可访问性</td>
-<td>用户够不着（API 受限）</td>
-<td>用户可配置、可验证</td>
-</tr>
-<tr>
-<td>强项</td>
-<td>强隔离的执行环境</td>
-<td>用户侧密钥/存储/认证</td>
-</tr>
-<tr>
-<td>短板</td>
-<td>信任是黑箱</td>
-<td>没有执行环境</td>
-</tr>
-</tbody>
-</table>
-<p>关键差异：<strong>CPU-TEE
-信任根是黑盒的</strong>，只能给系统底层（固件、hypervisor、内核）用，用户够不着、验不了；<strong>TPM
-是白盒的</strong>，用户可以直接访问、配置、验证，能补上 TEE
-没有的用户侧能力。</p>
-<p>三个核心挑战与对应方案：</p>
-<table>
-<thead>
-<tr>
-<th>挑战</th>
-<th>问题</th>
-<th>方案</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Q1</td>
-<td>怎么建立用户可控的信任体系？</td>
-<td>S1：协作信任根（TEE+TPM）</td>
-</tr>
-<tr>
-<td>Q2</td>
-<td>怎么弥合 TEE 和 TPM 的技术鸿沟？</td>
-<td>S2：机密 TPM（CTPM）</td>
-</tr>
-<tr>
-<td>Q3</td>
-<td>怎么保证 CVM 敏感数据安全？</td>
-<td>S3：复合认证</td>
-</tr>
-</tbody>
-</table>
-<h2 id="核心分配三件套怎么分工">📐 核心分配：三件套怎么分工</h2>
-<p>CCxTrust 的原创设计——<strong>不搞一家独大，让 TEE 和 TPM
-分工协作</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RTM（度量）  → TEE 与 TPM 并行独立，各测各的域</span><br><span class="line">              TEE 测：硬件/固件/启动环境（TEE 的 TCB）</span><br><span class="line">              TPM 测：hypervisor、guest OS、工作负载</span><br><span class="line">              → 两块&quot;账本&quot;互不依赖，一份被攻破，另一份还在</span><br><span class="line"></span><br><span class="line">RTR（报告）  → TEE 与 TPM 协作，生成&quot;复合认证报告&quot;</span><br><span class="line">              → 单一报告根容易被伪造/拼接攻击（见下）</span><br><span class="line"></span><br><span class="line">RTS（存储）  → 完全交给 TPM</span><br><span class="line">              → 用户密钥由 TPM 密封存储，TEE 也把密钥托管给 TPM</span><br></pre></td></tr></table></figure>
-<p><strong>为什么这样分？</strong></p>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>分配</th>
-<th>原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RTM 并行独立</td>
-<td>两者测的域不同、互不依赖，形成双保险（dual insurance）</td>
-</tr>
-<tr>
-<td>RTR 协作</td>
-<td>单一报告根容易被伪造/拼接攻击，合并成一份报告才能防拼接</td>
-</tr>
-<tr>
-<td>RTS 归 TPM</td>
-<td>TEE 没有持久存储能力（内存加密但掉电即失），TPM 有 NVRAM +
-密钥树，天生是保险库</td>
-</tr>
-</tbody>
-</table>
-<h2 id="三阶段测量rtm-的具体落地">📏 三阶段测量：RTM 的具体落地</h2>
-<p>CVM 的信任链从启动到运行分成三个阶段：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Stage 1：Host 静态测量（CVM 启动前）</span><br><span class="line">   · 测 hypervisor、host 内核、虚拟化服务</span><br><span class="line">   · → 保证&quot;我住的房子是干净的&quot;</span><br><span class="line"></span><br><span class="line">Stage 2：CVM 启动测量</span><br><span class="line">   · 测 guest 固件、内核、initrd、根文件系统、镜像签名</span><br><span class="line">   · → 保证&quot;住进来的这个租客是预期的&quot;</span><br><span class="line"></span><br><span class="line">Stage 3：运行时测量（动态）</span><br><span class="line">   · TEE 对 CVM 内工作负载做完整性校验</span><br><span class="line">   · → 保证&quot;运行过程中没被篡改&quot;</span><br></pre></td></tr></table></figure>
-<p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。也就是静态
-+ 动态信任链结合。</p>
-<blockquote>
-<p>顺带澄清一个容易混的概念：<strong>hypervisor
-不是固件</strong>。层次是：应用 → Guest OS → hypervisor（软件）→ 固件
-Firmware（UEFI/BIOS、PSP 等，烧在只读存储里）→ CPU 硬件。固件启动
-hypervisor，hypervisor 启动 guest。</p>
-</blockquote>
-<h2 id="度量分工重合吗这是双保险不是-bug">🔗
-度量分工重合吗？——这是双保险不是 bug</h2>
-<p>设计上 TEE 测固件、TPM 测 hypervisor，但现实中 TPM
-的启动链本来也测固件（UEFI 启动时自己 Extend
-PCR）。<strong>实践中有重叠，但这是刻意为之</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">设计意图 = 双保险（redundancy）：</span><br><span class="line">· 两个独立的测量源（TEE 的 PSP 侧 vs TPM 芯片侧），互不信任、互不依赖</span><br><span class="line">· TEE 的测量域 = &quot;TEE 自己的启动信任链&quot;（PSP→SEV 固件→OVMF 等）</span><br><span class="line">· TPM 的测量域 = &quot;平台全局启动链&quot;（UEFI→hypervisor→guest）</span><br><span class="line">· 哪怕一条链被攻破/伪造，另一条链的账本仍然可信</span><br></pre></td></tr></table></figure>
-<p><strong>概念上分工（各测各的域），实践上有重叠（都碰固件），重叠是刻意的冗余设计。</strong></p>
-<h2 id="信任链与信任锚固件为什么改不了">🔑
-信任链与信任锚：固件为什么改不了</h2>
-<p>PCR
-的固件逻辑强制依赖一个前提：<strong>固件本身不能被恶意修改</strong>。这靠两道防线，不是靠加载时度量一次解决：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 物理防护（第一道，硬件级）：</span><br><span class="line">   · dTPM 是独立芯片，固件写在一次性熔丝/受保护闪存里，</span><br><span class="line">     常规软件攻击根本写不进去</span><br><span class="line">   · fTPM 在 CPU 的 PSP 里，PSP 固件有签名校验 + 只读存储</span><br><span class="line">   → &quot;改 TPM 固件&quot;不是软件层能做到的事，物理防护兜底</span><br><span class="line"></span><br><span class="line">② 信任链（第二道，启动级）：</span><br><span class="line">   从&quot;绝对可信的起点&quot;逐级验证：</span><br><span class="line">   硬件（RoT 芯片）→ 验证固件 → 固件验证 bootloader → bootloader 验证内核 → ...</span><br><span class="line">   每一步都由前一步验证</span><br></pre></td></tr></table></figure>
-<p>所以准确表述是：</p>
-<table>
-<thead>
-<tr>
-<th>防护对象</th>
-<th>防护手段</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>TPM 固件本身不可改</td>
-<td>物理防护（熔丝、受保护存储、签名校验）</td>
-</tr>
-<tr>
-<td>系统软件（内核等）不被篡改</td>
-<td>信任链（启动时逐级度量 + 签名校验）</td>
-</tr>
-</tbody>
-</table>
-<p><strong>信任链的起点（信任锚）是谁？</strong> 是硬件本身（RoT，Root
-of Trust，信任根）——它是物理上无法篡改的，比如 TPM 芯片内部逻辑、CPU
-内部的 PSP
-ROM。<strong>信任链不是无限的，它终止于一个物理可信的锚点</strong>，这就是根（Root）的含义。</p>
-<blockquote>
-<p>修正一个常见说法：不是加载时度量保证固件不可改——UEFI
-是第一级软件，加载时已经没人能度量它了，它靠的是硬件锚点 +
-物理防护。</p>
-</blockquote>
-<h2 id="pspamd-芯片里的先于一切的安全小电脑">🔩 PSP：AMD
-芯片里的先于一切的安全小电脑</h2>
-<p><strong>PSP（Platform Security Processor，平台安全处理器）</strong>
-是 AMD CPU 里的<strong>独立 ARM 安全协处理器</strong>，相当于 CPU
-里的一个小电脑：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">AMD CPU 芯片</span><br><span class="line">├── x86 主核（跑你的系统）</span><br><span class="line">│</span><br><span class="line">└── PSP（独立 ARM 核）</span><br><span class="line">      · 芯片上电先于 x86 主核</span><br><span class="line">      · 跑在隔离的安全环境里</span><br><span class="line">      · 管理：SEV 内存加密密钥、RMP 表、</span><br><span class="line">        固件签名校验、fTPM、DMA 保护</span><br></pre></td></tr></table></figure>
-<p>PSP 的核心角色：</p>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>PSP 干什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>TEE 通过 PSP 进行信任初始化</td>
-<td>PSP 是 TEE 信任链的起点（锚点）</td>
-</tr>
-<tr>
-<td>内存加密</td>
-<td>PSP 生成和管理内存加密密钥</td>
-</tr>
-<tr>
-<td>RMP 归属分配</td>
-<td>PSP 固件执行 RMPUPDATE，锁定页归属</td>
-</tr>
-<tr>
-<td>fTPM</td>
-<td>AMD 的 fTPM 就跑在 PSP 里</td>
-</tr>
-</tbody>
-</table>
-<p>概括：<strong>PSP 是 AMD 芯片里先于一切、独立于一切的安全小电脑，TEE
-的信任锚就是它。</strong> 类似地，Intel 有 Intel ME/CSE，ARM 有
-TrustZone 的 secure world。</p>
-<h2 id="展望rtr-协作-复合认证">🔭 展望：RTR 协作 = 复合认证</h2>
-<p>本篇已建立完整骨架，最后预告 CCxTrust 最核心的一环——<strong>RTR
-协作</strong>。</p>
-<p><strong>为什么独立认证不够</strong>：TEE 和 TPM
-各自单独出认证报告时：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· 攻击者可能伪造 CVM 的 ID 发起攻击</span><br><span class="line">· 攻击者可能做&quot;报告拼接攻击&quot;（report concatenation）：</span><br><span class="line">  把 A 机器的 TPM 报告 + B 机器的 TEE 报告拼成&quot;完整报告&quot;</span><br><span class="line">  → 验证方以为是一台可信机器的完整状态，实际是两台机器拼的</span><br><span class="line">· 独立认证需要两次交互（两个数据拷贝、两次签名、两次报告返回），效率低</span><br></pre></td></tr></table></figure>
-<p><strong>CCxTrust 的解法</strong>：复合认证协议——把 TEE 报告嵌进 TPM
-Quote（或反过来），生成<strong>一份不可拆分的复合报告</strong>，一次交互完成认证。拼接攻击的根基（两份独立报告）被直接消灭，认证效率还提升了
-24%。</p>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RTM/RTR/RTS 是 CCxTrust 发明的</td>
-<td>是 TCG 标准术语，CCxTrust 的创新在于怎么分配</td>
-</tr>
-<tr>
-<td>TEE 比 TPM 强，全都用 TEE</td>
-<td>TEE 是黑盒、无持久存储、用户够不着；TPM
-是白盒、有存储，两者互补</td>
-</tr>
-<tr>
-<td>度量分工必须严格不重合</td>
-<td>实践中有重叠，这是刻意的双保险冗余设计</td>
-</tr>
-<tr>
-<td>固件不可篡改靠启动时度量</td>
-<td>固件本身靠物理防护（熔丝/受保护存储），度量管的是系统软件</td>
-</tr>
-<tr>
-<td>信任链可以无限延伸</td>
-<td>信任链终止于物理锚点（TPM 芯片、PSP），根不需要被验证</td>
-</tr>
-<tr>
-<td>hypervisor 是底层固件</td>
-<td>hypervisor 是软件层，固件在它下面一层</td>
-</tr>
-<tr>
-<td>TEE 和 TPM 各自出报告就行</td>
-<td>独立报告可被拼接攻击利用，复合认证才能防拼接</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>信任根三件套中，RTM 管测量、RTR 管报告、RTS 管存储；CCxTrust 让 TEE
-和 TPM 分工协作——RTM 并行独立（双保险）、RTR 复合认证（防拼接）、RTS 归
-TPM（用白盒补黑盒），通过三阶段测量覆盖从启动到运行的完整信任链，信任锚则落在
-PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
-</blockquote>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>TEE</tag>
-        <tag>安全</tag>
-        <tag>机密计算</tag>
-        <tag>TPM</tag>
-        <tag>信任根</tag>
-        <tag>远程认证</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>TPM从零理解：保险箱里的密码世界</title>
     <url>/posts/fd7258a1/</url>
     <content><![CDATA[<p>TPM（Trusted Platform
@@ -21892,6 +21522,376 @@ blob 形式散落在外；PCR 只能 Extend 保证系统指纹不可伪造，sea
         <tag>TPM</tag>
         <tag>可信计算</tag>
         <tag>密钥管理</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>信任根三件套：RTM、RTR、RTS与TEE+TPM协作</title>
+    <url>/posts/2affc801/</url>
+    <content><![CDATA[<p>TEE 是黑盒信任根，TPM 是白盒信任根——把它们拼在一起，就拼出了 CCxTrust
+协作信任的核心。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM</td>
+<td>Root of Trust for Measurement，度量信任根</td>
+<td>记账员：负责测量</td>
+</tr>
+<tr>
+<td>RTR</td>
+<td>Root of Trust for Report，报告信任根</td>
+<td>公证员：负责汇报</td>
+</tr>
+<tr>
+<td>RTS</td>
+<td>Root of Trust for Storage，存储信任根</td>
+<td>保险库：负责藏钥匙</td>
+</tr>
+<tr>
+<td>黑盒信任根</td>
+<td>black-box RoT</td>
+<td>TEE 的信任根，用户够不着</td>
+</tr>
+<tr>
+<td>白盒信任根</td>
+<td>white-box RoT</td>
+<td>TPM 的信任根，用户可访问可配置</td>
+</tr>
+<tr>
+<td>TCB</td>
+<td>Trusted Computing Base，受信计算基</td>
+<td>安全所依赖的最小可信组件集合</td>
+</tr>
+<tr>
+<td>信任链</td>
+<td>chain of trust</td>
+<td>从物理锚点逐级验证的链条</td>
+</tr>
+<tr>
+<td>信任锚</td>
+<td>trust anchor</td>
+<td>信任链的起点，物理上不可篡改</td>
+</tr>
+<tr>
+<td>PSP</td>
+<td>Platform Security Processor，平台安全处理器</td>
+<td>AMD CPU 里的独立安全协处理器</td>
+</tr>
+<tr>
+<td>复合认证</td>
+<td>composite attestation</td>
+<td>TEE 和 TPM 合并出认证报告</td>
+</tr>
+</tbody>
+</table>
+<h2 id="信任根三件套rtm-rtr-rts">🧩 信任根三件套：RTM / RTR / RTS</h2>
+<p>TCG 把可信平台拆成三个信任根。<strong>整个 CCxTrust
+架构就是围绕这三个根怎么分配展开的</strong>：</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 18%" />
+<col style="width: 25%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>信任根</th>
+<th>全称</th>
+<th>干什么</th>
+<th>通俗类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>RTM</strong></td>
+<td>Root of Trust for <strong>Measurement</strong>，度量信任根</td>
+<td>负责测量系统状态，保证测了、记了、改不了</td>
+<td>记账员</td>
+</tr>
+<tr>
+<td><strong>RTR</strong></td>
+<td>Root of Trust for <strong>Report</strong>，报告信任根</td>
+<td>负责把测量结果<strong>可信地报出去</strong>（签名）</td>
+<td>公证员</td>
+</tr>
+<tr>
+<td><strong>RTS</strong></td>
+<td>Root of Trust for <strong>Storage</strong>，存储信任根</td>
+<td>负责保护密钥等秘密</td>
+<td>保险库</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>概括：<strong>RTM 管测量，RTR 管汇报，RTS
+管存储</strong>。一台机器可不可信，就是测得好、报得真、藏得牢三件事。</p>
+</blockquote>
+<h2 id="黑盒-tee-白盒-tpm各有所长">⚖️ 黑盒 TEE + 白盒 TPM：各有所长</h2>
+<p><strong>TEE 和 TPM 是两种完全不同的信任根</strong>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>TEE（SEV-SNP）</th>
+<th>TPM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>信任模式</td>
+<td>black-box：信任根归厂商</td>
+<td>white-box：用户可直接访问</td>
+</tr>
+<tr>
+<td>可访问性</td>
+<td>用户够不着（API 受限）</td>
+<td>用户可配置、可验证</td>
+</tr>
+<tr>
+<td>强项</td>
+<td>强隔离的执行环境</td>
+<td>用户侧密钥/存储/认证</td>
+</tr>
+<tr>
+<td>短板</td>
+<td>信任是黑箱</td>
+<td>没有执行环境</td>
+</tr>
+</tbody>
+</table>
+<p>关键差异：<strong>CPU-TEE
+信任根是黑盒的</strong>，只能给系统底层（固件、hypervisor、内核）用，用户够不着、验不了；<strong>TPM
+是白盒的</strong>，用户可以直接访问、配置、验证，能补上 TEE
+没有的用户侧能力。</p>
+<p>三个核心挑战与对应方案：</p>
+<table>
+<thead>
+<tr>
+<th>挑战</th>
+<th>问题</th>
+<th>方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1</td>
+<td>怎么建立用户可控的信任体系？</td>
+<td>S1：协作信任根（TEE+TPM）</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>怎么弥合 TEE 和 TPM 的技术鸿沟？</td>
+<td>S2：机密 TPM（CTPM）</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>怎么保证 CVM 敏感数据安全？</td>
+<td>S3：复合认证</td>
+</tr>
+</tbody>
+</table>
+<h2 id="核心分配三件套怎么分工">📐 核心分配：三件套怎么分工</h2>
+<p>CCxTrust 的原创设计——<strong>不搞一家独大，让 TEE 和 TPM
+分工协作</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RTM（度量）  → TEE 与 TPM 并行独立，各测各的域</span><br><span class="line">              TEE 测：硬件/固件/启动环境（TEE 的 TCB）</span><br><span class="line">              TPM 测：hypervisor、guest OS、工作负载</span><br><span class="line">              → 两块&quot;账本&quot;互不依赖，一份被攻破，另一份还在</span><br><span class="line"></span><br><span class="line">RTR（报告）  → TEE 与 TPM 协作，生成&quot;复合认证报告&quot;</span><br><span class="line">              → 单一报告根容易被伪造/拼接攻击（见下）</span><br><span class="line"></span><br><span class="line">RTS（存储）  → 完全交给 TPM</span><br><span class="line">              → 用户密钥由 TPM 密封存储，TEE 也把密钥托管给 TPM</span><br></pre></td></tr></table></figure>
+<p><strong>为什么这样分？</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>分配</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM 并行独立</td>
+<td>两者测的域不同、互不依赖，形成双保险（dual insurance）</td>
+</tr>
+<tr>
+<td>RTR 协作</td>
+<td>单一报告根容易被伪造/拼接攻击，合并成一份报告才能防拼接</td>
+</tr>
+<tr>
+<td>RTS 归 TPM</td>
+<td>TEE 没有持久存储能力（内存加密但掉电即失），TPM 有 NVRAM +
+密钥树，天生是保险库</td>
+</tr>
+</tbody>
+</table>
+<h2 id="三阶段测量rtm-的具体落地">📏 三阶段测量：RTM 的具体落地</h2>
+<p>CVM 的信任链从启动到运行分成三个阶段：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Stage 1：Host 静态测量（CVM 启动前）</span><br><span class="line">   · 测 hypervisor、host 内核、虚拟化服务</span><br><span class="line">   · → 保证&quot;我住的房子是干净的&quot;</span><br><span class="line"></span><br><span class="line">Stage 2：CVM 启动测量</span><br><span class="line">   · 测 guest 固件、内核、initrd、根文件系统、镜像签名</span><br><span class="line">   · → 保证&quot;住进来的这个租客是预期的&quot;</span><br><span class="line"></span><br><span class="line">Stage 3：运行时测量（动态）</span><br><span class="line">   · TEE 对 CVM 内工作负载做完整性校验</span><br><span class="line">   · → 保证&quot;运行过程中没被篡改&quot;</span><br></pre></td></tr></table></figure>
+<p>前两阶段偏静态（启动时测一次），第三阶段偏动态（运行中持续测）。也就是静态
++ 动态信任链结合。</p>
+<blockquote>
+<p>顺带澄清一个容易混的概念：<strong>hypervisor
+不是固件</strong>。层次是：应用 → Guest OS → hypervisor（软件）→ 固件
+Firmware（UEFI/BIOS、PSP 等，烧在只读存储里）→ CPU 硬件。固件启动
+hypervisor，hypervisor 启动 guest。</p>
+</blockquote>
+<h2 id="度量分工重合吗这是双保险不是-bug">🔗
+度量分工重合吗？——这是双保险不是 bug</h2>
+<p>设计上 TEE 测固件、TPM 测 hypervisor，但现实中 TPM
+的启动链本来也测固件（UEFI 启动时自己 Extend
+PCR）。<strong>实践中有重叠，但这是刻意为之</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">设计意图 = 双保险（redundancy）：</span><br><span class="line">· 两个独立的测量源（TEE 的 PSP 侧 vs TPM 芯片侧），互不信任、互不依赖</span><br><span class="line">· TEE 的测量域 = &quot;TEE 自己的启动信任链&quot;（PSP→SEV 固件→OVMF 等）</span><br><span class="line">· TPM 的测量域 = &quot;平台全局启动链&quot;（UEFI→hypervisor→guest）</span><br><span class="line">· 哪怕一条链被攻破/伪造，另一条链的账本仍然可信</span><br></pre></td></tr></table></figure>
+<p><strong>概念上分工（各测各的域），实践上有重叠（都碰固件），重叠是刻意的冗余设计。</strong></p>
+<h2 id="信任链与信任锚固件为什么改不了">🔑
+信任链与信任锚：固件为什么改不了</h2>
+<p>PCR
+的固件逻辑强制依赖一个前提：<strong>固件本身不能被恶意修改</strong>。这靠两道防线，不是靠加载时度量一次解决：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">① 物理防护（第一道，硬件级）：</span><br><span class="line">   · dTPM 是独立芯片，固件写在一次性熔丝/受保护闪存里，</span><br><span class="line">     常规软件攻击根本写不进去</span><br><span class="line">   · fTPM 在 CPU 的 PSP 里，PSP 固件有签名校验 + 只读存储</span><br><span class="line">   → &quot;改 TPM 固件&quot;不是软件层能做到的事，物理防护兜底</span><br><span class="line"></span><br><span class="line">② 信任链（第二道，启动级）：</span><br><span class="line">   从&quot;绝对可信的起点&quot;逐级验证：</span><br><span class="line">   硬件（RoT 芯片）→ 验证固件 → 固件验证 bootloader → bootloader 验证内核 → ...</span><br><span class="line">   每一步都由前一步验证</span><br></pre></td></tr></table></figure>
+<p>所以准确表述是：</p>
+<table>
+<thead>
+<tr>
+<th>防护对象</th>
+<th>防护手段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TPM 固件本身不可改</td>
+<td>物理防护（熔丝、受保护存储、签名校验）</td>
+</tr>
+<tr>
+<td>系统软件（内核等）不被篡改</td>
+<td>信任链（启动时逐级度量 + 签名校验）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>信任链的起点（信任锚）是谁？</strong> 是硬件本身（RoT，Root
+of Trust，信任根）——它是物理上无法篡改的，比如 TPM 芯片内部逻辑、CPU
+内部的 PSP
+ROM。<strong>信任链不是无限的，它终止于一个物理可信的锚点</strong>，这就是根（Root）的含义。</p>
+<blockquote>
+<p>修正一个常见说法：不是加载时度量保证固件不可改——UEFI
+是第一级软件，加载时已经没人能度量它了，它靠的是硬件锚点 +
+物理防护。</p>
+</blockquote>
+<h2 id="pspamd-芯片里的先于一切的安全小电脑">🔩 PSP：AMD
+芯片里的先于一切的安全小电脑</h2>
+<p><strong>PSP（Platform Security Processor，平台安全处理器）</strong>
+是 AMD CPU 里的<strong>独立 ARM 安全协处理器</strong>，相当于 CPU
+里的一个小电脑：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">AMD CPU 芯片</span><br><span class="line">├── x86 主核（跑你的系统）</span><br><span class="line">│</span><br><span class="line">└── PSP（独立 ARM 核）</span><br><span class="line">      · 芯片上电先于 x86 主核</span><br><span class="line">      · 跑在隔离的安全环境里</span><br><span class="line">      · 管理：SEV 内存加密密钥、RMP 表、</span><br><span class="line">        固件签名校验、fTPM、DMA 保护</span><br></pre></td></tr></table></figure>
+<p>PSP 的核心角色：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>PSP 干什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TEE 通过 PSP 进行信任初始化</td>
+<td>PSP 是 TEE 信任链的起点（锚点）</td>
+</tr>
+<tr>
+<td>内存加密</td>
+<td>PSP 生成和管理内存加密密钥</td>
+</tr>
+<tr>
+<td>RMP 归属分配</td>
+<td>PSP 固件执行 RMPUPDATE，锁定页归属</td>
+</tr>
+<tr>
+<td>fTPM</td>
+<td>AMD 的 fTPM 就跑在 PSP 里</td>
+</tr>
+</tbody>
+</table>
+<p>概括：<strong>PSP 是 AMD 芯片里先于一切、独立于一切的安全小电脑，TEE
+的信任锚就是它。</strong> 类似地，Intel 有 Intel ME/CSE，ARM 有
+TrustZone 的 secure world。</p>
+<h2 id="展望rtr-协作-复合认证">🔭 展望：RTR 协作 = 复合认证</h2>
+<p>本篇已建立完整骨架，最后预告 CCxTrust 最核心的一环——<strong>RTR
+协作</strong>。</p>
+<p><strong>为什么独立认证不够</strong>：TEE 和 TPM
+各自单独出认证报告时：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">· 攻击者可能伪造 CVM 的 ID 发起攻击</span><br><span class="line">· 攻击者可能做&quot;报告拼接攻击&quot;（report concatenation）：</span><br><span class="line">  把 A 机器的 TPM 报告 + B 机器的 TEE 报告拼成&quot;完整报告&quot;</span><br><span class="line">  → 验证方以为是一台可信机器的完整状态，实际是两台机器拼的</span><br><span class="line">· 独立认证需要两次交互（两个数据拷贝、两次签名、两次报告返回），效率低</span><br></pre></td></tr></table></figure>
+<p><strong>CCxTrust 的解法</strong>：复合认证协议——把 TEE 报告嵌进 TPM
+Quote（或反过来），生成<strong>一份不可拆分的复合报告</strong>，一次交互完成认证。拼接攻击的根基（两份独立报告）被直接消灭，认证效率还提升了
+24%。</p>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTM/RTR/RTS 是 CCxTrust 发明的</td>
+<td>是 TCG 标准术语，CCxTrust 的创新在于怎么分配</td>
+</tr>
+<tr>
+<td>TEE 比 TPM 强，全都用 TEE</td>
+<td>TEE 是黑盒、无持久存储、用户够不着；TPM
+是白盒、有存储，两者互补</td>
+</tr>
+<tr>
+<td>度量分工必须严格不重合</td>
+<td>实践中有重叠，这是刻意的双保险冗余设计</td>
+</tr>
+<tr>
+<td>固件不可篡改靠启动时度量</td>
+<td>固件本身靠物理防护（熔丝/受保护存储），度量管的是系统软件</td>
+</tr>
+<tr>
+<td>信任链可以无限延伸</td>
+<td>信任链终止于物理锚点（TPM 芯片、PSP），根不需要被验证</td>
+</tr>
+<tr>
+<td>hypervisor 是底层固件</td>
+<td>hypervisor 是软件层，固件在它下面一层</td>
+</tr>
+<tr>
+<td>TEE 和 TPM 各自出报告就行</td>
+<td>独立报告可被拼接攻击利用，复合认证才能防拼接</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>信任根三件套中，RTM 管测量、RTR 管报告、RTS 管存储；CCxTrust 让 TEE
+和 TPM 分工协作——RTM 并行独立（双保险）、RTR 复合认证（防拼接）、RTS 归
+TPM（用白盒补黑盒），通过三阶段测量覆盖从启动到运行的完整信任链，信任锚则落在
+PSP 等物理硬件上。这就是 CCxTrust 协作信任的全貌。</p>
+</blockquote>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>TEE</tag>
+        <tag>安全</tag>
+        <tag>机密计算</tag>
+        <tag>TPM</tag>
+        <tag>信任根</tag>
+        <tag>远程认证</tag>
       </tags>
   </entry>
   <entry>
@@ -32852,6 +32852,9 @@ FPGA 插进主机与外设之间，读包、改包、复制包。</p>
 CPU 核里，不在 hypervisor
 里，而是<strong>在一根网线前面</strong>，由一块独立的、和主机物理隔离的可编程网卡执行。它给这套设计的卖点只有四个字：<strong>leakage-free</strong>（无泄漏）。</p>
 <p>这篇要盯住的就是这四个字：它凭什么敢这么说，这个「无」的边界画在哪里，以及代价是多少。</p>
+<p>不过这篇容易读乱的地方不在它做了什么，而在<strong>谁在做</strong>：一台物理主机、一块挂在它旁边的独立网卡、一个看得见网线的第三方，三方的信任状态完全不同，同一条
+PCIe
+上两边的打算也正好相反。所以下面先花一节把出场角色认全，再顺着「谁防谁」去看设计。</p>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
@@ -32887,7 +32890,8 @@ TCB</strong>，把云厂商和训练软件都踢出去</td>
 <tr>
 <td><strong>沙箱</strong>（Sandbox）</td>
 <td>把所有会碰到机密数据的代码关进一个框里，只留一条受控的信息出口</td>
-<td>本文的框是<strong>一整台物理主机</strong>，出口是<strong>一根网线</strong></td>
+<td>本文的框是<strong>一整台物理主机</strong>，出口是<strong>一根网线</strong>；注意文中「沙箱」有时指<strong>框</strong>（那台主机），有时指<strong>锁</strong>（DPU
+上的监控器）</td>
 </tr>
 <tr>
 <td><strong>隐蔽信道</strong>（Covert channel）</td>
@@ -32953,25 +32957,109 @@ PCIe switch、内存与存储</td>
 </tr>
 </tbody>
 </table>
-<h2 id="起点沙箱为什么保不住密">🧭 起点：沙箱为什么保不住密？</h2>
-<p>先把问题的链条摆出来，因为它决定了后面每个设计选择。</p>
-<p><strong>第一环：数据必须出门。</strong>
+<h2 id="出场角色谁是谁谁信谁">🎭 出场角色：谁是谁、谁信谁</h2>
+<p>这篇的设定里只有五个角色，先把它们摆在一起看。后面每一节讲的，都是其中某一个在干什么、防谁、被谁防。</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>角色</th>
+<th>是谁</th>
+<th>可信吗</th>
+<th>负责什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>数据所有者</strong>（用户）</td>
+<td>手里有敏感数据、想训大模型又不想泄密的一方（政府、航空、金融、军工这类客户）</td>
+<td><strong>可信</strong>，也是唯一着急的人</td>
+<td>把数据交给别人代跑；提供自己指定的软件镜像，并验证 DPU
+的远程证明</td>
+</tr>
+<tr>
+<td><strong>主机</strong>（host）</td>
+<td>一台裸金属服务器，Linux / CUDA / NCCL / PyTorch /
+训练代码全在上面</td>
+<td><strong>不可信</strong></td>
+<td>干活：真正做矩阵运算、真正碰到机密数据的那台机器</td>
+</tr>
+<tr>
+<td><strong>DPU</strong></td>
+<td>挂在主机 PCIe
+上的一块独立小电脑（BlueField-3），同时也是这台节点<strong>唯一</strong>的网卡</td>
+<td><strong>可信</strong>，系统里唯一的 TCB</td>
+<td>执法：主机与外界之间所有数据往来都从它手里过——加密、阻断、整形</td>
+</tr>
+<tr>
+<td><strong>对端节点</strong>（peer node）</td>
+<td>同一个训练任务里的另一台机器，结构完全一样</td>
+<td>可信（与本地对称）</td>
+<td>通信的另一端</td>
+</tr>
+<tr>
+<td><strong>云网络运营商</strong></td>
+<td>拥有并观测那根网线的第三方</td>
+<td><strong>不可信</strong>（观察者，不是攻击者）</td>
+<td>它什么都不用做，光是能看见网线上的每个包就够了</td>
+</tr>
+</tbody>
+</table>
+<p>三个可信角色串成一条直线：<strong>数据所有者出镜像 → DPU
+证明自己跑的是用户指定的监控器 → DPU 从网络启动主机。</strong> 信任是从
+DPU 这一端长出来的，主机在链条末端，从一开始就被当成不可信。</p>
+<p>两个不可信角色则要分开看，因为它们干的事完全不同：</p>
+<ul>
+<li><strong>主机里的代码会主动搞事</strong>——它想把数据偷出去，会主动找信子往外递。这就是隐蔽信道（covert
+channel）。</li>
+<li><strong>云网络运营商只是在看</strong>——它不篡改任何东西，但网线上每个包的大小和时间间隔它都看得见。这是流量分析（traffic
+analysis）。</li>
+</ul>
+<p>这两件事要分开防：<strong>加密防的是「看不懂内容」，整形防的是「看不出节奏」。</strong>
+论文承诺的 leakage-free，主要是对着后者说的。</p>
+<p>还有两个角色被明确排除在威胁模型之外：<strong>能物理接触硬件的人</strong>（拆机箱、在链路上插探针、改主板配置），以及<strong>同租户</strong>（所以要求
+DPU 由单租户独占）。边界一节还会回到它们。</p>
+<p>最后一个容易混的地方：「沙箱」这个词在文中指两样东西——<strong>框</strong>是那台主机（所有会碰数据的代码都关在里面），<strong>锁</strong>是
+DPU 上的那个监控器（sandbox
+monitor）。下文说「框」，指的是主机；说「监控器」，指的是 DPU
+上的执法软件。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">┌───────────────────────────────────────┐</span><br><span class="line">│ untrusted host  (the box)             │  ← 干活的那台机器，训练代码与机密数据都在里面</span><br><span class="line">│ Linux / CUDA / NCCL / PyTorch / LLM   │</span><br><span class="line">└───────────────────┬───────────────────┘</span><br><span class="line">                    │ PCIe    ← 主机唯一能碰到 DPU 的通道：能挤流量、能递时序</span><br><span class="line">┌───────────────────┴───────────────────┐</span><br><span class="line">│ IOValve DPU (BlueField-3)             │  ← 唯一可信的一方，sandbox monitor 在这里执法</span><br><span class="line">│ sandbox monitor: encrypt/block/shape  │</span><br><span class="line">└───────────────────┬───────────────────┘</span><br><span class="line">                    │ Ethernet (RoCEv2 + IPSec)</span><br><span class="line">     ══════════════════ the only wire ══════════════════</span><br><span class="line">                    │                            ↑</span><br><span class="line">                    ↓                            └── cloud network operator：不可信的观察者，站在这里看每个包</span><br><span class="line">                    peer node  (host + DPU)   ← 同一个训练任务里的另一台机器，结构相同</span><br></pre></td></tr></table></figure>
+<h2 id="主机被关进框里的那台机器">🧭 主机：被关进框里的那台机器</h2>
+<p>先看框里那个角色。它要干的活、以及它为什么不可信，决定了后面所有设计。</p>
+<p><strong>它要干的活，本身就要求数据出门。</strong>
 训练和微调大模型需要巨量算力——Meta 训 Llama 3 用了两个各含 24,576 张
 NVIDIA H100 的集群；全量微调 Llama 3.1 405B 需要 3.25 TB 显存，折合 40
 多张
 H100。政府、航空、金融、军工这类客户很在意数据机密，但自建这个规模的算力不现实，只能外包。</p>
-<p><strong>第二环：外包之后，软件栈不可信。</strong>
-机密计算解决的是”云厂商不可信”：把数据放进 enclave 或 CVM，连 hypervisor
+<p><strong>外包之后，跑在这台主机上的整套软件栈就都不可信了。</strong>
+机密计算解决的是「云厂商不可信」：把数据放进 enclave 或 CVM，连
+hypervisor
 都看不进去。但它没解决另一半——<strong>处理数据的代码本身不可信</strong>。现代大模型训练栈除了操作系统、GPU
 驱动、CUDA，还有 NCCL（通信）、Alpa（模型并行）、PyTorch /
 TensorFlow（训练框架）、Ray /
 Horovod（分布式调度）、数据管道、日志监控……横跨几十上百个开源与闭源组件，而供应链攻击
 2022 年同比增长 633%、报告了 8.8
-万起。指望”这一堆代码都没问题”是不现实的。</p>
-<p><strong>第三环：沙箱是对第二环的回答。</strong>
-沙箱的思路是：把所有会碰机密数据的代码<strong>全都关进一个框</strong>，然后只留受控的信息出口。这相当于一种粗粒度的强制访问控制，好处是那堆训练代码不再需要被信任。</p>
-<p><strong>第四环：但沙箱的保密性被隐蔽信道击穿。</strong>
-框里的恶意代码不会乖乖只走设计好的出口，它会<strong>主动</strong>找信子往外递——这就是隐蔽信道。论文对现状的判断很直接：</p>
+万起。指望「这一堆代码都没问题」是不现实的。</p>
+<p><strong>沙箱就是对这一环的回答：</strong>
+把所有会碰机密数据的代码<strong>全都关进一个框</strong>，然后只留受控的信息出口。这相当于一种粗粒度的强制访问控制，好处是那堆训练代码不再需要被信任。请注意这个框的尺寸——它不是围着某个进程画的，而是<strong>围着一整台物理主机画的</strong>。</p>
+<p><strong>但一个不可信的角色关进框里，也还是握着两把能作弊的钥匙：</strong></p>
+<ul>
+<li><strong>第一把通向隔壁的 DPU。</strong> 主机和 DPU 之间连着一条
+PCIe。论文这样描述这条路怎么被利用：假设一个良性进程正把 DRAM
+里的通信缓冲发给远端，网卡通过 DMA（直接内存访问，让设备绕过 CPU
+直接读写内存的机制）去读 DRAM——那么一个同样能访问 DRAM
+的恶意进程，就可以<strong>通过挤压内存带宽来改变网卡的 DMA
+速度</strong>，从而在良性的传输上调制出信息。这条信道根本不需要恶意代码有网络权限，也不需要它碰到那份数据。</li>
+<li><strong>第二把通向网线。</strong>
+就算数据离开主机时不带任何标签，主机也能靠「什么时候发、发多少」在流量节奏上写信。</li>
+</ul>
+<p>第二把钥匙还有另一层麻烦：<strong>即使主机不主动写信，光看这根网线上的流量形状，别人也能看出它在干什么。</strong>
+论文对现状的判断是：</p>
 <blockquote>
 <p>存储型隐蔽信道（把秘密藏在某个共享状态里）有人处理，<strong>时间型隐蔽信道几乎被普遍排除在威胁模型之外</strong>。</p>
 </blockquote>
@@ -32979,25 +33067,46 @@ Horovod（分布式调度）、数据管道、日志监控……横跨几十上�
 CPU
 的缓存、同一条内存总线、同一个分支预测器，恶意方只要调节自己对共享资源的占用，就能让良性的传输快一点或慢一点，这本身就是一个比特。</p>
 <p><strong>于是就有了这篇的转向。</strong>
-既然”细粒度共享下堵不住”，那就换一个<strong>粗得多</strong>的边界：不要围着进程画框，<strong>围着一整台物理主机画框</strong>。这台主机与外界的唯一连接是一根网线，网线那头的云网络运营商能看到的，只有这根线上的包。论文的原话是：</p>
+既然「细粒度共享下堵不住」，那就换一个<strong>粗得多</strong>的边界：不要围着进程画框，<strong>围着一整台物理主机画框</strong>。这台主机与外界的唯一连接是一根网线，网线那头的云网络运营商能看到的，只有这根线上的包。论文的原话是：</p>
 <blockquote>
 <p>大规模计算恰好适合这么做——它本来就需要一整批机器，而机器之间的通信模式通常很规则。</p>
 </blockquote>
-<h2 id="核心一招把沙箱边界画在网线上">🏗️
-核心一招：把沙箱边界画在网线上</h2>
-<p>设计原则只有两句：<strong>让沙箱的接口尽可能简单</strong>，<strong>让框里的代码和执法代码之间有强物理隔离</strong>。</p>
-<p>具体落在三个位置上：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">┌──────────── untrusted host ────────────────┐</span><br><span class="line">│  Linux / CUDA / NCCL / PyTorch / LLM        │</span><br><span class="line">└───────────────────┬────────────────────────┘</span><br><span class="line">                    │  PCIe    ← 只用来取数据；不允许 host 拥塞这条链路</span><br><span class="line">┌───────────────────┴────────────────────────┐</span><br><span class="line">│  IOValve DPU (BlueField-3)                 │</span><br><span class="line">│  sandbox monitor:  encrypt / block / shape │  ← 沙箱边界画在这里</span><br><span class="line">└───────────────────┬────────────────────────┘</span><br><span class="line">                    │  Ethernet (RoCEv2 + IPSec)</span><br><span class="line">════════════════ the only wire ═══════════════</span><br></pre></td></tr></table></figure>
+<h2 id="云网络运营商看得见每一根网线上的包">👀
+云网络运营商：看得见每一根网线上的包</h2>
+<p>顺着那根网线看过去，线那头站着第二个威胁方，而它和主机完全不同——<strong>它什么都不用做</strong>。</p>
+<ul>
+<li><strong>它能看到什么：</strong>
+网线上的每一个包，以及包的<strong>大小、方向、时间间隔</strong>。它不用解密，也不用攻破任何组件。</li>
+<li><strong>它的威胁叫什么：</strong> 流量分析（traffic
+analysis）——不解密，只看包的大小与时间间隔，就能推断内容或行为。</li>
+<li><strong>它是整形存在的理由：</strong> 论文承诺的 leakage-free
+主要是给它看的。不管框里的主机在干什么，这根线上的包都得长成同一个样子——固定大小、固定间隔，没真数据就拿假包顶上。这一步由
+DPU 上的 regularizer 做，下一节细说。</li>
+</ul>
+<p>顺着这一节也能看出论文为什么挑了多机训练当战场：<strong>AllReduce /
+AllGather</strong>
+这类集合通信的流量天然接近匀速，整形几乎不额外花钱。而 LLM 对话那种
+prompt 与 response 长度高度可变的场景，整形会立刻变贵——这一点论文自己在
+Limitations 里承认了，边界一节再展开。</p>
+<h2 id="dpu唯一被信任的执法者">🔒 DPU：唯一被信任的执法者</h2>
+<p>现在轮到夹在两个威胁方中间的那块硬件。</p>
+<p><strong>DPU</strong> 是一块独立的、自带 CPU 和网卡的”小电脑”，通过
+PCIe
+挂在主机上，替主机做网络与存储——云厂商本来就用它卸载网络加密、健康监控。本文的原型是
+NVIDIA 的 <strong>BlueField-3</strong>：内含一颗 RDMA 网卡（RNIC）、一颗
+Arm CPU、一个 PCIe switch、内存与存储。</p>
+<p><strong>它凭什么可信？</strong> 因为它是整个系统里唯一的
+TCB（必须被信任、一旦坏了整个安全性就没了的那部分）。设计原则只有两句：<strong>让沙箱的接口尽可能简单</strong>，<strong>让框里的代码和执法代码之间有强物理隔离</strong>。具体落在三个位置上：</p>
 <ul>
 <li><strong>接口只有两个</strong>：send 和
-receive。除这两个之外，框内框外没有其它接口，而且这两个接口的行为<strong>不取决于框内做了什么</strong>（这一点后面看整形时会更清楚）。</li>
+receive。除这两个之外，框内框外没有其它接口，而且这两个接口的行为<strong>不取决于框内做了什么</strong>（这一点看整形时会更清楚）。</li>
 <li><strong>执法者和被执法者物理隔离</strong>：沙箱监控器跑在 DPU
 上，主机跑在 CPU 上，两者是两个独立的计算机，只通过 PCIe 相连。</li>
 <li><strong>上界被压到一根网线</strong>：恶意代码想往外传，能用的信道只剩”调制这根网线上的流量”。剩下的任务，就变成”如何让这根线上的流量不可被调制”。</li>
 </ul>
 <p>这一步是整个设计里最漂亮的地方——它把”不可能的任务”（在共享缓存的核里堵住时间信道）换成了”难但可做的任务”（把一根网线上的流量整形到匀速）。</p>
-<h2 id="平台让-dpu-当主机唯一的网卡">🧱 平台：让 DPU
-当主机唯一的网卡</h2>
+<h3 id="开局先给-dpu-立四条硬件要求">🧱 开局：先给 DPU
+立四条硬件要求</h3>
 <p>把监控器放到 DPU 上之后，新的问题立刻出现：<strong>DPU
 和主机之间还连着一条 PCIe</strong>，主机完全可以去挤这条链路、用时序往
 DPU 递消息。所以论文给 DPU
@@ -33041,19 +33150,11 @@ DPU，DPU 证明自己跑的是用户指定的监控器，然后再由 DPU
 从网络启动主机。</strong>
 从这一刻起，主机里的一切都是不可信的，包括那块负责搬数据的
 adapter，而监控器本身是可信的。</p>
-<h2 id="两道关口内存不能拥塞流量必须匀速">🌊
-两道关口：内存不能拥塞，流量必须匀速</h2>
-<p>剩下的工作分成两段：<strong>主机 ↔︎ DPU 这一段</strong>（PCIe），和
-<strong>DPU ↔︎ DPU
-这一段</strong>（网络线）。两段都要堵时序信道，但堵法不同。</p>
-<h3 id="第一道pcie-这头让拥塞传不过去">第一道：PCIe
-这头，让拥塞传不过去</h3>
-<p>先看清楚威胁长什么样。假设一个良性进程正把 DRAM
-里的通信缓冲发给远端，网卡通过 DMA 去读 DRAM——那么一个同样能访问 DRAM
-的恶意进程，就可以<strong>通过挤压内存带宽来改变网卡的 DMA
-速度</strong>，从而在良性的传输上调制出信息。这条信道根本不需要恶意代码有网络权限，也不需要它碰到那份数据。</p>
-<p>IOValve
-的解法是<strong>空间上的隔离</strong>：把通信缓冲从主机内存挪到 DPU
+<h3 id="对付主机在-pcie-上让拥塞传不过去">🌊 对付主机：在 PCIe
+上让拥塞传不过去</h3>
+<p>开局之后的第一条战线，冲着主机去。主机能用来写信的那个变量是<strong>拥塞</strong>，所以
+IOValve 的解法是<strong>空间上的隔离</strong>：把通信缓冲从主机内存挪到
+DPU
 内存里，恶意代码在物理上就够不着它。要做到这一点，需要同时满足三件事：</p>
 <ul>
 <li>主机 CPU（也就是它的 DMA 引擎）<strong>不能</strong>访问 DPU
@@ -33081,9 +33182,9 @@ FaRM：<strong>改元数据之前先抬计数器，改完之后再抬一次，�
 DPU 的发送缓冲，中间不经过 DPU 的 CPU 内存拷贝。</li>
 <li><strong>节点级的缓冲管理</strong>：一对节点、每个方向只有<strong>一个</strong>环形缓冲、<strong>一条</strong>连接，不管上层软件开了多少条连接。这是个安全决定而不是性能决定——如果允许上层动态改变连接数，主机就能靠”改连接数”影响传输节奏，信道又回来了。</li>
 </ul>
-<h3
-id="第二道网线这头把流量变成节拍器">第二道：网线这头，把流量变成节拍器</h3>
-<p>这一段才是真正的正面战场：<strong>云网络运营商能直接看到这根线上的每一个包</strong>。</p>
+<h3 id="对付运营商把网线流量变成节拍器">📡
+对付运营商：把网线流量变成节拍器</h3>
+<p>第二条战线才是真正的正面战场：<strong>云网络运营商能直接看到这根线上的每一个包</strong>。</p>
 <p>思路仍然朴素，但执行起来很讲究。DPU 上的 regularizer
 按固定时间间隔往对端 DPU
 发固定大小的数据：<strong>有真数据就发数据，没有就发假数据（对端收到后直接丢弃）</strong>。对端收到的要么是真数据项，要么是假数据项，而网络上的观察者<strong>分不出哪个是哪个</strong>——因为两者同样大小、同样加密。</p>
@@ -33092,7 +33193,7 @@ id="第二道网线这头把流量变成节拍器">第二道：网线这头，�
 <li><strong>用 RDMA 单向操作</strong>：发送方用 RDMA Read
 读对端接收缓冲的元数据（为了惰性同步），用 RDMA Write
 写数据，并把元数据搭车捎过去（<code>WRITE_WITH_IMM</code>），省掉一次独立的
-RDMA 操作。整个对 DPU 之间的传输模式因此变成”小的 Read + 大的
+RDMA 操作。整个 DPU 之间的传输模式因此变成”小的 Read + 大的
 Write”，两种都是固定尺寸。</li>
 <li><strong>连接要持久</strong>：节点之间的连接在部署时就建好，一直用到系统结束。<strong>不按应用的需求建连接</strong>，因为按需建连接本身就构成一个信道（连接数会随上层行为变化）。</li>
 <li><strong>加密在 DPU
@@ -33101,8 +33202,8 @@ Write”，两种都是固定尺寸。</li>
 UDP），用 IPSec 的硬件加速来保护这些 UDP 包——因为它比 InfiniBand
 自带的加密方案更容易拿到。</li>
 </ul>
-<h2 id="实测一个对照实验-三个应用">📊 实测：一个对照实验 + 三个应用</h2>
-<h3 id="那个无泄漏是这么证明的">那个”无泄漏”是这么证明的</h3>
+<h2 id="实测给这套分工结一次账">📊 实测：给这套分工结一次账</h2>
+<h3 id="先量主机这条路断没断">🧪 先量主机这条路断没断</h3>
 <p>论文把”leakage-free”这个断言，落成了<strong>一个对照实验</strong>。逻辑是：主机与
 DPU 之间共享的硬件只有两处，主机内存和 DPU 的 PCIe
 switch，那么在单租户加流量过滤的前提下，恶意代码只剩”调制合法流量”这一条路。于是他们直接去量这条路上的延迟。</p>
@@ -33141,15 +33242,13 @@ switch，那么在单租户加流量过滤的前提下，恶意代码只剩”�
 <p>这张表就是全文最核心的证据：<strong>不是”我们加密得好”，而是”恶意方根本没有可调节的那个变量”</strong>。注意第二行的绝对值本来就更慢（7.04
 对 6.06 µs），这是把缓冲搬到 DPU
 的固定代价；关键在于它对拥塞<strong>不敏感</strong>。</p>
-<h3 id="网络微基准先摊开代价">网络微基准：先摊开代价</h3>
+<h3 id="再看代价">🐢 再看代价</h3>
 <p>在应用之前，先看纯网络层面的开销（这部分是 IOValve
 最难看的地方）：</p>
 <ul>
-<li>延迟比 stock NCCL 高 <strong>77.4% ～ 2.8 倍</strong>；</li>
-<li>吞吐比 stock NCCL 低 <strong>16.8% ～ 39.1%</strong>。</li>
+<li>延迟比 stock NCCL 高 <strong>77.4%～2.8 倍</strong>；</li>
+<li>吞吐比 stock NCCL 低 <strong>16.8%～39.1%</strong>。</li>
 </ul>
-<h3
-id="三个真实应用开销被计算掩盖了大半">三个真实应用：开销被计算掩盖了大半</h3>
 <p>到了真实负载，因为节点内计算本身很重，网络开销被摊薄了：</p>
 <table>
 <colgroup>
@@ -33187,7 +33286,8 @@ token</td>
 <p>一个值得注意的规律：<strong>模型越大、训练指令越多，IOValve
 的相对开销越小</strong>——因为计算占比更高，网络被进一步摊薄。另外，这三个应用<strong>一行代码都没改</strong>，IOValve
 是在 NCCL 的网络插件层接进去的。</p>
-<h2 id="边界它明确挡不住什么">⚠️ 边界：它明确挡不住什么</h2>
+<h2 id="边界哪些角色被排除哪一招有天花板">⚠️
+边界：哪些角色被排除，哪一招有天花板</h2>
 <p>这类”我做到了 X”的论文，最该读的是它自己在哪让步。IOValve
 的边界相当清楚，而且<strong>第一条正好和 LLM 对话场景冲突</strong>：</p>
 <p><strong>① 对 chatbot 这类动态、延迟敏感的场景不合适。</strong> 论文在
@@ -33209,7 +33309,7 @@ PCIe 上，而是落在”主机里的数据由用户自己的代码处理”这
 <p><strong>③ 威胁模型把物理攻击排除在外。</strong>
 论文的假设是：数据所有者信任云厂商的<strong>硬件与物理安全</strong>，信任
 IOValve
-自己的固件，只把云厂商的软件、员工和外部黑客当作对手。所以主板配置被改、机箱被打开、在链路上插探针，这些都不在它的防御范围内。</p>
+自己的固件，只把云厂商的软件、员工和外部黑客当作对手。所以主板配置被改、机箱被打开、在链路上插探针，这些都不在它的防御范围内——也就是角色表里那两类被排除的角色。</p>
 <p><strong>④ 只保机密性，不保可用性与完整性。</strong>
 论文说得很直接：被攻陷的 adapter
 故意破坏元数据同步，只会造成完整性和可用性问题，<strong>那是本文范围之外的</strong>。</p>

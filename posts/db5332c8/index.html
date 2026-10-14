@@ -30,7 +30,7 @@
 <meta property="og:description" content="把 I&#x2F;O 沙箱的执法点从 CPU 核挪到一块与主机物理隔离的 DPU 上，出网流量全都要经过它——加密、阻断，再整形成恒定节拍（固定大小的包、固定间隔，没真数据就发假包）。于是沙箱里的恶意代码没有可调的信道。代价是 LLM 微调耗时增加 2.1%～4.1%，批量推理吞吐下降 1.4%。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-16T03:00:00.000Z">
-<meta property="article:modified_time" content="2026-10-13T08:09:28.824Z">
+<meta property="article:modified_time" content="2026-10-14T08:03:59.419Z">
 <meta property="article:author" content="Zihao Li">
 <meta property="article:tag" content="安全">
 <meta property="article:tag" content="LLM">
@@ -179,11 +179,12 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%B7%E7%82%B9%E6%B2%99%E7%AE%B1%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BF%9D%E4%B8%8D%E4%BD%8F%E5%AF%86"><span class="nav-number">2.</span> <span class="nav-text">🧭 起点：沙箱为什么保不住密？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E4%B8%80%E6%8B%9B%E6%8A%8A%E6%B2%99%E7%AE%B1%E8%BE%B9%E7%95%8C%E7%94%BB%E5%9C%A8%E7%BD%91%E7%BA%BF%E4%B8%8A"><span class="nav-number">3.</span> <span class="nav-text">🏗️
-核心一招：把沙箱边界画在网线上</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B9%B3%E5%8F%B0%E8%AE%A9-dpu-%E5%BD%93%E4%B8%BB%E6%9C%BA%E5%94%AF%E4%B8%80%E7%9A%84%E7%BD%91%E5%8D%A1"><span class="nav-number">4.</span> <span class="nav-text">🧱 平台：让 DPU
-当主机唯一的网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E9%81%93%E5%85%B3%E5%8F%A3%E5%86%85%E5%AD%98%E4%B8%8D%E8%83%BD%E6%8B%A5%E5%A1%9E%E6%B5%81%E9%87%8F%E5%BF%85%E9%A1%BB%E5%8C%80%E9%80%9F"><span class="nav-number">5.</span> <span class="nav-text">🌊
-两道关口：内存不能拥塞，流量必须匀速</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E9%81%93pcie-%E8%BF%99%E5%A4%B4%E8%AE%A9%E6%8B%A5%E5%A1%9E%E4%BC%A0%E4%B8%8D%E8%BF%87%E5%8E%BB"><span class="nav-number">5.1.</span> <span class="nav-text">第一道：PCIe
-这头，让拥塞传不过去</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E9%81%93%E7%BD%91%E7%BA%BF%E8%BF%99%E5%A4%B4%E6%8A%8A%E6%B5%81%E9%87%8F%E5%8F%98%E6%88%90%E8%8A%82%E6%8B%8D%E5%99%A8"><span class="nav-number">5.2.</span> <span class="nav-text">第二道：网线这头，把流量变成节拍器</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E6%B5%8B%E4%B8%80%E4%B8%AA%E5%AF%B9%E7%85%A7%E5%AE%9E%E9%AA%8C-%E4%B8%89%E4%B8%AA%E5%BA%94%E7%94%A8"><span class="nav-number">6.</span> <span class="nav-text">📊 实测：一个对照实验 + 三个应用</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%82%A3%E4%B8%AA%E6%97%A0%E6%B3%84%E6%BC%8F%E6%98%AF%E8%BF%99%E4%B9%88%E8%AF%81%E6%98%8E%E7%9A%84"><span class="nav-number">6.1.</span> <span class="nav-text">那个”无泄漏”是这么证明的</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BD%91%E7%BB%9C%E5%BE%AE%E5%9F%BA%E5%87%86%E5%85%88%E6%91%8A%E5%BC%80%E4%BB%A3%E4%BB%B7"><span class="nav-number">6.2.</span> <span class="nav-text">网络微基准：先摊开代价</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E4%B8%AA%E7%9C%9F%E5%AE%9E%E5%BA%94%E7%94%A8%E5%BC%80%E9%94%80%E8%A2%AB%E8%AE%A1%E7%AE%97%E6%8E%A9%E7%9B%96%E4%BA%86%E5%A4%A7%E5%8D%8A"><span class="nav-number">6.3.</span> <span class="nav-text">三个真实应用：开销被计算掩盖了大半</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%B9%E7%95%8C%E5%AE%83%E6%98%8E%E7%A1%AE%E6%8C%A1%E4%B8%8D%E4%BD%8F%E4%BB%80%E4%B9%88"><span class="nav-number">7.</span> <span class="nav-text">⚠️ 边界：它明确挡不住什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8D%A2%E4%B8%AA%E4%BD%8D%E7%BD%AE%E8%AF%BB%E5%AE%83%E5%9C%A8%E7%8B%AC%E7%AB%8B%E5%8F%AF%E7%BC%96%E7%A8%8B%E8%AE%BE%E5%A4%87%E8%BF%99%E6%9D%A1%E7%BA%BF%E4%B8%8A%E7%9A%84%E4%BD%8D%E7%BD%AE"><span class="nav-number">8.</span> <span class="nav-text">🔭
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5%E9%80%9F%E8%AF%BB"><span class="nav-number">1.</span> <span class="nav-text">📚 基本概念速读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%87%BA%E5%9C%BA%E8%A7%92%E8%89%B2%E8%B0%81%E6%98%AF%E8%B0%81%E8%B0%81%E4%BF%A1%E8%B0%81"><span class="nav-number">2.</span> <span class="nav-text">🎭 出场角色：谁是谁、谁信谁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BB%E6%9C%BA%E8%A2%AB%E5%85%B3%E8%BF%9B%E6%A1%86%E9%87%8C%E7%9A%84%E9%82%A3%E5%8F%B0%E6%9C%BA%E5%99%A8"><span class="nav-number">3.</span> <span class="nav-text">🧭 主机：被关进框里的那台机器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%91%E7%BD%91%E7%BB%9C%E8%BF%90%E8%90%A5%E5%95%86%E7%9C%8B%E5%BE%97%E8%A7%81%E6%AF%8F%E4%B8%80%E6%A0%B9%E7%BD%91%E7%BA%BF%E4%B8%8A%E7%9A%84%E5%8C%85"><span class="nav-number">4.</span> <span class="nav-text">👀
+云网络运营商：看得见每一根网线上的包</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#dpu%E5%94%AF%E4%B8%80%E8%A2%AB%E4%BF%A1%E4%BB%BB%E7%9A%84%E6%89%A7%E6%B3%95%E8%80%85"><span class="nav-number">5.</span> <span class="nav-text">🔒 DPU：唯一被信任的执法者</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BC%80%E5%B1%80%E5%85%88%E7%BB%99-dpu-%E7%AB%8B%E5%9B%9B%E6%9D%A1%E7%A1%AC%E4%BB%B6%E8%A6%81%E6%B1%82"><span class="nav-number">5.1.</span> <span class="nav-text">🧱 开局：先给 DPU
+立四条硬件要求</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%B9%E4%BB%98%E4%B8%BB%E6%9C%BA%E5%9C%A8-pcie-%E4%B8%8A%E8%AE%A9%E6%8B%A5%E5%A1%9E%E4%BC%A0%E4%B8%8D%E8%BF%87%E5%8E%BB"><span class="nav-number">5.2.</span> <span class="nav-text">🌊 对付主机：在 PCIe
+上让拥塞传不过去</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%B9%E4%BB%98%E8%BF%90%E8%90%A5%E5%95%86%E6%8A%8A%E7%BD%91%E7%BA%BF%E6%B5%81%E9%87%8F%E5%8F%98%E6%88%90%E8%8A%82%E6%8B%8D%E5%99%A8"><span class="nav-number">5.3.</span> <span class="nav-text">📡
+对付运营商：把网线流量变成节拍器</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E6%B5%8B%E7%BB%99%E8%BF%99%E5%A5%97%E5%88%86%E5%B7%A5%E7%BB%93%E4%B8%80%E6%AC%A1%E8%B4%A6"><span class="nav-number">6.</span> <span class="nav-text">📊 实测：给这套分工结一次账</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%88%E9%87%8F%E4%B8%BB%E6%9C%BA%E8%BF%99%E6%9D%A1%E8%B7%AF%E6%96%AD%E6%B2%A1%E6%96%AD"><span class="nav-number">6.1.</span> <span class="nav-text">🧪 先量主机这条路断没断</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%8D%E7%9C%8B%E4%BB%A3%E4%BB%B7"><span class="nav-number">6.2.</span> <span class="nav-text">🐢 再看代价</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%B9%E7%95%8C%E5%93%AA%E4%BA%9B%E8%A7%92%E8%89%B2%E8%A2%AB%E6%8E%92%E9%99%A4%E5%93%AA%E4%B8%80%E6%8B%9B%E6%9C%89%E5%A4%A9%E8%8A%B1%E6%9D%BF"><span class="nav-number">7.</span> <span class="nav-text">⚠️
+边界：哪些角色被排除，哪一招有天花板</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8D%A2%E4%B8%AA%E4%BD%8D%E7%BD%AE%E8%AF%BB%E5%AE%83%E5%9C%A8%E7%8B%AC%E7%AB%8B%E5%8F%AF%E7%BC%96%E7%A8%8B%E8%AE%BE%E5%A4%87%E8%BF%99%E6%9D%A1%E7%BA%BF%E4%B8%8A%E7%9A%84%E4%BD%8D%E7%BD%AE"><span class="nav-number">8.</span> <span class="nav-text">🔭
 换个位置读：它在”独立可编程设备”这条线上的位置</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">✅ 总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E6%9D%A1%E8%B7%AF%E7%BA%BF%E4%B8%8A%E8%BF%98%E6%9C%89%E5%93%AA%E4%BA%9B%E5%B7%A5%E4%BD%9C"><span class="nav-number">10.</span> <span class="nav-text">🔗 这条路线上还有哪些工作</span></a></li></ol></div>
         </div>
         <!--/noindex-->
@@ -276,7 +277,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-13 16:09:28" itemprop="dateModified" datetime="2026-10-13T16:09:28+08:00">2026-10-13</time>
+      <time title="Modified: 2026-10-14 16:03:59" itemprop="dateModified" datetime="2026-10-14T16:03:59+08:00">2026-10-14</time>
     </span>
 
   
@@ -293,14 +294,14 @@
         <i class="far fa-file-word"></i>
       </span>
       <span class="post-meta-item-text">Word count in article: </span>
-      <span>8.7k</span>
+      <span>11k</span>
     </span>
     <span class="post-meta-item" title="Reading time">
       <span class="post-meta-item-icon">
         <i class="far fa-clock"></i>
       </span>
       <span class="post-meta-item-text">Reading time &asymp;</span>
-      <span>16 mins.</span>
+      <span>19 mins.</span>
     </span>
 </div>
 
@@ -331,6 +332,9 @@ FPGA 插进主机与外设之间，读包、改包、复制包。</p>
 CPU 核里，不在 hypervisor
 里，而是<strong>在一根网线前面</strong>，由一块独立的、和主机物理隔离的可编程网卡执行。它给这套设计的卖点只有四个字：<strong>leakage-free</strong>（无泄漏）。</p>
 <p>这篇要盯住的就是这四个字：它凭什么敢这么说，这个「无」的边界画在哪里，以及代价是多少。</p>
+<p>不过这篇容易读乱的地方不在它做了什么，而在<strong>谁在做</strong>：一台物理主机、一块挂在它旁边的独立网卡、一个看得见网线的第三方，三方的信任状态完全不同，同一条
+PCIe
+上两边的打算也正好相反。所以下面先花一节把出场角色认全，再顺着「谁防谁」去看设计。</p>
 <h2 id="基本概念速读">📚 基本概念速读</h2>
 <table>
 <colgroup>
@@ -366,7 +370,8 @@ TCB</strong>，把云厂商和训练软件都踢出去</td>
 <tr>
 <td><strong>沙箱</strong>（Sandbox）</td>
 <td>把所有会碰到机密数据的代码关进一个框里，只留一条受控的信息出口</td>
-<td>本文的框是<strong>一整台物理主机</strong>，出口是<strong>一根网线</strong></td>
+<td>本文的框是<strong>一整台物理主机</strong>，出口是<strong>一根网线</strong>；注意文中「沙箱」有时指<strong>框</strong>（那台主机），有时指<strong>锁</strong>（DPU
+上的监控器）</td>
 </tr>
 <tr>
 <td><strong>隐蔽信道</strong>（Covert channel）</td>
@@ -432,25 +437,109 @@ PCIe switch、内存与存储</td>
 </tr>
 </tbody>
 </table>
-<h2 id="起点沙箱为什么保不住密">🧭 起点：沙箱为什么保不住密？</h2>
-<p>先把问题的链条摆出来，因为它决定了后面每个设计选择。</p>
-<p><strong>第一环：数据必须出门。</strong>
+<h2 id="出场角色谁是谁谁信谁">🎭 出场角色：谁是谁、谁信谁</h2>
+<p>这篇的设定里只有五个角色，先把它们摆在一起看。后面每一节讲的，都是其中某一个在干什么、防谁、被谁防。</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>角色</th>
+<th>是谁</th>
+<th>可信吗</th>
+<th>负责什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>数据所有者</strong>（用户）</td>
+<td>手里有敏感数据、想训大模型又不想泄密的一方（政府、航空、金融、军工这类客户）</td>
+<td><strong>可信</strong>，也是唯一着急的人</td>
+<td>把数据交给别人代跑；提供自己指定的软件镜像，并验证 DPU
+的远程证明</td>
+</tr>
+<tr>
+<td><strong>主机</strong>（host）</td>
+<td>一台裸金属服务器，Linux / CUDA / NCCL / PyTorch /
+训练代码全在上面</td>
+<td><strong>不可信</strong></td>
+<td>干活：真正做矩阵运算、真正碰到机密数据的那台机器</td>
+</tr>
+<tr>
+<td><strong>DPU</strong></td>
+<td>挂在主机 PCIe
+上的一块独立小电脑（BlueField-3），同时也是这台节点<strong>唯一</strong>的网卡</td>
+<td><strong>可信</strong>，系统里唯一的 TCB</td>
+<td>执法：主机与外界之间所有数据往来都从它手里过——加密、阻断、整形</td>
+</tr>
+<tr>
+<td><strong>对端节点</strong>（peer node）</td>
+<td>同一个训练任务里的另一台机器，结构完全一样</td>
+<td>可信（与本地对称）</td>
+<td>通信的另一端</td>
+</tr>
+<tr>
+<td><strong>云网络运营商</strong></td>
+<td>拥有并观测那根网线的第三方</td>
+<td><strong>不可信</strong>（观察者，不是攻击者）</td>
+<td>它什么都不用做，光是能看见网线上的每个包就够了</td>
+</tr>
+</tbody>
+</table>
+<p>三个可信角色串成一条直线：<strong>数据所有者出镜像 → DPU
+证明自己跑的是用户指定的监控器 → DPU 从网络启动主机。</strong> 信任是从
+DPU 这一端长出来的，主机在链条末端，从一开始就被当成不可信。</p>
+<p>两个不可信角色则要分开看，因为它们干的事完全不同：</p>
+<ul>
+<li><strong>主机里的代码会主动搞事</strong>——它想把数据偷出去，会主动找信子往外递。这就是隐蔽信道（covert
+channel）。</li>
+<li><strong>云网络运营商只是在看</strong>——它不篡改任何东西，但网线上每个包的大小和时间间隔它都看得见。这是流量分析（traffic
+analysis）。</li>
+</ul>
+<p>这两件事要分开防：<strong>加密防的是「看不懂内容」，整形防的是「看不出节奏」。</strong>
+论文承诺的 leakage-free，主要是对着后者说的。</p>
+<p>还有两个角色被明确排除在威胁模型之外：<strong>能物理接触硬件的人</strong>（拆机箱、在链路上插探针、改主板配置），以及<strong>同租户</strong>（所以要求
+DPU 由单租户独占）。边界一节还会回到它们。</p>
+<p>最后一个容易混的地方：「沙箱」这个词在文中指两样东西——<strong>框</strong>是那台主机（所有会碰数据的代码都关在里面），<strong>锁</strong>是
+DPU 上的那个监控器（sandbox
+monitor）。下文说「框」，指的是主机；说「监控器」，指的是 DPU
+上的执法软件。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">┌───────────────────────────────────────┐</span><br><span class="line">│ untrusted host  (the box)             │  ← 干活的那台机器，训练代码与机密数据都在里面</span><br><span class="line">│ Linux / CUDA / NCCL / PyTorch / LLM   │</span><br><span class="line">└───────────────────┬───────────────────┘</span><br><span class="line">                    │ PCIe    ← 主机唯一能碰到 DPU 的通道：能挤流量、能递时序</span><br><span class="line">┌───────────────────┴───────────────────┐</span><br><span class="line">│ IOValve DPU (BlueField-3)             │  ← 唯一可信的一方，sandbox monitor 在这里执法</span><br><span class="line">│ sandbox monitor: encrypt/block/shape  │</span><br><span class="line">└───────────────────┬───────────────────┘</span><br><span class="line">                    │ Ethernet (RoCEv2 + IPSec)</span><br><span class="line">     ══════════════════ the only wire ══════════════════</span><br><span class="line">                    │                            ↑</span><br><span class="line">                    ↓                            └── cloud network operator：不可信的观察者，站在这里看每个包</span><br><span class="line">                    peer node  (host + DPU)   ← 同一个训练任务里的另一台机器，结构相同</span><br></pre></td></tr></table></figure>
+<h2 id="主机被关进框里的那台机器">🧭 主机：被关进框里的那台机器</h2>
+<p>先看框里那个角色。它要干的活、以及它为什么不可信，决定了后面所有设计。</p>
+<p><strong>它要干的活，本身就要求数据出门。</strong>
 训练和微调大模型需要巨量算力——Meta 训 Llama 3 用了两个各含 24,576 张
 NVIDIA H100 的集群；全量微调 Llama 3.1 405B 需要 3.25 TB 显存，折合 40
 多张
 H100。政府、航空、金融、军工这类客户很在意数据机密，但自建这个规模的算力不现实，只能外包。</p>
-<p><strong>第二环：外包之后，软件栈不可信。</strong>
-机密计算解决的是”云厂商不可信”：把数据放进 enclave 或 CVM，连 hypervisor
+<p><strong>外包之后，跑在这台主机上的整套软件栈就都不可信了。</strong>
+机密计算解决的是「云厂商不可信」：把数据放进 enclave 或 CVM，连
+hypervisor
 都看不进去。但它没解决另一半——<strong>处理数据的代码本身不可信</strong>。现代大模型训练栈除了操作系统、GPU
 驱动、CUDA，还有 NCCL（通信）、Alpa（模型并行）、PyTorch /
 TensorFlow（训练框架）、Ray /
 Horovod（分布式调度）、数据管道、日志监控……横跨几十上百个开源与闭源组件，而供应链攻击
 2022 年同比增长 633%、报告了 8.8
-万起。指望”这一堆代码都没问题”是不现实的。</p>
-<p><strong>第三环：沙箱是对第二环的回答。</strong>
-沙箱的思路是：把所有会碰机密数据的代码<strong>全都关进一个框</strong>，然后只留受控的信息出口。这相当于一种粗粒度的强制访问控制，好处是那堆训练代码不再需要被信任。</p>
-<p><strong>第四环：但沙箱的保密性被隐蔽信道击穿。</strong>
-框里的恶意代码不会乖乖只走设计好的出口，它会<strong>主动</strong>找信子往外递——这就是隐蔽信道。论文对现状的判断很直接：</p>
+万起。指望「这一堆代码都没问题」是不现实的。</p>
+<p><strong>沙箱就是对这一环的回答：</strong>
+把所有会碰机密数据的代码<strong>全都关进一个框</strong>，然后只留受控的信息出口。这相当于一种粗粒度的强制访问控制，好处是那堆训练代码不再需要被信任。请注意这个框的尺寸——它不是围着某个进程画的，而是<strong>围着一整台物理主机画的</strong>。</p>
+<p><strong>但一个不可信的角色关进框里，也还是握着两把能作弊的钥匙：</strong></p>
+<ul>
+<li><strong>第一把通向隔壁的 DPU。</strong> 主机和 DPU 之间连着一条
+PCIe。论文这样描述这条路怎么被利用：假设一个良性进程正把 DRAM
+里的通信缓冲发给远端，网卡通过 DMA（直接内存访问，让设备绕过 CPU
+直接读写内存的机制）去读 DRAM——那么一个同样能访问 DRAM
+的恶意进程，就可以<strong>通过挤压内存带宽来改变网卡的 DMA
+速度</strong>，从而在良性的传输上调制出信息。这条信道根本不需要恶意代码有网络权限，也不需要它碰到那份数据。</li>
+<li><strong>第二把通向网线。</strong>
+就算数据离开主机时不带任何标签，主机也能靠「什么时候发、发多少」在流量节奏上写信。</li>
+</ul>
+<p>第二把钥匙还有另一层麻烦：<strong>即使主机不主动写信，光看这根网线上的流量形状，别人也能看出它在干什么。</strong>
+论文对现状的判断是：</p>
 <blockquote>
 <p>存储型隐蔽信道（把秘密藏在某个共享状态里）有人处理，<strong>时间型隐蔽信道几乎被普遍排除在威胁模型之外</strong>。</p>
 </blockquote>
@@ -458,25 +547,46 @@ Horovod（分布式调度）、数据管道、日志监控……横跨几十上�
 CPU
 的缓存、同一条内存总线、同一个分支预测器，恶意方只要调节自己对共享资源的占用，就能让良性的传输快一点或慢一点，这本身就是一个比特。</p>
 <p><strong>于是就有了这篇的转向。</strong>
-既然”细粒度共享下堵不住”，那就换一个<strong>粗得多</strong>的边界：不要围着进程画框，<strong>围着一整台物理主机画框</strong>。这台主机与外界的唯一连接是一根网线，网线那头的云网络运营商能看到的，只有这根线上的包。论文的原话是：</p>
+既然「细粒度共享下堵不住」，那就换一个<strong>粗得多</strong>的边界：不要围着进程画框，<strong>围着一整台物理主机画框</strong>。这台主机与外界的唯一连接是一根网线，网线那头的云网络运营商能看到的，只有这根线上的包。论文的原话是：</p>
 <blockquote>
 <p>大规模计算恰好适合这么做——它本来就需要一整批机器，而机器之间的通信模式通常很规则。</p>
 </blockquote>
-<h2 id="核心一招把沙箱边界画在网线上">🏗️
-核心一招：把沙箱边界画在网线上</h2>
-<p>设计原则只有两句：<strong>让沙箱的接口尽可能简单</strong>，<strong>让框里的代码和执法代码之间有强物理隔离</strong>。</p>
-<p>具体落在三个位置上：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">┌──────────── untrusted host ────────────────┐</span><br><span class="line">│  Linux / CUDA / NCCL / PyTorch / LLM        │</span><br><span class="line">└───────────────────┬────────────────────────┘</span><br><span class="line">                    │  PCIe    ← 只用来取数据；不允许 host 拥塞这条链路</span><br><span class="line">┌───────────────────┴────────────────────────┐</span><br><span class="line">│  IOValve DPU (BlueField-3)                 │</span><br><span class="line">│  sandbox monitor:  encrypt / block / shape │  ← 沙箱边界画在这里</span><br><span class="line">└───────────────────┬────────────────────────┘</span><br><span class="line">                    │  Ethernet (RoCEv2 + IPSec)</span><br><span class="line">════════════════ the only wire ═══════════════</span><br></pre></td></tr></table></figure>
+<h2 id="云网络运营商看得见每一根网线上的包">👀
+云网络运营商：看得见每一根网线上的包</h2>
+<p>顺着那根网线看过去，线那头站着第二个威胁方，而它和主机完全不同——<strong>它什么都不用做</strong>。</p>
+<ul>
+<li><strong>它能看到什么：</strong>
+网线上的每一个包，以及包的<strong>大小、方向、时间间隔</strong>。它不用解密，也不用攻破任何组件。</li>
+<li><strong>它的威胁叫什么：</strong> 流量分析（traffic
+analysis）——不解密，只看包的大小与时间间隔，就能推断内容或行为。</li>
+<li><strong>它是整形存在的理由：</strong> 论文承诺的 leakage-free
+主要是给它看的。不管框里的主机在干什么，这根线上的包都得长成同一个样子——固定大小、固定间隔，没真数据就拿假包顶上。这一步由
+DPU 上的 regularizer 做，下一节细说。</li>
+</ul>
+<p>顺着这一节也能看出论文为什么挑了多机训练当战场：<strong>AllReduce /
+AllGather</strong>
+这类集合通信的流量天然接近匀速，整形几乎不额外花钱。而 LLM 对话那种
+prompt 与 response 长度高度可变的场景，整形会立刻变贵——这一点论文自己在
+Limitations 里承认了，边界一节再展开。</p>
+<h2 id="dpu唯一被信任的执法者">🔒 DPU：唯一被信任的执法者</h2>
+<p>现在轮到夹在两个威胁方中间的那块硬件。</p>
+<p><strong>DPU</strong> 是一块独立的、自带 CPU 和网卡的”小电脑”，通过
+PCIe
+挂在主机上，替主机做网络与存储——云厂商本来就用它卸载网络加密、健康监控。本文的原型是
+NVIDIA 的 <strong>BlueField-3</strong>：内含一颗 RDMA 网卡（RNIC）、一颗
+Arm CPU、一个 PCIe switch、内存与存储。</p>
+<p><strong>它凭什么可信？</strong> 因为它是整个系统里唯一的
+TCB（必须被信任、一旦坏了整个安全性就没了的那部分）。设计原则只有两句：<strong>让沙箱的接口尽可能简单</strong>，<strong>让框里的代码和执法代码之间有强物理隔离</strong>。具体落在三个位置上：</p>
 <ul>
 <li><strong>接口只有两个</strong>：send 和
-receive。除这两个之外，框内框外没有其它接口，而且这两个接口的行为<strong>不取决于框内做了什么</strong>（这一点后面看整形时会更清楚）。</li>
+receive。除这两个之外，框内框外没有其它接口，而且这两个接口的行为<strong>不取决于框内做了什么</strong>（这一点看整形时会更清楚）。</li>
 <li><strong>执法者和被执法者物理隔离</strong>：沙箱监控器跑在 DPU
 上，主机跑在 CPU 上，两者是两个独立的计算机，只通过 PCIe 相连。</li>
 <li><strong>上界被压到一根网线</strong>：恶意代码想往外传，能用的信道只剩”调制这根网线上的流量”。剩下的任务，就变成”如何让这根线上的流量不可被调制”。</li>
 </ul>
 <p>这一步是整个设计里最漂亮的地方——它把”不可能的任务”（在共享缓存的核里堵住时间信道）换成了”难但可做的任务”（把一根网线上的流量整形到匀速）。</p>
-<h2 id="平台让-dpu-当主机唯一的网卡">🧱 平台：让 DPU
-当主机唯一的网卡</h2>
+<h3 id="开局先给-dpu-立四条硬件要求">🧱 开局：先给 DPU
+立四条硬件要求</h3>
 <p>把监控器放到 DPU 上之后，新的问题立刻出现：<strong>DPU
 和主机之间还连着一条 PCIe</strong>，主机完全可以去挤这条链路、用时序往
 DPU 递消息。所以论文给 DPU
@@ -520,19 +630,11 @@ DPU，DPU 证明自己跑的是用户指定的监控器，然后再由 DPU
 从网络启动主机。</strong>
 从这一刻起，主机里的一切都是不可信的，包括那块负责搬数据的
 adapter，而监控器本身是可信的。</p>
-<h2 id="两道关口内存不能拥塞流量必须匀速">🌊
-两道关口：内存不能拥塞，流量必须匀速</h2>
-<p>剩下的工作分成两段：<strong>主机 ↔︎ DPU 这一段</strong>（PCIe），和
-<strong>DPU ↔︎ DPU
-这一段</strong>（网络线）。两段都要堵时序信道，但堵法不同。</p>
-<h3 id="第一道pcie-这头让拥塞传不过去">第一道：PCIe
-这头，让拥塞传不过去</h3>
-<p>先看清楚威胁长什么样。假设一个良性进程正把 DRAM
-里的通信缓冲发给远端，网卡通过 DMA 去读 DRAM——那么一个同样能访问 DRAM
-的恶意进程，就可以<strong>通过挤压内存带宽来改变网卡的 DMA
-速度</strong>，从而在良性的传输上调制出信息。这条信道根本不需要恶意代码有网络权限，也不需要它碰到那份数据。</p>
-<p>IOValve
-的解法是<strong>空间上的隔离</strong>：把通信缓冲从主机内存挪到 DPU
+<h3 id="对付主机在-pcie-上让拥塞传不过去">🌊 对付主机：在 PCIe
+上让拥塞传不过去</h3>
+<p>开局之后的第一条战线，冲着主机去。主机能用来写信的那个变量是<strong>拥塞</strong>，所以
+IOValve 的解法是<strong>空间上的隔离</strong>：把通信缓冲从主机内存挪到
+DPU
 内存里，恶意代码在物理上就够不着它。要做到这一点，需要同时满足三件事：</p>
 <ul>
 <li>主机 CPU（也就是它的 DMA 引擎）<strong>不能</strong>访问 DPU
@@ -560,9 +662,9 @@ FaRM：<strong>改元数据之前先抬计数器，改完之后再抬一次，�
 DPU 的发送缓冲，中间不经过 DPU 的 CPU 内存拷贝。</li>
 <li><strong>节点级的缓冲管理</strong>：一对节点、每个方向只有<strong>一个</strong>环形缓冲、<strong>一条</strong>连接，不管上层软件开了多少条连接。这是个安全决定而不是性能决定——如果允许上层动态改变连接数，主机就能靠”改连接数”影响传输节奏，信道又回来了。</li>
 </ul>
-<h3
-id="第二道网线这头把流量变成节拍器">第二道：网线这头，把流量变成节拍器</h3>
-<p>这一段才是真正的正面战场：<strong>云网络运营商能直接看到这根线上的每一个包</strong>。</p>
+<h3 id="对付运营商把网线流量变成节拍器">📡
+对付运营商：把网线流量变成节拍器</h3>
+<p>第二条战线才是真正的正面战场：<strong>云网络运营商能直接看到这根线上的每一个包</strong>。</p>
 <p>思路仍然朴素，但执行起来很讲究。DPU 上的 regularizer
 按固定时间间隔往对端 DPU
 发固定大小的数据：<strong>有真数据就发数据，没有就发假数据（对端收到后直接丢弃）</strong>。对端收到的要么是真数据项，要么是假数据项，而网络上的观察者<strong>分不出哪个是哪个</strong>——因为两者同样大小、同样加密。</p>
@@ -571,7 +673,7 @@ id="第二道网线这头把流量变成节拍器">第二道：网线这头，�
 <li><strong>用 RDMA 单向操作</strong>：发送方用 RDMA Read
 读对端接收缓冲的元数据（为了惰性同步），用 RDMA Write
 写数据，并把元数据搭车捎过去（<code>WRITE_WITH_IMM</code>），省掉一次独立的
-RDMA 操作。整个对 DPU 之间的传输模式因此变成”小的 Read + 大的
+RDMA 操作。整个 DPU 之间的传输模式因此变成”小的 Read + 大的
 Write”，两种都是固定尺寸。</li>
 <li><strong>连接要持久</strong>：节点之间的连接在部署时就建好，一直用到系统结束。<strong>不按应用的需求建连接</strong>，因为按需建连接本身就构成一个信道（连接数会随上层行为变化）。</li>
 <li><strong>加密在 DPU
@@ -580,8 +682,8 @@ Write”，两种都是固定尺寸。</li>
 UDP），用 IPSec 的硬件加速来保护这些 UDP 包——因为它比 InfiniBand
 自带的加密方案更容易拿到。</li>
 </ul>
-<h2 id="实测一个对照实验-三个应用">📊 实测：一个对照实验 + 三个应用</h2>
-<h3 id="那个无泄漏是这么证明的">那个”无泄漏”是这么证明的</h3>
+<h2 id="实测给这套分工结一次账">📊 实测：给这套分工结一次账</h2>
+<h3 id="先量主机这条路断没断">🧪 先量主机这条路断没断</h3>
 <p>论文把”leakage-free”这个断言，落成了<strong>一个对照实验</strong>。逻辑是：主机与
 DPU 之间共享的硬件只有两处，主机内存和 DPU 的 PCIe
 switch，那么在单租户加流量过滤的前提下，恶意代码只剩”调制合法流量”这一条路。于是他们直接去量这条路上的延迟。</p>
@@ -620,15 +722,13 @@ switch，那么在单租户加流量过滤的前提下，恶意代码只剩”�
 <p>这张表就是全文最核心的证据：<strong>不是”我们加密得好”，而是”恶意方根本没有可调节的那个变量”</strong>。注意第二行的绝对值本来就更慢（7.04
 对 6.06 µs），这是把缓冲搬到 DPU
 的固定代价；关键在于它对拥塞<strong>不敏感</strong>。</p>
-<h3 id="网络微基准先摊开代价">网络微基准：先摊开代价</h3>
+<h3 id="再看代价">🐢 再看代价</h3>
 <p>在应用之前，先看纯网络层面的开销（这部分是 IOValve
 最难看的地方）：</p>
 <ul>
-<li>延迟比 stock NCCL 高 <strong>77.4% ～ 2.8 倍</strong>；</li>
-<li>吞吐比 stock NCCL 低 <strong>16.8% ～ 39.1%</strong>。</li>
+<li>延迟比 stock NCCL 高 <strong>77.4%～2.8 倍</strong>；</li>
+<li>吞吐比 stock NCCL 低 <strong>16.8%～39.1%</strong>。</li>
 </ul>
-<h3
-id="三个真实应用开销被计算掩盖了大半">三个真实应用：开销被计算掩盖了大半</h3>
 <p>到了真实负载，因为节点内计算本身很重，网络开销被摊薄了：</p>
 <table>
 <colgroup>
@@ -666,7 +766,8 @@ token</td>
 <p>一个值得注意的规律：<strong>模型越大、训练指令越多，IOValve
 的相对开销越小</strong>——因为计算占比更高，网络被进一步摊薄。另外，这三个应用<strong>一行代码都没改</strong>，IOValve
 是在 NCCL 的网络插件层接进去的。</p>
-<h2 id="边界它明确挡不住什么">⚠️ 边界：它明确挡不住什么</h2>
+<h2 id="边界哪些角色被排除哪一招有天花板">⚠️
+边界：哪些角色被排除，哪一招有天花板</h2>
 <p>这类”我做到了 X”的论文，最该读的是它自己在哪让步。IOValve
 的边界相当清楚，而且<strong>第一条正好和 LLM 对话场景冲突</strong>：</p>
 <p><strong>① 对 chatbot 这类动态、延迟敏感的场景不合适。</strong> 论文在
@@ -688,7 +789,7 @@ PCIe 上，而是落在”主机里的数据由用户自己的代码处理”这
 <p><strong>③ 威胁模型把物理攻击排除在外。</strong>
 论文的假设是：数据所有者信任云厂商的<strong>硬件与物理安全</strong>，信任
 IOValve
-自己的固件，只把云厂商的软件、员工和外部黑客当作对手。所以主板配置被改、机箱被打开、在链路上插探针，这些都不在它的防御范围内。</p>
+自己的固件，只把云厂商的软件、员工和外部黑客当作对手。所以主板配置被改、机箱被打开、在链路上插探针，这些都不在它的防御范围内——也就是角色表里那两类被排除的角色。</p>
 <p><strong>④ 只保机密性，不保可用性与完整性。</strong>
 论文说得很直接：被攻陷的 adapter
 故意破坏元数据同步，只会造成完整性和可用性问题，<strong>那是本文范围之外的</strong>。</p>
@@ -848,13 +949,13 @@ Large-Scale Untrusted Data Processing</em>
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-line"></i>
     </span>
-    <span title="Word count total">539k</span>
+    <span title="Word count total">541k</span>
   </span>
   <span class="post-meta-item">
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">16:20</span>
+    <span title="Reading time total">16:23</span>
   </span>
 </div>
 <div class="busuanzi-count">
