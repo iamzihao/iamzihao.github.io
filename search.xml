@@ -3934,6 +3934,263 @@ v3</strong>（或在“网络服务”场景下考虑 <strong>AGPL</strong>）�
       </tags>
   </entry>
   <entry>
+    <title>git之路：rebase &amp; cherry-pick</title>
+    <url>/posts/1566a5aa/</url>
+    <content><![CDATA[<p>在团队协作和日常开发中，<code>rebase</code> 和
+<code>cherry-pick</code> 是 Git
+中非常强大的两个命令。它们不仅能让你的提交历史更加清晰，还能灵活地“搬运”代码。本文结合一张可视化分支图，带你深入理解这两者的用法与区别，并掌握团队协作中的最佳实践。</p>
+<span id="more"></span>
+<h2 id="一核心概念">🧩 一、核心概念</h2>
+<ul>
+<li><strong>rebase
+(变基)</strong>：将当前分支的一系列提交“重放”到另一个目标分支之上。其核心用途是<strong>整理个人分支的提交历史</strong>，使其在并入主干时保持线性、清晰。</li>
+<li><strong>cherry-pick
+(拣选)</strong>：将某个（或某些）特定的提交<strong>复制</strong>到当前分支。它像摘樱桃一样，适合“挑着搬运”某个功能或紧急修复。</li>
+</ul>
+<h2 id="二图解分支操作流程">🗺️ 二、图解分支操作流程</h2>
+<p>下面的两幅 Mermaid 图示分别演示了 Rebase 和 Cherry-pick
+在典型协作场景中的作用。将代码块直接放入支持 Mermaid 的 Markdown
+环境即可自动渲染。</p>
+<h3 id="图-1-rebase-工作流主干更新后将功能分支变基到最新-main">图 1 ·
+Rebase 工作流（主干更新后将功能分支变基到最新 main）</h3>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    subgraph &quot;main 分支&quot;
+        c0((c0)) --&gt; c1((c1)) --&gt; c3((c3))
+    end
+
+    subgraph &quot;feature&#x2F;a (rebase 前)&quot;
+        c2_before((c2)) --&gt; c4_before((c4))
+    end
+
+    subgraph &quot;feature&#x2F;a (rebase 后)&quot;
+        c2_after((&quot;c2&#39;&quot;)) --&gt; c4_after((&quot;c4&#39;&quot;))
+    end
+
+    c1 --&gt; c2_before
+    c3 --&gt; c2_after
+</code>
+</pre>
+<h3 id="图-2-cherry-pick-工作流从-featurea-拣选-c2-到-main">图 2 ·
+Cherry-pick 工作流（从 feature/a 拣选 c2 到 main）</h3>
+<pre>
+<code class="mermaid">
+
+flowchart TD
+    subgraph &quot;初始历史&quot;
+        c0((c0)) --&gt; c1((c1))
+    end
+
+    subgraph &quot;main 分支&quot;
+        c3((c3)) --&gt; c2_prime((&quot;c2&#39;&quot;))
+        style c2_prime fill:#bbf,stroke:#333,stroke-width:2px
+    end
+
+    subgraph &quot;feature&#x2F;a 分支&quot;
+        c2((c2)) --&gt; c4((c4))
+    end
+    
+    c1 --&gt; c3
+    c1 --&gt; c2
+
+    c2 -.-&gt; c2_prime
+</code>
+</pre>
+<h3 id="场景设定">场景设定</h3>
+<ul>
+<li><code>main</code> 是我们的主分支，开发主线从 <code>c0</code> -&gt;
+<code>c1</code> 开始。</li>
+<li>从 <code>c1</code> 拉取了一个 <code>feature/a</code>
+分支进行功能开发，并提交了 <code>c2</code> 和 <code>c4</code>。</li>
+<li>在此期间，另一位同事完成了 <code>fixbug/b</code> 分支，并将其合并回
+<code>main</code>，使得 <code>main</code> 分支前进到
+<code>c3</code>。</li>
+</ul>
+<p>此时，你的 <code>feature/a</code> 分支就“落后”于 <code>main</code>
+分支了。在准备合并你的功能之前，最好的做法是先将 <code>main</code>
+的最新更改同步到 <code>feature/a</code> 分支。这里，<code>rebase</code>
+就是最佳选择。</p>
+<h3 id="rebase同步主干保持线性历史">1.
+Rebase：同步主干，保持线性历史</h3>
+<p>为了让 <code>feature/a</code> 的历史记录更清晰，我们执行变基操作，将
+<code>feature/a</code> 的提交“重放”到最新的 <code>main</code>
+分支上。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 确保你的功能分支是当前分支</span></span><br><span class="line">git checkout feature/a</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 拉取远程主分支的最新代码（好习惯）</span></span><br><span class="line">git fetch origin main</span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 将当前分支变基到最新的 main 分支上</span></span><br><span class="line">git rebase origin/main <span class="comment"># 或者 git rebase main</span></span><br></pre></td></tr></table></figure>
+<p>执行后，Git 会在内部执行以下操作：</p>
+<ol type="1">
+<li>找到 <code>feature/a</code> 和 <code>main</code> 的共同祖先
+<code>c1</code>。</li>
+<li>暂存 <code>feature/a</code> 在 <code>c1</code>
+之后独有的提交（<code>c2</code>, <code>c4</code>）。</li>
+<li>将 <code>feature/a</code> 分支的指针指向 <code>main</code>
+的最新提交 <code>c3</code>。</li>
+<li>将刚刚暂存的提交 <code>c2</code> 和 <code>c4</code>
+重新应用（Replay）在 <code>c3</code>
+之后，生成两个<strong>内容相同但ID不同</strong>的新提交 <code>c2'</code>
+和 <code>c4'</code>。</li>
+</ol>
+<p>最终，<code>feature/a</code> 的历史就变成了
+<code>c0 -&gt; c1 -&gt; c3 -&gt; c2' -&gt; c4'</code>。它看起来就像是你从最新的
+<code>main</code>
+分支拉取代码然后才开始开发的一样，历史记录干净、线性，非常便于后续的合并和代码审查。</p>
+<p>这个操作完美地诠释了 <code>rebase</code>
+在个人开发分支上的核心用途：<strong>保持与主干同步，并维持一个清晰的线性历史。</strong></p>
+<h3 id="cherry-pick挑选特定提交">2. Cherry-pick：挑选特定提交</h3>
+<p>现在，我们换一个场景。假设 <code>feature/a</code> 上的
+<code>c2</code> 是一个非常紧急的修复，需要立即上线，但 <code>c4</code>
+还没开发完。这时就可以用 <code>cherry-pick</code>。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 切换到需要接收修复的主分支</span></span><br><span class="line">git checkout main</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 从 feature/a 分支拣选 c2 提交</span></span><br><span class="line">git cherry-pick c2</span><br></pre></td></tr></table></figure>
+<p>如图右侧所示，<code>main</code> 分支通过 <code>cherry-pick</code>，将
+<code>feature/a</code> 上的 <code>c2</code>
+提交“拣选”过来，生成了一个新的提交 <code>c5</code>。其他提交
+(<code>c4</code>)
+不会被带过来，完美满足了只需要部分功能/修复的场景。</p>
+<h2 id="三rebase-用法详解">🛠️ 三、rebase 用法详解</h2>
+<h3 id="基本用法">1. 基本用法</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 将当前分支变基到 &lt;目标分支&gt; 上</span></span><br><span class="line">git rebase &lt;目标分支&gt;</span><br></pre></td></tr></table></figure>
+<h3 id="交互式-rebase">2. 交互式 rebase</h3>
+<p>这是 <code>rebase</code>
+的一大神器，常用于合并、修改、整理当前分支的提交。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># -i 代表 --interactive（交互式）</span></span><br><span class="line"><span class="comment"># HEAD~3 表示整理当前分支最新的 3 个提交</span></span><br><span class="line">git rebase -i HEAD~3</span><br></pre></td></tr></table></figure>
+<p>执行后会打开一个编辑器，你可以对指定范围的提交进行
+<code>squash</code> (合并)、<code>edit</code>
+(修改)、<code>reword</code> (修改提交信息)
+等精细化操作，极大提升提交历史的可读性。</p>
+<h3 id="注意事项">3. 注意事项</h3>
+<ul>
+<li>rebase
+会重写历史，<strong>永远不要对已经推送并被他人使用的公共分支（如
+main）进行 rebase</strong>。</li>
+<li>rebase 过程遇到冲突需手动解决，解决后用 <code>git add .</code>
+将文件标记为已解决，然后用 <code>git rebase --continue</code>
+继续。</li>
+</ul>
+<h2 id="四cherry-pick-用法详解">🍒 四、cherry-pick 用法详解</h2>
+<h3 id="基本用法-1">1. 基本用法</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">git cherry-pick &lt;commit-hash&gt;</span><br></pre></td></tr></table></figure>
+<p>将指定的 <code>&lt;commit-hash&gt;</code>
+应用到当前分支，生成一个新的提交。</p>
+<h3 id="批量-cherry-pick">2. 批量 cherry-pick</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 拣选多个不连续的提交</span></span><br><span class="line">git cherry-pick &lt;commit-1&gt; &lt;commit-2&gt;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 拣选一个连续的提交范围（不包含 commit-A）</span></span><br><span class="line">git cherry-pick &lt;commit-A&gt;..&lt;commit-B&gt;</span><br></pre></td></tr></table></figure>
+<h3 id="注意事项-1">3. 注意事项</h3>
+<ul>
+<li>cherry-pick 也可能遇到冲突，需手动解决并 <code>commit</code>。</li>
+<li>cherry-pick 会生成<strong>新的 commit
+id</strong>，因为它是在新的分支上下文中应用变更。</li>
+</ul>
+<h2 id="rebase-vs.-merge黄金准则与团队协作">👑 Rebase
+vs. Merge：黄金准则与团队协作</h2>
+<p>我们已经看到了 <code>rebase</code>
+的强大之处，但它也是一把双刃剑，因为它会<strong>重写提交历史</strong>。这就引出了
+Git 协作中一条最重要的准则：</p>
+<blockquote>
+<p><strong>黄金准则：在自己的私有分支上自由地 rebase，但永远不要 rebase
+一个公共的、共享的分支。</strong></p>
+</blockquote>
+<p>换句话说：</p>
+<ul>
+<li><strong><code>rebase</code>
+用来“整理”自己</strong>：在你的个人功能分支（如
+<code>feature/a</code>）上，使用 <code>rebase</code> 来同步
+<code>main</code>
+分支的更新。这属于你自己的“私事”，目的是让你的工作成果能干净地对接到主线上。</li>
+<li><strong><code>merge</code>
+用来“汇合”他人</strong>：当你的功能分支准备好被合并到 <code>main</code>
+或 <code>develop</code> 这样的公共分支时，应该使用
+<code>git merge</code>（通常是通过 GitHub/GitLab 上的 Pull Request/Merge
+Request）来完成。这次合并会产生一个合并提交（Merge
+Commit），清晰地记录了“在某个时间点，我们将 <code>feature/a</code>
+的所有成果汇入了主线”这一事实。</li>
+</ul>
+<h3 id="为什么这是最佳实践">为什么这是最佳实践？</h3>
+<ol type="1">
+<li><strong>清晰且可追溯的历史</strong>：通过 <code>rebase</code>
+保持功能分支的线性，使得 <code>main</code>
+分支的历史由一个个清晰的功能块（通过 merge commit
+连接）组成，而不是一个混乱交织的网络。阅读 <code>git log</code>
+会非常轻松。</li>
+<li><strong>避免团队混乱</strong>：如果你 rebase 了一个公共分支（例如
+<code>main</code>），所有基于旧的 <code>main</code>
+进行开发的同事都会在下一次 <code>git pull</code>
+时遇到严重的问题。他们的本地历史和被你重写过的远程历史产生了冲突，需要非常复杂的操作才能修复，这会给整个团队带来灾难。</li>
+</ol>
+<h3 id="推荐的开发工作流">推荐的开发工作流</h3>
+<p>一个标准的、健壮的开发工作流如下：</p>
+<ol type="1">
+<li><p><strong>开始新任务</strong>： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">git checkout main</span><br><span class="line">git pull origin main</span><br><span class="line">git checkout -b feature/new-login</span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>开心写代码并提交</strong>： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># ... coding and committing ...</span></span><br><span class="line">git commit -m <span class="string">&quot;feat: add username field&quot;</span></span><br><span class="line">git commit -m <span class="string">&quot;feat: add password field&quot;</span></span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>定期与主干同步</strong>（使用 Rebase）：
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 当 main 分支有更新时</span></span><br><span class="line">git fetch origin main</span><br><span class="line">git rebase origin/main</span><br><span class="line"><span class="comment"># 如果有冲突，解决冲突后 git rebase --continue</span></span><br></pre></td></tr></table></figure></p></li>
+<li><p><strong>发起合并请求</strong>：</p>
+<ul>
+<li>将你整理好的分支推送到远程：<code>git push origin feature/new-login --force-with-lease</code>
+(<code>--force-with-lease</code> 是比 <code>--force</code>
+更安全的选择，因为它不会覆盖他人的工作)。</li>
+<li>在代码托管平台（如 GitHub）上创建 Pull Request，请求将
+<code>feature/new-login</code> 合并到 <code>main</code>。</li>
+<li>团队成员进行代码审查，最终由维护者点击 <code>Merge</code>
+按钮，将你的功能安全地汇入主线。</li>
+</ul></li>
+</ol>
+<h2 id="五实战小结">⚡ 五、实战小结</h2>
+<ul>
+<li><strong>rebase</strong>：核心用途是在<strong>个人开发分支</strong>上同步主干分支的变更，以保持提交历史的<strong>整洁和线性</strong>。它是合并到公共分支前的“自我修养”。</li>
+<li><strong>cherry-pick</strong>：核心用途是<strong>精确复制</strong>一个或多个提交到其他分支，适合跨分支应用热修复或挑选特定功能。</li>
+<li><strong>黄金准则</strong>：永远记住在私有分支上 rebase，在公共分支上
+merge。</li>
+</ul>
+<h2 id="六实用建议">📝 六、实用建议</h2>
+<h3 id="分支命名规范">1. 分支命名规范</h3>
+<ul>
+<li>功能开发：<code>feature/功能简述</code>
+如：<code>feature/login-page</code></li>
+<li>Bug 修复：<code>fix/问题简述</code>
+如：<code>fix/login-crash</code></li>
+<li>热修复：<code>hotfix/问题简述</code>
+如：<code>hotfix/urgent-bug</code></li>
+<li>其他类型：<code>chore/</code>、<code>test/</code>、<code>docs/</code>
+等</li>
+</ul>
+<h3 id="commit-信息规范">2. Commit 信息规范</h3>
+<ul>
+<li>推荐格式（Angular 规范）：<code>type(scope): subject</code>
+<ul>
+<li><code>type</code>: <code>feat</code>, <code>fix</code>,
+<code>docs</code>, <code>style</code>, <code>refactor</code>,
+<code>test</code>, <code>chore</code></li>
+<li><code>scope</code>: 影响范围（可选）</li>
+<li><code>subject</code>: 简短描述</li>
+</ul></li>
+<li>一次 commit 只做一件事，保持原子性。</li>
+</ul>
+<h3 id="团队协作建议">3. 团队协作建议</h3>
+<ul>
+<li><strong>合并前先同步</strong>：在将功能分支合并到 <code>main</code>
+之前，应先在自己的分支上执行 <code>git rebase main</code>
+来同步最新代码，这能极大减少最终合并时的冲突。</li>
+<li><strong>保护公共分支</strong>：像
+<code>main</code>、<code>release</code>
+这样的重要分支应设置为受保护状态，禁止
+<code>force push</code>，所有变更都必须通过 Pull Request (PR)
+进行。</li>
+<li><strong>拥抱代码评审</strong>：充分利用 Pull Request
+进行代码评审，这是保证代码质量和知识共享的最佳途径。</li>
+<li><strong>勤于观察状态</strong>：养成良好习惯，多用
+<code>git status</code>、<code>git log --oneline --graph</code>
+观察分支状态，做到心中有数。</li>
+</ul>
+<p>希望这些建议能帮助你和团队更高效地使用
+Git，写出更优雅、可维护的代码历史！</p>
+]]></content>
+      <tags>
+        <tag>Git</tag>
+        <tag>Rebase</tag>
+        <tag>Cherry-pick</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Linux 包管理：从入门到进阶的实战指南</title>
     <url>/posts/3b71e21f/</url>
     <content><![CDATA[<p>包管理器是操作系统里负责安装、删除、查询和管理软件包的工具，可以类比手机上的应用商店。本文从概念到实操、从单机到团队，整理一份跨发行版的包管理学习大纲与命令速查。</p>
@@ -4202,263 +4459,6 @@ APT 演示即可迁移。</p>
         <tag>Linux</tag>
         <tag>包管理</tag>
         <tag>Package</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>git之路：rebase &amp; cherry-pick</title>
-    <url>/posts/1566a5aa/</url>
-    <content><![CDATA[<p>在团队协作和日常开发中，<code>rebase</code> 和
-<code>cherry-pick</code> 是 Git
-中非常强大的两个命令。它们不仅能让你的提交历史更加清晰，还能灵活地“搬运”代码。本文结合一张可视化分支图，带你深入理解这两者的用法与区别，并掌握团队协作中的最佳实践。</p>
-<span id="more"></span>
-<h2 id="一核心概念">🧩 一、核心概念</h2>
-<ul>
-<li><strong>rebase
-(变基)</strong>：将当前分支的一系列提交“重放”到另一个目标分支之上。其核心用途是<strong>整理个人分支的提交历史</strong>，使其在并入主干时保持线性、清晰。</li>
-<li><strong>cherry-pick
-(拣选)</strong>：将某个（或某些）特定的提交<strong>复制</strong>到当前分支。它像摘樱桃一样，适合“挑着搬运”某个功能或紧急修复。</li>
-</ul>
-<h2 id="二图解分支操作流程">🗺️ 二、图解分支操作流程</h2>
-<p>下面的两幅 Mermaid 图示分别演示了 Rebase 和 Cherry-pick
-在典型协作场景中的作用。将代码块直接放入支持 Mermaid 的 Markdown
-环境即可自动渲染。</p>
-<h3 id="图-1-rebase-工作流主干更新后将功能分支变基到最新-main">图 1 ·
-Rebase 工作流（主干更新后将功能分支变基到最新 main）</h3>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    subgraph &quot;main 分支&quot;
-        c0((c0)) --&gt; c1((c1)) --&gt; c3((c3))
-    end
-
-    subgraph &quot;feature&#x2F;a (rebase 前)&quot;
-        c2_before((c2)) --&gt; c4_before((c4))
-    end
-
-    subgraph &quot;feature&#x2F;a (rebase 后)&quot;
-        c2_after((&quot;c2&#39;&quot;)) --&gt; c4_after((&quot;c4&#39;&quot;))
-    end
-
-    c1 --&gt; c2_before
-    c3 --&gt; c2_after
-</code>
-</pre>
-<h3 id="图-2-cherry-pick-工作流从-featurea-拣选-c2-到-main">图 2 ·
-Cherry-pick 工作流（从 feature/a 拣选 c2 到 main）</h3>
-<pre>
-<code class="mermaid">
-
-flowchart TD
-    subgraph &quot;初始历史&quot;
-        c0((c0)) --&gt; c1((c1))
-    end
-
-    subgraph &quot;main 分支&quot;
-        c3((c3)) --&gt; c2_prime((&quot;c2&#39;&quot;))
-        style c2_prime fill:#bbf,stroke:#333,stroke-width:2px
-    end
-
-    subgraph &quot;feature&#x2F;a 分支&quot;
-        c2((c2)) --&gt; c4((c4))
-    end
-    
-    c1 --&gt; c3
-    c1 --&gt; c2
-
-    c2 -.-&gt; c2_prime
-</code>
-</pre>
-<h3 id="场景设定">场景设定</h3>
-<ul>
-<li><code>main</code> 是我们的主分支，开发主线从 <code>c0</code> -&gt;
-<code>c1</code> 开始。</li>
-<li>从 <code>c1</code> 拉取了一个 <code>feature/a</code>
-分支进行功能开发，并提交了 <code>c2</code> 和 <code>c4</code>。</li>
-<li>在此期间，另一位同事完成了 <code>fixbug/b</code> 分支，并将其合并回
-<code>main</code>，使得 <code>main</code> 分支前进到
-<code>c3</code>。</li>
-</ul>
-<p>此时，你的 <code>feature/a</code> 分支就“落后”于 <code>main</code>
-分支了。在准备合并你的功能之前，最好的做法是先将 <code>main</code>
-的最新更改同步到 <code>feature/a</code> 分支。这里，<code>rebase</code>
-就是最佳选择。</p>
-<h3 id="rebase同步主干保持线性历史">1.
-Rebase：同步主干，保持线性历史</h3>
-<p>为了让 <code>feature/a</code> 的历史记录更清晰，我们执行变基操作，将
-<code>feature/a</code> 的提交“重放”到最新的 <code>main</code>
-分支上。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 确保你的功能分支是当前分支</span></span><br><span class="line">git checkout feature/a</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 拉取远程主分支的最新代码（好习惯）</span></span><br><span class="line">git fetch origin main</span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 将当前分支变基到最新的 main 分支上</span></span><br><span class="line">git rebase origin/main <span class="comment"># 或者 git rebase main</span></span><br></pre></td></tr></table></figure>
-<p>执行后，Git 会在内部执行以下操作：</p>
-<ol type="1">
-<li>找到 <code>feature/a</code> 和 <code>main</code> 的共同祖先
-<code>c1</code>。</li>
-<li>暂存 <code>feature/a</code> 在 <code>c1</code>
-之后独有的提交（<code>c2</code>, <code>c4</code>）。</li>
-<li>将 <code>feature/a</code> 分支的指针指向 <code>main</code>
-的最新提交 <code>c3</code>。</li>
-<li>将刚刚暂存的提交 <code>c2</code> 和 <code>c4</code>
-重新应用（Replay）在 <code>c3</code>
-之后，生成两个<strong>内容相同但ID不同</strong>的新提交 <code>c2'</code>
-和 <code>c4'</code>。</li>
-</ol>
-<p>最终，<code>feature/a</code> 的历史就变成了
-<code>c0 -&gt; c1 -&gt; c3 -&gt; c2' -&gt; c4'</code>。它看起来就像是你从最新的
-<code>main</code>
-分支拉取代码然后才开始开发的一样，历史记录干净、线性，非常便于后续的合并和代码审查。</p>
-<p>这个操作完美地诠释了 <code>rebase</code>
-在个人开发分支上的核心用途：<strong>保持与主干同步，并维持一个清晰的线性历史。</strong></p>
-<h3 id="cherry-pick挑选特定提交">2. Cherry-pick：挑选特定提交</h3>
-<p>现在，我们换一个场景。假设 <code>feature/a</code> 上的
-<code>c2</code> 是一个非常紧急的修复，需要立即上线，但 <code>c4</code>
-还没开发完。这时就可以用 <code>cherry-pick</code>。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 1. 切换到需要接收修复的主分支</span></span><br><span class="line">git checkout main</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 从 feature/a 分支拣选 c2 提交</span></span><br><span class="line">git cherry-pick c2</span><br></pre></td></tr></table></figure>
-<p>如图右侧所示，<code>main</code> 分支通过 <code>cherry-pick</code>，将
-<code>feature/a</code> 上的 <code>c2</code>
-提交“拣选”过来，生成了一个新的提交 <code>c5</code>。其他提交
-(<code>c4</code>)
-不会被带过来，完美满足了只需要部分功能/修复的场景。</p>
-<h2 id="三rebase-用法详解">🛠️ 三、rebase 用法详解</h2>
-<h3 id="基本用法">1. 基本用法</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 将当前分支变基到 &lt;目标分支&gt; 上</span></span><br><span class="line">git rebase &lt;目标分支&gt;</span><br></pre></td></tr></table></figure>
-<h3 id="交互式-rebase">2. 交互式 rebase</h3>
-<p>这是 <code>rebase</code>
-的一大神器，常用于合并、修改、整理当前分支的提交。</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># -i 代表 --interactive（交互式）</span></span><br><span class="line"><span class="comment"># HEAD~3 表示整理当前分支最新的 3 个提交</span></span><br><span class="line">git rebase -i HEAD~3</span><br></pre></td></tr></table></figure>
-<p>执行后会打开一个编辑器，你可以对指定范围的提交进行
-<code>squash</code> (合并)、<code>edit</code>
-(修改)、<code>reword</code> (修改提交信息)
-等精细化操作，极大提升提交历史的可读性。</p>
-<h3 id="注意事项">3. 注意事项</h3>
-<ul>
-<li>rebase
-会重写历史，<strong>永远不要对已经推送并被他人使用的公共分支（如
-main）进行 rebase</strong>。</li>
-<li>rebase 过程遇到冲突需手动解决，解决后用 <code>git add .</code>
-将文件标记为已解决，然后用 <code>git rebase --continue</code>
-继续。</li>
-</ul>
-<h2 id="四cherry-pick-用法详解">🍒 四、cherry-pick 用法详解</h2>
-<h3 id="基本用法-1">1. 基本用法</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">git cherry-pick &lt;commit-hash&gt;</span><br></pre></td></tr></table></figure>
-<p>将指定的 <code>&lt;commit-hash&gt;</code>
-应用到当前分支，生成一个新的提交。</p>
-<h3 id="批量-cherry-pick">2. 批量 cherry-pick</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 拣选多个不连续的提交</span></span><br><span class="line">git cherry-pick &lt;commit-1&gt; &lt;commit-2&gt;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 拣选一个连续的提交范围（不包含 commit-A）</span></span><br><span class="line">git cherry-pick &lt;commit-A&gt;..&lt;commit-B&gt;</span><br></pre></td></tr></table></figure>
-<h3 id="注意事项-1">3. 注意事项</h3>
-<ul>
-<li>cherry-pick 也可能遇到冲突，需手动解决并 <code>commit</code>。</li>
-<li>cherry-pick 会生成<strong>新的 commit
-id</strong>，因为它是在新的分支上下文中应用变更。</li>
-</ul>
-<h2 id="rebase-vs.-merge黄金准则与团队协作">👑 Rebase
-vs. Merge：黄金准则与团队协作</h2>
-<p>我们已经看到了 <code>rebase</code>
-的强大之处，但它也是一把双刃剑，因为它会<strong>重写提交历史</strong>。这就引出了
-Git 协作中一条最重要的准则：</p>
-<blockquote>
-<p><strong>黄金准则：在自己的私有分支上自由地 rebase，但永远不要 rebase
-一个公共的、共享的分支。</strong></p>
-</blockquote>
-<p>换句话说：</p>
-<ul>
-<li><strong><code>rebase</code>
-用来“整理”自己</strong>：在你的个人功能分支（如
-<code>feature/a</code>）上，使用 <code>rebase</code> 来同步
-<code>main</code>
-分支的更新。这属于你自己的“私事”，目的是让你的工作成果能干净地对接到主线上。</li>
-<li><strong><code>merge</code>
-用来“汇合”他人</strong>：当你的功能分支准备好被合并到 <code>main</code>
-或 <code>develop</code> 这样的公共分支时，应该使用
-<code>git merge</code>（通常是通过 GitHub/GitLab 上的 Pull Request/Merge
-Request）来完成。这次合并会产生一个合并提交（Merge
-Commit），清晰地记录了“在某个时间点，我们将 <code>feature/a</code>
-的所有成果汇入了主线”这一事实。</li>
-</ul>
-<h3 id="为什么这是最佳实践">为什么这是最佳实践？</h3>
-<ol type="1">
-<li><strong>清晰且可追溯的历史</strong>：通过 <code>rebase</code>
-保持功能分支的线性，使得 <code>main</code>
-分支的历史由一个个清晰的功能块（通过 merge commit
-连接）组成，而不是一个混乱交织的网络。阅读 <code>git log</code>
-会非常轻松。</li>
-<li><strong>避免团队混乱</strong>：如果你 rebase 了一个公共分支（例如
-<code>main</code>），所有基于旧的 <code>main</code>
-进行开发的同事都会在下一次 <code>git pull</code>
-时遇到严重的问题。他们的本地历史和被你重写过的远程历史产生了冲突，需要非常复杂的操作才能修复，这会给整个团队带来灾难。</li>
-</ol>
-<h3 id="推荐的开发工作流">推荐的开发工作流</h3>
-<p>一个标准的、健壮的开发工作流如下：</p>
-<ol type="1">
-<li><p><strong>开始新任务</strong>： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">git checkout main</span><br><span class="line">git pull origin main</span><br><span class="line">git checkout -b feature/new-login</span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>开心写代码并提交</strong>： <figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># ... coding and committing ...</span></span><br><span class="line">git commit -m <span class="string">&quot;feat: add username field&quot;</span></span><br><span class="line">git commit -m <span class="string">&quot;feat: add password field&quot;</span></span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>定期与主干同步</strong>（使用 Rebase）：
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 当 main 分支有更新时</span></span><br><span class="line">git fetch origin main</span><br><span class="line">git rebase origin/main</span><br><span class="line"><span class="comment"># 如果有冲突，解决冲突后 git rebase --continue</span></span><br></pre></td></tr></table></figure></p></li>
-<li><p><strong>发起合并请求</strong>：</p>
-<ul>
-<li>将你整理好的分支推送到远程：<code>git push origin feature/new-login --force-with-lease</code>
-(<code>--force-with-lease</code> 是比 <code>--force</code>
-更安全的选择，因为它不会覆盖他人的工作)。</li>
-<li>在代码托管平台（如 GitHub）上创建 Pull Request，请求将
-<code>feature/new-login</code> 合并到 <code>main</code>。</li>
-<li>团队成员进行代码审查，最终由维护者点击 <code>Merge</code>
-按钮，将你的功能安全地汇入主线。</li>
-</ul></li>
-</ol>
-<h2 id="五实战小结">⚡ 五、实战小结</h2>
-<ul>
-<li><strong>rebase</strong>：核心用途是在<strong>个人开发分支</strong>上同步主干分支的变更，以保持提交历史的<strong>整洁和线性</strong>。它是合并到公共分支前的“自我修养”。</li>
-<li><strong>cherry-pick</strong>：核心用途是<strong>精确复制</strong>一个或多个提交到其他分支，适合跨分支应用热修复或挑选特定功能。</li>
-<li><strong>黄金准则</strong>：永远记住在私有分支上 rebase，在公共分支上
-merge。</li>
-</ul>
-<h2 id="六实用建议">📝 六、实用建议</h2>
-<h3 id="分支命名规范">1. 分支命名规范</h3>
-<ul>
-<li>功能开发：<code>feature/功能简述</code>
-如：<code>feature/login-page</code></li>
-<li>Bug 修复：<code>fix/问题简述</code>
-如：<code>fix/login-crash</code></li>
-<li>热修复：<code>hotfix/问题简述</code>
-如：<code>hotfix/urgent-bug</code></li>
-<li>其他类型：<code>chore/</code>、<code>test/</code>、<code>docs/</code>
-等</li>
-</ul>
-<h3 id="commit-信息规范">2. Commit 信息规范</h3>
-<ul>
-<li>推荐格式（Angular 规范）：<code>type(scope): subject</code>
-<ul>
-<li><code>type</code>: <code>feat</code>, <code>fix</code>,
-<code>docs</code>, <code>style</code>, <code>refactor</code>,
-<code>test</code>, <code>chore</code></li>
-<li><code>scope</code>: 影响范围（可选）</li>
-<li><code>subject</code>: 简短描述</li>
-</ul></li>
-<li>一次 commit 只做一件事，保持原子性。</li>
-</ul>
-<h3 id="团队协作建议">3. 团队协作建议</h3>
-<ul>
-<li><strong>合并前先同步</strong>：在将功能分支合并到 <code>main</code>
-之前，应先在自己的分支上执行 <code>git rebase main</code>
-来同步最新代码，这能极大减少最终合并时的冲突。</li>
-<li><strong>保护公共分支</strong>：像
-<code>main</code>、<code>release</code>
-这样的重要分支应设置为受保护状态，禁止
-<code>force push</code>，所有变更都必须通过 Pull Request (PR)
-进行。</li>
-<li><strong>拥抱代码评审</strong>：充分利用 Pull Request
-进行代码评审，这是保证代码质量和知识共享的最佳途径。</li>
-<li><strong>勤于观察状态</strong>：养成良好习惯，多用
-<code>git status</code>、<code>git log --oneline --graph</code>
-观察分支状态，做到心中有数。</li>
-</ul>
-<p>希望这些建议能帮助你和团队更高效地使用
-Git，写出更优雅、可维护的代码历史！</p>
-]]></content>
-      <tags>
-        <tag>Git</tag>
-        <tag>Rebase</tag>
-        <tag>Cherry-pick</tag>
       </tags>
   </entry>
   <entry>
@@ -8345,6 +8345,88 @@ index）或轮数（epoch index）。</li>
       </tags>
   </entry>
   <entry>
+    <title>了解RNN</title>
+    <url>/posts/da4b49ae/</url>
+    <content><![CDATA[<p>卷积神经网络适合处理图片信息，那文字信息怎么办呢？首先要明白，对于计算机，或者说神经网络来说，文字都是要转换为数字之后再进行处理的。那么我们要面对的第一个问题就是：如何将文字转换为数字？</p>
+<span id="more"></span>
+<h2 id="文字转数字的朴素思想">文字转数字的朴素思想</h2>
+<p>有一种简单粗暴的方法：每一个文字或词组都用一个数字来代表，建一个非常大的映射关系表。</p>
+<p>但这样有几个显而易见的缺点：</p>
+<ol type="1">
+<li>只用一个数字表示，不仅要建的表很大，维度也很低（只有一维）。</li>
+<li>数字和数字之间无法表示字与字、词与词之间的联系。</li>
+</ol>
+<p>为了解决维度低的问题，有人提出了 <strong>one-hot
+编码</strong>，即准备一个维度非常高的向量，每个字只有向量中一个位置是
+1，其余全是
+0。虽然维度低的问题被解决了，但是维度好像又太高了，并且依然没有解决之前的第二个问题。</p>
+<h2 id="更好的方案词嵌入">更好的方案：词嵌入</h2>
+<p>那有没有能解决以上两种问题的方法呢？有的，这种方法就是
+<strong>词嵌入（Word Embedding）</strong>。</p>
+<p><img src="/assets/rnn-01.png" /></p>
+<p>通过词嵌入的方式得到的词向量，维度不高不低，每个位置可以理解为一个特征值，但这个特征是通过训练得到的，我们并不知道代表着什么。那这种方式如何表示词与词之间的语义相关性呢？可以用两个向量的点积或余弦相似度来表示向量之间的相关性，进而表示词语之间的相关性。</p>
+<p>这样就将自然语言之间的联系转为可以用数学公式计算的方式。同时，一些数学上的计算结果可能反映出一些很微妙的关系，例如一个训练好的词嵌入矩阵，很可能使得
+<code>桌子 - 椅子 = 鼠标 - 键盘</code>。</p>
+<p>把所有词向量组成一个大矩阵，这个大矩阵就叫做
+<strong>嵌入矩阵</strong>，每一列表示一个词向量。</p>
+<p>矩阵中的值由训练得到，比较经典的方法是
+word2vec，这里不展开讲解。虽然这样表示的维度比起 one-hot
+已经大大下降，但是也超过了人能直接理解的二维、三维，我们管这些向量所在的空间叫做
+<strong>潜空间</strong>。</p>
+<p>我们无法理解潜空间中的位置关系，但是也有一些方法能够把潜空间降维至
+2-3 维，方便我们直观看到词与词之间的关系。</p>
+<h2 id="rnn-如何处理序列信息">RNN 如何处理序列信息</h2>
+<p>这样我们的第一个问题就算是解决了，我们可以用词嵌入的方法将文本转为数据，但这样就可以了吗？举个例子，一句话中的五个词转为
+5 个词向量，每个词向量假设为 300 维度，那么输入层就要有 1500
+个神经元。当然是可以的，但是有两个新问题：</p>
+<ol type="1">
+<li>输入层太大了，并且长度不固定；</li>
+<li>无法体现词语的先后顺序，参考之前无法体现图片像素的位置关系。</li>
+</ol>
+<p>在之前的图像处理中，我们可以通过卷积的方式来解决这一问题，那现在呢？</p>
+<p>让我们回到经典的神经网络，但是不是一次输入一句话，而是输入一个词。</p>
+<p>可以发现在第二个词的计算过程中，完全没有让第一个词的任何信息参与进来，怎么办呢？我们可以让它先输出一个隐藏状态，然后再经过一次非线性变换，得到输出
+Y。这就是 <strong>循环神经网络 RNN（Recurrent Neural
+Network）</strong>。</p>
+<p><img src="/assets/rnn-02.png" /></p>
+<p>这个 RNN
+模型就具备了理解词与词之间先后顺序的能力，可以判断一句话中各个单词的褒贬词性，还能给出一句话，不断生成下一个字，以及完成翻译等自然语言处理工作。</p>
+<p><img src="/assets/rnn-03.png" /></p>
+<h2 id="rnn-的局限性">RNN 的局限性</h2>
+<p>那么 RNN 是否就完美了呢？当然不，RNN 依旧存在两个问题：</p>
+<ol type="1">
+<li><strong>长期依赖问题</strong>：信息会随着时间步的增多而逐渐丢失，无法捕捉长期依赖，而有的语句的关键信息恰好在很远的地方。</li>
+<li><strong>顺序处理限制</strong>：RNN
+必须顺序处理，每个时间步必须依赖上一个时间步的隐藏状态的计算结果，这限制了并行计算的能力。</li>
+</ol>
+<p>为了解决这些问题，研究者们提出了多种 RNN 的变体。其中最著名的就是
+<strong>长短期记忆网络（LSTM）</strong> 和
+<strong>门控循环单元（GRU）</strong>。</p>
+<ul>
+<li><strong>LSTM</strong>：通过引入“门”机制（输入门、遗忘门、输出门）来控制信息的流动。这使得网络可以有选择地学习、记忆或遗忘信息，从而更好地捕捉序列中的长期依赖关系。</li>
+<li><strong>GRU</strong>：作为 LSTM
+的一种简化变体，它将输入门和遗忘门合并为“更新门”，并引入了“重置门”。GRU
+的结构更简单，计算效率更高，在许多任务上也能取得与 LSTM
+相近的效果。</li>
+</ul>
+<p>这些改进在很大程度上缓解了 RNN
+的梯度消失问题，但它们仍然需要按顺序处理数据，未能解决并行计算的限制。那么，是否有一个可以彻底抛弃按顺序计算的新方案呢？</p>
+<p>有的，那就是 <strong>Transformer</strong>！</p>
+<blockquote>
+<p>参考自 <a
+href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
+飞天闪客</a></p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+        <tag>RNN</tag>
+        <tag>NLP</tag>
+        <tag>词嵌入</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>pytorch train 模板</title>
     <url>/posts/14ba9e2c/</url>
     <content><![CDATA[<p>本文提供了一个完整、通用的 PyTorch
@@ -8575,172 +8657,6 @@ href="https://www.bilibili.com/video/BV1hE411t7RN?spm_id_from=333.788.videopod.e
         <tag>深度学习</tag>
         <tag>AI</tag>
         <tag>训练模板</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>了解RNN</title>
-    <url>/posts/da4b49ae/</url>
-    <content><![CDATA[<p>卷积神经网络适合处理图片信息，那文字信息怎么办呢？首先要明白，对于计算机，或者说神经网络来说，文字都是要转换为数字之后再进行处理的。那么我们要面对的第一个问题就是：如何将文字转换为数字？</p>
-<span id="more"></span>
-<h2 id="文字转数字的朴素思想">文字转数字的朴素思想</h2>
-<p>有一种简单粗暴的方法：每一个文字或词组都用一个数字来代表，建一个非常大的映射关系表。</p>
-<p>但这样有几个显而易见的缺点：</p>
-<ol type="1">
-<li>只用一个数字表示，不仅要建的表很大，维度也很低（只有一维）。</li>
-<li>数字和数字之间无法表示字与字、词与词之间的联系。</li>
-</ol>
-<p>为了解决维度低的问题，有人提出了 <strong>one-hot
-编码</strong>，即准备一个维度非常高的向量，每个字只有向量中一个位置是
-1，其余全是
-0。虽然维度低的问题被解决了，但是维度好像又太高了，并且依然没有解决之前的第二个问题。</p>
-<h2 id="更好的方案词嵌入">更好的方案：词嵌入</h2>
-<p>那有没有能解决以上两种问题的方法呢？有的，这种方法就是
-<strong>词嵌入（Word Embedding）</strong>。</p>
-<p><img src="/assets/rnn-01.png" /></p>
-<p>通过词嵌入的方式得到的词向量，维度不高不低，每个位置可以理解为一个特征值，但这个特征是通过训练得到的，我们并不知道代表着什么。那这种方式如何表示词与词之间的语义相关性呢？可以用两个向量的点积或余弦相似度来表示向量之间的相关性，进而表示词语之间的相关性。</p>
-<p>这样就将自然语言之间的联系转为可以用数学公式计算的方式。同时，一些数学上的计算结果可能反映出一些很微妙的关系，例如一个训练好的词嵌入矩阵，很可能使得
-<code>桌子 - 椅子 = 鼠标 - 键盘</code>。</p>
-<p>把所有词向量组成一个大矩阵，这个大矩阵就叫做
-<strong>嵌入矩阵</strong>，每一列表示一个词向量。</p>
-<p>矩阵中的值由训练得到，比较经典的方法是
-word2vec，这里不展开讲解。虽然这样表示的维度比起 one-hot
-已经大大下降，但是也超过了人能直接理解的二维、三维，我们管这些向量所在的空间叫做
-<strong>潜空间</strong>。</p>
-<p>我们无法理解潜空间中的位置关系，但是也有一些方法能够把潜空间降维至
-2-3 维，方便我们直观看到词与词之间的关系。</p>
-<h2 id="rnn-如何处理序列信息">RNN 如何处理序列信息</h2>
-<p>这样我们的第一个问题就算是解决了，我们可以用词嵌入的方法将文本转为数据，但这样就可以了吗？举个例子，一句话中的五个词转为
-5 个词向量，每个词向量假设为 300 维度，那么输入层就要有 1500
-个神经元。当然是可以的，但是有两个新问题：</p>
-<ol type="1">
-<li>输入层太大了，并且长度不固定；</li>
-<li>无法体现词语的先后顺序，参考之前无法体现图片像素的位置关系。</li>
-</ol>
-<p>在之前的图像处理中，我们可以通过卷积的方式来解决这一问题，那现在呢？</p>
-<p>让我们回到经典的神经网络，但是不是一次输入一句话，而是输入一个词。</p>
-<p>可以发现在第二个词的计算过程中，完全没有让第一个词的任何信息参与进来，怎么办呢？我们可以让它先输出一个隐藏状态，然后再经过一次非线性变换，得到输出
-Y。这就是 <strong>循环神经网络 RNN（Recurrent Neural
-Network）</strong>。</p>
-<p><img src="/assets/rnn-02.png" /></p>
-<p>这个 RNN
-模型就具备了理解词与词之间先后顺序的能力，可以判断一句话中各个单词的褒贬词性，还能给出一句话，不断生成下一个字，以及完成翻译等自然语言处理工作。</p>
-<p><img src="/assets/rnn-03.png" /></p>
-<h2 id="rnn-的局限性">RNN 的局限性</h2>
-<p>那么 RNN 是否就完美了呢？当然不，RNN 依旧存在两个问题：</p>
-<ol type="1">
-<li><strong>长期依赖问题</strong>：信息会随着时间步的增多而逐渐丢失，无法捕捉长期依赖，而有的语句的关键信息恰好在很远的地方。</li>
-<li><strong>顺序处理限制</strong>：RNN
-必须顺序处理，每个时间步必须依赖上一个时间步的隐藏状态的计算结果，这限制了并行计算的能力。</li>
-</ol>
-<p>为了解决这些问题，研究者们提出了多种 RNN 的变体。其中最著名的就是
-<strong>长短期记忆网络（LSTM）</strong> 和
-<strong>门控循环单元（GRU）</strong>。</p>
-<ul>
-<li><strong>LSTM</strong>：通过引入“门”机制（输入门、遗忘门、输出门）来控制信息的流动。这使得网络可以有选择地学习、记忆或遗忘信息，从而更好地捕捉序列中的长期依赖关系。</li>
-<li><strong>GRU</strong>：作为 LSTM
-的一种简化变体，它将输入门和遗忘门合并为“更新门”，并引入了“重置门”。GRU
-的结构更简单，计算效率更高，在许多任务上也能取得与 LSTM
-相近的效果。</li>
-</ul>
-<p>这些改进在很大程度上缓解了 RNN
-的梯度消失问题，但它们仍然需要按顺序处理数据，未能解决并行计算的限制。那么，是否有一个可以彻底抛弃按顺序计算的新方案呢？</p>
-<p>有的，那就是 <strong>Transformer</strong>！</p>
-<blockquote>
-<p>参考自 <a
-href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
-飞天闪客</a></p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
-        <tag>RNN</tag>
-        <tag>NLP</tag>
-        <tag>词嵌入</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>了解Transformer</title>
-    <url>/posts/9008a9df/</url>
-    <content><![CDATA[<p>在之前的文章中我们了解到，RNN（及其变体如
-LSTM、GRU）在处理序列数据时，必须按照时间步顺序计算，这导致其无法进行大规模并行计算。同时，它也难以解决长距离依赖的问题。</p>
-<p>为了解决这两个核心痛点，一种全新的、不依赖于循环结构的模型——Transformer
-横空出世。</p>
-<span id="more"></span>
-<p>和之前一样，输入神经网络的数据，要先转换为 <strong>词嵌入（Word
-Embedding）</strong> 向量。</p>
-<h2 id="第一步融入位置信息">第一步：融入位置信息</h2>
-<p>由于 Transformer 抛弃了 RNN
-的循环结构，模型本身无法感知输入序列中词语的先后顺序。</p>
-<p>为了解决这个问题，我们需要给每个词的词向量中添加
-<strong>位置编码（Positional
-Encoding）</strong>，以此来表示这个词在句子中的绝对或相对位置。</p>
-<p>这样，每个词的输入向量就同时包含了语义信息和位置信息。</p>
-<h2
-id="核心机制自注意力self-attention">核心机制：自注意力（Self-Attention）</h2>
-<p>仅仅包含位置信息是不够的，每个词的向量中还不包含与其他词的关系。为了让模型“注意”到句子中其他词的存在并建立联系，Transformer
-引入了 <strong>自注意力机制</strong>。</p>
-<p>该机制的核心思想是为句子中的每个词动态地计算一个权重系数，这个权重代表了在编码当前词时，句子中其他词对它的重要性。这是通过三个特殊的向量来实现的：</p>
-<ul>
-<li><strong>Query (查询向量
-Q)</strong>：代表当前词，用于去“查询”其他词。</li>
-<li><strong>Key (键向量
-K)</strong>：代表被查询的词，用于和查询向量进行匹配。</li>
-<li><strong>Value (值向量 V)</strong>：代表被查询词的实际内容。</li>
-</ul>
-<p>这三个向量是通过将每个词的词向量（已包含位置编码）分别与三个可训练的权重矩阵
-<code>Wq</code>、<code>Wk</code>、<code>Wv</code> 相乘得到的。</p>
-<p><img src="/assets/transformer-01.png" /></p>
-<p>计算过程如下：</p>
-<ol type="1">
-<li>拿一个词的查询向量 <code>q</code> 去和所有词（包括它自己）的键向量
-<code>k</code> 做点积，得到一个
-<strong>注意力分数</strong>。这个分数衡量了两个词之间的相关性。</li>
-<li>对得到的分数进行归一化处理（例如通过 SoftMax）。</li>
-<li>将归一化后的分数与每个词对应的值向量 <code>v</code> 相乘。</li>
-<li>将所有加权后的值向量 <code>v</code> 相加，就得到了一个新的向量
-<code>a</code>。</li>
-</ol>
-<p><img src="/assets/transformer-02.png" /></p>
-<p>这个新向量 <code>a</code>
-就包含了整个句子上下文的信息，并且是为当前词量身定制的。对句子中的每一个词都执行相同的操作，我们就能得到一组全新的、富含上下文信息的词向量。</p>
-<p><img src="/assets/transformer-03.png" /></p>
-<h2 id="优化多头注意力multi-head-attention">优化：多头注意力（Multi-Head
-Attention）</h2>
-<p>一个词与另一个词的关系可能有很多种（例如，语法关系、语义关系等）。如果只用一组
-<code>Wq</code>, <code>Wk</code>, <code>Wv</code>
-矩阵来计算相关性，灵活性会很低。</p>
-<p>因此，Transformer 提出了
-<strong>多头注意力机制</strong>。它通过设置多组独立的 <code>Wq</code>,
-<code>Wk</code>, <code>Wv</code> 矩阵（每一组被称为一个“头”），将原始的
-Q, K, V 映射到不同的子空间中，学习不同方面的相关性。</p>
-<p><img src="/assets/transformer-04.png" /></p>
-<p>每个头都会独立地执行一次注意力计算，得到一个输出向量。最后，将所有头的输出向量拼接起来，再经过一次线性变换，就得到了最终的输出。这样，模型就能在不同维度上综合地理解词与词之间的关系。</p>
-<h2 id="整体架构编码器与解码器">整体架构：编码器与解码器</h2>
-<p>Transformer 的整体架构由 <strong>编码器（Encoder）</strong> 和
-<strong>解码器（Decoder）</strong>
-两大部分组成，每一部分都由多层堆叠而成。我们上面介绍的多头注意力机制就是其核心组件。</p>
-<ul>
-<li><strong>编码器</strong>：负责将输入序列处理成一系列富含上下文信息的表示。</li>
-<li><strong>解码器</strong>：根据编码器的输出和之前已生成的结果，来生成下一个词。</li>
-</ul>
-<p><img src="/assets/transformer-05.png" /></p>
-<h2 id="总结">总结</h2>
-<p>Transformer
-通过引入自注意力机制和位置编码，完全摒弃了传统的循环和卷积结构。其强大的并行计算能力和捕捉长距离依赖的优势，使其在自然语言处理领域取得了革命性的成功，并为后续的
-BERT、GPT 等大规模预训练模型奠定了基础。</p>
-<blockquote>
-<p>参考自 <a
-href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
-飞天闪客</a></p>
-</blockquote>
-]]></content>
-      <tags>
-        <tag>深度学习</tag>
-        <tag>AI</tag>
-        <tag>Transformer</tag>
-        <tag>Attention</tag>
-        <tag>自注意力</tag>
       </tags>
   </entry>
   <entry>
@@ -9196,6 +9112,90 @@ IP 地址，然后点击连接，按提示输入主机的用户名和密码。</
         <tag>远程桌面</tag>
         <tag>Tailscale</tag>
         <tag>网络基础</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>了解Transformer</title>
+    <url>/posts/9008a9df/</url>
+    <content><![CDATA[<p>在之前的文章中我们了解到，RNN（及其变体如
+LSTM、GRU）在处理序列数据时，必须按照时间步顺序计算，这导致其无法进行大规模并行计算。同时，它也难以解决长距离依赖的问题。</p>
+<p>为了解决这两个核心痛点，一种全新的、不依赖于循环结构的模型——Transformer
+横空出世。</p>
+<span id="more"></span>
+<p>和之前一样，输入神经网络的数据，要先转换为 <strong>词嵌入（Word
+Embedding）</strong> 向量。</p>
+<h2 id="第一步融入位置信息">第一步：融入位置信息</h2>
+<p>由于 Transformer 抛弃了 RNN
+的循环结构，模型本身无法感知输入序列中词语的先后顺序。</p>
+<p>为了解决这个问题，我们需要给每个词的词向量中添加
+<strong>位置编码（Positional
+Encoding）</strong>，以此来表示这个词在句子中的绝对或相对位置。</p>
+<p>这样，每个词的输入向量就同时包含了语义信息和位置信息。</p>
+<h2
+id="核心机制自注意力self-attention">核心机制：自注意力（Self-Attention）</h2>
+<p>仅仅包含位置信息是不够的，每个词的向量中还不包含与其他词的关系。为了让模型“注意”到句子中其他词的存在并建立联系，Transformer
+引入了 <strong>自注意力机制</strong>。</p>
+<p>该机制的核心思想是为句子中的每个词动态地计算一个权重系数，这个权重代表了在编码当前词时，句子中其他词对它的重要性。这是通过三个特殊的向量来实现的：</p>
+<ul>
+<li><strong>Query (查询向量
+Q)</strong>：代表当前词，用于去“查询”其他词。</li>
+<li><strong>Key (键向量
+K)</strong>：代表被查询的词，用于和查询向量进行匹配。</li>
+<li><strong>Value (值向量 V)</strong>：代表被查询词的实际内容。</li>
+</ul>
+<p>这三个向量是通过将每个词的词向量（已包含位置编码）分别与三个可训练的权重矩阵
+<code>Wq</code>、<code>Wk</code>、<code>Wv</code> 相乘得到的。</p>
+<p><img src="/assets/transformer-01.png" /></p>
+<p>计算过程如下：</p>
+<ol type="1">
+<li>拿一个词的查询向量 <code>q</code> 去和所有词（包括它自己）的键向量
+<code>k</code> 做点积，得到一个
+<strong>注意力分数</strong>。这个分数衡量了两个词之间的相关性。</li>
+<li>对得到的分数进行归一化处理（例如通过 SoftMax）。</li>
+<li>将归一化后的分数与每个词对应的值向量 <code>v</code> 相乘。</li>
+<li>将所有加权后的值向量 <code>v</code> 相加，就得到了一个新的向量
+<code>a</code>。</li>
+</ol>
+<p><img src="/assets/transformer-02.png" /></p>
+<p>这个新向量 <code>a</code>
+就包含了整个句子上下文的信息，并且是为当前词量身定制的。对句子中的每一个词都执行相同的操作，我们就能得到一组全新的、富含上下文信息的词向量。</p>
+<p><img src="/assets/transformer-03.png" /></p>
+<h2 id="优化多头注意力multi-head-attention">优化：多头注意力（Multi-Head
+Attention）</h2>
+<p>一个词与另一个词的关系可能有很多种（例如，语法关系、语义关系等）。如果只用一组
+<code>Wq</code>, <code>Wk</code>, <code>Wv</code>
+矩阵来计算相关性，灵活性会很低。</p>
+<p>因此，Transformer 提出了
+<strong>多头注意力机制</strong>。它通过设置多组独立的 <code>Wq</code>,
+<code>Wk</code>, <code>Wv</code> 矩阵（每一组被称为一个“头”），将原始的
+Q, K, V 映射到不同的子空间中，学习不同方面的相关性。</p>
+<p><img src="/assets/transformer-04.png" /></p>
+<p>每个头都会独立地执行一次注意力计算，得到一个输出向量。最后，将所有头的输出向量拼接起来，再经过一次线性变换，就得到了最终的输出。这样，模型就能在不同维度上综合地理解词与词之间的关系。</p>
+<h2 id="整体架构编码器与解码器">整体架构：编码器与解码器</h2>
+<p>Transformer 的整体架构由 <strong>编码器（Encoder）</strong> 和
+<strong>解码器（Decoder）</strong>
+两大部分组成，每一部分都由多层堆叠而成。我们上面介绍的多头注意力机制就是其核心组件。</p>
+<ul>
+<li><strong>编码器</strong>：负责将输入序列处理成一系列富含上下文信息的表示。</li>
+<li><strong>解码器</strong>：根据编码器的输出和之前已生成的结果，来生成下一个词。</li>
+</ul>
+<p><img src="/assets/transformer-05.png" /></p>
+<h2 id="总结">总结</h2>
+<p>Transformer
+通过引入自注意力机制和位置编码，完全摒弃了传统的循环和卷积结构。其强大的并行计算能力和捕捉长距离依赖的优势，使其在自然语言处理领域取得了革命性的成功，并为后续的
+BERT、GPT 等大规模预训练模型奠定了基础。</p>
+<blockquote>
+<p>参考自 <a
+href="https://www.bilibili.com/video/BV1NCgVzoEG9?spm_id_from=333.788.player.switch&amp;vd_source=a1e48cea1c1e1104579f0aefa6e00490&amp;p=1">B站up主
+飞天闪客</a></p>
+</blockquote>
+]]></content>
+      <tags>
+        <tag>深度学习</tag>
+        <tag>AI</tag>
+        <tag>Transformer</tag>
+        <tag>Attention</tag>
+        <tag>自注意力</tag>
       </tags>
   </entry>
   <entry>
@@ -17180,6 +17180,438 @@ flowchart TD
       </tags>
   </entry>
   <entry>
+    <title>C/C++ 入门：STL 容器</title>
+    <url>/posts/e9f3b7c2/</url>
+    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
+提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
+<span id="more"></span>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STL</td>
+<td>Standard Template Library，标准模板库</td>
+<td>C++ 标准库的容器 + 算法</td>
+</tr>
+<tr>
+<td>容器（container）</td>
+<td>存储和管理一组元素的数据结构</td>
+<td>装数据的东西</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td>动态数组，内存连续，自动扩容</td>
+<td>自动扩容的数组</td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>字符串类型，自动管理字符内存</td>
+<td>好用的字符串</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>键值对映射，按键有序</td>
+<td>字典/映射</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>不重复元素的有序集合</td>
+<td>去重 + 有序</td>
+</tr>
+<tr>
+<td>迭代器（iterator）</td>
+<td>遍历容器的指针式对象</td>
+<td>容器的通用游标</td>
+</tr>
+<tr>
+<td>范围 for</td>
+<td><code>for (auto x : c)</code> 遍历语法</td>
+<td>简单遍历</td>
+</tr>
+</tbody>
+</table>
+<h2 id="stl-是什么">🧩 STL 是什么</h2>
+<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
+<table>
+<thead>
+<tr>
+<th>组成</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>容器</td>
+<td>存储数据</td>
+<td><code>vector</code>、<code>map</code>、<code>set</code></td>
+</tr>
+<tr>
+<td>算法</td>
+<td>操作数据</td>
+<td><code>sort</code>、<code>find</code></td>
+</tr>
+<tr>
+<td>迭代器</td>
+<td>连接容器和算法</td>
+<td><code>begin()</code>、<code>end()</code></td>
+</tr>
+</tbody>
+</table>
+<p>STL
+用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[容器] &lt;--&gt; B[迭代器]
+    B &lt;--&gt; C[算法]
+    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
+    C --&gt; E[sort&#x2F;find&#x2F;count]
+</code>
+</pre>
+<p>先记住一个总原则：<strong>能用 STL
+容器解决的，不要自己造轮子</strong>。</p>
+<h2 id="vector动态数组">🧮 vector：动态数组</h2>
+<h3 id="基本用法">基本用法</h3>
+<p><code>vector</code>
+是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>也可以在创建时直接给初始值：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
+<h3 id="遍历">遍历</h3>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>size()</code> 返回的是
+<code>size_t</code>（无符号整数），所以循环变量建议也用
+<code>size_t</code>，避免有符号/无符号比较的警告。</p>
+</blockquote>
+<h3 id="常用接口">常用接口</h3>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_back(x)</code></td>
+<td>尾部追加元素</td>
+</tr>
+<tr>
+<td><code>pop_back()</code></td>
+<td>删除尾部元素</td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>empty()</code></td>
+<td>是否为空</td>
+</tr>
+<tr>
+<td><code>front()</code> / <code>back()</code></td>
+<td>第一个 / 最后一个元素</td>
+</tr>
+<tr>
+<td><code>v[i]</code></td>
+<td>按下标访问，<strong>不检查越界</strong></td>
+</tr>
+<tr>
+<td><code>v.at(i)</code></td>
+<td>按下标访问，越界抛异常</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><code>v[i]</code>
+越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
+<code>v.at(i)</code> 更安全。</p>
+</blockquote>
+<h2 id="string常用接口与互转">📝 string：常用接口与互转</h2>
+<h3 id="常用接口-1">常用接口</h3>
+<p><code>string</code> 是 C++
+的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>find</code> 找不到时返回
+<code>string::npos</code>，判断要用它：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="与-c-字符串互转">与 C 字符串互转</h3>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
+<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
+省去了手动管理长度、手动拼接的麻烦：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>C 风格 <code>char[]</code></th>
+<th><code>string</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拼接</td>
+<td><code>strcat</code>，要保证空间够</td>
+<td><code>s1 + s2</code></td>
+</tr>
+<tr>
+<td>比较</td>
+<td><code>strcmp</code></td>
+<td><code>==</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td><code>strlen</code></td>
+<td><code>.size()</code></td>
+</tr>
+<tr>
+<td>拷贝</td>
+<td><code>strcpy</code></td>
+<td><code>=</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="map键值对">🗺️ map：键值对</h2>
+<h3 id="基本用法-1">基本用法</h3>
+<p><code>map</code>
+保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出（按键排序）：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
+<h3 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>键不存在时</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scores["Bob"]</code></td>
+<td>自动插入一个默认值（0）</td>
+<td>需要写入时</td>
+</tr>
+<tr>
+<td><code>scores.find("Bob")</code></td>
+<td>返回 <code>end()</code>，不插入</td>
+<td>只查询时</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
+<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
+<code>count</code>，避免误插入脏数据：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="set去重与有序">🧹 set：去重与有序</h2>
+<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th><code>vector</code></th>
+<th><code>set</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>顺序</td>
+<td>保持插入顺序</td>
+<td>自动排序</td>
+</tr>
+<tr>
+<td>重复</td>
+<td>允许</td>
+<td>不允许</td>
+</tr>
+<tr>
+<td>按下标访问</td>
+<td>可以</td>
+<td>不可以，用迭代器</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>需要去重 + 有序时用
+<code>set</code>；需要保持插入顺序、按下标访问时用
+<code>vector</code>。</p>
+</blockquote>
+<h2 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h2>
+<h3 id="基本概念">基本概念</h3>
+<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
+指向第一个元素，<code>end()</code>
+指向最后一个元素的下一个位置（不指向有效元素）。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<pre>
+<code class="mermaid">
+
+flowchart LR
+    A[begin 指向第一个元素] --&gt; B[元素...]
+    B --&gt; C[end 指向末尾之后]
+</code>
+</pre>
+<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
+的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
+<code>it-&gt;second</code> 访问：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="迭代器失效问题">迭代器失效问题</h3>
+<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
+<p>最典型的例子是 <code>vector</code> 扩容：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
+<p>什么时候要警惕：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>是否可能使旧迭代器失效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
+<td>可能失效</td>
+</tr>
+<tr>
+<td><code>vector</code> 中间插入/删除</td>
+<td>受影响位置之后失效</td>
+</tr>
+<tr>
+<td><code>map</code>/<code>set</code> 插入</td>
+<td>通常不失效</td>
+</tr>
+<tr>
+<td>遍历中删除当前元素</td>
+<td>当前迭代器失效</td>
+</tr>
+</tbody>
+</table>
+<p>范围 for
+内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
+<h2 id="sort-算法">🔀 sort 算法</h2>
+<h3 id="默认排序">默认排序</h3>
+<p><code>sort</code> 属于 STL
+算法，对迭代器范围内的元素排序，默认升序。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>降序可以用标准库提供的比较器：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
+<h3 id="自定义比较函数">自定义比较函数</h3>
+<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
+<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
+前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
+<code>&gt;=</code> 这种包含等号的条件。</p>
+<h3 id="小结">小结</h3>
+<table>
+<thead>
+<tr>
+<th>用法</th>
+<th>代码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升序</td>
+<td><code>sort(v.begin(), v.end())</code></td>
+</tr>
+<tr>
+<td>降序</td>
+<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
+</tr>
+<tr>
+<td>按自定义规则</td>
+<td><code>sort(v.begin(), v.end(), lambda)</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="常见误区">⚠️ 常见误区</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>误区</th>
+<th>正解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vector</code> 下标越界会报错</td>
+<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
+会抛异常</td>
+</tr>
+<tr>
+<td><code>string</code> 就是 <code>char[]</code></td>
+<td><code>string</code> 自动管理内存，支持
+<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
+</tr>
+<tr>
+<td>用 <code>map[]</code> 查询很安全</td>
+<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
+<code>find</code>/<code>count</code></td>
+</tr>
+<tr>
+<td><code>set</code> 和 <code>vector</code> 都能去重</td>
+<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
+</tr>
+<tr>
+<td>范围 for 遍历时随便删元素</td>
+<td>删除元素可能导致迭代器失效，需小心处理</td>
+</tr>
+<tr>
+<td><code>sort</code> 只能排数字</td>
+<td>传自定义比较函数就能排任意类型</td>
+</tr>
+<tr>
+<td>STL 容器都要自己管理内存</td>
+<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
+</tr>
+</tbody>
+</table>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p>STL
+三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
+</blockquote>
+<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
+管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
+自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>C/C++</tag>
+        <tag>编程入门</tag>
+        <tag>STL</tag>
+        <tag>vector</tag>
+        <tag>string</tag>
+        <tag>map</tag>
+        <tag>set</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>C/C++ 入门：动态内存管理</title>
     <url>/posts/d6a2e8f1/</url>
     <content><![CDATA[<p>栈上的变量由编译器自动管理，但程序运行时常常需要自己决定分配多少内存、什么时候释放，这就是动态内存。</p>
@@ -17613,438 +18045,6 @@ RAII 落到实处。最常用的是 <code>unique_ptr</code>。</p>
         <tag>动态内存</tag>
         <tag>new/delete</tag>
         <tag>智能指针</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>C/C++ 入门：STL 容器</title>
-    <url>/posts/e9f3b7c2/</url>
-    <content><![CDATA[<p>手动管理数组和字符串又麻烦又容易错，STL
-提供了一组现成的容器和算法，让存数据、查数据、排数据变成几行代码的事。</p>
-<span id="more"></span>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>STL</td>
-<td>Standard Template Library，标准模板库</td>
-<td>C++ 标准库的容器 + 算法</td>
-</tr>
-<tr>
-<td>容器（container）</td>
-<td>存储和管理一组元素的数据结构</td>
-<td>装数据的东西</td>
-</tr>
-<tr>
-<td><code>vector</code></td>
-<td>动态数组，内存连续，自动扩容</td>
-<td>自动扩容的数组</td>
-</tr>
-<tr>
-<td><code>string</code></td>
-<td>字符串类型，自动管理字符内存</td>
-<td>好用的字符串</td>
-</tr>
-<tr>
-<td><code>map</code></td>
-<td>键值对映射，按键有序</td>
-<td>字典/映射</td>
-</tr>
-<tr>
-<td><code>set</code></td>
-<td>不重复元素的有序集合</td>
-<td>去重 + 有序</td>
-</tr>
-<tr>
-<td>迭代器（iterator）</td>
-<td>遍历容器的指针式对象</td>
-<td>容器的通用游标</td>
-</tr>
-<tr>
-<td>范围 for</td>
-<td><code>for (auto x : c)</code> 遍历语法</td>
-<td>简单遍历</td>
-</tr>
-</tbody>
-</table>
-<h2 id="stl-是什么">🧩 STL 是什么</h2>
-<p>STL 是 C++ 标准库的核心组成部分，主要由三件东西协作：</p>
-<table>
-<thead>
-<tr>
-<th>组成</th>
-<th>作用</th>
-<th>例子</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>容器</td>
-<td>存储数据</td>
-<td><code>vector</code>、<code>map</code>、<code>set</code></td>
-</tr>
-<tr>
-<td>算法</td>
-<td>操作数据</td>
-<td><code>sort</code>、<code>find</code></td>
-</tr>
-<tr>
-<td>迭代器</td>
-<td>连接容器和算法</td>
-<td><code>begin()</code>、<code>end()</code></td>
-</tr>
-</tbody>
-</table>
-<p>STL
-用模板（template）实现，所以容器能装任意类型：<code>vector&lt;int&gt;</code>、<code>vector&lt;string&gt;</code>、<code>map&lt;string, int&gt;</code>。尖括号里的类型就是模板参数。</p>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[容器] &lt;--&gt; B[迭代器]
-    B &lt;--&gt; C[算法]
-    A --&gt; D[vector&#x2F;string&#x2F;map&#x2F;set]
-    C --&gt; E[sort&#x2F;find&#x2F;count]
-</code>
-</pre>
-<p>先记住一个总原则：<strong>能用 STL
-容器解决的，不要自己造轮子</strong>。</p>
-<h2 id="vector动态数组">🧮 vector：动态数组</h2>
-<h3 id="基本用法">基本用法</h3>
-<p><code>vector</code>
-是动态数组：像数组一样按下标访问，又能自动扩容，不用自己管内存。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 尾部追加元素，自动扩容</span></span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">10</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">20</span>);</span><br><span class="line">    v.<span class="built_in">push_back</span>(<span class="number">30</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; v[<span class="number">0</span>] &lt;&lt; endl;       <span class="comment">// 10，按下标访问</span></span><br><span class="line">    cout &lt;&lt; v.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，元素个数</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>也可以在创建时直接给初始值：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;     <span class="comment">// 初始化列表</span></span><br><span class="line"><span class="function">vector&lt;<span class="type">int</span>&gt; <span class="title">v2</span><span class="params">(<span class="number">10</span>, <span class="number">0</span>)</span></span>;         <span class="comment">// 10 个元素，都初始化为 0</span></span><br></pre></td></tr></table></figure>
-<h3 id="遍历">遍历</h3>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 方式一：按下标</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>; i &lt; v.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    cout &lt;&lt; v[i] &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 方式二：范围 for</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">    cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>size()</code> 返回的是
-<code>size_t</code>（无符号整数），所以循环变量建议也用
-<code>size_t</code>，避免有符号/无符号比较的警告。</p>
-</blockquote>
-<h3 id="常用接口">常用接口</h3>
-<table>
-<thead>
-<tr>
-<th>接口</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>push_back(x)</code></td>
-<td>尾部追加元素</td>
-</tr>
-<tr>
-<td><code>pop_back()</code></td>
-<td>删除尾部元素</td>
-</tr>
-<tr>
-<td><code>size()</code></td>
-<td>元素个数</td>
-</tr>
-<tr>
-<td><code>empty()</code></td>
-<td>是否为空</td>
-</tr>
-<tr>
-<td><code>front()</code> / <code>back()</code></td>
-<td>第一个 / 最后一个元素</td>
-</tr>
-<tr>
-<td><code>v[i]</code></td>
-<td>按下标访问，<strong>不检查越界</strong></td>
-</tr>
-<tr>
-<td><code>v.at(i)</code></td>
-<td>按下标访问，越界抛异常</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">v.<span class="built_in">push_back</span>(<span class="number">40</span>);   <span class="comment">// 追加</span></span><br><span class="line">v.<span class="built_in">pop_back</span>();      <span class="comment">// 删掉最后一个</span></span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><code>v[i]</code>
-越界是未定义行为，可能悄悄读到脏数据；不确定下标是否合法时，用
-<code>v.at(i)</code> 更安全。</p>
-</blockquote>
-<h2 id="string常用接口与互转">📝 string：常用接口与互转</h2>
-<h3 id="常用接口-1">常用接口</h3>
-<p><code>string</code> 是 C++
-的字符串类型，自动管理字符内存，可以拼接、比较、查找、截取。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">length</span>() &lt;&lt; endl;      <span class="comment">// 5，长度</span></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;        <span class="comment">// 5，和 length 一样</span></span><br><span class="line"></span><br><span class="line">    string t = s + <span class="string">&quot; world&quot;</span>;         <span class="comment">// 拼接</span></span><br><span class="line">    cout &lt;&lt; t &lt;&lt; endl;               <span class="comment">// hello world</span></span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; (s == <span class="string">&quot;hello&quot;</span>) &lt;&lt; endl;  <span class="comment">// 1，可以直接比较</span></span><br><span class="line"></span><br><span class="line">    <span class="type">size_t</span> pos = t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>);    <span class="comment">// 查找子串位置</span></span><br><span class="line">    cout &lt;&lt; pos &lt;&lt; endl;             <span class="comment">// 6</span></span><br><span class="line"></span><br><span class="line">    string sub = t.<span class="built_in">substr</span>(<span class="number">6</span>, <span class="number">5</span>);     <span class="comment">// 从位置 6 取 5 个字符</span></span><br><span class="line">    cout &lt;&lt; sub &lt;&lt; endl;             <span class="comment">// world</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>find</code> 找不到时返回
-<code>string::npos</code>，判断要用它：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (t.<span class="built_in">find</span>(<span class="string">&quot;world&quot;</span>) != string::npos) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;找到了&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="与-c-字符串互转">与 C 字符串互转</h3>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">string s = <span class="string">&quot;hello&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// string -&gt; C 字符串（const char*），用于传给旧接口</span></span><br><span class="line"><span class="type">const</span> <span class="type">char</span>* c = s.<span class="built_in">c_str</span>();</span><br><span class="line"></span><br><span class="line"><span class="comment">// C 字符串 -&gt; string，直接构造即可</span></span><br><span class="line">string t = c;</span><br></pre></td></tr></table></figure>
-<p>对比 C 风格的 <code>char[]</code>，<code>string</code>
-省去了手动管理长度、手动拼接的麻烦：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>C 风格 <code>char[]</code></th>
-<th><code>string</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>拼接</td>
-<td><code>strcat</code>，要保证空间够</td>
-<td><code>s1 + s2</code></td>
-</tr>
-<tr>
-<td>比较</td>
-<td><code>strcmp</code></td>
-<td><code>==</code></td>
-</tr>
-<tr>
-<td>长度</td>
-<td><code>strlen</code></td>
-<td><code>.size()</code></td>
-</tr>
-<tr>
-<td>拷贝</td>
-<td><code>strcpy</code></td>
-<td><code>=</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="map键值对">🗺️ map：键值对</h2>
-<h3 id="基本用法-1">基本用法</h3>
-<p><code>map</code>
-保存键值对（key-value），按键自动排序，查找、插入都很快。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;map&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    map&lt;string, <span class="type">int</span>&gt; scores;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 插入：用 [] 或 insert</span></span><br><span class="line">    scores[<span class="string">&quot;Alice&quot;</span>] = <span class="number">92</span>;</span><br><span class="line">    scores[<span class="string">&quot;Bob&quot;</span>] = <span class="number">88</span>;</span><br><span class="line">    scores.<span class="built_in">insert</span>(&#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找：[] 会插入默认值，find 不会</span></span><br><span class="line">    <span class="keyword">auto</span> it = scores.<span class="built_in">find</span>(<span class="string">&quot;Bob&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (it != scores.<span class="built_in">end</span>()) &#123;</span><br><span class="line">        cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;  <span class="comment">// Bob: 88</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：按键升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; kv : scores) &#123;</span><br><span class="line">        cout &lt;&lt; kv.first &lt;&lt; <span class="string">&quot; -&gt; &quot;</span> &lt;&lt; kv.second &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出（按键排序）：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Alice -&gt; 92</span><br><span class="line">Bob -&gt; 88</span><br><span class="line">Carol -&gt; 95</span><br></pre></td></tr></table></figure>
-<h3 id="和-find-的区别"><code>[]</code> 和 <code>find</code> 的区别</h3>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>键不存在时</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>scores["Bob"]</code></td>
-<td>自动插入一个默认值（0）</td>
-<td>需要写入时</td>
-</tr>
-<tr>
-<td><code>scores.find("Bob")</code></td>
-<td>返回 <code>end()</code>，不插入</td>
-<td>只查询时</td>
-</tr>
-</tbody>
-</table>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> x = scores[<span class="string">&quot;Dave&quot;</span>];   <span class="comment">// Dave 不存在，会被插入并初始化为 0</span></span><br></pre></td></tr></table></figure>
-<p>如果只是想查询某个键存不存在，用 <code>find</code> 或
-<code>count</code>，避免误插入脏数据：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (scores.<span class="built_in">count</span>(<span class="string">&quot;Dave&quot;</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;没有 Dave&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h2 id="set去重与有序">🧹 set：去重与有序</h2>
-<p><code>set</code> 保存不重复的元素，并且自动排序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;set&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    set&lt;<span class="type">int</span>&gt; s;</span><br><span class="line"></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">1</span>);</span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">3</span>);   <span class="comment">// 重复，被忽略</span></span><br><span class="line">    s.<span class="built_in">insert</span>(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    cout &lt;&lt; s.<span class="built_in">size</span>() &lt;&lt; endl;   <span class="comment">// 3，重复的 3 只算一个</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历：自动升序</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : s) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 3</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 查找</span></span><br><span class="line">    <span class="keyword">if</span> (s.<span class="built_in">count</span>(<span class="number">2</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;2 在集合里&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>set</code> 和 <code>vector</code> 都能装数据，区别在语义：</p>
-<table>
-<thead>
-<tr>
-<th>特性</th>
-<th><code>vector</code></th>
-<th><code>set</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>顺序</td>
-<td>保持插入顺序</td>
-<td>自动排序</td>
-</tr>
-<tr>
-<td>重复</td>
-<td>允许</td>
-<td>不允许</td>
-</tr>
-<tr>
-<td>按下标访问</td>
-<td>可以</td>
-<td>不可以，用迭代器</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>需要去重 + 有序时用
-<code>set</code>；需要保持插入顺序、按下标访问时用
-<code>vector</code>。</p>
-</blockquote>
-<h2 id="迭代器beginend-与范围-for">🔁 迭代器：begin/end 与范围 for</h2>
-<h3 id="基本概念">基本概念</h3>
-<p>迭代器可以理解成容器专用的指针：<code>begin()</code>
-指向第一个元素，<code>end()</code>
-指向最后一个元素的下一个位置（不指向有效元素）。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; *it &lt;&lt; <span class="string">&quot; &quot;</span>;    <span class="comment">// 解引用拿到元素</span></span><br><span class="line">&#125;</span><br><span class="line">cout &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
-<pre>
-<code class="mermaid">
-
-flowchart LR
-    A[begin 指向第一个元素] --&gt; B[元素...]
-    B --&gt; C[end 指向末尾之后]
-</code>
-</pre>
-<p>范围 for 就是迭代器遍历的语法糖，两者等价：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> x : v) &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 等价于</span></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = v.<span class="built_in">begin</span>(); it != v.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    <span class="type">int</span> x = *it;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>map</code>、<code>set</code> 也可以这样遍历。<code>map</code>
-的迭代器解引用得到的是键值对，用 <code>it-&gt;first</code> 和
-<code>it-&gt;second</code> 访问：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> it = scores.<span class="built_in">begin</span>(); it != scores.<span class="built_in">end</span>(); it++) &#123;</span><br><span class="line">    cout &lt;&lt; it-&gt;first &lt;&lt; <span class="string">&quot;: &quot;</span> &lt;&lt; it-&gt;second &lt;&lt; endl;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="迭代器失效问题">迭代器失效问题</h3>
-<p>迭代器指向的是容器内部的数据。如果容器发生了会移动数据或释放内存的操作，旧迭代器就失效了，再用它访问是未定义行为。</p>
-<p>最典型的例子是 <code>vector</code> 扩容：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line">vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> it = v.<span class="built_in">begin</span>();      <span class="comment">// 指向 1</span></span><br><span class="line"></span><br><span class="line">v.<span class="built_in">push_back</span>(<span class="number">4</span>);           <span class="comment">// 可能触发扩容，数据搬到新内存</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// cout &lt;&lt; *it &lt;&lt; endl;   // 危险：it 可能已失效</span></span><br></pre></td></tr></table></figure>
-<p>什么时候要警惕：</p>
-<table>
-<thead>
-<tr>
-<th>操作</th>
-<th>是否可能使旧迭代器失效</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 扩容（<code>push_back</code> 等）</td>
-<td>可能失效</td>
-</tr>
-<tr>
-<td><code>vector</code> 中间插入/删除</td>
-<td>受影响位置之后失效</td>
-</tr>
-<tr>
-<td><code>map</code>/<code>set</code> 插入</td>
-<td>通常不失效</td>
-</tr>
-<tr>
-<td>遍历中删除当前元素</td>
-<td>当前迭代器失效</td>
-</tr>
-</tbody>
-</table>
-<p>范围 for
-内部也是迭代器，所以在遍历时删除元素要格外小心，通常需要改用迭代器循环并小心处理，或先收集再删除。</p>
-<h2 id="sort-算法">🔀 sort 算法</h2>
-<h3 id="默认排序">默认排序</h3>
-<p><code>sort</code> 属于 STL
-算法，对迭代器范围内的元素排序，默认升序。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;<span class="type">int</span>&gt; v = &#123;<span class="number">5</span>, <span class="number">2</span>, <span class="number">8</span>, <span class="number">1</span>&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>());   <span class="comment">// 升序</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> x : v) &#123;</span><br><span class="line">        cout &lt;&lt; x &lt;&lt; <span class="string">&quot; &quot;</span>;       <span class="comment">// 1 2 5 8</span></span><br><span class="line">    &#125;</span><br><span class="line">    cout &lt;&lt; endl;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>降序可以用标准库提供的比较器：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">sort</span>(v.<span class="built_in">begin</span>(), v.<span class="built_in">end</span>(), <span class="built_in">greater</span>&lt;<span class="type">int</span>&gt;());   <span class="comment">// 降序</span></span><br></pre></td></tr></table></figure>
-<h3 id="自定义比较函数">自定义比较函数</h3>
-<p>排自定义类型时，用 lambda 告诉 <code>sort</code> 按什么排：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;algorithm&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;vector&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">Student</span> &#123;</span><br><span class="line">    string name;</span><br><span class="line">    <span class="type">int</span> score;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    vector&lt;Student&gt; students = &#123;</span><br><span class="line">        &#123;<span class="string">&quot;Alice&quot;</span>, <span class="number">92</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Bob&quot;</span>, <span class="number">88</span>&#125;,</span><br><span class="line">        &#123;<span class="string">&quot;Carol&quot;</span>, <span class="number">95</span>&#125;,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 按分数从高到低排</span></span><br><span class="line">    <span class="built_in">sort</span>(students.<span class="built_in">begin</span>(), students.<span class="built_in">end</span>(),</span><br><span class="line">         [](<span class="type">const</span> Student&amp; a, <span class="type">const</span> Student&amp; b) &#123;</span><br><span class="line">             <span class="keyword">return</span> a.score &gt; b.score;</span><br><span class="line">         &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">const</span> <span class="keyword">auto</span>&amp; s : students) &#123;</span><br><span class="line">        cout &lt;&lt; s.name &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; s.score &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Carol 95</span><br><span class="line">Alice 92</span><br><span class="line">Bob 88</span><br></pre></td></tr></table></figure>
-<p>比较函数返回 <code>true</code> 表示 a 应该排在 b
-前面。注意比较函数要满足严格弱序：相等时返回 <code>false</code>，不要写
-<code>&gt;=</code> 这种包含等号的条件。</p>
-<h3 id="小结">小结</h3>
-<table>
-<thead>
-<tr>
-<th>用法</th>
-<th>代码</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>升序</td>
-<td><code>sort(v.begin(), v.end())</code></td>
-</tr>
-<tr>
-<td>降序</td>
-<td><code>sort(v.begin(), v.end(), greater&lt;int&gt;())</code></td>
-</tr>
-<tr>
-<td>按自定义规则</td>
-<td><code>sort(v.begin(), v.end(), lambda)</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="常见误区">⚠️ 常见误区</h2>
-<table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th>误区</th>
-<th>正解</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>vector</code> 下标越界会报错</td>
-<td><code>v[i]</code> 不检查越界，是未定义行为；用 <code>v.at(i)</code>
-会抛异常</td>
-</tr>
-<tr>
-<td><code>string</code> 就是 <code>char[]</code></td>
-<td><code>string</code> 自动管理内存，支持
-<code>+</code>、<code>==</code>、<code>find</code> 等操作</td>
-</tr>
-<tr>
-<td>用 <code>map[]</code> 查询很安全</td>
-<td>键不存在时 <code>[]</code> 会插入默认值；只查询用
-<code>find</code>/<code>count</code></td>
-</tr>
-<tr>
-<td><code>set</code> 和 <code>vector</code> 都能去重</td>
-<td><code>vector</code> 不去重、保顺序；<code>set</code> 去重且有序</td>
-</tr>
-<tr>
-<td>范围 for 遍历时随便删元素</td>
-<td>删除元素可能导致迭代器失效，需小心处理</td>
-</tr>
-<tr>
-<td><code>sort</code> 只能排数字</td>
-<td>传自定义比较函数就能排任意类型</td>
-</tr>
-<tr>
-<td>STL 容器都要自己管理内存</td>
-<td>容器自动管理内存，别手动 <code>delete</code> 容器内部数据</td>
-</tr>
-</tbody>
-</table>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p>STL
-三件套各司其职：容器存数据（<code>vector</code>/<code>string</code>/<code>map</code>/<code>set</code>），迭代器统一遍历方式，算法直接复用（<code>sort</code>/<code>find</code>/<code>count</code>）。能用现成的，就别自己造。</p>
-</blockquote>
-<p>学到这里，前面手动 <code>new[]</code>/<code>delete[]</code>
-管理动态数组的章节，现在有了更省心的替代：<code>vector</code>
-自动扩容、自动释放，配合 <code>sort</code> 一行排序。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>C/C++</tag>
-        <tag>编程入门</tag>
-        <tag>STL</tag>
-        <tag>vector</tag>
-        <tag>string</tag>
-        <tag>map</tag>
-        <tag>set</tag>
       </tags>
   </entry>
   <entry>
@@ -22698,6 +22698,228 @@ class="uri">https://os.phil-opp.com/</a></li>
       </tags>
   </entry>
   <entry>
+    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
+    <url>/posts/a5117577/</url>
+    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
+只是地图上的一种东西。</p>
+<span id="more"></span>
+<blockquote>
+<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
+class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
+href="/posts/5d0b788d/">Rust OS
+入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
+需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
+为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
+</blockquote>
+<h2 id="基本概念速读">📚 基本概念速读</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>省流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>物理内存（Physical Memory）</td>
+<td>真正的 RAM 硬件</td>
+<td>可读写的存储芯片</td>
+</tr>
+<tr>
+<td>物理地址（Physical Address）</td>
+<td>CPU 访问物理资源时产生的地址</td>
+<td>不一定是 RAM 的地址</td>
+</tr>
+<tr>
+<td>物理地址空间（Physical Address Space）</td>
+<td>CPU 眼中全部地址的集合</td>
+<td>一张地址地图，RAM 只是其中一种</td>
+</tr>
+<tr>
+<td>MMIO（Memory-Mapped I/O）</td>
+<td>把设备寄存器映射进地址空间</td>
+<td>读写内存 = 操作硬件</td>
+</tr>
+<tr>
+<td>Memory Map</td>
+<td>记录地址区域用途的地图</td>
+<td>Kernel 靠它分辨能碰/不能碰</td>
+</tr>
+<tr>
+<td>Reserved</td>
+<td>地址空间里存在但 OS 不能用的区域</td>
+<td>千万别拿来当 RAM</td>
+</tr>
+<tr>
+<td>虚拟地址（Virtual Address）</td>
+<td>程序看到的地址，经 MMU 翻译</td>
+<td>程序眼里的地址是假的</td>
+</tr>
+</tbody>
+</table>
+<h2 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h2>
+<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
+RAM，那确实很简单：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
+<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
+时产生的地址叫<strong>物理地址（Physical
+Address）</strong>，而<strong>这个地址背后的东西不一定是
+RAM</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
+只是其中一种资源。</strong></p>
+</blockquote>
+<h2 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h2>
+<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
+<p>逐个来看：</p>
+<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
+本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
+<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
+附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
+访问它时路径是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
+<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
+ROM</strong>。</p>
+<p><strong>MMIO</strong>：见下一节。</p>
+<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
+<h2 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h2>
+<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
+的思想很简单：</p>
+<blockquote>
+<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
+</blockquote>
+<p>硬件工程师的思路是：CPU 本来就有读地址 /
+写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
+就不需要额外的指令来访问设备了。</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
+<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
+<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
+附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
+MMIO，只是地址和机制更复杂。</p>
+<h2 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h2>
+<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
+<ul>
+<li>被硬件使用</li>
+<li>被固件使用</li>
+<li>对应 MMIO</li>
+<li>有特殊用途</li>
+<li>芯片组保留区域</li>
+</ul>
+<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
+<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
+= 硬件。</p>
+<h2 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
+Map：Bootloader 为什么要传给 Kernel</h2>
+<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
+Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
+不能靠猜</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
+<p>它需要一张地图：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>整个启动链路串起来就是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
+<h2 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
+Allocator</h2>
+<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
+为例，下一步就是 <strong>Frame
+Allocator（物理页帧分配器）</strong>：</p>
+<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
+是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
+frame</strong>：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
+<p>之后所有内存需求都从这里申请：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
+<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
+Memory</strong> 就是接下来最自然的学习路线。</p>
+<h2 id="虚拟地址程序看到的地址是假的">🕳️
+虚拟地址：程序看到的地址是假的</h2>
+<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
+<p>通常<strong>并不是 RAM
+的物理地址</strong>，而是<strong>虚拟地址（Virtual
+Address）</strong>。现代操作系统的地址翻译链路是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
+<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
+<code>0x7FFF0000</code>，实际过程是：</p>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
+<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
+个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>层级</th>
+<th>内容</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一层：虚拟地址空间</td>
+<td>程序看到的地址</td>
+<td><code>0x7FFF0000</code></td>
+</tr>
+<tr>
+<td>第二层：物理地址空间</td>
+<td>MMU 翻译后的地址</td>
+<td><code>0x12345000</code></td>
+</tr>
+<tr>
+<td>第三层：真正的硬件</td>
+<td>地址最终对应的东西</td>
+<td>RAM / MMIO / Firmware / Reserved</td>
+</tr>
+</tbody>
+</table>
+<h2 id="一张图串起全部">🎨 一张图串起全部</h2>
+<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
+<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
+<ul>
+<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
+Stack/Heap、Page Tables、各进程的
+Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
+<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
+RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
+控制区域等。</li>
+</ul>
+<p><strong>这两处提到的内存内容不是一回事。</strong></p>
+<h2 id="总结">✅ 总结</h2>
+<blockquote>
+<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
+只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
+分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
+Allocator，进而进入虚拟内存的世界。</p>
+</blockquote>
+<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
+Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
+Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
+<p>Happy Hacking! 🎉</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>Rust</tag>
+        <tag>内存管理</tag>
+        <tag>物理地址</tag>
+        <tag>MMIO</tag>
+        <tag>Memory Map</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Rust OS 入门：从按下电源键到内核接管</title>
     <url>/posts/5d0b788d/</url>
     <content><![CDATA[<p>按下电源键时，RAM
@@ -23115,228 +23337,6 @@ _start</a>》的内容。两篇连起来读，启动的完整图景就通了。<
         <tag>实模式</tag>
         <tag>Rust</tag>
         <tag>Bootloader</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Rust OS 入门：物理地址 ≠ RAM 地址——地址空间、MMIO 与 Memory Map</title>
-    <url>/posts/a5117577/</url>
-    <content><![CDATA[<p>物理地址（Physical Address）是一张地址地图，RAM
-只是地图上的一种东西。</p>
-<span id="more"></span>
-<blockquote>
-<p>本文是《Writing an OS in Rust》（<a href="https://os.phil-opp.com/"
-class="uri">https://os.phil-opp.com/</a>）入门系列的第三篇，接上《<a
-href="/posts/5d0b788d/">Rust OS
-入门：从按下电源键到内核接管</a>》里”内存映射：Kernel
-需要知道机器长什么样”那一节，把物理地址空间里到底有什么、Bootloader
-为什么要把 Memory Map 传给 Kernel 彻底讲透。</p>
-</blockquote>
-<h2 id="基本概念速读">📚 基本概念速读</h2>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>名称</th>
-<th>定义</th>
-<th>省流</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>物理内存（Physical Memory）</td>
-<td>真正的 RAM 硬件</td>
-<td>可读写的存储芯片</td>
-</tr>
-<tr>
-<td>物理地址（Physical Address）</td>
-<td>CPU 访问物理资源时产生的地址</td>
-<td>不一定是 RAM 的地址</td>
-</tr>
-<tr>
-<td>物理地址空间（Physical Address Space）</td>
-<td>CPU 眼中全部地址的集合</td>
-<td>一张地址地图，RAM 只是其中一种</td>
-</tr>
-<tr>
-<td>MMIO（Memory-Mapped I/O）</td>
-<td>把设备寄存器映射进地址空间</td>
-<td>读写内存 = 操作硬件</td>
-</tr>
-<tr>
-<td>Memory Map</td>
-<td>记录地址区域用途的地图</td>
-<td>Kernel 靠它分辨能碰/不能碰</td>
-</tr>
-<tr>
-<td>Reserved</td>
-<td>地址空间里存在但 OS 不能用的区域</td>
-<td>千万别拿来当 RAM</td>
-</tr>
-<tr>
-<td>虚拟地址（Virtual Address）</td>
-<td>程序看到的地址，经 MMU 翻译</td>
-<td>程序眼里的地址是假的</td>
-</tr>
-</tbody>
-</table>
-<h2 id="物理地址-ram-地址">🧩 物理地址 ≠ RAM 地址</h2>
-<p>先想象 CPU 眼里的世界。假设电脑有 16GB RAM，如果地址空间里只有
-RAM，那确实很简单：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 ───────┐</span><br><span class="line">                  │</span><br><span class="line">                  │ 16 GB RAM</span><br><span class="line">                  │</span><br><span class="line">0x3FFFFFFFF ──────┘</span><br></pre></td></tr></table></figure>
-<p>但真实电脑不是这样。CPU 执行 <code>mov rax, [0x12345678]</code>
-时产生的地址叫<strong>物理地址（Physical
-Address）</strong>，而<strong>这个地址背后的东西不一定是
-RAM</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line"></span><br><span class="line">0x00000000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM</span><br><span class="line">            │</span><br><span class="line">0x0009FFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Reserved</span><br><span class="line">            │</span><br><span class="line">0x000F0000 ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ Firmware / ROM</span><br><span class="line">            │</span><br><span class="line">0x000FFFFF ───────────────</span><br><span class="line">            │</span><br><span class="line">            │ RAM / ...</span><br><span class="line">            │</span><br><span class="line">            ...</span><br></pre></td></tr></table></figure>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址；RAM
-只是其中一种资源。</strong></p>
-</blockquote>
-<h2 id="物理地址空间里有什么">🗺️ 物理地址空间里有什么</h2>
-<p>对一台典型的 x86 PC，物理地址空间大致可以分成五类：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">物理地址空间</span><br><span class="line">│</span><br><span class="line">├── RAM              可读写存储</span><br><span class="line">├── Firmware / ROM   主板上的固件</span><br><span class="line">├── MMIO             设备寄存器</span><br><span class="line">├── Reserved         存在但不能用</span><br><span class="line">└── 其他硬件相关区域</span><br></pre></td></tr></table></figure>
-<p>逐个来看：</p>
-<p><strong>RAM</strong>：最好理解，CPU 访问它就是普通读写。RAM
-本身不规定这里必须放什么，启动后由操作系统动态填充：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line">│</span><br><span class="line">├── Kernel</span><br><span class="line">├── Kernel Stack</span><br><span class="line">├── Page Tables</span><br><span class="line">├── 进程 A</span><br><span class="line">│    ├── Code</span><br><span class="line">│    ├── Data</span><br><span class="line">│    ├── Heap</span><br><span class="line">│    └── Stack</span><br><span class="line">├── 进程 B</span><br><span class="line">├── Disk Cache</span><br><span class="line">├── Network Buffers</span><br><span class="line">└── ...</span><br></pre></td></tr></table></figure>
-<p><strong>Firmware / ROM</strong>：例如物理地址 <code>0x000F0000</code>
-附近对应的可能是<strong>主板上的 Flash ROM</strong>（BIOS）。CPU
-访问它时路径是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU → Memory Controller / Chipset → 主板上的 Firmware Flash</span><br></pre></td></tr></table></figure>
-<p>而不是 <code>CPU → RAM</code>。这就是 <strong>Memory-mapped
-ROM</strong>。</p>
-<p><strong>MMIO</strong>：见下一节。</p>
-<p><strong>Reserved</strong>：存在于地址空间里，但操作系统不能随便用。</p>
-<h2 id="mmio内存映射-io">🔌 MMIO：内存映射 I/O</h2>
-<p><strong>MMIO（Memory-Mapped I/O，内存映射 I/O）</strong>
-的思想很简单：</p>
-<blockquote>
-<p><strong>把硬件设备的寄存器映射到物理地址空间里。</strong></p>
-</blockquote>
-<p>硬件工程师的思路是：CPU 本来就有读地址 /
-写地址的机制，那干脆把设备寄存器也放进地址空间，CPU
-就不需要额外的指令来访问设备了。</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 看起来：</span><br><span class="line"></span><br><span class="line">地址 0x1000 → RAM</span><br><span class="line">地址 0x2000 → RAM</span><br><span class="line">地址 0x3000 → RAM</span><br><span class="line">地址 0xF000 → GPU</span><br><span class="line">地址 0xF100 → 网卡</span><br><span class="line">地址 0xF200 → NVMe</span><br></pre></td></tr></table></figure>
-<p>假设显卡把某个寄存器规定在物理地址 <code>0xF0000000</code>：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mov eax, [0xF0000000]   ; 不是读 RAM，而是在读 GPU 寄存器的值</span><br></pre></td></tr></table></figure>
-<p>经典的例子是传统 PC 的显存区域：CPU 往物理地址 <code>0xA0000</code>
-附近写数据，就会影响屏幕显示内容。现代 PCIe 设备也大量使用
-MMIO，只是地址和机制更复杂。</p>
-<h2 id="reserved为什么不能碰">⚠️ Reserved：为什么不能碰</h2>
-<p>某些物理地址区域存在于地址空间里，但<strong>操作系统不能随便使用</strong>。原因可能是：</p>
-<ul>
-<li>被硬件使用</li>
-<li>被固件使用</li>
-<li>对应 MMIO</li>
-<li>有特殊用途</li>
-<li>芯片组保留区域</li>
-</ul>
-<p>如果 OS 把它当普通 RAM 存数据，后果很严重：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">写入数据</span><br><span class="line">    ↓</span><br><span class="line">实际上写到了某个硬件寄存器</span><br><span class="line">    ↓</span><br><span class="line">硬件收到奇怪命令</span><br><span class="line">    ↓</span><br><span class="line">💥</span><br></pre></td></tr></table></figure>
-<p>所以 OS 必须非常小心地区分：绿色 = 可以拿来用，红色 = 千万别碰，黄色
-= 硬件。</p>
-<h2 id="memory-mapbootloader-为什么要传给-kernel">📦 Memory
-Map：Bootloader 为什么要传给 Kernel</h2>
-<p>现在就能理解为什么 Bootloader 要把 <strong>Memory
-Map（内存映射）</strong> 传给 Kernel 了——<strong>Kernel
-不能靠猜</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">0x00000000 → RAM？</span><br><span class="line">0x000A0000 → RAM？</span><br><span class="line">0xF0000000 → RAM？</span><br></pre></td></tr></table></figure>
-<p>它需要一张地图：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">Physical Memory Map</span><br><span class="line"></span><br><span class="line">起始地址        结束地址        类型</span><br><span class="line">0x00000000     0x0009FFFF     RAM</span><br><span class="line">0x000A0000     0x000FFFFF     Reserved</span><br><span class="line">0x00100000     0x7FFFFFFF     RAM</span><br><span class="line">...</span><br><span class="line">0xF0000000     0xF0FFFFFF     MMIO</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
-<p>整个启动链路串起来就是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">电脑启动 → BIOS → 检测 RAM / 硬件 / 物理地址布局</span><br><span class="line">    → Bootloader → 保存并传递 Memory Map</span><br><span class="line">    → Kernel → 区分可分配 / 不可分配 / 设备 MMIO</span><br></pre></td></tr></table></figure>
-<h2 id="从-memory-map-到-frame-allocator">🧱 从 Memory Map 到 Frame
-Allocator</h2>
-<p>拿到 Memory Map 之后，Kernel 才能建立自己的内存管理系统。以 Rust OS
-为例，下一步就是 <strong>Frame
-Allocator（物理页帧分配器）</strong>：</p>
-<p>假设 Memory Map 告诉 Kernel：<code>0x100000 ~ 0x80000000</code>
-是可用 RAM，Kernel 就把它切成一个个 <strong>4 KiB page
-frame</strong>：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">RAM</span><br><span class="line"></span><br><span class="line">0x100000</span><br><span class="line">   │</span><br><span class="line">   ├── Frame 0     4 KiB</span><br><span class="line">   ├── Frame 1     4 KiB</span><br><span class="line">   ├── Frame 2     4 KiB</span><br><span class="line">   ├── Frame 3     4 KiB</span><br><span class="line">   ├── ...</span><br><span class="line">   └── Frame N</span><br></pre></td></tr></table></figure>
-<p>之后所有内存需求都从这里申请：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">需要创建页表？ → 申请一个 Frame</span><br><span class="line">需要创建进程？ → 申请一些 Frame</span><br><span class="line">需要 Kernel Heap？ → 申请一些 Frame</span><br></pre></td></tr></table></figure>
-<p><strong>Memory Map → Frame Allocator → Page Table → Virtual
-Memory</strong> 就是接下来最自然的学习路线。</p>
-<h2 id="虚拟地址程序看到的地址是假的">🕳️
-虚拟地址：程序看到的地址是假的</h2>
-<p>到这里还有一个很容易混淆的点。你写代码时看到的地址：</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *p = <span class="built_in">malloc</span>(<span class="number">100</span>);   <span class="comment">// p ≈ 0x7FF123456000</span></span><br></pre></td></tr></table></figure>
-<p>通常<strong>并不是 RAM
-的物理地址</strong>，而是<strong>虚拟地址（Virtual
-Address）</strong>。现代操作系统的地址翻译链路是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">程序</span><br><span class="line"> │</span><br><span class="line"> │ 虚拟地址</span><br><span class="line"> ▼</span><br><span class="line">┌─────────────┐</span><br><span class="line">│ MMU         │</span><br><span class="line">│ Page Tables │</span><br><span class="line">└──────┬──────┘</span><br><span class="line">       │</span><br><span class="line">       │ 翻译</span><br><span class="line">       ▼</span><br><span class="line">物理地址</span><br><span class="line">       │</span><br><span class="line">       ▼</span><br><span class="line">RAM / MMIO / ...</span><br></pre></td></tr></table></figure>
-<p>举例：程序执行 <code>*p = 123</code>，<code>p</code> 是虚拟地址
-<code>0x7FFF0000</code>，实际过程是：</p>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">CPU 写虚拟地址 0x7FFF0000</span><br><span class="line">    → MMU 查 Page Table</span><br><span class="line">    → 翻译成物理地址 0x12345000</span><br><span class="line">    → 写入 RAM</span><br></pre></td></tr></table></figure>
-<p>所以 <code>0x7FFF0000</code> 不是 RAM 第 0x7FFF0000
-个字节，而是当前这个进程看到的虚拟地址。由此可以建立三层概念：</p>
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>层级</th>
-<th>内容</th>
-<th>示例</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>第一层：虚拟地址空间</td>
-<td>程序看到的地址</td>
-<td><code>0x7FFF0000</code></td>
-</tr>
-<tr>
-<td>第二层：物理地址空间</td>
-<td>MMU 翻译后的地址</td>
-<td><code>0x12345000</code></td>
-</tr>
-<tr>
-<td>第三层：真正的硬件</td>
-<td>地址最终对应的东西</td>
-<td>RAM / MMIO / Firmware / Reserved</td>
-</tr>
-</tbody>
-</table>
-<h2 id="一张图串起全部">🎨 一张图串起全部</h2>
-<figure class="highlight text"><table><tr><td class="code"><pre><span class="line">          用户程序</span><br><span class="line">             │</span><br><span class="line">             │ 虚拟地址</span><br><span class="line">             ▼</span><br><span class="line">      ┌──────────────┐</span><br><span class="line">      │     MMU      │</span><br><span class="line">      │  Page Table  │</span><br><span class="line">      └──────┬───────┘</span><br><span class="line">             │</span><br><span class="line">             │ 物理地址</span><br><span class="line">             ▼</span><br><span class="line">┌───────────────────────────┐</span><br><span class="line">│   Physical Address Space  │</span><br><span class="line">│                           │</span><br><span class="line">│  0x00000000               │</span><br><span class="line">│      │                    │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── Reserved         │</span><br><span class="line">│      ├── Firmware         │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      ├── MMIO             │</span><br><span class="line">│      ├── RAM              │</span><br><span class="line">│      └── ...              │</span><br><span class="line">└───────────────────────────┘</span><br></pre></td></tr></table></figure>
-<p>再回到开头的疑问：16GB RAM 里面有什么？要分两种情况回答：</p>
-<ul>
-<li><strong>问 RAM 这块硬件运行时存什么</strong>：Kernel、Kernel
-Stack/Heap、Page Tables、各进程的
-Code/Data/Heap/Stack、文件缓存、网络缓冲区、设备缓冲区等。</li>
-<li><strong>问 CPU 的整个物理地址空间里有什么</strong>：可用
-RAM、Reserved 区域、Firmware/ROM、MMIO、ACPI 硬件信息、APIC
-控制区域等。</li>
-</ul>
-<p><strong>这两处提到的内存内容不是一回事。</strong></p>
-<h2 id="总结">✅ 总结</h2>
-<blockquote>
-<p><strong>物理地址是 CPU 用来定位物理资源的地址，RAM
-只是地址空间里的一种资源。</strong> Kernel 靠 Bootloader 传的 Memory Map
-分辨能碰 / 不能碰 / 是硬件，才能安全地建立 Frame
-Allocator，进而进入虚拟内存的世界。</p>
-</blockquote>
-<p>下一步建议沿着 <strong>Memory Map → Frame Allocator → Page Table →
-Virtual Address</strong> 继续：搞清一个 4 KiB 的物理页帧到底是什么、Page
-Table 怎么把虚拟地址翻译成物理地址，前面的所有概念就会真正串起来。</p>
-<p>Happy Hacking! 🎉</p>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>Rust</tag>
-        <tag>内存管理</tag>
-        <tag>物理地址</tag>
-        <tag>MMIO</tag>
-        <tag>Memory Map</tag>
       </tags>
   </entry>
   <entry>
