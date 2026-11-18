@@ -5868,283 +5868,6 @@ CI 早点发现错。</li>
       </tags>
   </entry>
   <entry>
-    <title>Compute Sanitizer 实用指南：从 0 到熟练</title>
-    <url>/posts/a1b2c3d4/</url>
-    <content><![CDATA[<p>Compute Sanitizer（前身 <code>cuda-memcheck</code>）用于定位 CUDA
-程序中的越界读写、未初始化、数据竞争与 Barrier
-不匹配等问题。本文按最小示例、常见报错、命令参数与协同工具的顺序，整理一份可参考的排查笔记。</p>
-<span id="more"></span>
-<h2
-id="学习地图由浅入深可边学边用">学习地图（由浅入深，可边学边用）</h2>
-<ul>
-<li><strong>CUDA 基础语法</strong>：能写/编译最简单的
-<code>kernel</code>，理解
-<code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code>、<code>__global__</code>/<code>__device__</code>。</li>
-<li><strong>GPU 线程层级与同步</strong>：Warp / Block /
-Grid，<code>__syncthreads()</code>、<code>atomic*</code>、<code>cudaDeviceSynchronize()</code>
-的作用与限制。</li>
-<li><strong>GPU 内存层次</strong>：Global / Shared / Local / Constant /
-Texture 的用途、可见性、对齐与带宽差异。</li>
-<li><strong>常见 GPU Bug
-类型</strong>：越界、未初始化、数据竞争、Barrier 不匹配等（Sanitizer
-就是为它们报警）。</li>
-<li><strong><code>nvcc</code>
-编译选项</strong>：<code>-G</code>、<code>-g</code>、<code>-lineinfo</code>、<code>-rdc=true</code>
-等，为报告提供更友好的源码回溯。</li>
-<li><strong>Compute Sanitizer
-命令行</strong>：<code>--tool</code>、<code>--print-limit</code>、<code>--kernel-regex</code>、<code>--log-file</code>、<code>--launch-count</code>
-等高频旗标。</li>
-<li><strong>报告阅读与定位</strong>：看懂
-<code>Invalid __global__ read of size 4 at myKernel+0x280</code>
-并回溯到源码行与线程坐标。</li>
-<li><strong>性能开销与调优</strong>：理解检查为什么会变慢，以及用小数据集、<code>--launch-count</code>
-等手段控时。</li>
-<li><strong>与其他工具协同</strong>：<code>nsys</code> 找热点 →
-Sanitizer 精查；结合 <code>cuda-gdb</code> / Nsight
-工具链提升效率。</li>
-<li><strong>驱动/CUDA 版本兼容</strong>：避免工具新版 +
-驱动旧版导致的报错或缺失功能。</li>
-</ul>
-<h2 id="cuda-基础语法最小可运行示例">CUDA
-基础语法（最小可运行示例）</h2>
-<p>下面是一个最小示例：把数组里的每个元素都加 1。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// file: add_one.cu</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;cstdio&gt;</span></span></span><br><span class="line"></span><br><span class="line">__global__ <span class="type">void</span> <span class="title function_">add_one</span><span class="params">(<span class="type">int</span>* data, <span class="type">int</span> n)</span> &#123;</span><br><span class="line">    <span class="type">int</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid &lt; n) data[tid] += <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">int</span> n = <span class="number">16</span>;</span><br><span class="line">    <span class="type">int</span> h[n] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="type">int</span> *d = nullptr;</span><br><span class="line">    cudaMalloc(&amp;d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>));</span><br><span class="line">    cudaMemcpy(d, h, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyHostToDevice);</span><br><span class="line"></span><br><span class="line">    dim3 <span class="title function_">block</span><span class="params">(<span class="number">8</span>)</span>, <span class="title function_">grid</span><span class="params">((n + block.x - <span class="number">1</span>) / block.x)</span>;</span><br><span class="line">    add_one&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d, n);</span><br><span class="line">    cudaDeviceSynchronize();</span><br><span class="line"></span><br><span class="line">    cudaMemcpy(h, d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyDeviceToHost);</span><br><span class="line">    cudaFree(d);</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; n; ++i) <span class="built_in">printf</span>(<span class="string">&quot;%d &quot;</span>, h[i]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译（带调试信息与行号，便于报告映射回源码）：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo add_one.cu -o add_one</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong><code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code></strong>：设定网格与线程块维度；<code>threadIdx</code>/<code>blockIdx</code>
-提供线程坐标。</li>
-<li><strong><code>__global__</code></strong>：从主机端调用、在设备端执行的函数（即
-kernel）。</li>
-<li><strong><code>__device__</code></strong>：仅在设备端调用/执行的函数。</li>
-</ul>
-<h2 id="线程层级与同步原语">线程层级与同步原语</h2>
-<ul>
-<li><strong>执行模型</strong>：
-<ul>
-<li><strong>Warp</strong>：通常 32 线程的执行束，同步粒度最细。</li>
-<li><strong>Block</strong>：多个 warp 组成；可用
-<code>__syncthreads()</code> 在同一 Block 内屏障同步。</li>
-<li><strong>Grid</strong>：由多个 Block 组成；不同 Block 之间不可用
-<code>__syncthreads()</code> 同步。</li>
-</ul></li>
-<li><strong>同步与原子</strong>：
-<ul>
-<li><code>__syncthreads()</code>：只作用于 Block
-内；如果有条件分支导致并非所有线程执行，可能引发 Barrier 不匹配。</li>
-<li><code>atomicAdd/atomicExch/...</code>：在共享全局状态时消除数据竞争，但会降低并发度。</li>
-<li><code>cudaDeviceSynchronize()</code>：在主机端等待所有之前发起的
-kernel 完成，常用于调试阶段确保报错及时显现。</li>
-</ul></li>
-</ul>
-<h2 id="gpu-内存层次结构">GPU 内存层次结构</h2>
-<ul>
-<li><strong>Global
-Memory</strong>：容量大、延迟高、全设备可见；注意对齐与合并访问（coalescing）。</li>
-<li><strong>Shared Memory</strong>：Block 内共享、低延迟、高带宽；需留意
-Bank 冲突与对齐。</li>
-<li><strong>Local
-Memory</strong>：线程私有，寄存器溢出或大对象会落在这里，实质上也是从全局内存取，延迟高。</li>
-<li><strong>Constant/Texture</strong>：只读、缓存友好（广播/2D
-局部性场景）。</li>
-</ul>
-<p>理解这些有助于你判断这个地址是否可见或越界，从而更快看懂 Sanitizer
-的报错。</p>
-<h2 id="常见-gpu-bug-类型sanitizer-重点覆盖">常见 GPU Bug
-类型（Sanitizer 重点覆盖）</h2>
-<ul>
-<li><strong>越界读写</strong>：访问数组下标 &lt;0 或 ≥N。</li>
-<li><strong>未初始化读</strong>：读到了未写入的内存内容。</li>
-<li><strong>数据竞争 (race)</strong>：多个线程无序写同一地址。</li>
-<li><strong>Barrier 不匹配</strong>：同一 Block 内，有些线程执行了
-<code>__syncthreads()</code>，有些没执行。</li>
-</ul>
-<p>下面分别给出“可运行的最小示例 → 如何触发 → 典型报文（示意） →
-修复方式”。</p>
-<h3 id="越界读写out-of-bounds">4.1 越界读写（Out-of-Bounds）</h3>
-<p>最常见，也最好修。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// oob.cu</span><br><span class="line">__global__ void oob(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    // 故意漏掉边界判断</span><br><span class="line">    a[i] = 42;  // 当 i &gt;= n 时越界写</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>编译与运行（调试构建）：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo oob.cu -o oob</span><br><span class="line">compute-sanitizer --tool memcheck ./oob | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>典型报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:5: oob+0x30</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
-<p>如何修：补边界条件；或在 launch 侧收紧
-<code>grid</code>/<code>block</code>。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void oob_fix(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) a[i] = 42;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="未初始化读uninitialized-read">4.2 未初始化读（Uninitialized
-Read）</h3>
-<p>读到了从未写入的值，往往来源于遗漏初始化或越界导致的脏数据。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// uninit.cu</span><br><span class="line">__global__ void use_before_set(int* out, const int* src, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) &#123;</span><br><span class="line">        // src 未初始化就被读取</span><br><span class="line">        out[i] = src[i] + 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>主机侧若只分配未写入：</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *d_src=<span class="literal">nullptr</span>, *d_out=<span class="literal">nullptr</span>;</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_src, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_out, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 故意不 cudaMemset/cudaMemcpy d_src</span></span><br><span class="line">use_before_set&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d_out, d_src, n);</span><br></pre></td></tr></table></figure>
-<p>检查：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo uninit.cu -o uninit</span><br><span class="line">compute-sanitizer --tool memcheck ./uninit | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Uninitialized __global__ memory read of size 4</span><br><span class="line">=========     at use_before_set(int*, int const*, int):uninit.cu:6</span><br></pre></td></tr></table></figure>
-<p>如何修：在设备内或拷贝前初始化。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemset</span>(d_src, <span class="number">0</span>, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 或者先在主机填充，再 cudaMemcpy 到设备</span></span><br></pre></td></tr></table></figure>
-<h3 id="数据竞争data-race">4.3 数据竞争（Data Race）</h3>
-<p>多个线程对同一地址进行未同步的读/写，导致结果随机。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// race.cu</span><br><span class="line">__global__ void sum_naive(int* out) &#123;</span><br><span class="line">    // 让所有线程把 1 加到同一个位置</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) &#123;</span><br><span class="line">        // 非原子写：存在数据竞争</span><br><span class="line">        *out += 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>检查：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo race.cu -o race</span><br><span class="line">compute-sanitizer --tool racecheck ./race | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Race reported between Write and Write</span><br><span class="line">=========     Location: 0x7f2c38000000 in global memory</span><br><span class="line">=========     by thread (t*,b*) at sum_naive:race.cu:7</span><br></pre></td></tr></table></figure>
-<p>如何修：使用原子操作或重构并行归约。</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void sum_atomic(int* out) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) atomicAdd(out, 1);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>更高性能的做法是先在 Block 内用共享内存做局部和，再用一次原子把每个
-Block 的结果汇总到全局。</p>
-<h3 id="barrier-不匹配barrier-divergence">4.4 Barrier 不匹配（Barrier
-Divergence）</h3>
-<p>同一 Block 内不是所有线程都在同一控制流路径调用
-<code>__syncthreads()</code>，会导致死锁或未定义行为。</p>
-<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// barrier.cu</span></span><br><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">bad_barrier</span><span class="params">(<span class="type">int</span>* a)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid % <span class="number">2</span> == <span class="number">0</span>) &#123;</span><br><span class="line">        __syncthreads();  <span class="comment">// 只有偶数线程到达屏障</span></span><br><span class="line">        a[tid] = <span class="number">1</span>;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        a[tid] = <span class="number">2</span>;</span><br><span class="line">        <span class="comment">// 缺少同步</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>检查：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo barrier.cu -o barrier</span><br><span class="line">compute-sanitizer --tool synccheck ./barrier | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
-<p>报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Barrier error detected. Divergent thread(s) in block.</span><br><span class="line">=========     at __syncthreads(): barrier.cu:5</span><br></pre></td></tr></table></figure>
-<p>如何修：确保同一 Block
-内所有线程对屏障的到达一致（要么都到，要么都不到），或将屏障搬出分支，或重写算法避免需要屏障。</p>
-<h2 id="nvcc-编译选项给报告喂足信息"><code>nvcc</code>
-编译选项：给报告喂足信息</h2>
-<ul>
-<li><strong><code>-g -G</code></strong>：生成设备端调试符号（注意：会显著降低性能，调试用；性能测试请移除
-<code>-G</code>）。</li>
-<li><strong><code>-lineinfo</code></strong>：保留源码行号信息，Sanitizer
-可将 PC 偏移映射回源文件行。</li>
-<li><strong><code>-rdc=true</code></strong>：启用设备端链接，跨文件/库的设备函数能正确回溯。</li>
-<li>可选：<code>-Xcompiler -fno-omit-frame-pointer</code>
-便于栈回溯；<code>-O0</code> 降低优化避免行号漂移。</li>
-</ul>
-<p>推荐调试构建与发布构建分离：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Debug（用于 Sanitizer）</span></span><br><span class="line">nvcc -g -G -lineinfo -rdc=<span class="literal">true</span> -O0 app.cu -o app_dbg</span><br><span class="line"></span><br><span class="line"><span class="comment"># Release（性能评测）</span></span><br><span class="line">nvcc -O3 app.cu -o app_rel</span><br></pre></td></tr></table></figure>
-<h2 id="compute-sanitizer命令行速查">Compute Sanitizer：命令行速查</h2>
-<p>基本用法：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./app_dbg</span><br></pre></td></tr></table></figure>
-<p>常用工具（<code>--tool</code>）：</p>
-<ul>
-<li><code>memcheck</code>：越界、未初始化、非法地址等内存问题。</li>
-<li><code>racecheck</code>：数据竞争（全局/共享内存的读写冲突）。</li>
-<li><code>initcheck</code>：检测未初始化的全局内存使用。</li>
-<li><code>synccheck</code>：屏障不匹配、死锁相关问题。</li>
-</ul>
-<p>高频旗标：</p>
-<ul>
-<li><code>--print-limit &lt;N&gt;</code>：每类问题最多打印 N
-条，控制噪音。</li>
-<li><code>--kernel-regex &lt;regex&gt;</code>：只检查匹配名称的
-kernel，聚焦问题。</li>
-<li><code>--launch-count &lt;N&gt;</code>：只检查前 N 次 kernel
-启动，快速抽样。</li>
-<li><code>--log-file &lt;path&gt;</code>：将报告写入文件，便于后续解析与分享。</li>
-<li><code>--target-processes all|application-only</code>：当程序会派生子进程时很有用。</li>
-</ul>
-<p>示例：只检查 <code>oob</code> 这个 kernel
-的前两次启动，并把日志保存到 <code>cs.log</code>：</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer \</span><br><span class="line">  --tool memcheck \</span><br><span class="line">  --kernel-regex <span class="string">&quot;^oob$&quot;</span> \</span><br><span class="line">  --launch-count 2 \</span><br><span class="line">  --print-limit 20 \</span><br><span class="line">  --log-file cs.log \</span><br><span class="line">  ./app_dbg --small-input</span><br></pre></td></tr></table></figure>
-<h2 id="报告阅读与定位技巧">报告阅读与定位技巧</h2>
-<p>典型报文（示意）：</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:6: oob+0x40</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
-<p>如何快速定位：</p>
-<ul>
-<li><strong>看标题</strong>：<code>Invalid __global__ write of size 4</code>
-→ 非法全局写、长度 4 字节。</li>
-<li><strong>看符号/行号</strong>：<code>oob.cu:6</code> 需要
-<code>-lineinfo</code>/<code>-G</code> 支持。</li>
-<li><strong>看线程坐标</strong>：<code>thread (15,0,0) in block (1,0,0)</code>
-帮助你还原分支条件与边界判断。</li>
-<li><strong>回源代码</strong>：
-<ul>
-<li>确认是否缺少 <code>if (i &lt; n)</code> 之类的边界保护；</li>
-<li>若为竞争，检查是否需要 <code>atomic*</code>
-或者按块分配私有缓冲；</li>
-<li>若为 Barrier，不要将 <code>__syncthreads()</code>
-放在分支内（除非分支路径对所有线程一致）。</li>
-</ul></li>
-</ul>
-<p>调一类警告时，善用 <code>--kernel-regex</code>
-与最小复现输入，可大幅缩短迭代时间。</p>
-<h2 id="性能开销与调优">性能开销与调优</h2>
-<p>Sanitizer
-会“显著变慢”（有时数十倍），属于正常现象。降低成本的常用手段：</p>
-<ul>
-<li><strong>缩小输入规模</strong>：提供 <code>--small-input</code>
-模式或环境变量开关。</li>
-<li><strong>限制检查范围</strong>：用 <code>--kernel-regex</code>
-锁定怀疑的 kernel。</li>
-<li><strong>限制次数</strong>：用 <code>--launch-count</code>
-只审前几次启动。</li>
-<li><strong>分阶段检查</strong>：先 <code>memcheck</code>，再
-<code>racecheck</code>/<code>synccheck</code> 针对性检查。</li>
-<li><strong>仅 Debug 构建检查</strong>：<code>-G</code>
-只在调试构建开启，Release 保持性能纯净。</li>
-</ul>
-<h2 id="与其他调试-性能工具协同">与其他调试 &amp; 性能工具协同</h2>
-<ul>
-<li><strong>nsys profile → sanitizer 精查</strong>：
-<ul>
-<li>用 <code>nsys profile -o run ./app_rel</code> 找到耗时热点与可疑
-kernel 名称；</li>
-<li>针对热点 kernel 用 <code>--kernel-regex</code> + Sanitizer
-精准排错。</li>
-</ul></li>
-<li><strong>cuda-gdb</strong>：遇到崩溃或需要单步设备端代码时使用；Sanitizer
-报出可疑位置后，转到 gdb 做细粒度验证。</li>
-<li><strong>Nsight Compute/Systems</strong>：前者做单 kernel
-的性能属性分析（访存、SM 利用）；后者看系统级时间线。二者与 Sanitizer
-互补：先“无错再快”。</li>
-<li><strong>日志解析/IDE 高亮</strong>：将 <code>--log-file</code>
-输出的文本导入 IDE（或自写脚本解析），按 <code>file:line</code>
-生成可点击的诊断列表，提高修复效率。</li>
-</ul>
-<h2 id="驱动-cuda-版本兼容">🔟 驱动 / CUDA 版本兼容</h2>
-<ul>
-<li>尽量保持：<strong>Driver 版本 ≥ CUDA Toolkit
-要求的最低版本</strong>；工具链与驱动的主次版本差距大时，可能出现“工具不可用/功能缺失/报错异常”。</li>
-<li>快速自检：
-<ul>
-<li><code>nvidia-smi</code> 查看驱动版本；</li>
-<li><code>nvcc --version</code> /
-<code>compute-sanitizer --version</code> 查看工具链版本；</li>
-<li>优先使用同一套 Toolkit 内的工具 + 匹配的驱动。</li>
-</ul></li>
-</ul>
-<h2 id="实战清单拿来就用">✅ 实战清单（拿来就用）</h2>
-<ol type="1">
-<li>准备 Debug 构建：<code>-g -G -lineinfo [-rdc=true]</code>。</li>
-<li>缩小输入：加入 <code>--small-input</code> 选项或测试数据集。</li>
-<li>先跑内存：<code>compute-sanitizer --tool memcheck --print-limit 50 ./app_dbg ...</code>。</li>
-<li>聚焦可疑 kernel：<code>--kernel-regex</code> +
-<code>--launch-count</code>。</li>
-<li>若提示竞争：切到 <code>--tool racecheck</code>，确认是否需要
-<code>atomic*</code> 或重构写入模式。</li>
-<li>若提示 Barrier：检查 <code>__syncthreads()</code>
-的分支一致性与循环内位置。</li>
-<li>通过后再回 Release 构建做性能评测（<code>nsys</code>/Nsight）。</li>
-</ol>
-<h2 id="小结">📝 小结</h2>
-<ul>
-<li><strong>核心心法</strong>：先保证正确性（Sanitizer
-清零告警），再谈性能（Nsight/<code>nsys</code> 优化）。</li>
-<li><strong>高频技巧</strong>：<code>-lineinfo</code>
-给行号、<code>--kernel-regex</code> 聚焦、<code>--launch-count</code>
-抽样、日志落盘便于追踪。</li>
-<li><strong>避坑要点</strong>：Barrier
-一致性、越界/未初始化、跨文件设备函数需 <code>-rdc=true</code>。</li>
-</ul>
-<p>把以上套路串起来，基本就能“熟练驾驭 Compute Sanitizer”：遇到可疑
-kernel，开 Debug 构建 + 小输入，定位报文 → 回溯源码 → 修复 →
-复查通过，再做性能迭代。祝你早日实现“无错再快”的理想状态 🚀</p>
-]]></content>
-      <tags>
-        <tag>工具</tag>
-        <tag>GPU</tag>
-        <tag>CUDA</tag>
-        <tag>调试</tag>
-        <tag>调试与性能</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Tensor 基础：布局、算子与形状推导</title>
     <url>/posts/f1e2d3c4/</url>
     <content><![CDATA[<p>本文聚焦 <strong>张量布局 → 常见算子 →
@@ -6723,6 +6446,283 @@ id="三大框架参数映射同一功能不同叫法">三大框架参数映射�
         <tag>深度学习</tag>
         <tag>张量</tag>
         <tag>形状推导</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Compute Sanitizer 实用指南：从 0 到熟练</title>
+    <url>/posts/a1b2c3d4/</url>
+    <content><![CDATA[<p>Compute Sanitizer（前身 <code>cuda-memcheck</code>）用于定位 CUDA
+程序中的越界读写、未初始化、数据竞争与 Barrier
+不匹配等问题。本文按最小示例、常见报错、命令参数与协同工具的顺序，整理一份可参考的排查笔记。</p>
+<span id="more"></span>
+<h2
+id="学习地图由浅入深可边学边用">学习地图（由浅入深，可边学边用）</h2>
+<ul>
+<li><strong>CUDA 基础语法</strong>：能写/编译最简单的
+<code>kernel</code>，理解
+<code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code>、<code>__global__</code>/<code>__device__</code>。</li>
+<li><strong>GPU 线程层级与同步</strong>：Warp / Block /
+Grid，<code>__syncthreads()</code>、<code>atomic*</code>、<code>cudaDeviceSynchronize()</code>
+的作用与限制。</li>
+<li><strong>GPU 内存层次</strong>：Global / Shared / Local / Constant /
+Texture 的用途、可见性、对齐与带宽差异。</li>
+<li><strong>常见 GPU Bug
+类型</strong>：越界、未初始化、数据竞争、Barrier 不匹配等（Sanitizer
+就是为它们报警）。</li>
+<li><strong><code>nvcc</code>
+编译选项</strong>：<code>-G</code>、<code>-g</code>、<code>-lineinfo</code>、<code>-rdc=true</code>
+等，为报告提供更友好的源码回溯。</li>
+<li><strong>Compute Sanitizer
+命令行</strong>：<code>--tool</code>、<code>--print-limit</code>、<code>--kernel-regex</code>、<code>--log-file</code>、<code>--launch-count</code>
+等高频旗标。</li>
+<li><strong>报告阅读与定位</strong>：看懂
+<code>Invalid __global__ read of size 4 at myKernel+0x280</code>
+并回溯到源码行与线程坐标。</li>
+<li><strong>性能开销与调优</strong>：理解检查为什么会变慢，以及用小数据集、<code>--launch-count</code>
+等手段控时。</li>
+<li><strong>与其他工具协同</strong>：<code>nsys</code> 找热点 →
+Sanitizer 精查；结合 <code>cuda-gdb</code> / Nsight
+工具链提升效率。</li>
+<li><strong>驱动/CUDA 版本兼容</strong>：避免工具新版 +
+驱动旧版导致的报错或缺失功能。</li>
+</ul>
+<h2 id="cuda-基础语法最小可运行示例">CUDA
+基础语法（最小可运行示例）</h2>
+<p>下面是一个最小示例：把数组里的每个元素都加 1。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// file: add_one.cu</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;cstdio&gt;</span></span></span><br><span class="line"></span><br><span class="line">__global__ <span class="type">void</span> <span class="title function_">add_one</span><span class="params">(<span class="type">int</span>* data, <span class="type">int</span> n)</span> &#123;</span><br><span class="line">    <span class="type">int</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid &lt; n) data[tid] += <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">int</span> n = <span class="number">16</span>;</span><br><span class="line">    <span class="type">int</span> h[n] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="type">int</span> *d = nullptr;</span><br><span class="line">    cudaMalloc(&amp;d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>));</span><br><span class="line">    cudaMemcpy(d, h, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyHostToDevice);</span><br><span class="line"></span><br><span class="line">    dim3 <span class="title function_">block</span><span class="params">(<span class="number">8</span>)</span>, <span class="title function_">grid</span><span class="params">((n + block.x - <span class="number">1</span>) / block.x)</span>;</span><br><span class="line">    add_one&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d, n);</span><br><span class="line">    cudaDeviceSynchronize();</span><br><span class="line"></span><br><span class="line">    cudaMemcpy(h, d, n * <span class="keyword">sizeof</span>(<span class="type">int</span>), cudaMemcpyDeviceToHost);</span><br><span class="line">    cudaFree(d);</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; n; ++i) <span class="built_in">printf</span>(<span class="string">&quot;%d &quot;</span>, h[i]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译（带调试信息与行号，便于报告映射回源码）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo add_one.cu -o add_one</span><br></pre></td></tr></table></figure>
+<ul>
+<li><strong><code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code></strong>：设定网格与线程块维度；<code>threadIdx</code>/<code>blockIdx</code>
+提供线程坐标。</li>
+<li><strong><code>__global__</code></strong>：从主机端调用、在设备端执行的函数（即
+kernel）。</li>
+<li><strong><code>__device__</code></strong>：仅在设备端调用/执行的函数。</li>
+</ul>
+<h2 id="线程层级与同步原语">线程层级与同步原语</h2>
+<ul>
+<li><strong>执行模型</strong>：
+<ul>
+<li><strong>Warp</strong>：通常 32 线程的执行束，同步粒度最细。</li>
+<li><strong>Block</strong>：多个 warp 组成；可用
+<code>__syncthreads()</code> 在同一 Block 内屏障同步。</li>
+<li><strong>Grid</strong>：由多个 Block 组成；不同 Block 之间不可用
+<code>__syncthreads()</code> 同步。</li>
+</ul></li>
+<li><strong>同步与原子</strong>：
+<ul>
+<li><code>__syncthreads()</code>：只作用于 Block
+内；如果有条件分支导致并非所有线程执行，可能引发 Barrier 不匹配。</li>
+<li><code>atomicAdd/atomicExch/...</code>：在共享全局状态时消除数据竞争，但会降低并发度。</li>
+<li><code>cudaDeviceSynchronize()</code>：在主机端等待所有之前发起的
+kernel 完成，常用于调试阶段确保报错及时显现。</li>
+</ul></li>
+</ul>
+<h2 id="gpu-内存层次结构">GPU 内存层次结构</h2>
+<ul>
+<li><strong>Global
+Memory</strong>：容量大、延迟高、全设备可见；注意对齐与合并访问（coalescing）。</li>
+<li><strong>Shared Memory</strong>：Block 内共享、低延迟、高带宽；需留意
+Bank 冲突与对齐。</li>
+<li><strong>Local
+Memory</strong>：线程私有，寄存器溢出或大对象会落在这里，实质上也是从全局内存取，延迟高。</li>
+<li><strong>Constant/Texture</strong>：只读、缓存友好（广播/2D
+局部性场景）。</li>
+</ul>
+<p>理解这些有助于你判断这个地址是否可见或越界，从而更快看懂 Sanitizer
+的报错。</p>
+<h2 id="常见-gpu-bug-类型sanitizer-重点覆盖">常见 GPU Bug
+类型（Sanitizer 重点覆盖）</h2>
+<ul>
+<li><strong>越界读写</strong>：访问数组下标 &lt;0 或 ≥N。</li>
+<li><strong>未初始化读</strong>：读到了未写入的内存内容。</li>
+<li><strong>数据竞争 (race)</strong>：多个线程无序写同一地址。</li>
+<li><strong>Barrier 不匹配</strong>：同一 Block 内，有些线程执行了
+<code>__syncthreads()</code>，有些没执行。</li>
+</ul>
+<p>下面分别给出“可运行的最小示例 → 如何触发 → 典型报文（示意） →
+修复方式”。</p>
+<h3 id="越界读写out-of-bounds">4.1 越界读写（Out-of-Bounds）</h3>
+<p>最常见，也最好修。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// oob.cu</span><br><span class="line">__global__ void oob(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    // 故意漏掉边界判断</span><br><span class="line">    a[i] = 42;  // 当 i &gt;= n 时越界写</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编译与运行（调试构建）：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo oob.cu -o oob</span><br><span class="line">compute-sanitizer --tool memcheck ./oob | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>典型报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:5: oob+0x30</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
+<p>如何修：补边界条件；或在 launch 侧收紧
+<code>grid</code>/<code>block</code>。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void oob_fix(int* a, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) a[i] = 42;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="未初始化读uninitialized-read">4.2 未初始化读（Uninitialized
+Read）</h3>
+<p>读到了从未写入的值，往往来源于遗漏初始化或越界导致的脏数据。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// uninit.cu</span><br><span class="line">__global__ void use_before_set(int* out, const int* src, int n) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; n) &#123;</span><br><span class="line">        // src 未初始化就被读取</span><br><span class="line">        out[i] = src[i] + 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>主机侧若只分配未写入：</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> *d_src=<span class="literal">nullptr</span>, *d_out=<span class="literal">nullptr</span>;</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_src, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="built_in">cudaMalloc</span>(&amp;d_out, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 故意不 cudaMemset/cudaMemcpy d_src</span></span><br><span class="line">use_before_set&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d_out, d_src, n);</span><br></pre></td></tr></table></figure>
+<p>检查：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo uninit.cu -o uninit</span><br><span class="line">compute-sanitizer --tool memcheck ./uninit | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Uninitialized __global__ memory read of size 4</span><br><span class="line">=========     at use_before_set(int*, int const*, int):uninit.cu:6</span><br></pre></td></tr></table></figure>
+<p>如何修：在设备内或拷贝前初始化。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cudaMemset</span>(d_src, <span class="number">0</span>, n*<span class="built_in">sizeof</span>(<span class="type">int</span>));</span><br><span class="line"><span class="comment">// 或者先在主机填充，再 cudaMemcpy 到设备</span></span><br></pre></td></tr></table></figure>
+<h3 id="数据竞争data-race">4.3 数据竞争（Data Race）</h3>
+<p>多个线程对同一地址进行未同步的读/写，导致结果随机。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">// race.cu</span><br><span class="line">__global__ void sum_naive(int* out) &#123;</span><br><span class="line">    // 让所有线程把 1 加到同一个位置</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) &#123;</span><br><span class="line">        // 非原子写：存在数据竞争</span><br><span class="line">        *out += 1;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>检查：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo race.cu -o race</span><br><span class="line">compute-sanitizer --tool racecheck ./race | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Race reported between Write and Write</span><br><span class="line">=========     Location: 0x7f2c38000000 in global memory</span><br><span class="line">=========     by thread (t*,b*) at sum_naive:race.cu:7</span><br></pre></td></tr></table></figure>
+<p>如何修：使用原子操作或重构并行归约。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">__global__ void sum_atomic(int* out) &#123;</span><br><span class="line">    int i = blockIdx.x * blockDim.x + threadIdx.x;</span><br><span class="line">    if (i &lt; 1024) atomicAdd(out, 1);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>更高性能的做法是先在 Block 内用共享内存做局部和，再用一次原子把每个
+Block 的结果汇总到全局。</p>
+<h3 id="barrier-不匹配barrier-divergence">4.4 Barrier 不匹配（Barrier
+Divergence）</h3>
+<p>同一 Block 内不是所有线程都在同一控制流路径调用
+<code>__syncthreads()</code>，会导致死锁或未定义行为。</p>
+<figure class="highlight cpp"><table><tr><td class="code"><pre><span class="line"><span class="comment">// barrier.cu</span></span><br><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">bad_barrier</span><span class="params">(<span class="type">int</span>* a)</span> </span>&#123;</span><br><span class="line">    <span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">    <span class="keyword">if</span> (tid % <span class="number">2</span> == <span class="number">0</span>) &#123;</span><br><span class="line">        __syncthreads();  <span class="comment">// 只有偶数线程到达屏障</span></span><br><span class="line">        a[tid] = <span class="number">1</span>;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        a[tid] = <span class="number">2</span>;</span><br><span class="line">        <span class="comment">// 缺少同步</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>检查：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">nvcc -g -G -lineinfo barrier.cu -o barrier</span><br><span class="line">compute-sanitizer --tool synccheck ./barrier | <span class="built_in">cat</span></span><br></pre></td></tr></table></figure>
+<p>报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Barrier error detected. Divergent thread(s) in block.</span><br><span class="line">=========     at __syncthreads(): barrier.cu:5</span><br></pre></td></tr></table></figure>
+<p>如何修：确保同一 Block
+内所有线程对屏障的到达一致（要么都到，要么都不到），或将屏障搬出分支，或重写算法避免需要屏障。</p>
+<h2 id="nvcc-编译选项给报告喂足信息"><code>nvcc</code>
+编译选项：给报告喂足信息</h2>
+<ul>
+<li><strong><code>-g -G</code></strong>：生成设备端调试符号（注意：会显著降低性能，调试用；性能测试请移除
+<code>-G</code>）。</li>
+<li><strong><code>-lineinfo</code></strong>：保留源码行号信息，Sanitizer
+可将 PC 偏移映射回源文件行。</li>
+<li><strong><code>-rdc=true</code></strong>：启用设备端链接，跨文件/库的设备函数能正确回溯。</li>
+<li>可选：<code>-Xcompiler -fno-omit-frame-pointer</code>
+便于栈回溯；<code>-O0</code> 降低优化避免行号漂移。</li>
+</ul>
+<p>推荐调试构建与发布构建分离：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># Debug（用于 Sanitizer）</span></span><br><span class="line">nvcc -g -G -lineinfo -rdc=<span class="literal">true</span> -O0 app.cu -o app_dbg</span><br><span class="line"></span><br><span class="line"><span class="comment"># Release（性能评测）</span></span><br><span class="line">nvcc -O3 app.cu -o app_rel</span><br></pre></td></tr></table></figure>
+<h2 id="compute-sanitizer命令行速查">Compute Sanitizer：命令行速查</h2>
+<p>基本用法：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer --tool memcheck ./app_dbg</span><br></pre></td></tr></table></figure>
+<p>常用工具（<code>--tool</code>）：</p>
+<ul>
+<li><code>memcheck</code>：越界、未初始化、非法地址等内存问题。</li>
+<li><code>racecheck</code>：数据竞争（全局/共享内存的读写冲突）。</li>
+<li><code>initcheck</code>：检测未初始化的全局内存使用。</li>
+<li><code>synccheck</code>：屏障不匹配、死锁相关问题。</li>
+</ul>
+<p>高频旗标：</p>
+<ul>
+<li><code>--print-limit &lt;N&gt;</code>：每类问题最多打印 N
+条，控制噪音。</li>
+<li><code>--kernel-regex &lt;regex&gt;</code>：只检查匹配名称的
+kernel，聚焦问题。</li>
+<li><code>--launch-count &lt;N&gt;</code>：只检查前 N 次 kernel
+启动，快速抽样。</li>
+<li><code>--log-file &lt;path&gt;</code>：将报告写入文件，便于后续解析与分享。</li>
+<li><code>--target-processes all|application-only</code>：当程序会派生子进程时很有用。</li>
+</ul>
+<p>示例：只检查 <code>oob</code> 这个 kernel
+的前两次启动，并把日志保存到 <code>cs.log</code>：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">compute-sanitizer \</span><br><span class="line">  --tool memcheck \</span><br><span class="line">  --kernel-regex <span class="string">&quot;^oob$&quot;</span> \</span><br><span class="line">  --launch-count 2 \</span><br><span class="line">  --print-limit 20 \</span><br><span class="line">  --log-file cs.log \</span><br><span class="line">  ./app_dbg --small-input</span><br></pre></td></tr></table></figure>
+<h2 id="报告阅读与定位技巧">报告阅读与定位技巧</h2>
+<p>典型报文（示意）：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">========= Invalid __global__ write of size 4</span><br><span class="line">=========     at oob(int*, int):oob.cu:6: oob+0x40</span><br><span class="line">=========     by thread (15,0,0) in block (1,0,0)</span><br><span class="line">=========     Address 0x7f2c38010040 is out of bounds</span><br></pre></td></tr></table></figure>
+<p>如何快速定位：</p>
+<ul>
+<li><strong>看标题</strong>：<code>Invalid __global__ write of size 4</code>
+→ 非法全局写、长度 4 字节。</li>
+<li><strong>看符号/行号</strong>：<code>oob.cu:6</code> 需要
+<code>-lineinfo</code>/<code>-G</code> 支持。</li>
+<li><strong>看线程坐标</strong>：<code>thread (15,0,0) in block (1,0,0)</code>
+帮助你还原分支条件与边界判断。</li>
+<li><strong>回源代码</strong>：
+<ul>
+<li>确认是否缺少 <code>if (i &lt; n)</code> 之类的边界保护；</li>
+<li>若为竞争，检查是否需要 <code>atomic*</code>
+或者按块分配私有缓冲；</li>
+<li>若为 Barrier，不要将 <code>__syncthreads()</code>
+放在分支内（除非分支路径对所有线程一致）。</li>
+</ul></li>
+</ul>
+<p>调一类警告时，善用 <code>--kernel-regex</code>
+与最小复现输入，可大幅缩短迭代时间。</p>
+<h2 id="性能开销与调优">性能开销与调优</h2>
+<p>Sanitizer
+会“显著变慢”（有时数十倍），属于正常现象。降低成本的常用手段：</p>
+<ul>
+<li><strong>缩小输入规模</strong>：提供 <code>--small-input</code>
+模式或环境变量开关。</li>
+<li><strong>限制检查范围</strong>：用 <code>--kernel-regex</code>
+锁定怀疑的 kernel。</li>
+<li><strong>限制次数</strong>：用 <code>--launch-count</code>
+只审前几次启动。</li>
+<li><strong>分阶段检查</strong>：先 <code>memcheck</code>，再
+<code>racecheck</code>/<code>synccheck</code> 针对性检查。</li>
+<li><strong>仅 Debug 构建检查</strong>：<code>-G</code>
+只在调试构建开启，Release 保持性能纯净。</li>
+</ul>
+<h2 id="与其他调试-性能工具协同">与其他调试 &amp; 性能工具协同</h2>
+<ul>
+<li><strong>nsys profile → sanitizer 精查</strong>：
+<ul>
+<li>用 <code>nsys profile -o run ./app_rel</code> 找到耗时热点与可疑
+kernel 名称；</li>
+<li>针对热点 kernel 用 <code>--kernel-regex</code> + Sanitizer
+精准排错。</li>
+</ul></li>
+<li><strong>cuda-gdb</strong>：遇到崩溃或需要单步设备端代码时使用；Sanitizer
+报出可疑位置后，转到 gdb 做细粒度验证。</li>
+<li><strong>Nsight Compute/Systems</strong>：前者做单 kernel
+的性能属性分析（访存、SM 利用）；后者看系统级时间线。二者与 Sanitizer
+互补：先“无错再快”。</li>
+<li><strong>日志解析/IDE 高亮</strong>：将 <code>--log-file</code>
+输出的文本导入 IDE（或自写脚本解析），按 <code>file:line</code>
+生成可点击的诊断列表，提高修复效率。</li>
+</ul>
+<h2 id="驱动-cuda-版本兼容">🔟 驱动 / CUDA 版本兼容</h2>
+<ul>
+<li>尽量保持：<strong>Driver 版本 ≥ CUDA Toolkit
+要求的最低版本</strong>；工具链与驱动的主次版本差距大时，可能出现“工具不可用/功能缺失/报错异常”。</li>
+<li>快速自检：
+<ul>
+<li><code>nvidia-smi</code> 查看驱动版本；</li>
+<li><code>nvcc --version</code> /
+<code>compute-sanitizer --version</code> 查看工具链版本；</li>
+<li>优先使用同一套 Toolkit 内的工具 + 匹配的驱动。</li>
+</ul></li>
+</ul>
+<h2 id="实战清单拿来就用">✅ 实战清单（拿来就用）</h2>
+<ol type="1">
+<li>准备 Debug 构建：<code>-g -G -lineinfo [-rdc=true]</code>。</li>
+<li>缩小输入：加入 <code>--small-input</code> 选项或测试数据集。</li>
+<li>先跑内存：<code>compute-sanitizer --tool memcheck --print-limit 50 ./app_dbg ...</code>。</li>
+<li>聚焦可疑 kernel：<code>--kernel-regex</code> +
+<code>--launch-count</code>。</li>
+<li>若提示竞争：切到 <code>--tool racecheck</code>，确认是否需要
+<code>atomic*</code> 或重构写入模式。</li>
+<li>若提示 Barrier：检查 <code>__syncthreads()</code>
+的分支一致性与循环内位置。</li>
+<li>通过后再回 Release 构建做性能评测（<code>nsys</code>/Nsight）。</li>
+</ol>
+<h2 id="小结">📝 小结</h2>
+<ul>
+<li><strong>核心心法</strong>：先保证正确性（Sanitizer
+清零告警），再谈性能（Nsight/<code>nsys</code> 优化）。</li>
+<li><strong>高频技巧</strong>：<code>-lineinfo</code>
+给行号、<code>--kernel-regex</code> 聚焦、<code>--launch-count</code>
+抽样、日志落盘便于追踪。</li>
+<li><strong>避坑要点</strong>：Barrier
+一致性、越界/未初始化、跨文件设备函数需 <code>-rdc=true</code>。</li>
+</ul>
+<p>把以上套路串起来，基本就能“熟练驾驭 Compute Sanitizer”：遇到可疑
+kernel，开 Debug 构建 + 小输入，定位报文 → 回溯源码 → 修复 →
+复查通过，再做性能迭代。祝你早日实现“无错再快”的理想状态 🚀</p>
+]]></content>
+      <tags>
+        <tag>工具</tag>
+        <tag>GPU</tag>
+        <tag>CUDA</tag>
+        <tag>调试</tag>
+        <tag>调试与性能</tag>
       </tags>
   </entry>
   <entry>
